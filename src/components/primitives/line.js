@@ -18,6 +18,7 @@ export default class Line {
     draw(p1, p2) {
 
         const layout = this.comp.$props.layout
+        const yellow = '#E5B41F' 
 
         let x1 = layout.t2screen(p1[0])
         let y1 = layout.$2screen(p1[1])

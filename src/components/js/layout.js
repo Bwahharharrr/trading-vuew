@@ -83,6 +83,7 @@ function Layout(params) {
                 h: Math.floor(p[2] * self.A + self.B),
                 l: Math.floor(p[3] * self.A + self.B),
                 c: Math.floor(p[4] * self.A + self.B),
+                z: p[6],
                 raw: p
             })
             // Clear volume bar if there is a time gap
@@ -95,7 +96,8 @@ function Layout(params) {
                 x1: x1,
                 x2: x2,
                 h: p[5] * vs,
-                green: p[4] >= p[1],
+                /* green: p[4] >= p[1], */
+                z: p[6],
                 raw: p
             })
             prev = x2 + splitter
