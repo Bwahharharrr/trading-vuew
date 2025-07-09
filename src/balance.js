@@ -53,7 +53,7 @@ export default {
             ctx.lineWidth = 1
             ctx.strokeStyle = 'yellow'
 
-            let x = layout.t2screen(this.data.[0][0])
+            let x = layout.t2screen(this.data[0][0])
             let lastYY = layout.$2screen(this.data[this.data.length-1][1])
             ctx.moveTo(x, lastYY)
 
