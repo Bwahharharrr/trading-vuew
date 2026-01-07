@@ -44,6 +44,8 @@ module.exports = (env, options) => ({
     ],
     devServer: {
         host: '0.0.0.0',
+        contentBase: require('path').join(__dirname, '../data'),
+        contentBasePublicPath: '/data',
         onListening: function(server) {
             const port = server.listeningApp.address().port
             global.port = port

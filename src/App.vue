@@ -10,19 +10,22 @@
     </trading-vue>
     <tf-selector :charts="charts" v-on:selected="on_selected">
     </tf-selector>
+    <file-selector
+        :files="dataFiles"
+        :current-file="currentDataFile"
+        @file-selected="onFileSelected">
+    </file-selector>
     <span class="log-scale">
         <input type="checkbox" v-model="log_scale">
         <label>Log Scale</label>
     </span>
-    <div>
-        <h1>Hello world</h1>
-    </div>
 </div>
 </template>
 
 <script>
 import TradingVue from './TradingVue.vue'
 import TfSelector from './TFSelector.vue'
+import FileSelector from './FileSelector.vue'
 
 let uri = window.location.href.split('?');
 if(uri.length == 2) {
@@ -66,7 +69,7 @@ export default {
         }
     },
     components: {
-        TradingVue, TfSelector
+        TradingVue, TfSelector, FileSelector
     },
     methods: {
         onResize() {
@@ -74,17 +77,39 @@ export default {
             this.height = window.innerHeight
         },
         on_selected(tf) {
-            // this.chart.set('chart', this.charts[tf.name].chart)
-            
-            this.chart = new DataCube( Data[tf.name] )
-            // this.chart.set('onchart', this.charts[tf.name].onchart)
-            //console.log(this)
-            //this.chart.set('chart', this.charts[tf.name].chart)
-            //this.chart.set('onchart', this.charts[tf.name].onchart)
-            //this.overlays = this.charts[tf.name].onchart
-           // this.chart.set('onchart', this.charts[tf.name].onchart)
-           // this.$refs.tradingVue.resetChart()
-         //   this.log_scale = false
+            this.chart = new DataCube(this.charts[tf.name])
+        },
+        async onFileSelected(filename) {
+            try {
+                const response = await fetch(`/data/${filename}`)
+                if (!response.ok) {
+                    throw new Error(`Failed to load ${filename}`)
+                }
+                const data = await response.json()
+                this.currentDataFile = filename
+
+                // Reset chart first to force Vue reactivity
+                this.chart = new DataCube()
+
+                // Use nextTick to ensure the reset is processed
+                this.$nextTick(() => {
+                    // Check if this is single-format (has chart.data array at root)
+                    if (data.chart && Array.isArray(data.chart.data)) {
+                        // Single-timeframe format (data.json style)
+                        this.charts = { 'default': data }
+                        this.chart = new DataCube(data)
+                    } else {
+                        // Multi-timeframe format (data_tf.json style)
+                        this.charts = data
+                        const timeframes = Object.keys(data)
+                        if (timeframes.length > 0) {
+                            this.chart = new DataCube(data[timeframes[0]])
+                        }
+                    }
+                })
+            } catch (error) {
+                console.error('Error loading data file:', error)
+            }
         }
     },
     mounted() {
@@ -98,20 +123,26 @@ export default {
     data() {
         return {
             charts: Data,
-            // chart: new DataCube(Data['Y']),
             chart: new DataCube(),
             width: window.innerWidth,
             height: window.innerHeight,
             overlays: [BuysAndSells,Balance,LineTracker],
             config: {
-                DEFAULT_LEN: 200, 
+                DEFAULT_LEN: 200,
                 TB_BORDER: 5,
                 CANDLEW: 0.9,
                 GRIDX: 200,
                 VOLSCALE: 0.1
             },
             log_scale: true,
-            // index_based: false
+            dataFiles: [
+                'data_tf.json',
+                'data.json',
+                'bak.data.json',
+                'bak.data_tf_orig.json',
+                'bak_v1.data_tf.json'
+            ],
+            currentDataFile: 'data_tf.json'
         };
     },
     watch: {
