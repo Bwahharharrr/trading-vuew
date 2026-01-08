@@ -15,6 +15,11 @@
         :current-file="currentDataFile"
         @file-selected="onFileSelected">
     </file-selector>
+    <candle-color-selector
+        :coloring-options="candleColoringOptions"
+        :current-coloring="currentCandleColoring"
+        @coloring-selected="onCandleColoringSelected">
+    </candle-color-selector>
     <span class="log-scale">
         <input type="checkbox" v-model="log_scale">
         <label>Log Scale</label>
@@ -26,6 +31,7 @@
 import TradingVue from './TradingVue.vue'
 import TfSelector from './TFSelector.vue'
 import FileSelector from './FileSelector.vue'
+import CandleColorSelector from './CandleColorSelector.vue'
 
 let uri = window.location.href.split('?');
 if(uri.length == 2) {
@@ -69,7 +75,7 @@ export default {
         }
     },
     components: {
-        TradingVue, TfSelector, FileSelector
+        TradingVue, TfSelector, FileSelector, CandleColorSelector
     },
     methods: {
         onResize() {
@@ -77,7 +83,67 @@ export default {
             this.height = window.innerHeight
         },
         on_selected(tf) {
-            this.chart = new DataCube(this.charts[tf.name])
+            const chartData = this.charts[tf.name]
+            // Store original data for color scheme switching
+            this.originalChartData = JSON.parse(JSON.stringify(chartData.chart.data))
+            // Extract candle coloring options from onchart
+            this.extractCandleColoringOptions(chartData)
+            // Reset current coloring selection
+            this.currentCandleColoring = ''
+            // Create DataCube with candle_coloring items filtered out
+            this.chart = new DataCube(this.prepareChartData(chartData))
+            // Force chart to redraw
+            this.$nextTick(() => {
+                if (this.$refs.tradingVue) {
+                    this.$refs.tradingVue.resetChart()
+                }
+            })
+        },
+        extractCandleColoringOptions(chartData) {
+            this.candleColoringOptions = []
+            if (chartData.onchart && Array.isArray(chartData.onchart)) {
+                for (const item of chartData.onchart) {
+                    if (item.type === 'candle_coloring' && item.title && Array.isArray(item.data)) {
+                        this.candleColoringOptions.push({
+                            title: item.title,
+                            data: item.data
+                        })
+                    }
+                }
+            }
+        },
+        // Create a clean copy of chart data with candle_coloring items filtered out
+        prepareChartData(chartData) {
+            const cleaned = JSON.parse(JSON.stringify(chartData))
+            if (cleaned.onchart && Array.isArray(cleaned.onchart)) {
+                cleaned.onchart = cleaned.onchart.filter(item => item.type !== 'candle_coloring')
+            }
+            return cleaned
+        },
+        onCandleColoringSelected(coloringTitle) {
+            this.currentCandleColoring = coloringTitle
+
+            if (!this.originalChartData || !this.chart.data.chart) return
+
+            // Get the color data for selected scheme
+            let colorData = null
+            if (coloringTitle) {
+                const selectedOption = this.candleColoringOptions.find(opt => opt.title === coloringTitle)
+                if (selectedOption) {
+                    colorData = selectedOption.data
+                }
+            }
+
+            // Apply colors to chart data
+            const newData = JSON.parse(JSON.stringify(this.originalChartData))
+            if (colorData) {
+                for (let i = 0; i < newData.length && i < colorData.length; i++) {
+                    newData[i][6] = colorData[i]
+                }
+            }
+
+            // Update the chart
+            this.$set(this.chart.data.chart, 'data', newData)
         },
         async loadDataFileList() {
             try {
@@ -111,19 +177,34 @@ export default {
                 const data = await response.json()
                 this.currentDataFile = filename
 
+                // Reset candle coloring
+                this.currentCandleColoring = ''
+
                 // Check if this is single-format (has chart.data array at root)
                 if (data.chart && Array.isArray(data.chart.data)) {
                     // Single-timeframe format (data.json style)
                     this.charts = { 'default': data }
-                    this.chart = new DataCube(data)
+                    this.originalChartData = JSON.parse(JSON.stringify(data.chart.data))
+                    this.extractCandleColoringOptions(data)
+                    this.chart = new DataCube(this.prepareChartData(data))
                 } else {
                     // Multi-timeframe format (data_tf.json style)
                     this.charts = data
                     const timeframes = Object.keys(data)
                     if (timeframes.length > 0) {
-                        this.chart = new DataCube(data[timeframes[0]])
+                        const firstTfData = data[timeframes[0]]
+                        this.originalChartData = JSON.parse(JSON.stringify(firstTfData.chart.data))
+                        this.extractCandleColoringOptions(firstTfData)
+                        this.chart = new DataCube(this.prepareChartData(firstTfData))
                     }
                 }
+
+                // Force chart to redraw after data loads
+                this.$nextTick(() => {
+                    if (this.$refs.tradingVue) {
+                        this.$refs.tradingVue.resetChart()
+                    }
+                })
 
                 // Restore range only if new dataset has exact same first/last as previous dataset
                 if (savedRange && savedRange[0] && savedRange[1] && prevStart !== null) {
@@ -171,7 +252,10 @@ export default {
             },
             log_scale: true,
             dataFiles: [],
-            currentDataFile: 'data_tf.json'
+            currentDataFile: 'data_tf.json',
+            candleColoringOptions: [],
+            currentCandleColoring: '',
+            originalChartData: null
         };
     },
     watch: {
