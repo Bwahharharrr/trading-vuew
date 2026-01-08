@@ -18,7 +18,8 @@
             >
         </grid-section>
         <botbar v-bind="botbar_props"
-            :shaders="shaders" :timezone="timezone">
+            :shaders="shaders" :timezone="timezone"
+            v-on:botbar-zoom="range_changed">
         </botbar>
     </div>
 </template>

@@ -1,6 +1,7 @@
 
 import Const from '../../stuff/constants.js'
 import Utils from '../../stuff/utils.js'
+import Hamster from 'hamsterjs'
 
 const { MINUTE15, MINUTE, HOUR, DAY, WEEK, MONTH, YEAR, MONTHMAP } = Const
 
@@ -16,6 +17,41 @@ export default class Botbar {
         this.range = this.$p.range
         this.layout = this.$p.layout
 
+        this.MIN_ZOOM = comp.config.MIN_ZOOM
+        this.MAX_ZOOM = comp.config.MAX_ZOOM
+        this.listeners()
+
+    }
+
+    listeners() {
+        this.hm = Hamster(this.canvas)
+        this.hm.wheel((event, delta) => this.mousezoom(-delta * 50, event))
+    }
+
+    mousezoom(delta, event) {
+        event.originalEvent.preventDefault()
+        event.preventDefault()
+
+        let dominated = this.data.length
+
+        if (delta < 0 && dominated <= this.MIN_ZOOM) return
+        if (delta > 0 && dominated > this.MAX_ZOOM) return
+
+        delta = Utils.smart_wheel(delta)
+
+        let interval = this.$p.interval
+        let k = interval / 1000
+        let diff = delta * k * dominated
+
+        // Zoom from center of x-axis
+        this.range[0] -= diff * 0.5
+        this.range[1] += diff * 0.5
+
+        this.comp.$emit('botbar-zoom', this.range)
+    }
+
+    destroy() {
+        if (this.hm) this.hm.unwheel()
     }
 
     update() {

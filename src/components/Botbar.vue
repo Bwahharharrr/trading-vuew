@@ -18,6 +18,9 @@ export default {
         this.setup()
         this.redraw()
     },
+    beforeDestroy() {
+        if (this.renderer) this.renderer.destroy()
+    },
     render(h) {
         const sett = this.$props.layout.botbar
         return this.create_canvas(h, 'botbar', {

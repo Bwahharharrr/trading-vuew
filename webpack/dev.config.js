@@ -58,6 +58,19 @@ module.exports = (env, options) => ({
                 } catch(e) {}
                 res.send("[OK]")
             })
+            app.get("/data-files", function(req, res) {
+                const fs = require('fs')
+                const path = require('path')
+                const dataDir = path.join(__dirname, '../data')
+                try {
+                    const files = fs.readdirSync(dataDir)
+                        .filter(f => f.endsWith('.json') && !f.startsWith('bak'))
+                        .sort()
+                    res.json(files)
+                } catch(e) {
+                    res.status(500).json({ error: e.message })
+                }
+            })
         }
     },
     optimization: {

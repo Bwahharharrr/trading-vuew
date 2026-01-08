@@ -1,4 +1,5 @@
 import * as Hammer from 'hammerjs'
+import Hamster from 'hamsterjs'
 import Utils from '../../stuff/utils.js'
 import math from '../../stuff/math.js'
 
@@ -25,6 +26,10 @@ export default class Sidebar {
     }
 
     listeners() {
+        // Add wheel zoom for Y-axis
+        this.hm = Hamster(this.canvas)
+        this.hm.wheel((event, delta) => this.mousezoom(-delta * 50, event))
+
         let mc = this.mc = new Hammer.Manager(this.canvas)
         mc.add(new Hammer.Pan({
             direction: Hammer.DIRECTION_VERTICAL,
@@ -250,6 +255,49 @@ export default class Sidebar {
         return range
     }
 
+    mousezoom(delta, event) {
+        event.originalEvent.preventDefault()
+        event.preventDefault()
+
+        // Initialize zoom state if needed
+        if (this.$p.y_transform) {
+            this.zoom = this.$p.y_transform.zoom
+        } else {
+            this.zoom = 1.0
+        }
+
+        this.y_range = [
+            this.layout.$_hi,
+            this.layout.$_lo
+        ]
+        this.drug = {
+            y: 0,
+            z: this.zoom,
+            mid: math.log_mid(this.y_range, this.layout.height),
+            A: this.layout.A,
+            B: this.layout.B
+        }
+
+        // Calculate zoom based on wheel delta
+        delta = Utils.smart_wheel(delta)
+        let k = delta * 0.002
+        this.zoom = Utils.clamp(this.zoom * (1 + k), 0.005, 100)
+
+        this.comp.$emit('sidebar-transform', {
+            grid_id: this.id,
+            zoom: this.zoom,
+            auto: false,
+            range: this.calc_range(),
+            drugging: true
+        })
+        this.drug = null
+        this.comp.$emit('sidebar-transform', {
+            grid_id: this.id,
+            drugging: false
+        })
+        this.update()
+    }
+
     rezoom_range(delta, diff1, diff2) {
 
         if (!this.$p.y_transform || this.$p.y_transform.auto) return
@@ -291,6 +339,7 @@ export default class Sidebar {
 
     destroy() {
         if (this.mc) this.mc.destroy()
+        if (this.hm) this.hm.unwheel()
     }
 
     mousemove() { }

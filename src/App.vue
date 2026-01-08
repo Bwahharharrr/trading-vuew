@@ -79,6 +79,16 @@ export default {
         on_selected(tf) {
             this.chart = new DataCube(this.charts[tf.name])
         },
+        async loadDataFileList() {
+            try {
+                const response = await fetch('/data-files')
+                if (response.ok) {
+                    this.dataFiles = await response.json()
+                }
+            } catch (error) {
+                console.error('Error loading file list:', error)
+            }
+        },
         async onFileSelected(filename) {
             try {
                 const response = await fetch(`/data/${filename}`)
@@ -116,6 +126,7 @@ export default {
         window.addEventListener('resize', this.onResize)
         window.dc = this.chart
         window.tv = this.$refs.tradingVue
+        this.loadDataFileList()
     },
     beforeDestroy() {
         window.removeEventListener('resize', this.onResize)
@@ -135,13 +146,7 @@ export default {
                 VOLSCALE: 0.1
             },
             log_scale: true,
-            dataFiles: [
-                'data_tf.json',
-                'data.json',
-                'bak.data.json',
-                'bak.data_tf_orig.json',
-                'bak_v1.data_tf.json'
-            ],
+            dataFiles: [],
             currentDataFile: 'data_tf.json'
         };
     },
