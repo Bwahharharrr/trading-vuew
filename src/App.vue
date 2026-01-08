@@ -1,6 +1,6 @@
 <template>
 <div>
-    <trading-vue :data="chart" :width="this.width" :height="this.height"
+    <trading-vue ref="tradingVue" :data="chart" :width="this.width" :height="this.height"
             :color-back="colors.colorBack"
             :color-grid="colors.colorGrid"
             :color-text="colors.colorText"
@@ -91,6 +91,19 @@ export default {
         },
         async onFileSelected(filename) {
             try {
+                // Save current view range and dataset bounds before loading new data
+                let savedRange = null
+                let prevStart = null
+                let prevEnd = null
+                if (this.$refs.tradingVue && this.$refs.tradingVue.$refs.chart) {
+                    savedRange = this.$refs.tradingVue.getRange()
+                    const ohlcv = this.$refs.tradingVue.$refs.chart.ohlcv
+                    if (ohlcv && ohlcv.length >= 2) {
+                        prevStart = ohlcv[0][0]
+                        prevEnd = ohlcv[ohlcv.length - 1][0]
+                    }
+                }
+
                 const response = await fetch(`/data/${filename}`)
                 if (!response.ok) {
                     throw new Error(`Failed to load ${filename}`)
@@ -98,25 +111,36 @@ export default {
                 const data = await response.json()
                 this.currentDataFile = filename
 
-                // Reset chart first to force Vue reactivity
-                this.chart = new DataCube()
-
-                // Use nextTick to ensure the reset is processed
-                this.$nextTick(() => {
-                    // Check if this is single-format (has chart.data array at root)
-                    if (data.chart && Array.isArray(data.chart.data)) {
-                        // Single-timeframe format (data.json style)
-                        this.charts = { 'default': data }
-                        this.chart = new DataCube(data)
-                    } else {
-                        // Multi-timeframe format (data_tf.json style)
-                        this.charts = data
-                        const timeframes = Object.keys(data)
-                        if (timeframes.length > 0) {
-                            this.chart = new DataCube(data[timeframes[0]])
-                        }
+                // Check if this is single-format (has chart.data array at root)
+                if (data.chart && Array.isArray(data.chart.data)) {
+                    // Single-timeframe format (data.json style)
+                    this.charts = { 'default': data }
+                    this.chart = new DataCube(data)
+                } else {
+                    // Multi-timeframe format (data_tf.json style)
+                    this.charts = data
+                    const timeframes = Object.keys(data)
+                    if (timeframes.length > 0) {
+                        this.chart = new DataCube(data[timeframes[0]])
                     }
-                })
+                }
+
+                // Restore range only if new dataset has exact same first/last as previous dataset
+                if (savedRange && savedRange[0] && savedRange[1] && prevStart !== null) {
+                    setTimeout(() => {
+                        if (this.$refs.tradingVue && this.$refs.tradingVue.$refs.chart) {
+                            const ohlcv = this.$refs.tradingVue.$refs.chart.ohlcv
+                            if (ohlcv && ohlcv.length >= 2) {
+                                const newStart = ohlcv[0][0]
+                                const newEnd = ohlcv[ohlcv.length - 1][0]
+                                // Only restore if dataset start/end match exactly
+                                if (newStart === prevStart && newEnd === prevEnd) {
+                                    this.$refs.tradingVue.setRange(savedRange[0], savedRange[1])
+                                }
+                            }
+                        }
+                    }, 50)
+                }
             } catch (error) {
                 console.error('Error loading data file:', error)
             }
