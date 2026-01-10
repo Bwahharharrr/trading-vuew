@@ -57,7 +57,7 @@ import Spinner from './Spinner.vue'
 export default {
     name: 'ChartLegend',
     props: [
-        'common', 'values', 'grid_id', 'meta_props'
+        'common', 'values', 'grid_id', 'meta_props', 'layout_override'
     ],
     components: { ButtonGroup, Spinner },
     computed: {
@@ -117,6 +117,10 @@ export default {
         },
         layout() {
             const id = this.$props.grid_id
+            // Use layout override if available (for resize operations)
+            if (this.$props.layout_override) {
+                return this.$props.layout_override.grids[id]
+            }
             return this.$props.common.layout.grids[id]
         },
         json_data() {

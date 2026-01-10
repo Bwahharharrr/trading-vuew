@@ -6,6 +6,7 @@
             v-bind:grid_id="grid_id"
             v-bind:common="legend_props"
             v-bind:meta_props="get_meta_props"
+            v-bind:layout_override="legendLayoutOverride"
             v-on:legend-button-click="button_click">
         </chart-legend>
         <grid v-bind="grid_props" ref="grid"
@@ -93,14 +94,19 @@ export default {
             let hs = val.layout.grids.map(x => x.height)
             return hs.reduce((a, b) => a + b, '')
         },
-        // Update legend position during resize (bypassing Vue reactivity)
+        // Update legend position during resize using layoutOverride
         updateLegendPosition(layout) {
             const id = this.$props.grid_id
             const grid = layout ? layout.grids[id] : null
-            if (grid && this.$refs.legend && this.$refs.legend.$el) {
-                const top = grid.height > 150 ? 10 : 5
-                this.$refs.legend.$el.style.top = (grid.offset + top) + 'px'
+            if (grid) {
+                // Set layout override so legend_props uses correct layout
+                this.legendLayoutOverride = layout
+                this.$forceUpdate()
             }
+        },
+        // Clear the layout override (called after normal layout update)
+        clearLayoutOverride() {
+            this.legendLayoutOverride = null
         }
     },
     computed: {
@@ -185,7 +191,8 @@ export default {
         return {
             meta_props: {},
             rerender: 0,
-            last_ghash: ''
+            last_ghash: '',
+            legendLayoutOverride: null
         }
     }
 }

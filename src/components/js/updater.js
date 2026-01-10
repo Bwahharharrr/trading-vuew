@@ -6,8 +6,13 @@ import Utils from '../../stuff/utils.js'
 class CursorUpdater {
 
     constructor(comp) {
-        this.comp = comp, this.grids = comp._layout.grids,
+        this.comp = comp
         this.cursor = comp.cursor
+    }
+
+    // Get fresh grid references from the current layout
+    get grids() {
+        return this.comp._layout.grids
     }
 
     sync(e) {

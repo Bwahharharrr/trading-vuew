@@ -278,6 +278,10 @@ export default {
                             sidebar.layoutOverride = null
                             if (sidebar.renderer) sidebar.renderer.layout = layout.grids[i]
                         }
+                        // Clear legend layout override
+                        if (section && section.clearLayoutOverride) {
+                            section.clearLayoutOverride()
+                        }
                     })
                 }
             }
