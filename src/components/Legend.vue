@@ -1,6 +1,7 @@
 <template>
 <div class="trading-vue-legend"
-     v-bind:style="calc_style">
+     v-bind:style="calc_style"
+     @dblclick="on_dblclick">
     <div v-if="grid_id === 0"
          class="trading-vue-ohlcv"
         :style = "{ 'max-width': common.width + 'px' }">
@@ -164,6 +165,16 @@ export default {
         },
         button_click(event) {
             this.$emit('legend-button-click', event)
+        },
+        // Handle double-click on legend to minimize/expand off-chart grids
+        on_dblclick(e) {
+            const grid_id = this.$props.grid_id
+            // Only trigger for off-chart grids (grid_id > 0)
+            if (grid_id > 0) {
+                e.preventDefault()
+                e.stopPropagation()
+                this.$emit('legend-dblclick', grid_id)
+            }
         }
     }
 }
@@ -174,10 +185,11 @@ export default {
     z-index: 100;
     font-size: 1.25em;
     margin-left: 10px;
-    pointer-events: none;
+    pointer-events: auto;
     text-align: left;
     user-select: none;
     font-weight: 300;
+    cursor: default;
 }
 @media (min-resolution: 2x) {
     .trading-vue-legend {
@@ -185,7 +197,7 @@ export default {
     }
 }
 .trading-vue-ohlcv {
-    pointer-events: none;
+    pointer-events: auto;
     margin-bottom: 0.5em;
 }
 .t-vue-lspan {

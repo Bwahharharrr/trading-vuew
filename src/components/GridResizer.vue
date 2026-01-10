@@ -29,7 +29,7 @@ export default {
             return {
                 top: (grid.offset - 6) + 'px',
                 left: '0px',
-                width: (grid.width + grid.sb) + 'px'
+                width: grid.width + 'px'  // Chart area only, not including sidebar
             }
         },
         lineStyle() {

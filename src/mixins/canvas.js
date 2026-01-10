@@ -49,7 +49,8 @@ export default {
                         mousemove: e => this.renderer.mousemove(e),
                         mouseout: e => this.renderer.mouseout(e),
                         mouseup: e => this.renderer.mouseup(e),
-                        mousedown: e => this.renderer.mousedown(e)
+                        mousedown: e => this.renderer.mousedown(e),
+                        dblclick: e => this.on_dblclick && this.on_dblclick(e)
                     },
                     attrs: Object.assign({
                         id: `${this.$props.tv_id}-${id}-canvas`

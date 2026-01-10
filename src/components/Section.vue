@@ -7,7 +7,8 @@
             v-bind:common="legend_props"
             v-bind:meta_props="get_meta_props"
             v-bind:layout_override="legendLayoutOverride"
-            v-on:legend-button-click="button_click">
+            v-on:legend-button-click="button_click"
+            v-on:legend-dblclick="legend_dblclick">
         </chart-legend>
         <grid v-bind="grid_props" ref="grid"
             v-bind:grid_id="grid_id"
@@ -74,6 +75,13 @@ export default {
         },
         button_click(event) {
             this.$emit('legend-button-click', event)
+        },
+        legend_dblclick(grid_id) {
+            // Emit as custom event to be handled by Chart.vue
+            this.$emit('custom-event', {
+                event: 'grid-dblclick',
+                args: [grid_id]
+            })
         },
         register_kb(event) {
             this.$emit('register-kb-listener', event)

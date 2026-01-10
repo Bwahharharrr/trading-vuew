@@ -237,6 +237,10 @@ export default {
             if (d.event === 'remove-layer-meta') {
                 this.remove_meta_props(...d.args)
             }
+            // Handle double-click on off-chart grid to minimize
+            if (d.event === 'grid-dblclick') {
+                this.on_toggle_minimize(d.args[0])
+            }
         },
         update_layout(clac_tf, forceResize = false) {
             if (clac_tf) this.calc_interval()
@@ -361,38 +365,75 @@ export default {
 
             // Redistribute remaining space to other grids
             this.redistribute_heights(gridId, isMinimized)
-            this.update_layout()
+            // Use forceResize to trigger immediate visual updates
+            this.update_layout(false, true)
         },
         redistribute_heights(changedGridId, wasMinimized) {
             const grids = this._layout.grids
             const MINIMIZED_HEIGHT = 28
-            const totalHeight = this.$props.height - this.$props.config.BOTBAR
+            const MIN_MAIN_CHART_HEIGHT = 100  // Minimum height for main chart
+            const MIN_OFFCHART_HEIGHT = 50     // Minimum height for off-charts when donating space
 
-            // Find non-minimized grids (excluding the changed one)
-            let otherGrids = grids.filter((g, i) =>
-                i !== changedGridId && !this.minimizedGrids[i]
-            ).map(g => g.id)
-
-            if (otherGrids.length === 0) return
-
-            // Calculate height change
-            let heightDelta
             if (wasMinimized) {
-                // We're expanding: take space from other grids
+                // EXPANDING: first try main chart, then off-charts above
                 const restoreHeight = this.savedGridHeights[changedGridId] || 150
-                heightDelta = -(restoreHeight - MINIMIZED_HEIGHT)
-            } else {
-                // We're minimizing: give space to other grids
-                const currentHeight = this.savedGridHeights[changedGridId] || 150
-                heightDelta = currentHeight - MINIMIZED_HEIGHT
-            }
+                let remainingDelta = restoreHeight - MINIMIZED_HEIGHT
 
-            // Distribute the delta among other grids
-            const deltaPerGrid = Math.floor(heightDelta / otherGrids.length)
-            otherGrids.forEach(id => {
-                const currentHeight = this.customGridHeights[id] || grids[id]?.height || 100
-                this.$set(this.customGridHeights, id, currentHeight + deltaPerGrid)
-            })
+                // First, try to take from main chart
+                const mainChartHeight = this.customGridHeights[0] || grids[0]?.height || 100
+                const mainAvailable = Math.max(0, mainChartHeight - MIN_MAIN_CHART_HEIGHT)
+                const takeFromMain = Math.min(remainingDelta, mainAvailable)
+
+                if (takeFromMain > 0) {
+                    this.$set(this.customGridHeights, 0, mainChartHeight - takeFromMain)
+                    remainingDelta -= takeFromMain
+                }
+
+                // If still need more space, take from off-charts above (starting from closest)
+                if (remainingDelta > 0) {
+                    for (let i = changedGridId - 1; i >= 1; i--) {
+                        if (this.minimizedGrids[i]) continue  // Skip minimized grids
+
+                        const gridHeight = this.customGridHeights[i] || grids[i]?.height || 100
+                        const available = Math.max(0, gridHeight - MIN_OFFCHART_HEIGHT)
+                        const takeAmount = Math.min(remainingDelta, available)
+
+                        if (takeAmount > 0) {
+                            this.$set(this.customGridHeights, i, gridHeight - takeAmount)
+                            remainingDelta -= takeAmount
+                        }
+
+                        if (remainingDelta <= 0) break
+                    }
+                }
+
+                // Set the actual height we could achieve
+                const actualHeight = restoreHeight - remainingDelta
+                if (actualHeight > MINIMIZED_HEIGHT) {
+                    this.$set(this.customGridHeights, changedGridId, actualHeight)
+                }
+            } else {
+                // MINIMIZING: give space to grid directly above
+                // This moves the bar down (grid above expands)
+                const gridAboveId = changedGridId - 1
+                if (gridAboveId < 0) return
+
+                // Find target grid (skip minimized grids)
+                let targetGridId = gridAboveId
+                if (this.minimizedGrids[gridAboveId]) {
+                    for (let i = gridAboveId; i >= 0; i--) {
+                        if (!this.minimizedGrids[i]) {
+                            targetGridId = i
+                            break
+                        }
+                    }
+                }
+
+                const targetHeight = this.customGridHeights[targetGridId] || grids[targetGridId]?.height || 100
+                const savedHeight = this.savedGridHeights[changedGridId] || 150
+                const heightDelta = savedHeight - MINIMIZED_HEIGHT
+                this.$set(this.customGridHeights, targetGridId, targetHeight + heightDelta)
+            }
         }
     },
     computed: {
@@ -456,7 +497,10 @@ export default {
         },
         styles() {
             let w = this.$props.toolbar ? this.$props.config.TOOLBAR : 0
-            return { 'margin-left': `${w}px` }
+            return {
+                'margin-left': `${w}px`,
+                'position': 'relative'  // Ensure GridResizer is positioned relative to chart
+            }
         },
         meta() {
             return {

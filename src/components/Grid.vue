@@ -130,6 +130,17 @@ export default {
             })
             this.remove_all_ux(layer)
         },
+        // Handle double-click to minimize off-chart grids
+        on_dblclick(e) {
+            const grid_id = this.$props.grid_id
+            // Only trigger for off-chart grids (grid_id > 0)
+            if (grid_id > 0) {
+                this.$emit('custom-event', {
+                    event: 'grid-dblclick',
+                    args: [grid_id]
+                })
+            }
+        },
         get_overlays(h) {
             // Distributes overlay data & settings according
             // to this._registry; returns compo list
