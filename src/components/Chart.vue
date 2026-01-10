@@ -245,6 +245,10 @@ export default {
             if (d.event === 'minimize-all-offcharts') {
                 this.minimize_all_offcharts()
             }
+            // Handle open indicator settings modal
+            if (d.event === 'open-indicator-settings') {
+                this.$emit('open-indicator-settings', d.args[0])
+            }
         },
         update_layout(clac_tf, forceResize = false) {
             if (clac_tf) this.calc_interval()

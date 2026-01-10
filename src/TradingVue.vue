@@ -26,7 +26,8 @@
             v-bind:config="chart_config"
             v-on:custom-event="custom_event"
             v-on:range-changed="range_changed"
-            v-on:legend-button-click="legend_button">
+            v-on:legend-button-click="legend_button"
+            v-on:open-indicator-settings="open_indicator_settings">
         </chart>
         <transition name="tvjs-drift">
             <the-tip :data="tip" v-if="tip"
@@ -310,6 +311,9 @@ export default {
             this.custom_event({
                 event: 'legend-button-click', args: [event]
             })
+        },
+        open_indicator_settings(indicatorInfo) {
+            this.$emit('open-indicator-settings', indicatorInfo)
         },
         custom_event(d) {
             if ('args' in d) {

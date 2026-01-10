@@ -21,8 +21,17 @@
             {{(common.meta.last || [])[4]}}
         </span>
     </div>
-    <div class="t-vue-ind" v-for="ind in this.indicators">
+    <div class="t-vue-ind" v-for="ind in this.indicators" :key="ind.id">
         <span class="t-vue-iname">{{ind.name}}</span>
+        <button
+            v-if="grid_id > 0"
+            class="t-vue-settings-btn"
+            @click.stop="openSettings(ind)"
+            title="Settings">
+            <svg viewBox="0 0 24 24" width="14" height="14">
+                <path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+            </svg>
+        </button>
         <button-group
             v-bind:buttons="common.buttons"
             v-bind:config="common.config"
@@ -101,6 +110,8 @@ export default {
                     name: x.name || id,
                     index: (this.off_data || this.json_data).indexOf(x),
                     id: id,
+                    type: x.type,
+                    settings: x.settings || {},
                     values: values ? f(id, values) : this.n_a(1),
                     unk: !(id in (this.$props.meta_props || {})),
                     loading: x.loading
@@ -175,6 +186,16 @@ export default {
                 e.stopPropagation()
                 this.$emit('legend-dblclick', grid_id)
             }
+        },
+        openSettings(indicator) {
+            // Emit event to open settings modal at App.vue level
+            this.$emit('open-indicator-settings', {
+                name: indicator.name,
+                type: indicator.type,
+                index: indicator.index,
+                settings: indicator.settings,
+                gridId: this.$props.grid_id
+            })
         }
     }
 }
@@ -216,6 +237,32 @@ export default {
     margin-bottom: 0.5em;
     font-size: 1.0em;
     margin-top: 0.3em;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    pointer-events: auto;
+}
+.t-vue-settings-btn {
+    background: none;
+    border: none;
+    color: #808a9d;
+    cursor: pointer;
+    padding: 2px 4px;
+    margin-left: 4px;
+    border-radius: 3px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    position: relative;
+    z-index: 10;
+}
+.t-vue-settings-btn:hover {
+    color: #35a776;
+    background: rgba(53, 167, 118, 0.1);
+}
+.t-vue-settings-btn svg {
+    display: block;
 }
 .t-vue-ivalue {
     margin-left: 0.5em;

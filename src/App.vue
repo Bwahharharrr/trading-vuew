@@ -9,7 +9,8 @@
                     :color-text="colors.colorText"
                     :overlays="overlays"
                     :chart-config="config"
-                    :toolbar="true">
+                    :toolbar="true"
+                    @open-indicator-settings="openIndicatorSettings">
             </trading-vue>
 
             <!-- Left toolbar for drawing tools -->
@@ -104,11 +105,24 @@
             </div>
         </div>
     </div>
+
+    <!-- Indicator Settings Modal (rendered at app level to escape stacking contexts) -->
+    <indicator-settings
+        v-if="indicatorSettingsOpen"
+        :indicator-name="indicatorSettingsData.name"
+        :current-type="indicatorSettingsData.type"
+        :current-settings="indicatorSettingsData.settings"
+        :indicator-index="indicatorSettingsData.index"
+        :grid-id="indicatorSettingsData.gridId"
+        @close="closeIndicatorSettings"
+        @apply="applyIndicatorSettings">
+    </indicator-settings>
 </div>
 </template>
 
 <script>
 import TradingVue from './TradingVue.vue'
+import IndicatorSettings from './components/IndicatorSettings.vue'
 
 let uri = window.location.href.split('?');
 if(uri.length == 2) {
@@ -167,7 +181,8 @@ export default {
         }
     },
     components: {
-        TradingVue
+        TradingVue,
+        IndicatorSettings
     },
     methods: {
         onResize() {
@@ -458,6 +473,44 @@ export default {
             } catch (error) {
                 console.error('Error loading data file:', error)
             }
+        },
+        openIndicatorSettings(indicatorInfo) {
+            this.indicatorSettingsData = indicatorInfo
+            this.indicatorSettingsOpen = true
+        },
+        closeIndicatorSettings() {
+            this.indicatorSettingsOpen = false
+            this.indicatorSettingsData = null
+        },
+        applyIndicatorSettings(payload) {
+            // payload: { gridId, indicatorIndex, newType, newSettings }
+            const { gridId, indicatorIndex, newType, newSettings } = payload
+
+            // Update the offchart data type and settings immediately
+            if (this.chart.data.offchart && this.chart.data.offchart[indicatorIndex]) {
+                this.$set(this.chart.data.offchart[indicatorIndex], 'type', newType)
+
+                // Merge new settings with existing settings
+                const currentSettings = this.chart.data.offchart[indicatorIndex].settings || {}
+                const mergedSettings = Object.assign({}, currentSettings, newSettings)
+                this.$set(this.chart.data.offchart[indicatorIndex], 'settings', mergedSettings)
+
+                // Also update in the original charts data to persist across timeframe changes
+                if (this.currentTimeframe && this.charts[this.currentTimeframe]) {
+                    const tfData = this.charts[this.currentTimeframe]
+                    if (tfData.offchart && tfData.offchart[indicatorIndex]) {
+                        tfData.offchart[indicatorIndex].type = newType
+                        tfData.offchart[indicatorIndex].settings = mergedSettings
+                    }
+                }
+
+                // Update the indicatorSettingsData so the modal reflects current state
+                if (this.indicatorSettingsData) {
+                    this.indicatorSettingsData.type = newType
+                    this.indicatorSettingsData.settings = mergedSettings
+                }
+            }
+            // Modal stays open - user clicks Close to dismiss
         }
     },
     mounted() {
@@ -502,7 +555,9 @@ export default {
             rectDrawMode: false,
             isDrawing: false,
             rectStart: null,
-            rectCurrent: null
+            rectCurrent: null,
+            indicatorSettingsOpen: false,
+            indicatorSettingsData: null
         };
     },
     watch: {

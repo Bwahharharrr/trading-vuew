@@ -8,7 +8,8 @@
             v-bind:meta_props="get_meta_props"
             v-bind:layout_override="legendLayoutOverride"
             v-on:legend-button-click="button_click"
-            v-on:legend-dblclick="legend_dblclick">
+            v-on:legend-dblclick="legend_dblclick"
+            v-on:open-indicator-settings="open_indicator_settings">
         </chart-legend>
         <grid v-bind="grid_props" ref="grid"
             v-bind:grid_id="grid_id"
@@ -96,6 +97,13 @@ export default {
                     event.z, event.diff1, event.diff2
                 )
             }
+        },
+        open_indicator_settings(indicatorInfo) {
+            // Emit as custom event to be handled by Chart.vue -> App.vue
+            this.$emit('custom-event', {
+                event: 'open-indicator-settings',
+                args: [indicatorInfo]
+            })
         },
         ghash(val) {
             // Measures grid heights configuration
