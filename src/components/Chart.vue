@@ -30,6 +30,11 @@
             :shaders="shaders" :timezone="timezone"
             v-on:botbar-zoom="range_changed">
         </botbar>
+        <right-panel
+            :width="rightPanelWidth"
+            :height="$props.height"
+            :colors="colors">
+        </right-panel>
     </div>
 </template>
 
@@ -43,6 +48,7 @@ import GridSection from './Section.vue'
 import Botbar from './Botbar.vue'
 import Keyboard from './Keyboard.vue'
 import GridResizer from './GridResizer.vue'
+import RightPanel from './RightPanel.vue'
 import Shaders from '../mixins/shaders.js'
 import DataTrack from '../mixins/datatrack.js'
 import TI from './js/ti_mapping.js'
@@ -61,7 +67,8 @@ export default {
         GridSection,
         Botbar,
         Keyboard,
-        GridResizer
+        GridResizer,
+        RightPanel
     },
     created() {
 
@@ -240,6 +247,10 @@ export default {
             // Handle double-click on off-chart grid to minimize
             if (d.event === 'grid-dblclick') {
                 this.on_toggle_minimize(d.args[0])
+            }
+            // Handle double-click on main chart to minimize all off-charts
+            if (d.event === 'minimize-all-offcharts') {
+                this.minimize_all_offcharts()
             }
         },
         update_layout(clac_tf, forceResize = false) {
@@ -434,6 +445,72 @@ export default {
                 const heightDelta = savedHeight - MINIMIZED_HEIGHT
                 this.$set(this.customGridHeights, targetGridId, targetHeight + heightDelta)
             }
+        },
+        minimize_all_offcharts() {
+            const grids = this._layout.grids
+            const MINIMIZED_HEIGHT = 28
+
+            // Check if any off-chart is NOT minimized
+            let hasExpandedOffchart = false
+            for (let i = 1; i < grids.length; i++) {
+                if (!this.minimizedGrids[i]) {
+                    hasExpandedOffchart = true
+                    break
+                }
+            }
+
+            if (hasExpandedOffchart) {
+                // Minimize all off-charts: save heights and give space to main chart
+                let totalHeightGained = 0
+
+                for (let i = 1; i < grids.length; i++) {
+                    if (!this.minimizedGrids[i]) {
+                        // Save current height before minimizing
+                        const currentHeight = this.customGridHeights[i] || grids[i]?.height
+                        if (currentHeight) {
+                            this.$set(this.savedGridHeights, i, currentHeight)
+                            totalHeightGained += currentHeight - MINIMIZED_HEIGHT
+                        }
+                        // Mark as minimized
+                        this.$set(this.minimizedGrids, i, true)
+                    }
+                }
+
+                // Give all gained space to main chart
+                const mainHeight = this.customGridHeights[0] || grids[0]?.height || 100
+                this.$set(this.customGridHeights, 0, mainHeight + totalHeightGained)
+            } else {
+                // All are minimized - expand all off-charts
+                let totalHeightNeeded = 0
+
+                // Calculate total height needed to restore all
+                for (let i = 1; i < grids.length; i++) {
+                    const restoreHeight = this.savedGridHeights[i] || 150
+                    totalHeightNeeded += restoreHeight - MINIMIZED_HEIGHT
+                }
+
+                // Take space from main chart
+                const mainHeight = this.customGridHeights[0] || grids[0]?.height || 100
+                const MIN_MAIN_CHART_HEIGHT = 100
+                const available = Math.max(0, mainHeight - MIN_MAIN_CHART_HEIGHT)
+                const takeFromMain = Math.min(totalHeightNeeded, available)
+
+                if (takeFromMain > 0) {
+                    this.$set(this.customGridHeights, 0, mainHeight - takeFromMain)
+                }
+
+                // Expand all off-charts (proportionally if not enough space)
+                const ratio = takeFromMain / totalHeightNeeded
+                for (let i = 1; i < grids.length; i++) {
+                    this.$set(this.minimizedGrids, i, false)
+                    const restoreHeight = this.savedGridHeights[i] || 150
+                    const actualHeight = MINIMIZED_HEIGHT + (restoreHeight - MINIMIZED_HEIGHT) * (ratio < 1 ? ratio : 1)
+                    this.$set(this.customGridHeights, i, actualHeight)
+                }
+            }
+
+            // Update layout with force resize
+            this.update_layout(false, true)
         }
     },
     computed: {
@@ -499,7 +576,9 @@ export default {
             let w = this.$props.toolbar ? this.$props.config.TOOLBAR : 0
             return {
                 'margin-left': `${w}px`,
-                'position': 'relative'  // Ensure GridResizer is positioned relative to chart
+                'position': 'relative',  // Ensure GridResizer is positioned relative to chart
+                'width': `${this.$props.width}px`,  // Full width including right panel
+                'height': `${this.$props.height}px`
             }
         },
         meta() {
@@ -521,6 +600,13 @@ export default {
                 indices.push(i)
             }
             return indices
+        },
+        rightPanelWidth() {
+            return this.$props.config.RIGHTBAR || 250
+        },
+        // Chart width excluding the right panel
+        chartWidth() {
+            return this.$props.width - this.rightPanelWidth
         }
     },
     data() {

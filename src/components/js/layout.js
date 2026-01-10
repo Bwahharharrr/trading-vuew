@@ -15,8 +15,14 @@ function Layout(params) {
     let {
         chart, sub, offsub, interval, range, ctx, layers_meta,
         ti_map, $props:$p, y_transforms: y_ts,
-        customGridHeights, minimizedGrids
+        customGridHeights, minimizedGrids,
+        chartWidth  // Use chartWidth if available (for right panel support)
     } = params
+
+    // Override width if chartWidth is provided
+    if (chartWidth !== undefined) {
+        $p = Object.assign({}, $p, { width: chartWidth })
+    }
 
     let mgrid = chart.grid || {}
 

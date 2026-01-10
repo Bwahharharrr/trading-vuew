@@ -130,11 +130,17 @@ export default {
             })
             this.remove_all_ux(layer)
         },
-        // Handle double-click to minimize off-chart grids
+        // Handle double-click to minimize off-chart grids or minimize all (main chart)
         on_dblclick(e) {
             const grid_id = this.$props.grid_id
-            // Only trigger for off-chart grids (grid_id > 0)
-            if (grid_id > 0) {
+            if (grid_id === 0) {
+                // Double-click on main chart minimizes all off-chart grids
+                this.$emit('custom-event', {
+                    event: 'minimize-all-offcharts',
+                    args: []
+                })
+            } else {
+                // Double-click on off-chart grid toggles its minimize state
                 this.$emit('custom-event', {
                     event: 'grid-dblclick',
                     args: [grid_id]

@@ -1,6 +1,6 @@
 <template>
 <!-- Timeframe Selector -->
-<div class="tf-selector">
+<div class="tf-selector" :style="selectorStyle">
     <span class="timeframe" v-for="(tf, i) in this.timeframes"
         v-on:click="on_click(tf, i)"
         v-bind:style= "selected === i ? {color: '#44c767'} : {}">
@@ -12,7 +12,7 @@
 <script>
 export default {
     name: 'TfSelector',
-    props: ['charts'],
+    props: ['charts', 'rightOffset'],
     mounted() {
         this.$emit('selected', {
             name: this.timeframes[this.selected],
@@ -22,6 +22,13 @@ export default {
     computed: {
         timeframes() {
             return Object.keys(this.$props.charts)
+        },
+        selectorStyle() {
+            // Account for right panel offset (default 80px from right edge of chart)
+            const rightPos = 80 + (this.$props.rightOffset || 0)
+            return {
+                right: rightPos + 'px'
+            }
         }
     },
     methods: {
@@ -45,7 +52,7 @@ export default {
 .tf-selector {
     position: absolute;
     top: 15px;
-    right: 80px;
+    /* right is set dynamically via selectorStyle computed property */
     font: 16px -apple-system,BlinkMacSystemFont,
         Segoe UI,Roboto,Oxygen,Ubuntu,Cantarell,
         Fira Sans,Droid Sans,Helvetica Neue,

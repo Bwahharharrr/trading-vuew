@@ -8,7 +8,7 @@
             :chart-config="config"
             :toolbar="true">
     </trading-vue>
-    <tf-selector :charts="charts" v-on:selected="on_selected">
+    <tf-selector :charts="charts" :right-offset="rightPanelWidth" v-on:selected="on_selected">
     </tf-selector>
     <file-selector
         :files="dataFiles"
@@ -109,6 +109,9 @@ export default {
               	candle_dw: '#e54077',
               	wick_dw: '#e54077'
             }
+        },
+        rightPanelWidth() {
+            return this.config.RIGHTBAR || 250
         }
     },
     components: {
@@ -398,7 +401,8 @@ export default {
                 TB_BORDER: 5,
                 CANDLEW: 0.9,
                 GRIDX: 200,
-                VOLSCALE: 0.1
+                VOLSCALE: 0.1,
+                RIGHTBAR: 250
             },
             log_scale: true,
             dataFiles: [],
@@ -436,7 +440,7 @@ body {
 .log-scale {
     position: absolute;
     top: 60px;
-    right: 80px;
+    right: 330px; /* 80px + 250px right panel */
     color: #888;
     font: 11px -apple-system, BlinkMacSystemFont,
         Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell,
