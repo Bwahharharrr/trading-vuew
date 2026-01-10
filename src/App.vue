@@ -104,6 +104,32 @@
                 </select>
             </div>
         </div>
+
+        <div class="panel-section" v-if="offchartIndicators.length > 0">
+            <div class="section-title">Indicators</div>
+            <div class="indicator-list">
+                <div
+                    v-for="(indicator, index) in offchartIndicators"
+                    :key="index"
+                    class="indicator-item">
+                    <button
+                        class="visibility-toggle"
+                        :class="{ hidden: !indicator.visible }"
+                        @click="toggleIndicatorVisibility(index)"
+                        :title="indicator.visible ? 'Hide indicator' : 'Show indicator'">
+                        <svg v-if="indicator.visible" viewBox="0 0 24 24" width="16" height="16">
+                            <path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                        </svg>
+                        <svg v-else viewBox="0 0 24 24" width="16" height="16">
+                            <path fill="currentColor" d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/>
+                        </svg>
+                    </button>
+                    <span class="indicator-name" :class="{ dimmed: !indicator.visible }">
+                        {{ indicator.name }}
+                    </span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Indicator Settings Modal (rendered at app level to escape stacking contexts) -->
@@ -178,6 +204,17 @@ export default {
         },
         timeframes() {
             return Object.keys(this.charts)
+        },
+        offchartIndicators() {
+            if (!this.chart || !this.chart.data || !this.chart.data.offchart) {
+                return []
+            }
+            return this.chart.data.offchart.map((indicator, index) => ({
+                name: indicator.name || `Indicator ${index + 1}`,
+                type: indicator.type,
+                visible: indicator.settings?.display !== false,
+                index: index
+            }))
         }
     },
     components: {
@@ -249,7 +286,7 @@ export default {
             const coloringStillAvailable = this.candleColoringOptions.some(opt => opt.title === previousColoring)
             this.currentCandleColoring = coloringStillAvailable ? previousColoring : ''
             // Create DataCube with candle_coloring items filtered out
-            this.chart = new DataCube(this.prepareChartData(chartData))
+            this.chart = new DataCube(this.prepareChartData(chartData, tf))
             // Apply coloring if one is selected
             if (this.currentCandleColoring) {
                 this.$nextTick(() => {
@@ -316,10 +353,15 @@ export default {
             }
         },
         // Create a clean copy of chart data with candle_coloring items filtered out
-        prepareChartData(chartData) {
+        // Always set chart.tf from timeframe key for multi-timeframe data
+        prepareChartData(chartData, timeframe = null) {
             const cleaned = JSON.parse(JSON.stringify(chartData))
             if (cleaned.onchart && Array.isArray(cleaned.onchart)) {
                 cleaned.onchart = cleaned.onchart.filter(item => item.type !== 'candle_coloring')
+            }
+            // Always set chart.tf from timeframe key (except for 'default' single-timeframe)
+            if (timeframe && timeframe !== 'default' && cleaned.chart) {
+                cleaned.chart.tf = timeframe
             }
             return cleaned
         },
@@ -376,7 +418,7 @@ export default {
                 this.selectedTimeframe = 0
                 this.originalChartData = JSON.parse(JSON.stringify(data.chart.data))
                 this.extractCandleColoringOptions(data, 'default')
-                this.chart = new DataCube(this.prepareChartData(data))
+                this.chart = new DataCube(this.prepareChartData(data, 'default'))
             } else {
                 // Multi-timeframe format (data_tf.json style)
                 this.charts = data
@@ -388,7 +430,7 @@ export default {
                     this.selectedTimeframe = 0
                     this.originalChartData = JSON.parse(JSON.stringify(firstTfData.chart.data))
                     this.extractCandleColoringOptions(firstTfData, firstTf)
-                    this.chart = new DataCube(this.prepareChartData(firstTfData))
+                    this.chart = new DataCube(this.prepareChartData(firstTfData, firstTf))
                 }
             }
         },
@@ -415,8 +457,8 @@ export default {
                 this.currentDataFile = filename
                 this.selectedDataFile = filename
 
-                // Reset candle coloring and timeframe
-                this.currentCandleColoring = ''
+                // Save previous candle coloring selection to check if it exists in new file
+                const previousColoring = this.currentCandleColoring
                 this.selectedTimeframe = 0
 
                 // Check if this is single-format (has chart.data array at root)
@@ -432,7 +474,7 @@ export default {
                         newStart = data.chart.data[0][0]
                         newEnd = data.chart.data[data.chart.data.length - 1][0]
                     }
-                    this.chart = new DataCube(this.prepareChartData(data))
+                    this.chart = new DataCube(this.prepareChartData(data, 'default'))
                 } else {
                     // Multi-timeframe format (data_tf.json style)
                     this.charts = data
@@ -447,8 +489,20 @@ export default {
                             newStart = firstTfData.chart.data[0][0]
                             newEnd = firstTfData.chart.data[firstTfData.chart.data.length - 1][0]
                         }
-                        this.chart = new DataCube(this.prepareChartData(firstTfData))
+                        this.chart = new DataCube(this.prepareChartData(firstTfData, firstTf))
                     }
+                }
+
+                // Check if previous coloring exists in new file's options
+                const coloringStillAvailable = previousColoring &&
+                    this.candleColoringOptions.some(opt => opt.title === previousColoring)
+                this.currentCandleColoring = coloringStillAvailable ? previousColoring : ''
+
+                // Apply coloring if one is selected (either restored or default)
+                if (this.currentCandleColoring) {
+                    this.$nextTick(() => {
+                        this.applyCurrentColoring()
+                    })
                 }
 
                 // Check if datasets have same bounds (can restore range without flash)
@@ -511,6 +565,34 @@ export default {
                 }
             }
             // Modal stays open - user clicks Close to dismiss
+        },
+        toggleIndicatorVisibility(index) {
+            if (!this.chart.data.offchart || !this.chart.data.offchart[index]) return
+
+            const indicator = this.chart.data.offchart[index]
+            const currentSettings = indicator.settings || {}
+            const isCurrentlyVisible = currentSettings.display !== false
+            const newDisplay = !isCurrentlyVisible
+
+            // Update settings with new display value
+            const newSettings = Object.assign({}, currentSettings, { display: newDisplay })
+            this.$set(this.chart.data.offchart[index], 'settings', newSettings)
+
+            // Also update in the original charts data to persist across timeframe changes
+            if (this.currentTimeframe && this.charts[this.currentTimeframe]) {
+                const tfData = this.charts[this.currentTimeframe]
+                if (tfData.offchart && tfData.offchart[index]) {
+                    tfData.offchart[index].settings = newSettings
+                }
+            }
+
+            // Force chart reset to properly recreate overlays and recalculate layout
+            // resetChart(false) preserves range and uses double nextTick for proper initialization
+            this.$nextTick(() => {
+                if (this.$refs.tradingVue) {
+                    this.$refs.tradingVue.resetChart(false)
+                }
+            })
         }
     },
     mounted() {
@@ -862,5 +944,61 @@ body {
 
 .drawing-overlay svg {
     display: block;
+}
+
+/* Indicator list in right panel */
+.indicator-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.indicator-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: #131722;
+    border: 1px solid #2a2e39;
+    border-radius: 4px;
+}
+
+.visibility-toggle {
+    background: none;
+    border: none;
+    color: #35a776;
+    cursor: pointer;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    border-radius: 3px;
+}
+
+.visibility-toggle:hover {
+    background: rgba(53, 167, 118, 0.1);
+}
+
+.visibility-toggle.hidden {
+    color: #808a9d;
+}
+
+.visibility-toggle.hidden:hover {
+    color: #d1d4dc;
+    background: rgba(128, 138, 157, 0.1);
+}
+
+.indicator-name {
+    color: #d1d4dc;
+    font-size: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, sans-serif;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.indicator-name.dimmed {
+    color: #808a9d;
 }
 </style>

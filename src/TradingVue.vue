@@ -257,10 +257,16 @@ export default {
     methods: {
         // TODO: reset extensions?
         resetChart(resetRange = true) {
-            this.reset++
             let range = this.getRange()
+            this.reset++
             if (!resetRange && range[0] && range[1]) {
-                this.$nextTick(() => this.setRange(...range))
+                // Wait for chart to fully initialize before restoring range
+                // Double nextTick ensures layout and overlays are created
+                this.$nextTick(() => {
+                    this.$nextTick(() => {
+                        this.setRange(...range)
+                    })
+                })
             }
             this.$nextTick(() => this.custom_event({
                 event: 'chart-reset', args: []

@@ -563,7 +563,12 @@ export default {
             return this.$props.data.onchart || []
         },
         offchart() {
-            return this.$props.data.offchart || []
+            const all = this.$props.data.offchart || []
+            // Filter out hidden indicators (settings.display === false)
+            return all.filter(x => {
+                if (!x.settings) return true
+                return x.settings.display !== false
+            })
         },
         filter() {
             return this.$props.ib ?
@@ -679,6 +684,8 @@ export default {
             Utils.overwrite(this.range, this.range)
         },
         forced_tf(n, p) {
+            // Recalculate interval when timeframe changes
+            this.calc_interval()
             this.update_layout(true)
             this.ce('exec-all-scripts')
         },

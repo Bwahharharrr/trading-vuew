@@ -261,6 +261,8 @@ export default {
                 // the main sub. Fast fix is to delay redraw()
                 // call. It will be a solution until a better
                 // one comes by.
+                // Also force update to ensure overlay data props are refreshed
+                this.$forceUpdate()
                 this.$nextTick(() => this.redraw())
             },
             deep: true
@@ -295,6 +297,15 @@ export default {
         },
         // Redraw on the shader list change
         shaders(n, p) { this.redraw() },
+        // Watch data changes to ensure overlays are updated
+        data: {
+            handler: function() {
+                // Force update and redraw when data changes
+                this.$forceUpdate()
+                this.$nextTick(() => this.redraw())
+            },
+            deep: true
+        },
         // Watch layout changes for resize operations
         layout: {
             handler: function(newLayout, oldLayout) {

@@ -83,13 +83,27 @@ const MAP_UNIT = {
   "5m": MINUTE5,
   "15m": MINUTE15,
   "30m": MINUTE30,
+  // Uppercase hour formats
   "1H": HOUR,
   "2H": HOUR * 2,
   "3H": HOUR * 3,
   "4H": HOUR4,
+  "6H": HOUR * 6,
+  "8H": HOUR * 8,
   "12H": HOUR12,
+  // Lowercase hour formats
+  "1h": HOUR,
+  "2h": HOUR * 2,
+  "3h": HOUR * 3,
+  "4h": HOUR4,
+  "6h": HOUR * 6,
+  "8h": HOUR * 8,
+  "12h": HOUR12,
+  // Day/Week/Month/Year (both cases)
   "1D": DAY,
+  "1d": DAY,
   "1W": WEEK,
+  "1w": WEEK,
   "1M": MONTH,
   "1Y": YEAR
 }
