@@ -30,11 +30,6 @@
             :shaders="shaders" :timezone="timezone"
             v-on:botbar-zoom="range_changed">
         </botbar>
-        <right-panel
-            :width="rightPanelWidth"
-            :height="$props.height"
-            :colors="colors">
-        </right-panel>
     </div>
 </template>
 
@@ -48,7 +43,6 @@ import GridSection from './Section.vue'
 import Botbar from './Botbar.vue'
 import Keyboard from './Keyboard.vue'
 import GridResizer from './GridResizer.vue'
-import RightPanel from './RightPanel.vue'
 import Shaders from '../mixins/shaders.js'
 import DataTrack from '../mixins/datatrack.js'
 import TI from './js/ti_mapping.js'
@@ -67,8 +61,7 @@ export default {
         GridSection,
         Botbar,
         Keyboard,
-        GridResizer,
-        RightPanel
+        GridResizer
     },
     created() {
 
@@ -576,9 +569,7 @@ export default {
             let w = this.$props.toolbar ? this.$props.config.TOOLBAR : 0
             return {
                 'margin-left': `${w}px`,
-                'position': 'relative',  // Ensure GridResizer is positioned relative to chart
-                'width': `${this.$props.width}px`,  // Full width including right panel
-                'height': `${this.$props.height}px`
+                'position': 'relative'  // Ensure GridResizer is positioned relative to chart
             }
         },
         meta() {
@@ -600,13 +591,6 @@ export default {
                 indices.push(i)
             }
             return indices
-        },
-        rightPanelWidth() {
-            return this.$props.config.RIGHTBAR || 250
-        },
-        // Chart width excluding the right panel
-        chartWidth() {
-            return this.$props.width - this.rightPanelWidth
         }
     },
     data() {

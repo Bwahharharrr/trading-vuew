@@ -1,74 +1,114 @@
 <template>
-<div>
-    <trading-vue ref="tradingVue" :data="chart" :width="this.width" :height="this.height"
-            :color-back="colors.colorBack"
-            :color-grid="colors.colorGrid"
-            :color-text="colors.colorText"
-            :overlays="overlays"
-            :chart-config="config"
-            :toolbar="true">
-    </trading-vue>
-    <tf-selector :charts="charts" :right-offset="rightPanelWidth" v-on:selected="on_selected">
-    </tf-selector>
-    <file-selector
-        :files="dataFiles"
-        :current-file="currentDataFile"
-        @file-selected="onFileSelected">
-    </file-selector>
-    <candle-color-selector
-        :coloring-options="candleColoringOptions"
-        :current-coloring="currentCandleColoring"
-        @coloring-selected="onCandleColoringSelected">
-    </candle-color-selector>
-    <span class="log-scale">
-        <input type="checkbox" v-model="log_scale">
-        <label>Log Scale</label>
-    </span>
-    <button class="reset-view-btn" @click="resetView">Reset View</button>
+<div class="app-container">
+    <!-- Chart area -->
+    <div class="chart-area">
+        <div class="chart-wrapper">
+            <trading-vue ref="tradingVue" :data="chart" :width="chartWidth" :height="chartHeight"
+                    :color-back="colors.colorBack"
+                    :color-grid="colors.colorGrid"
+                    :color-text="colors.colorText"
+                    :overlays="overlays"
+                    :chart-config="config"
+                    :toolbar="true">
+            </trading-vue>
 
-    <!-- Left toolbar for drawing tools -->
-    <div class="left-toolbar">
-        <button
-            class="tool-btn"
-            :class="{ active: rectDrawMode }"
-            @click="toggleRectDrawMode"
-            title="Draw Rectangle">
-            <svg viewBox="0 0 24 24" width="20" height="20">
-                <rect x="3" y="3" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"/>
-            </svg>
-        </button>
+            <!-- Left toolbar for drawing tools -->
+            <div class="left-toolbar">
+                <button
+                    class="tool-btn"
+                    :class="{ active: rectDrawMode }"
+                    @click="toggleRectDrawMode"
+                    title="Draw Rectangle">
+                    <svg viewBox="0 0 24 24" width="20" height="20">
+                        <rect x="3" y="3" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Drawing overlay -->
+            <div
+                v-if="rectDrawMode"
+                class="drawing-overlay"
+                @mousedown="onDrawStart"
+                @mousemove="onDrawMove"
+                @mouseup="onDrawEnd"
+                @mouseleave="onDrawEnd">
+                <svg :width="chartWidth" :height="chartHeight">
+                    <rect
+                        v-if="isDrawing && rectStart && rectCurrent"
+                        :x="Math.min(rectStart.x, rectCurrent.x)"
+                        :y="Math.min(rectStart.y, rectCurrent.y)"
+                        :width="Math.abs(rectCurrent.x - rectStart.x)"
+                        :height="Math.abs(rectCurrent.y - rectStart.y)"
+                        fill="rgba(53, 167, 118, 0.2)"
+                        stroke="#35a776"
+                        stroke-width="2"
+                        stroke-dasharray="5,5"
+                    />
+                </svg>
+            </div>
+        </div>
+
+        <!-- Bottom Panel -->
+        <div class="bottom-panel">
+            <div class="bottom-panel-section" v-if="Object.keys(charts).length > 1">
+                <span class="bottom-label">Timeframe</span>
+                <div class="tf-buttons">
+                    <button
+                        v-for="(tf, i) in timeframes"
+                        :key="tf"
+                        class="tf-btn"
+                        :class="{ active: selectedTimeframe === i }"
+                        @click="selectTimeframe(tf, i)">
+                        {{ tf }}
+                    </button>
+                </div>
+            </div>
+
+            <div class="bottom-panel-section">
+                <label class="toggle-control">
+                    <input type="checkbox" v-model="log_scale">
+                    <span class="toggle-label">Log Scale</span>
+                </label>
+            </div>
+
+            <div class="bottom-panel-section">
+                <button class="bottom-btn" @click="resetView">Reset View</button>
+            </div>
+        </div>
     </div>
 
-    <!-- Drawing overlay -->
-    <div
-        v-if="rectDrawMode"
-        class="drawing-overlay"
-        @mousedown="onDrawStart"
-        @mousemove="onDrawMove"
-        @mouseup="onDrawEnd"
-        @mouseleave="onDrawEnd">
-        <svg :width="width" :height="height">
-            <rect
-                v-if="isDrawing && rectStart && rectCurrent"
-                :x="Math.min(rectStart.x, rectCurrent.x)"
-                :y="Math.min(rectStart.y, rectCurrent.y)"
-                :width="Math.abs(rectCurrent.x - rectStart.x)"
-                :height="Math.abs(rectCurrent.y - rectStart.y)"
-                fill="rgba(53, 167, 118, 0.2)"
-                stroke="#35a776"
-                stroke-width="2"
-                stroke-dasharray="5,5"
-            />
-        </svg>
+    <!-- Right Panel -->
+    <div class="right-panel" :style="{ width: rightPanelWidth + 'px', height: height + 'px' }">
+        <div class="panel-section">
+            <div class="section-title">Data</div>
+            <div class="control-group">
+                <label>Data File</label>
+                <select v-model="selectedDataFile" @change="onFileSelected(selectedDataFile)">
+                    <option v-for="file in dataFiles" :key="file" :value="file">
+                        {{ file }}
+                    </option>
+                </select>
+            </div>
+        </div>
+
+        <div class="panel-section" v-if="candleColoringOptions.length > 0">
+            <div class="section-title">Candle Colors</div>
+            <div class="control-group">
+                <select v-model="currentCandleColoring" @change="applyCurrentColoring">
+                    <option value="">Default</option>
+                    <option v-for="option in candleColoringOptions" :key="option.title" :value="option.title">
+                        {{ option.title }}
+                    </option>
+                </select>
+            </div>
+        </div>
     </div>
 </div>
 </template>
 
 <script>
 import TradingVue from './TradingVue.vue'
-import TfSelector from './TFSelector.vue'
-import FileSelector from './FileSelector.vue'
-import CandleColorSelector from './CandleColorSelector.vue'
 
 let uri = window.location.href.split('?');
 if(uri.length == 2) {
@@ -90,7 +130,7 @@ if(uri.length == 2) {
 
 
 import Utils from '../src/stuff/utils.js'
-import Data from '../data/data_tf.json'
+import Data from '../data/data.json'
 // import DataColmap from '../data/data_colmap.json'
 import DataCube from '../src/helpers/datacube.js'
 import BuysAndSells from './buysandsells.js'
@@ -112,10 +152,22 @@ export default {
         },
         rightPanelWidth() {
             return this.config.RIGHTBAR || 250
+        },
+        chartWidth() {
+            return this.width - this.rightPanelWidth
+        },
+        chartHeight() {
+            return this.height - this.bottomPanelHeight
+        },
+        bottomPanelHeight() {
+            return 44
+        },
+        timeframes() {
+            return Object.keys(this.charts)
         }
     },
     components: {
-        TradingVue, TfSelector, FileSelector, CandleColorSelector
+        TradingVue
     },
     methods: {
         onResize() {
@@ -167,16 +219,17 @@ export default {
                 this.rectDrawMode = false
             }
         },
-        on_selected(tf) {
-            const chartData = this.charts[tf.name]
+        selectTimeframe(tf, index) {
+            this.selectedTimeframe = index
+            const chartData = this.charts[tf]
             // Store original data for color scheme switching
             this.originalChartData = JSON.parse(JSON.stringify(chartData.chart.data))
             // Track current timeframe
-            this.currentTimeframe = tf.name
+            this.currentTimeframe = tf
             // Remember current coloring selection
             const previousColoring = this.currentCandleColoring
             // Extract candle coloring options for this timeframe
-            this.extractCandleColoringOptions(chartData, tf.name)
+            this.extractCandleColoringOptions(chartData, tf)
             // Check if previous coloring is still available for this timeframe
             const coloringStillAvailable = this.candleColoringOptions.some(opt => opt.title === previousColoring)
             this.currentCandleColoring = coloringStillAvailable ? previousColoring : ''
@@ -299,6 +352,31 @@ export default {
                 console.error('Error loading file list:', error)
             }
         },
+        initializeChart(data) {
+            // Check if this is single-format (has chart.data array at root)
+            if (data.chart && Array.isArray(data.chart.data)) {
+                // Single-timeframe format (data.json style)
+                this.charts = { 'default': data }
+                this.currentTimeframe = 'default'
+                this.selectedTimeframe = 0
+                this.originalChartData = JSON.parse(JSON.stringify(data.chart.data))
+                this.extractCandleColoringOptions(data, 'default')
+                this.chart = new DataCube(this.prepareChartData(data))
+            } else {
+                // Multi-timeframe format (data_tf.json style)
+                this.charts = data
+                const timeframes = Object.keys(data)
+                if (timeframes.length > 0) {
+                    const firstTf = timeframes[0]
+                    const firstTfData = data[firstTf]
+                    this.currentTimeframe = firstTf
+                    this.selectedTimeframe = 0
+                    this.originalChartData = JSON.parse(JSON.stringify(firstTfData.chart.data))
+                    this.extractCandleColoringOptions(firstTfData, firstTf)
+                    this.chart = new DataCube(this.prepareChartData(firstTfData))
+                }
+            }
+        },
         async onFileSelected(filename) {
             try {
                 // Save current view range and dataset bounds before loading new data
@@ -320,9 +398,11 @@ export default {
                 }
                 const data = await response.json()
                 this.currentDataFile = filename
+                this.selectedDataFile = filename
 
-                // Reset candle coloring
+                // Reset candle coloring and timeframe
                 this.currentCandleColoring = ''
+                this.selectedTimeframe = 0
 
                 // Check if this is single-format (has chart.data array at root)
                 let newStart = null
@@ -382,9 +462,15 @@ export default {
     },
     mounted() {
         window.addEventListener('resize', this.onResize)
-        window.dc = this.chart
-        window.tv = this.$refs.tradingVue
         this.loadDataFileList()
+
+        // Initialize with imported data
+        this.initializeChart(Data)
+
+        this.$nextTick(() => {
+            window.dc = this.chart
+            window.tv = this.$refs.tradingVue
+        })
     },
     beforeDestroy() {
         window.removeEventListener('resize', this.onResize)
@@ -406,8 +492,10 @@ export default {
             },
             log_scale: true,
             dataFiles: [],
-            currentDataFile: 'data_tf.json',
+            currentDataFile: 'data.json',
+            selectedDataFile: 'data.json',
             currentTimeframe: null,
+            selectedTimeframe: 0,
             candleColoringOptions: [],
             currentCandleColoring: '',
             originalChartData: null,
@@ -437,39 +525,238 @@ body {
     padding: 0;
     overflow: hidden;
 }
-.log-scale {
-    position: absolute;
-    top: 60px;
-    right: 330px; /* 80px + 250px right panel */
-    color: #888;
-    font: 11px -apple-system, BlinkMacSystemFont,
-        Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell,
-        Fira Sans, Droid Sans, Helvetica Neue,
-        sans-serif
+
+/* Main layout */
+.app-container {
+    display: flex;
+    width: 100vw;
+    height: 100vh;
 }
-.reset-view-btn {
-    position: absolute;
-    bottom: 40px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(30, 36, 51, 0.6);
-    color: rgba(53, 167, 118, 0.8);
-    border: 1px solid rgba(62, 62, 62, 0.6);
+
+.chart-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: #121826; /* Match toolbar background to fill bottom-left corner */
+}
+
+.chart-wrapper {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Bottom Panel */
+.bottom-panel {
+    height: 44px;
+    background-color: #121827;
+    border-top: 1px solid #2a2e39;
+    border-left: 5px dotted #8282827d; /* Match toolbar border style (TB_BORDER: 5) */
+    display: flex;
+    align-items: center;
+    padding: 0 15px;
+    margin-left: 52px; /* Account for left toolbar width minus border */
+    gap: 20px;
+    box-sizing: border-box;
+}
+
+.bottom-panel-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.bottom-label {
+    color: #808a9d;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, sans-serif;
+}
+
+.bottom-btn {
+    background: #131722;
+    color: #808a9d;
+    border: 1px solid #2a2e39;
     border-radius: 4px;
-    padding: 8px 16px;
-    font: 11px -apple-system, BlinkMacSystemFont,
-        Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell,
-        Fira Sans, Droid Sans, Helvetica Neue,
-        sans-serif;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, sans-serif;
     cursor: pointer;
-    z-index: 1000;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
 }
-.reset-view-btn:hover {
-    background: rgba(30, 36, 51, 0.9);
+
+.bottom-btn:hover {
+    background: #1e222d;
+    border-color: #35a776;
     color: #35a776;
+}
+
+/* Right Panel */
+.right-panel {
+    background-color: #1e222d;
+    border-left: 1px solid #2a2e39;
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
+}
+
+.panel-section {
+    padding: 12px 15px;
+    border-bottom: 1px solid #2a2e39;
+}
+
+.section-title {
+    color: #808a9d;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+    font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, sans-serif;
+}
+
+.control-group {
+    margin-bottom: 8px;
+}
+
+.control-group:last-child {
+    margin-bottom: 0;
+}
+
+.control-group label {
+    display: block;
+    color: #888;
+    font-size: 11px;
+    margin-bottom: 4px;
+    font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, sans-serif;
+}
+
+.control-group select {
+    width: 100%;
+    background: #131722;
+    color: #d1d4dc;
+    border: 1px solid #2a2e39;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, sans-serif;
+    cursor: pointer;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.control-group select:hover {
+    border-color: #3e4251;
+}
+
+.control-group select:focus {
     border-color: #35a776;
 }
+
+.control-group select option {
+    background: #131722;
+    color: #d1d4dc;
+}
+
+/* Timeframe buttons */
+.tf-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.tf-btn {
+    background: #131722;
+    color: #808a9d;
+    border: 1px solid #2a2e39;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, sans-serif;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.tf-btn:hover {
+    background: #1e222d;
+    border-color: #3e4251;
+    color: #d1d4dc;
+}
+
+.tf-btn.active {
+    background: rgba(53, 167, 118, 0.15);
+    border-color: #35a776;
+    color: #35a776;
+}
+
+/* Toggle control styling */
+.toggle-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 6px 12px;
+    background: #131722;
+    border: 1px solid #2a2e39;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+}
+
+.toggle-control:hover {
+    border-color: #3e4251;
+}
+
+.toggle-control input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    accent-color: #35a776;
+    cursor: pointer;
+    margin: 0;
+}
+
+.toggle-label {
+    color: #808a9d;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, sans-serif;
+    user-select: none;
+}
+
+.toggle-control:has(input:checked) {
+    border-color: #35a776;
+    background: rgba(53, 167, 118, 0.1);
+}
+
+.toggle-control:has(input:checked) .toggle-label {
+    color: #35a776;
+}
+
+/* Panel button */
+.panel-btn {
+    width: 100%;
+    background: #131722;
+    color: #808a9d;
+    border: 1px solid #2a2e39;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, sans-serif;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    margin-top: 10px;
+}
+
+.panel-btn:hover {
+    background: #1e222d;
+    border-color: #35a776;
+    color: #35a776;
+}
+
+/* Left toolbar for drawing tools */
 .left-toolbar {
     position: absolute;
     left: 10px;
@@ -480,6 +767,7 @@ body {
     gap: 8px;
     z-index: 1000;
 }
+
 .tool-btn {
     width: 36px;
     height: 36px;
@@ -493,16 +781,20 @@ body {
     justify-content: center;
     transition: all 0.2s ease;
 }
+
 .tool-btn:hover {
     background: rgba(30, 36, 51, 1);
     color: #35a776;
     border-color: #35a776;
 }
+
 .tool-btn.active {
     background: rgba(53, 167, 118, 0.3);
     color: #35a776;
     border-color: #35a776;
 }
+
+/* Drawing overlay */
 .drawing-overlay {
     position: absolute;
     top: 0;
@@ -512,6 +804,7 @@ body {
     z-index: 999;
     cursor: crosshair;
 }
+
 .drawing-overlay svg {
     display: block;
 }
