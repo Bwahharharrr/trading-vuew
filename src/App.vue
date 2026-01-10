@@ -130,6 +130,7 @@
                 </div>
             </div>
         </div>
+
     </div>
 
     <!-- Indicator Settings Modal (rendered at app level to escape stacking contexts) -->

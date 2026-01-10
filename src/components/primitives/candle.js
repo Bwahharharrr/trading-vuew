@@ -64,6 +64,29 @@ export default class CandleExt {
 
         }
 
+        // Calculate font size based on candle width
+        const fontSize = Math.max(Math.min(Math.floor(data.w * 0.8), 14), 8)
+        this.ctx.font = `${fontSize}px sans-serif`
+        this.ctx.textAlign = 'center'
+
+        // Draw value1 (index 7) below candle in bright green
+        const value1 = data.raw[7]
+        if (value1 && value1 !== '') {
+            this.ctx.fillStyle = '#00FF00'
+            this.ctx.textBaseline = 'top'
+            const textY = Math.floor(data.l) + 3
+            this.ctx.fillText(value1, Math.floor(data.x), textY)
+        }
+
+        // Draw value2 (index 8) above candle in bright red
+        const value2 = data.raw[8]
+        if (value2 && value2 !== '') {
+            this.ctx.fillStyle = '#FF0000'
+            this.ctx.textBaseline = 'bottom'
+            const textY = Math.floor(data.h) - 3
+            this.ctx.fillText(value2, Math.floor(data.x), textY)
+        }
+
     }
 
 }
