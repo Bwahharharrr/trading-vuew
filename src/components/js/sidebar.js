@@ -100,7 +100,8 @@ export default class Sidebar {
     update() {
 
         // Update reference to the grid
-        this.layout = this.$p.layout.grids[this.id]
+        // Use layoutOverride if available (for resize operations)
+        this.layout = this.comp.layoutOverride || this.$p.layout.grids[this.id]
 
         var points = this.layout.ys
         var x, y, w, h, side = this.side

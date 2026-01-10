@@ -274,7 +274,8 @@ export default class Grid {
     update() {
         // Update reference to the grid
         // TODO: check what happens if data changes interval
-        this.layout = this.$p.layout.grids[this.id]
+        // Use layoutOverride if available (for resize operations)
+        this.layout = this.comp.layoutOverride || this.$p.layout.grids[this.id]
         this.interval = this.$p.interval
 
         if (!this.layout) return

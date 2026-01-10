@@ -14,7 +14,8 @@ function Layout(params) {
 
     let {
         chart, sub, offsub, interval, range, ctx, layers_meta,
-        ti_map, $props:$p, y_transforms: y_ts
+        ti_map, $props:$p, y_transforms: y_ts,
+        customGridHeights, minimizedGrids
     } = params
 
     let mgrid = chart.grid || {}
@@ -25,11 +26,21 @@ function Layout(params) {
         return !(x.grid && x.grid.id)
     })
 
+    // Minimum height for minimized grids (title bar only)
+    const MINIMIZED_HEIGHT = 28
+
     // Splits space between main chart
     // and offchart indicator grids
     function grid_hs() {
 
         const height = $p.height - $p.config.BOTBAR
+
+        // If custom pixel heights or minimized grids are provided, use custom calculation
+        const hasCustomHeights = customGridHeights && Object.keys(customGridHeights).length > 0
+        const hasMinimizedGrids = minimizedGrids && Object.keys(minimizedGrids).length > 0
+        if (hasCustomHeights || hasMinimizedGrids) {
+            return custom_hs(height)
+        }
 
         // When at least one height defined (default = 1),
         // Pxs calculated as: (sum of weights) / number
@@ -47,6 +58,44 @@ function Layout(params) {
         const m = height - px * n
         return [m].concat(Array(n).fill(px))
 
+    }
+
+    // Use custom pixel heights directly
+    function custom_hs(height) {
+        const n = offsub.length + 1 // main + offcharts
+        let hs = []
+
+        // Check for minimized grids
+        let minimized = minimizedGrids || {}
+
+        // Calculate heights for each grid
+        for (let i = 0; i < n; i++) {
+            if (minimized[i]) {
+                hs.push(MINIMIZED_HEIGHT)
+            } else if (customGridHeights && customGridHeights[i] !== undefined) {
+                hs.push(customGridHeights[i])
+            } else {
+                hs.push(null) // Will be calculated
+            }
+        }
+
+        // Calculate total used height and remaining
+        let usedHeight = hs.filter(h => h !== null).reduce((a, b) => a + b, 0)
+        let nullCount = hs.filter(h => h === null).length
+
+        if (nullCount > 0) {
+            let remainingHeight = height - usedHeight
+            let defaultHeight = Math.floor(remainingHeight / nullCount)
+            hs = hs.map(h => h === null ? defaultHeight : h)
+        }
+
+        // Ensure total matches available height
+        let total = hs.reduce((a, b) => a + b, 0)
+        if (total !== height && hs.length > 0) {
+            hs[0] += (height - total)
+        }
+
+        return hs
     }
 
     function weighted_hs(grid, height) {

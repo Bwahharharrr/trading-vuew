@@ -17,6 +17,15 @@
             v-on:legend-button-click="legend_button_click"
             >
         </grid-section>
+        <grid-resizer v-for="i in resizerIndices"
+            :key="'resizer-' + i"
+            :grid_id="i"
+            :layout="_layout"
+            :colors="colors"
+            v-on:resize-grids="on_resize_grids"
+            v-on:resize-complete="on_resize_complete"
+            v-on:toggle-minimize="on_toggle_minimize">
+        </grid-resizer>
         <botbar v-bind="botbar_props"
             :shaders="shaders" :timezone="timezone"
             v-on:botbar-zoom="range_changed">
@@ -33,6 +42,7 @@ import CursorUpdater from './js/updater.js'
 import GridSection from './Section.vue'
 import Botbar from './Botbar.vue'
 import Keyboard from './Keyboard.vue'
+import GridResizer from './GridResizer.vue'
 import Shaders from '../mixins/shaders.js'
 import DataTrack from '../mixins/datatrack.js'
 import TI from './js/ti_mapping.js'
@@ -50,7 +60,8 @@ export default {
     components: {
         GridSection,
         Botbar,
-        Keyboard
+        Keyboard,
+        GridResizer
     },
     created() {
 
@@ -227,11 +238,50 @@ export default {
                 this.remove_meta_props(...d.args)
             }
         },
-        update_layout(clac_tf) {
+        update_layout(clac_tf, forceResize = false) {
             if (clac_tf) this.calc_interval()
-            const lay = new Layout(this)
-            Utils.copy_layout(this._layout, lay)
-            if (this._hook_update) this.ce('?chart-update', lay)
+            // Create new layout and assign directly (triggers Vue reactivity)
+            this._layout = new Layout(this)
+            this.rerender++
+
+            const layout = this._layout
+            if (forceResize) {
+                // During active resize, force immediate visual updates
+                if (this.$refs.sec) {
+                    this.$refs.sec.forEach((section, i) => {
+                        const grid = section && section.$refs.grid
+                        const sidebar = section && section.$refs['sb-' + i]
+                        // Update via resize_from_layout for immediate feedback
+                        if (grid && grid.resize_from_layout) {
+                            grid.resize_from_layout(layout)
+                        }
+                        if (sidebar && sidebar.resize_from_layout) {
+                            sidebar.resize_from_layout(layout)
+                        }
+                        // Update legend position
+                        if (section && section.updateLegendPosition) {
+                            section.updateLegendPosition(layout)
+                        }
+                    })
+                }
+            } else {
+                // Normal update - clear any layoutOverride so Vue reactivity takes over
+                if (this.$refs.sec) {
+                    this.$refs.sec.forEach((section, i) => {
+                        const grid = section && section.$refs.grid
+                        const sidebar = section && section.$refs['sb-' + i]
+                        if (grid && grid.layoutOverride) {
+                            grid.layoutOverride = null
+                            if (grid.renderer) grid.renderer.layout = layout.grids[i]
+                        }
+                        if (sidebar && sidebar.layoutOverride) {
+                            sidebar.layoutOverride = null
+                            if (sidebar.renderer) sidebar.renderer.layout = layout.grids[i]
+                        }
+                    })
+                }
+            }
+            if (this._hook_update) this.ce('?chart-update', this._layout)
         },
         legend_button_click(event) {
             this.$emit('legend-button-click', event)
@@ -264,12 +314,90 @@ export default {
         // Set hooks list (called from an extension)
         hooks(...list) {
             list.forEach(x => this[`_hook_${x}`] = true)
+        },
+        // Grid resize handlers
+        on_resize_grids(e) {
+            this.isResizing = true
+            this.$set(this.customGridHeights, e.gridAbove, e.heightAbove)
+            this.$set(this.customGridHeights, e.gridBelow, e.heightBelow)
+            this.update_layout(false, true)  // forceResize = true
+        },
+        on_resize_complete() {
+            // Save heights for restore after minimize
+            const grids = this._layout.grids
+            grids.forEach((g, i) => {
+                if (!this.minimizedGrids[i]) {
+                    this.$set(this.savedGridHeights, i, g.height)
+                }
+            })
+            // End resize mode - layoutOverride stays set until next normal update
+            this.isResizing = false
+        },
+        on_toggle_minimize(gridId) {
+            const isMinimized = this.minimizedGrids[gridId]
+
+            if (isMinimized) {
+                // Restore from minimized state
+                this.$set(this.minimizedGrids, gridId, false)
+                // Restore saved height
+                if (this.savedGridHeights[gridId]) {
+                    this.$set(this.customGridHeights, gridId, this.savedGridHeights[gridId])
+                } else {
+                    this.$delete(this.customGridHeights, gridId)
+                }
+            } else {
+                // Save current height before minimizing
+                const currentHeight = this._layout.grids[gridId]?.height
+                if (currentHeight) {
+                    this.$set(this.savedGridHeights, gridId, currentHeight)
+                }
+                // Minimize
+                this.$set(this.minimizedGrids, gridId, true)
+            }
+
+            // Redistribute remaining space to other grids
+            this.redistribute_heights(gridId, isMinimized)
+            this.update_layout()
+        },
+        redistribute_heights(changedGridId, wasMinimized) {
+            const grids = this._layout.grids
+            const MINIMIZED_HEIGHT = 28
+            const totalHeight = this.$props.height - this.$props.config.BOTBAR
+
+            // Find non-minimized grids (excluding the changed one)
+            let otherGrids = grids.filter((g, i) =>
+                i !== changedGridId && !this.minimizedGrids[i]
+            ).map(g => g.id)
+
+            if (otherGrids.length === 0) return
+
+            // Calculate height change
+            let heightDelta
+            if (wasMinimized) {
+                // We're expanding: take space from other grids
+                const restoreHeight = this.savedGridHeights[changedGridId] || 150
+                heightDelta = -(restoreHeight - MINIMIZED_HEIGHT)
+            } else {
+                // We're minimizing: give space to other grids
+                const currentHeight = this.savedGridHeights[changedGridId] || 150
+                heightDelta = currentHeight - MINIMIZED_HEIGHT
+            }
+
+            // Distribute the delta among other grids
+            const deltaPerGrid = Math.floor(heightDelta / otherGrids.length)
+            otherGrids.forEach(id => {
+                const currentHeight = this.customGridHeights[id] || grids[id]?.height || 100
+                this.$set(this.customGridHeights, id, currentHeight + deltaPerGrid)
+            })
         }
     },
     computed: {
         // Component-specific props subsets:
         main_section() {
+            // Access _layout directly to ensure Vue tracks it as a dependency
+            const layout = this._layout
             let p = Object.assign({}, this.common_props())
+            p.layout = layout  // Ensure we use the tracked reference
             p.data = this.overlay_subset(this.onchart, 'onchart')
             p.data.push({
                 type: this.chart.type || 'Candles',
@@ -284,15 +412,21 @@ export default {
             return p
         },
         sub_section() {
+            // Access _layout directly to ensure Vue tracks it as a dependency
+            const layout = this._layout
             let p = Object.assign({}, this.common_props())
+            p.layout = layout  // Ensure we use the tracked reference
             p.data = this.overlay_subset(this.offchart, 'offchart')
             p.overlays = this.$props.overlays
             return p
         },
         botbar_props() {
+            // Access _layout directly to ensure Vue tracks it as a dependency
+            const layout = this._layout
             let p = Object.assign({}, this.common_props())
-            p.width = p.layout.botbar.width
-            p.height = p.layout.botbar.height
+            p.layout = layout
+            p.width = layout.botbar.width
+            p.height = layout.botbar.height
             p.rerender = this.rerender
             return p
         },
@@ -329,6 +463,16 @@ export default {
         },
         forced_tf() {
             return this.chart.tf
+        },
+        resizerIndices() {
+            // Returns array of grid indices that need resizers (1, 2, 3, ...)
+            // Resizer at index i sits between grid i-1 and grid i
+            const count = this._layout.grids.length
+            let indices = []
+            for (let i = 1; i < count; i++) {
+                indices.push(i)
+            }
+            return indices
         }
     },
     data() {
@@ -368,7 +512,16 @@ export default {
             last_candle: [],
             last_values: {},
             sub_start: undefined,
-            activated: false
+            activated: false,
+
+            // Grid resize state
+            customGridHeights: {},
+            minimizedGrids: {},
+            savedGridHeights: {},
+            isResizing: false,
+
+            // Layout object (needs to be reactive for grid resizing)
+            _layout: null
 
         }
     },

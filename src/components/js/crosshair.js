@@ -21,7 +21,8 @@ export default class Crosshair {
         if (!this.visible && cursor.mode === 'explore') return
 
         this.x = this.$p.cursor.x
-        this.y = this.$p.cursor.y
+        // cursor.y is chart-relative, convert to grid-relative for drawing
+        this.y = this.$p.cursor.y - (this.layout.offset || 0)
 
         ctx.save()
         ctx.strokeStyle = this.$p.colors.cross

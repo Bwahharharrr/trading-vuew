@@ -92,6 +92,15 @@ export default {
             // Measures grid heights configuration
             let hs = val.layout.grids.map(x => x.height)
             return hs.reduce((a, b) => a + b, '')
+        },
+        // Update legend position during resize (bypassing Vue reactivity)
+        updateLegendPosition(layout) {
+            const id = this.$props.grid_id
+            const grid = layout ? layout.grids[id] : null
+            if (grid && this.$refs.legend && this.$refs.legend.$el) {
+                const top = grid.height > 150 ? 10 : 5
+                this.$refs.legend.$el.style.top = (grid.offset + top) + 'px'
+            }
         }
     },
     computed: {

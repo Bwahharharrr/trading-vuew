@@ -24,6 +24,43 @@
         <input type="checkbox" v-model="log_scale">
         <label>Log Scale</label>
     </span>
+    <button class="reset-view-btn" @click="resetView">Reset View</button>
+
+    <!-- Left toolbar for drawing tools -->
+    <div class="left-toolbar">
+        <button
+            class="tool-btn"
+            :class="{ active: rectDrawMode }"
+            @click="toggleRectDrawMode"
+            title="Draw Rectangle">
+            <svg viewBox="0 0 24 24" width="20" height="20">
+                <rect x="3" y="3" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"/>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Drawing overlay -->
+    <div
+        v-if="rectDrawMode"
+        class="drawing-overlay"
+        @mousedown="onDrawStart"
+        @mousemove="onDrawMove"
+        @mouseup="onDrawEnd"
+        @mouseleave="onDrawEnd">
+        <svg :width="width" :height="height">
+            <rect
+                v-if="isDrawing && rectStart && rectCurrent"
+                :x="Math.min(rectStart.x, rectCurrent.x)"
+                :y="Math.min(rectStart.y, rectCurrent.y)"
+                :width="Math.abs(rectCurrent.x - rectStart.x)"
+                :height="Math.abs(rectCurrent.y - rectStart.y)"
+                fill="rgba(53, 167, 118, 0.2)"
+                stroke="#35a776"
+                stroke-width="2"
+                stroke-dasharray="5,5"
+            />
+        </svg>
+    </div>
 </div>
 </template>
 
@@ -82,16 +119,72 @@ export default {
             this.width = window.innerWidth
             this.height = window.innerHeight
         },
+        resetView() {
+            if (this.$refs.tradingVue) {
+                this.$refs.tradingVue.resetChart()
+            }
+        },
+        toggleRectDrawMode() {
+            this.rectDrawMode = !this.rectDrawMode
+            if (!this.rectDrawMode) {
+                this.isDrawing = false
+                this.rectStart = null
+                this.rectCurrent = null
+            }
+        },
+        onDrawStart(event) {
+            this.isDrawing = true
+            this.rectStart = { x: event.clientX, y: event.clientY }
+            this.rectCurrent = { x: event.clientX, y: event.clientY }
+        },
+        onDrawMove(event) {
+            if (this.isDrawing) {
+                this.rectCurrent = { x: event.clientX, y: event.clientY }
+            }
+        },
+        onDrawEnd(event) {
+            if (this.isDrawing && this.rectStart && this.rectCurrent) {
+                const x = Math.min(this.rectStart.x, this.rectCurrent.x)
+                const y = Math.min(this.rectStart.y, this.rectCurrent.y)
+                const w = Math.abs(this.rectCurrent.x - this.rectStart.x)
+                const h = Math.abs(this.rectCurrent.y - this.rectStart.y)
+
+                if (w > 5 && h > 5) {
+                    alert(
+                        `Rectangle Coordinates:\n` +
+                        `Position: (${x}, ${y})\n` +
+                        `Size: ${w} x ${h}\n` +
+                        `End: (${x + w}, ${y + h})`
+                    )
+                }
+
+                this.isDrawing = false
+                this.rectStart = null
+                this.rectCurrent = null
+                this.rectDrawMode = false
+            }
+        },
         on_selected(tf) {
             const chartData = this.charts[tf.name]
             // Store original data for color scheme switching
             this.originalChartData = JSON.parse(JSON.stringify(chartData.chart.data))
-            // Extract candle coloring options from onchart
-            this.extractCandleColoringOptions(chartData)
-            // Reset current coloring selection
-            this.currentCandleColoring = ''
+            // Track current timeframe
+            this.currentTimeframe = tf.name
+            // Remember current coloring selection
+            const previousColoring = this.currentCandleColoring
+            // Extract candle coloring options for this timeframe
+            this.extractCandleColoringOptions(chartData, tf.name)
+            // Check if previous coloring is still available for this timeframe
+            const coloringStillAvailable = this.candleColoringOptions.some(opt => opt.title === previousColoring)
+            this.currentCandleColoring = coloringStillAvailable ? previousColoring : ''
             // Create DataCube with candle_coloring items filtered out
             this.chart = new DataCube(this.prepareChartData(chartData))
+            // Apply coloring if one is selected
+            if (this.currentCandleColoring) {
+                this.$nextTick(() => {
+                    this.applyCurrentColoring()
+                })
+            }
             // Force chart to redraw
             this.$nextTick(() => {
                 if (this.$refs.tradingVue) {
@@ -99,15 +192,54 @@ export default {
                 }
             })
         },
-        extractCandleColoringOptions(chartData) {
+        extractCandleColoringOptions(chartData, timeframe = null) {
             this.candleColoringOptions = []
-            if (chartData.onchart && Array.isArray(chartData.onchart)) {
-                for (const item of chartData.onchart) {
-                    if (item.type === 'candle_coloring' && item.title && Array.isArray(item.data)) {
-                        this.candleColoringOptions.push({
-                            title: item.title,
-                            data: item.data
-                        })
+            const seenTitles = new Set()
+
+            // Helper to process onchart items
+            const processOnchart = (onchart) => {
+                if (!onchart || !Array.isArray(onchart)) return
+                for (const item of onchart) {
+                    if (item.type === 'candle_coloring' && item.title) {
+                        // Skip if we've already added this scheme
+                        if (seenTitles.has(item.title)) continue
+
+                        // New format: timeframes object with data per timeframe
+                        if (item.timeframes && typeof item.timeframes === 'object') {
+                            // Only add if this scheme has data for the current timeframe
+                            if (timeframe && item.timeframes[timeframe]) {
+                                seenTitles.add(item.title)
+                                this.candleColoringOptions.push({
+                                    title: item.title,
+                                    timeframes: item.timeframes
+                                })
+                            }
+                        }
+                        // Legacy format: single data array (backwards compatible)
+                        else if (Array.isArray(item.data)) {
+                            if (!item.timeframe || item.timeframe === timeframe) {
+                                seenTitles.add(item.title)
+                                this.candleColoringOptions.push({
+                                    title: item.title,
+                                    data: item.data,
+                                    timeframe: item.timeframe || null
+                                })
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Check current timeframe's onchart
+            processOnchart(chartData.onchart)
+
+            // Also search all timeframes for candle_coloring with timeframes object
+            // This allows defining colorings once in any timeframe's onchart
+            if (this.charts && typeof this.charts === 'object') {
+                for (const tfKey of Object.keys(this.charts)) {
+                    const tfData = this.charts[tfKey]
+                    if (tfData && tfData.onchart) {
+                        processOnchart(tfData.onchart)
                     }
                 }
             }
@@ -122,15 +254,24 @@ export default {
         },
         onCandleColoringSelected(coloringTitle) {
             this.currentCandleColoring = coloringTitle
-
+            this.applyCurrentColoring()
+        },
+        applyCurrentColoring() {
             if (!this.originalChartData || !this.chart.data.chart) return
 
             // Get the color data for selected scheme
             let colorData = null
-            if (coloringTitle) {
-                const selectedOption = this.candleColoringOptions.find(opt => opt.title === coloringTitle)
+            if (this.currentCandleColoring) {
+                const selectedOption = this.candleColoringOptions.find(opt => opt.title === this.currentCandleColoring)
                 if (selectedOption) {
-                    colorData = selectedOption.data
+                    // New format: get colors from timeframes object
+                    if (selectedOption.timeframes && this.currentTimeframe) {
+                        colorData = selectedOption.timeframes[this.currentTimeframe]
+                    }
+                    // Legacy format: use data array directly
+                    else if (selectedOption.data) {
+                        colorData = selectedOption.data
+                    }
                 }
             }
 
@@ -181,46 +322,55 @@ export default {
                 this.currentCandleColoring = ''
 
                 // Check if this is single-format (has chart.data array at root)
+                let newStart = null
+                let newEnd = null
                 if (data.chart && Array.isArray(data.chart.data)) {
                     // Single-timeframe format (data.json style)
                     this.charts = { 'default': data }
+                    this.currentTimeframe = 'default'
                     this.originalChartData = JSON.parse(JSON.stringify(data.chart.data))
-                    this.extractCandleColoringOptions(data)
+                    this.extractCandleColoringOptions(data, 'default')
+                    if (data.chart.data.length >= 2) {
+                        newStart = data.chart.data[0][0]
+                        newEnd = data.chart.data[data.chart.data.length - 1][0]
+                    }
                     this.chart = new DataCube(this.prepareChartData(data))
                 } else {
                     // Multi-timeframe format (data_tf.json style)
                     this.charts = data
                     const timeframes = Object.keys(data)
                     if (timeframes.length > 0) {
-                        const firstTfData = data[timeframes[0]]
+                        const firstTf = timeframes[0]
+                        const firstTfData = data[firstTf]
+                        this.currentTimeframe = firstTf
                         this.originalChartData = JSON.parse(JSON.stringify(firstTfData.chart.data))
-                        this.extractCandleColoringOptions(firstTfData)
+                        this.extractCandleColoringOptions(firstTfData, firstTf)
+                        if (firstTfData.chart.data.length >= 2) {
+                            newStart = firstTfData.chart.data[0][0]
+                            newEnd = firstTfData.chart.data[firstTfData.chart.data.length - 1][0]
+                        }
                         this.chart = new DataCube(this.prepareChartData(firstTfData))
                     }
                 }
 
-                // Force chart to redraw after data loads
-                this.$nextTick(() => {
-                    if (this.$refs.tradingVue) {
-                        this.$refs.tradingVue.resetChart()
-                    }
-                })
+                // Check if datasets have same bounds (can restore range without flash)
+                const sameBounds = savedRange && savedRange[0] && savedRange[1] &&
+                    prevStart !== null && newStart === prevStart && newEnd === prevEnd
 
-                // Restore range only if new dataset has exact same first/last as previous dataset
-                if (savedRange && savedRange[0] && savedRange[1] && prevStart !== null) {
-                    setTimeout(() => {
-                        if (this.$refs.tradingVue && this.$refs.tradingVue.$refs.chart) {
-                            const ohlcv = this.$refs.tradingVue.$refs.chart.ohlcv
-                            if (ohlcv && ohlcv.length >= 2) {
-                                const newStart = ohlcv[0][0]
-                                const newEnd = ohlcv[ohlcv.length - 1][0]
-                                // Only restore if dataset start/end match exactly
-                                if (newStart === prevStart && newEnd === prevEnd) {
-                                    this.$refs.tradingVue.setRange(savedRange[0], savedRange[1])
-                                }
-                            }
+                if (sameBounds) {
+                    // Same dataset bounds - restore range without reset to avoid flash
+                    this.$nextTick(() => {
+                        if (this.$refs.tradingVue) {
+                            this.$refs.tradingVue.setRange(savedRange[0], savedRange[1])
                         }
-                    }, 50)
+                    })
+                } else {
+                    // Different dataset - force chart to redraw
+                    this.$nextTick(() => {
+                        if (this.$refs.tradingVue) {
+                            this.$refs.tradingVue.resetChart()
+                        }
+                    })
                 }
             } catch (error) {
                 console.error('Error loading data file:', error)
@@ -253,9 +403,14 @@ export default {
             log_scale: true,
             dataFiles: [],
             currentDataFile: 'data_tf.json',
+            currentTimeframe: null,
             candleColoringOptions: [],
             currentCandleColoring: '',
-            originalChartData: null
+            originalChartData: null,
+            rectDrawMode: false,
+            isDrawing: false,
+            rectStart: null,
+            rectCurrent: null
         };
     },
     watch: {
@@ -287,5 +442,73 @@ body {
         Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell,
         Fira Sans, Droid Sans, Helvetica Neue,
         sans-serif
+}
+.reset-view-btn {
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(30, 36, 51, 0.6);
+    color: rgba(53, 167, 118, 0.8);
+    border: 1px solid rgba(62, 62, 62, 0.6);
+    border-radius: 4px;
+    padding: 8px 16px;
+    font: 11px -apple-system, BlinkMacSystemFont,
+        Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell,
+        Fira Sans, Droid Sans, Helvetica Neue,
+        sans-serif;
+    cursor: pointer;
+    z-index: 1000;
+    transition: all 0.2s ease;
+}
+.reset-view-btn:hover {
+    background: rgba(30, 36, 51, 0.9);
+    color: #35a776;
+    border-color: #35a776;
+}
+.left-toolbar {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 1000;
+}
+.tool-btn {
+    width: 36px;
+    height: 36px;
+    background: rgba(30, 36, 51, 0.8);
+    border: 1px solid rgba(62, 62, 62, 0.6);
+    border-radius: 4px;
+    color: rgba(53, 167, 118, 0.8);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+.tool-btn:hover {
+    background: rgba(30, 36, 51, 1);
+    color: #35a776;
+    border-color: #35a776;
+}
+.tool-btn.active {
+    background: rgba(53, 167, 118, 0.3);
+    color: #35a776;
+    border-color: #35a776;
+}
+.drawing-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 999;
+    cursor: crosshair;
+}
+.drawing-overlay svg {
+    display: block;
 }
 </style>

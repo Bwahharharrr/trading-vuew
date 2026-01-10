@@ -19,6 +19,9 @@ import Volume from "./overlays/Volume.vue"
 import Splitters from "./overlays/Splitters.vue"
 import LineTool from "./overlays/LineTool.vue"
 import RangeTool from "./overlays/RangeTool.vue"
+import StepLine from "./overlays/StepLine.vue"
+import Histogram from "./overlays/Histogram.vue"
+import Bar from "./overlays/Bar.vue"
 
 
 export default {
@@ -34,7 +37,8 @@ export default {
         // List of all possible overlays (builtin + custom)
         this._list = [
             Spline, Splines, Range, Trades, Channel, Segment,
-            Candles, Volume, Splitters, LineTool, RangeTool
+            Candles, Volume, Splitters, LineTool, RangeTool,
+            StepLine, Histogram, Bar
         ]
         .concat(this.$props.overlays)
         this._registry = {}
@@ -69,7 +73,9 @@ export default {
     },
     render(h) {
         const id = this.$props.grid_id
-        const layout = this.$props.layout.grids[id]
+        // Use layout override if available (for resize operations)
+        const layout = this.layoutOverride ||
+            this.$props.layout.grids[id]
         return this.create_canvas(h, `grid-${id}`, {
             position: {
                 x: 0,
@@ -165,10 +171,13 @@ export default {
             )
         },
         common_props() {
+            // Use layout override if available (for resize operations)
+            const layout = this.layoutOverride ||
+                this.$props.layout.grids[this.$props.grid_id]
             return {
                 cursor: this.$props.cursor,
                 colors: this.$props.colors,
-                layout: this.$props.layout.grids[this.$props.grid_id],
+                layout: layout,
                 interval: this.$props.interval,
                 sub: this.$props.sub,
                 font: this.$props.font,
@@ -194,6 +203,31 @@ export default {
             comp.__renderer__ = src.conf.renderer
 
             return comp
+        },
+        // Force resize canvas based on provided layout (for drag resize)
+        resize_from_layout(layout) {
+            const id = this.$props.grid_id
+            const grid = layout ? layout.grids[id] : null
+            if (grid && this._attrs) {
+                this._attrs.width = grid.width
+                this._attrs.height = grid.height
+                // Store layout override for common_props() and overlays
+                this.layoutOverride = grid
+                // Update wrapper div position
+                const wrapper = this.$el
+                if (wrapper) {
+                    wrapper.style.top = (grid.offset || 0) + 'px'
+                }
+                // Update renderer's layout reference for correct Y-scale
+                if (this.renderer) {
+                    this.renderer.layout = grid
+                }
+                // Force re-render to update overlay props with new layout
+                this.$forceUpdate()
+                this.$nextTick(() => {
+                    this.setup()
+                })
+            }
         }
     },
     computed: {
@@ -243,10 +277,31 @@ export default {
             deep: true
         },
         // Redraw on the shader list change
-        shaders(n, p) { this.redraw() }
+        shaders(n, p) { this.redraw() },
+        // Watch layout changes for resize operations
+        layout: {
+            handler: function(newLayout, oldLayout) {
+                const id = this.$props.grid_id
+                const newGrid = newLayout && newLayout.grids && newLayout.grids[id]
+                const oldGrid = oldLayout && oldLayout.grids && oldLayout.grids[id]
+
+                // Check if height or offset changed
+                if (newGrid && oldGrid &&
+                    (newGrid.height !== oldGrid.height || newGrid.offset !== oldGrid.offset)) {
+                    // Force canvas resize and redraw
+                    this.$nextTick(() => {
+                        this.setup()
+                        this.redraw()
+                    })
+                }
+            },
+            deep: true
+        }
     },
     data() {
         return {
+            // Override layout for resize operations (bypassing Vue reactivity)
+            layoutOverride: null,
             layer_events: {
                 'new-grid-layer': this.new_layer,
                 'delete-grid-layer': this.del_layer,

@@ -20,7 +20,9 @@ export default {
     },
     render(h) {
         const id = this.$props.grid_id
-        const layout = this.$props.layout.grids[id]
+        // Use layout override if available (for resize operations)
+        const layout = this.layoutOverride ||
+            this.$props.layout.grids[id]
         return this.create_canvas(h, `sidebar-${id}`, {
             position: {
                 x: layout.width,
@@ -28,13 +30,47 @@ export default {
             },
             attrs: {
                 rerender: this.$props.rerender,
-                width: this.$props.width,
+                width: layout.sb,
                 height: layout.height,
             },
             style: {
                 backgroundColor: this.$props.colors.back
             },
         })
+    },
+    methods: {
+        // Force resize canvas based on provided layout (for drag resize)
+        resize_from_layout(layout) {
+            const id = this.$props.grid_id
+            const grid = layout ? layout.grids[id] : null
+            if (grid && this._attrs) {
+                this._attrs.width = grid.sb
+                this._attrs.height = grid.height
+                // Store layout override
+                this.layoutOverride = grid
+                // Update wrapper div position
+                const wrapper = this.$el
+                if (wrapper) {
+                    wrapper.style.top = (grid.offset || 0) + 'px'
+                    wrapper.style.left = grid.width + 'px'
+                }
+                // Update renderer's layout reference for correct Y-scale
+                if (this.renderer) {
+                    this.renderer.layout = grid
+                }
+                // Force re-render and setup
+                this.$forceUpdate()
+                this.$nextTick(() => {
+                    this.setup()
+                })
+            }
+        }
+    },
+    data() {
+        return {
+            // Override layout for resize operations (bypassing Vue reactivity)
+            layoutOverride: null
+        }
     },
     watch: {
         range: {
