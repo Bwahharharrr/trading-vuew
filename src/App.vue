@@ -94,9 +94,9 @@
         </div>
 
         <div class="panel-section" v-if="candleColoringOptions.length > 0">
-            <div class="section-title">Candle Colors</div>
+            <div class="section-title">Views</div>
             <div class="control-group">
-                <select v-model="currentCandleColoring" @change="applyCurrentColoring">
+                <select v-model="displayedView" @change="onViewSelected(displayedView)">
                     <option value="">Default</option>
                     <option v-for="option in candleColoringOptions" :key="option.title" :value="option.title">
                         {{ option.title }}
@@ -279,21 +279,27 @@ export default {
             this.originalChartData = JSON.parse(JSON.stringify(chartData.chart.data))
             // Track current timeframe
             this.currentTimeframe = tf
-            // Remember current coloring selection
-            const previousColoring = this.currentCandleColoring
             // Extract candle coloring options for this timeframe
             this.extractCandleColoringOptions(chartData, tf)
-            // Check if previous coloring is still available for this timeframe
-            const coloringStillAvailable = this.candleColoringOptions.some(opt => opt.title === previousColoring)
-            this.currentCandleColoring = coloringStillAvailable ? previousColoring : ''
-            // Create DataCube with candle_coloring items filtered out
-            this.chart = new DataCube(this.prepareChartData(chartData, tf))
-            // Apply coloring if one is selected
-            if (this.currentCandleColoring) {
-                this.$nextTick(() => {
-                    this.applyCurrentColoring()
-                })
+
+            // Determine displayedView based on selectedView availability
+            const availableViews = this.candleColoringOptions.map(opt => opt.title)
+            if (availableViews.includes(this.selectedView)) {
+                // Selected view exists - use it
+                this.displayedView = this.selectedView
+            } else if (availableViews.length > 0) {
+                // Fallback to first view for display only (keep selectedView unchanged)
+                this.displayedView = availableViews[0]
+            } else {
+                this.displayedView = ''
             }
+
+            // Create DataCube with views filtered out
+            this.chart = new DataCube(this.prepareChartData(chartData, tf))
+            // Apply displayed view
+            this.$nextTick(() => {
+                this.applyCurrentColoring()
+            })
             // Force chart to redraw
             this.$nextTick(() => {
                 if (this.$refs.tradingVue) {
@@ -303,102 +309,140 @@ export default {
         },
         extractCandleColoringOptions(chartData, timeframe = null) {
             this.candleColoringOptions = []
-            const seenTitles = new Set()
 
-            // Helper to process onchart items
-            const processOnchart = (onchart) => {
-                if (!onchart || !Array.isArray(onchart)) return
-                for (const item of onchart) {
-                    if (item.type === 'candle_coloring' && item.title) {
-                        // Skip if we've already added this scheme
-                        if (seenTitles.has(item.title)) continue
-
-                        // New format: timeframes object with data per timeframe
-                        if (item.timeframes && typeof item.timeframes === 'object') {
-                            // Only add if this scheme has data for the current timeframe
-                            if (timeframe && item.timeframes[timeframe]) {
-                                seenTitles.add(item.title)
-                                this.candleColoringOptions.push({
-                                    title: item.title,
-                                    timeframes: item.timeframes
-                                })
-                            }
-                        }
-                        // Legacy format: single data array (backwards compatible)
-                        else if (Array.isArray(item.data)) {
-                            if (!item.timeframe || item.timeframe === timeframe) {
-                                seenTitles.add(item.title)
-                                this.candleColoringOptions.push({
-                                    title: item.title,
-                                    data: item.data,
-                                    timeframe: item.timeframe || null
-                                })
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Check current timeframe's onchart
-            processOnchart(chartData.onchart)
-
-            // Also search all timeframes for candle_coloring with timeframes object
-            // This allows defining colorings once in any timeframe's onchart
-            if (this.charts && typeof this.charts === 'object') {
-                for (const tfKey of Object.keys(this.charts)) {
-                    const tfData = this.charts[tfKey]
-                    if (tfData && tfData.onchart) {
-                        processOnchart(tfData.onchart)
-                    }
+            // New format: read from views object
+            const views = chartData.views
+            if (views && typeof views === 'object') {
+                for (const viewName of Object.keys(views)) {
+                    this.candleColoringOptions.push({
+                        title: viewName,
+                        viewData: views[viewName]
+                    })
                 }
             }
         },
-        // Create a clean copy of chart data with candle_coloring items filtered out
+        // Create a clean copy of chart data for DataCube
         // Always set chart.tf from timeframe key for multi-timeframe data
         prepareChartData(chartData, timeframe = null) {
             const cleaned = JSON.parse(JSON.stringify(chartData))
-            if (cleaned.onchart && Array.isArray(cleaned.onchart)) {
-                cleaned.onchart = cleaned.onchart.filter(item => item.type !== 'candle_coloring')
-            }
+            // Remove views from the cleaned data (it's metadata, not rendered directly)
+            delete cleaned.views
             // Always set chart.tf from timeframe key (except for 'default' single-timeframe)
             if (timeframe && timeframe !== 'default' && cleaned.chart) {
                 cleaned.chart.tf = timeframe
             }
             return cleaned
         },
-        onCandleColoringSelected(coloringTitle) {
-            this.currentCandleColoring = coloringTitle
+        onViewSelected(viewName) {
+            this.selectedView = viewName      // Update persistent selection
+            this.displayedView = viewName     // Update display
             this.applyCurrentColoring()
         },
         applyCurrentColoring() {
             if (!this.originalChartData || !this.chart.data.chart) return
 
-            // Get the color data for selected scheme
-            let colorData = null
-            if (this.currentCandleColoring) {
-                const selectedOption = this.candleColoringOptions.find(opt => opt.title === this.currentCandleColoring)
-                if (selectedOption) {
-                    // New format: get colors from timeframes object
-                    if (selectedOption.timeframes && this.currentTimeframe) {
-                        colorData = selectedOption.timeframes[this.currentTimeframe]
-                    }
-                    // Legacy format: use data array directly
-                    else if (selectedOption.data) {
-                        colorData = selectedOption.data
-                    }
+            // Get the view data for displayed view
+            let viewData = null
+            if (this.displayedView) {
+                const selectedOption = this.candleColoringOptions.find(opt => opt.title === this.displayedView)
+                if (selectedOption && selectedOption.viewData) {
+                    viewData = selectedOption.viewData
                 }
             }
 
-            // Apply colors to chart data
+            // Apply colors, below, and above markers to chart data
             const newData = JSON.parse(JSON.stringify(this.originalChartData))
-            if (colorData) {
-                for (let i = 0; i < newData.length && i < colorData.length; i++) {
-                    newData[i][6] = colorData[i]
+            if (viewData) {
+                const colors = viewData.colors || []
+                // Handle both simple array and extended object format for below/above
+                const below = Array.isArray(viewData.below) ? viewData.below : (viewData.below?.values || [])
+                const above = Array.isArray(viewData.above) ? viewData.above : (viewData.above?.values || [])
+
+                for (let i = 0; i < newData.length; i++) {
+                    // Ensure candle array has slots for color, below, above (indices 6, 7, 8)
+                    while (newData[i].length < 9) {
+                        newData[i].push('')
+                    }
+                    // Apply color
+                    if (i < colors.length && colors[i]) {
+                        newData[i][6] = colors[i]
+                    }
+                    // Apply below marker
+                    if (i < below.length) {
+                        newData[i][7] = below[i] || ''
+                    }
+                    // Apply above marker
+                    if (i < above.length) {
+                        newData[i][8] = above[i] || ''
+                    }
+                }
+            } else {
+                // No view selected - clear colors and markers
+                for (let i = 0; i < newData.length; i++) {
+                    if (newData[i].length > 6) newData[i][6] = ''
+                    if (newData[i].length > 7) newData[i][7] = ''
+                    if (newData[i].length > 8) newData[i][8] = ''
                 }
             }
 
-            // Update the chart
+            // Update the chart candle data
             this.$set(this.chart.data.chart, 'data', newData)
+
+            // Handle view-specific offchart indicators
+            this.applyViewOffchart(viewData)
+        },
+        applyViewOffchart(viewData) {
+            const tfData = this.currentTimeframe && this.charts[this.currentTimeframe]
+
+            // Only include base offchart if NO view is active (displayedView is empty)
+            let combinedOffchart = []
+
+            if (!this.displayedView) {
+                // No view selected - show base offchart
+                combinedOffchart = JSON.parse(JSON.stringify(tfData?.offchart || []))
+            } else {
+                // View is active - only show view-specific offchart, hide base
+                combinedOffchart = JSON.parse(JSON.stringify(viewData?.offchart || []))
+            }
+
+            // Get current indicator names
+            const currentIndicatorNames = combinedOffchart.map(ind => ind.name)
+
+            // Check if indicator set matches saved preferences
+            const sameSet = this.lastIndicatorSet.length === currentIndicatorNames.length &&
+                this.lastIndicatorSet.every(name => currentIndicatorNames.includes(name))
+
+            if (sameSet && currentIndicatorNames.length > 0) {
+                // Same indicator set - apply saved visibility preferences
+                for (let i = 0; i < combinedOffchart.length; i++) {
+                    const name = combinedOffchart[i].name
+                    if (name in this.indicatorVisibility) {
+                        combinedOffchart[i].settings = combinedOffchart[i].settings || {}
+                        combinedOffchart[i].settings.display = this.indicatorVisibility[name]
+                    }
+                }
+            } else if (currentIndicatorNames.length > 0) {
+                // Different indicator set - default to first visible only
+                this.indicatorVisibility = {}
+                for (let i = 0; i < combinedOffchart.length; i++) {
+                    const name = combinedOffchart[i].name
+                    const isVisible = (i === 0)  // Only first is visible
+                    combinedOffchart[i].settings = combinedOffchart[i].settings || {}
+                    combinedOffchart[i].settings.display = isVisible
+                    this.indicatorVisibility[name] = isVisible
+                }
+                this.lastIndicatorSet = [...currentIndicatorNames]
+            }
+
+            // Update chart offchart
+            this.$set(this.chart.data, 'offchart', combinedOffchart)
+
+            // Force chart reset to properly render new offchart panels
+            this.$nextTick(() => {
+                if (this.$refs.tradingVue) {
+                    this.$refs.tradingVue.resetChart(false)
+                }
+            })
         },
         async loadDataFileList() {
             try {
@@ -434,6 +478,15 @@ export default {
                     this.chart = new DataCube(this.prepareChartData(firstTfData, firstTf))
                 }
             }
+
+            // Set initial displayedView (fallback to first view since selectedView is empty on init)
+            const availableViews = this.candleColoringOptions.map(opt => opt.title)
+            if (availableViews.length > 0) {
+                this.displayedView = availableViews[0]
+                this.$nextTick(() => {
+                    this.applyCurrentColoring()
+                })
+            }
         },
         async onFileSelected(filename) {
             try {
@@ -458,8 +511,6 @@ export default {
                 this.currentDataFile = filename
                 this.selectedDataFile = filename
 
-                // Save previous candle coloring selection to check if it exists in new file
-                const previousColoring = this.currentCandleColoring
                 this.selectedTimeframe = 0
 
                 // Check if this is single-format (has chart.data array at root)
@@ -494,17 +545,22 @@ export default {
                     }
                 }
 
-                // Check if previous coloring exists in new file's options
-                const coloringStillAvailable = previousColoring &&
-                    this.candleColoringOptions.some(opt => opt.title === previousColoring)
-                this.currentCandleColoring = coloringStillAvailable ? previousColoring : ''
-
-                // Apply coloring if one is selected (either restored or default)
-                if (this.currentCandleColoring) {
-                    this.$nextTick(() => {
-                        this.applyCurrentColoring()
-                    })
+                // Determine displayedView based on selectedView availability
+                const availableViews = this.candleColoringOptions.map(opt => opt.title)
+                if (availableViews.includes(this.selectedView)) {
+                    // Selected view exists - use it
+                    this.displayedView = this.selectedView
+                } else if (availableViews.length > 0) {
+                    // Fallback to first view for display only (keep selectedView unchanged)
+                    this.displayedView = availableViews[0]
+                } else {
+                    this.displayedView = ''
                 }
+
+                // Apply displayed view
+                this.$nextTick(() => {
+                    this.applyCurrentColoring()
+                })
 
                 // Check if datasets have same bounds (can restore range without flash)
                 const sameBounds = savedRange && savedRange[0] && savedRange[1] &&
@@ -571,9 +627,13 @@ export default {
             if (!this.chart.data.offchart || !this.chart.data.offchart[index]) return
 
             const indicator = this.chart.data.offchart[index]
+            const indicatorName = indicator.name
             const currentSettings = indicator.settings || {}
             const isCurrentlyVisible = currentSettings.display !== false
             const newDisplay = !isCurrentlyVisible
+
+            // Save visibility preference by indicator name
+            this.indicatorVisibility[indicatorName] = newDisplay
 
             // Update settings with new display value
             const newSettings = Object.assign({}, currentSettings, { display: newDisplay })
@@ -633,7 +693,10 @@ export default {
             currentTimeframe: null,
             selectedTimeframe: 0,
             candleColoringOptions: [],
-            currentCandleColoring: '',
+            selectedView: '',      // User's persistent choice (survives file switches)
+            displayedView: '',     // Actually rendered view (may differ if selectedView unavailable)
+            indicatorVisibility: {},  // Saved visibility preferences by indicator name
+            lastIndicatorSet: [],     // Track which indicators were in the last applied set
             originalChartData: null,
             rectDrawMode: false,
             isDrawing: false,
