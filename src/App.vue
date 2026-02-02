@@ -106,7 +106,7 @@
         </div>
 
         <div class="panel-section" v-if="offchartIndicators.length > 0">
-            <div class="section-title">Indicators</div>
+            <div class="section-title">Values</div>
             <div class="indicator-list">
                 <div
                     v-for="(indicator, index) in offchartIndicators"
@@ -127,6 +127,43 @@
                     <span class="indicator-name" :class="{ dimmed: !indicator.visible }">
                         {{ indicator.name }}
                     </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- View Indicators Accordion Section -->
+        <div class="panel-section" v-if="viewIndicatorsAccordion.length > 0">
+            <div class="section-title">Indicators</div>
+            <div class="accordion-container">
+                <div v-for="view in viewIndicatorsAccordion"
+                     :key="view.title"
+                     class="accordion-item"
+                     :class="{ 'current-view': view.isCurrentView }">
+                    <div class="accordion-header" @click="toggleAccordion(view.title)">
+                        <span class="accordion-arrow" :class="{ expanded: view.isExpanded }">&#9654;</span>
+                        <span class="accordion-title">{{ view.title }}</span>
+                        <span class="indicator-count">({{ view.indicators.length }})</span>
+                    </div>
+                    <div v-if="view.isExpanded" class="accordion-content">
+                        <div v-for="ind in view.indicators"
+                             :key="ind.name"
+                             class="indicator-item">
+                            <button class="visibility-toggle"
+                                    :class="{ hidden: !ind.visible }"
+                                    @click.stop="toggleViewIndicatorVisibility(view.title, ind.name)"
+                                    :title="ind.visible ? 'Hide indicator' : 'Show indicator'">
+                                <svg v-if="ind.visible" viewBox="0 0 24 24" width="16" height="16">
+                                    <path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                                </svg>
+                                <svg v-else viewBox="0 0 24 24" width="16" height="16">
+                                    <path fill="currentColor" d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/>
+                                </svg>
+                            </button>
+                            <span class="indicator-name" :class="{ dimmed: !ind.visible }">
+                                {{ ind.name }}
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -210,11 +247,43 @@ export default {
             if (!this.chart || !this.chart.data || !this.chart.data.offchart) {
                 return []
             }
-            return this.chart.data.offchart.map((indicator, index) => ({
-                name: indicator.name || `Indicator ${index + 1}`,
-                type: indicator.type,
-                visible: indicator.settings?.display !== false,
-                index: index
+            // Get names of persistent indicators to exclude them from "Values" section
+            const persistentNames = new Set(
+                this.persistentIndicatorsClipped.map(ind => ind.name)
+            )
+            return this.chart.data.offchart
+                .map((indicator, index) => ({
+                    name: indicator.name || `Indicator ${index + 1}`,
+                    type: indicator.type,
+                    visible: indicator.settings?.display !== false,
+                    index: index
+                }))
+                .filter(ind => !persistentNames.has(ind.name))
+        },
+        viewIndicatorsAccordion() {
+            // Group persistent indicators by their group field for accordion display
+            if (!this.persistentIndicatorsClipped.length) return []
+
+            // Group indicators by their group field
+            const groups = {}
+            for (const ind of this.persistentIndicatorsClipped) {
+                const groupName = ind.group || 'Ungrouped'
+                if (!groups[groupName]) {
+                    groups[groupName] = []
+                }
+                groups[groupName].push({
+                    name: ind.name,
+                    type: ind.type,
+                    visible: this.persistentIndicatorVisibility[ind.name] !== false
+                })
+            }
+
+            // Convert to accordion format
+            return Object.entries(groups).map(([groupName, indicators]) => ({
+                title: groupName,
+                isExpanded: this.accordionExpandedViews[groupName] === true,
+                isCurrentView: false,
+                indicators: indicators
             }))
         }
     },
@@ -296,8 +365,9 @@ export default {
 
             // Create DataCube with views filtered out
             this.chart = new DataCube(this.prepareChartData(chartData, tf))
-            // Apply displayed view
+            // Apply displayed view and re-clip persistent indicators
             this.$nextTick(() => {
+                this.clipPersistentIndicators()
                 this.applyCurrentColoring()
             })
             // Force chart to redraw
@@ -337,6 +407,13 @@ export default {
             this.selectedView = viewName      // Update persistent selection
             this.displayedView = viewName     // Update display
             this.applyCurrentColoring()
+            // Force chart reset to render offchart changes
+            this.$nextTick(() => {
+                if (this.$refs.tradingVue) {
+                    this.$refs.tradingVue.resetChart(false)
+                }
+            })
+            this.saveStateToStorage()
         },
         applyCurrentColoring() {
             if (!this.originalChartData || !this.chart.data.chart) return
@@ -394,15 +471,23 @@ export default {
         applyViewOffchart(viewData) {
             const tfData = this.currentTimeframe && this.charts[this.currentTimeframe]
 
-            // Only include base offchart if NO view is active (displayedView is empty)
-            let combinedOffchart = []
+            // Get viewData if not passed (for calls from toggleViewIndicatorVisibility)
+            if (!viewData && this.displayedView) {
+                const selectedOption = this.candleColoringOptions.find(opt => opt.title === this.displayedView)
+                if (selectedOption && selectedOption.viewData) {
+                    viewData = selectedOption.viewData
+                }
+            }
 
-            if (!this.displayedView) {
-                // No view selected - show base offchart
-                combinedOffchart = JSON.parse(JSON.stringify(tfData?.offchart || []))
-            } else {
-                // View is active - only show view-specific offchart, hide base
-                combinedOffchart = JSON.parse(JSON.stringify(viewData?.offchart || []))
+            // Build combined offchart using helper
+            let combinedOffchart = this.buildOffchartData(this.persistentIndicatorsClipped, viewData)
+
+            // Track persistent indicator names for visibility preference handling
+            const persistentNames = new Set(this.persistentIndicatorsClipped.map(ind => ind.name))
+
+            // Handle base offchart when no view is selected
+            if (!this.displayedView && tfData?.offchart) {
+                combinedOffchart = combinedOffchart.concat(JSON.parse(JSON.stringify(tfData.offchart)))
             }
 
             // Get current indicator names
@@ -413,20 +498,25 @@ export default {
                 this.lastIndicatorSet.every(name => currentIndicatorNames.includes(name))
 
             if (sameSet && currentIndicatorNames.length > 0) {
-                // Same indicator set - apply saved visibility preferences
+                // Same indicator set - apply saved visibility preferences (skip persistent indicators)
                 for (let i = 0; i < combinedOffchart.length; i++) {
                     const name = combinedOffchart[i].name
-                    if (name in this.indicatorVisibility) {
+                    // Don't override persistent indicators - they use persistentIndicatorVisibility
+                    if (!persistentNames.has(name) && name in this.indicatorVisibility) {
                         combinedOffchart[i].settings = combinedOffchart[i].settings || {}
                         combinedOffchart[i].settings.display = this.indicatorVisibility[name]
                     }
                 }
             } else if (currentIndicatorNames.length > 0) {
-                // Different indicator set - default to first visible only
+                // Different indicator set - default to first non-persistent visible only
                 this.indicatorVisibility = {}
+                let firstNonPersistent = true
                 for (let i = 0; i < combinedOffchart.length; i++) {
                     const name = combinedOffchart[i].name
-                    const isVisible = (i === 0)  // Only first is visible
+                    // Don't override persistent indicators - they keep their settings
+                    if (persistentNames.has(name)) continue
+                    const isVisible = firstNonPersistent  // Only first non-persistent is visible
+                    firstNonPersistent = false
                     combinedOffchart[i].settings = combinedOffchart[i].settings || {}
                     combinedOffchart[i].settings.display = isVisible
                     this.indicatorVisibility[name] = isVisible
@@ -436,13 +526,6 @@ export default {
 
             // Update chart offchart
             this.$set(this.chart.data, 'offchart', combinedOffchart)
-
-            // Force chart reset to properly render new offchart panels
-            this.$nextTick(() => {
-                if (this.$refs.tradingVue) {
-                    this.$refs.tradingVue.resetChart(false)
-                }
-            })
         },
         async loadDataFileList() {
             try {
@@ -453,6 +536,100 @@ export default {
             } catch (error) {
                 console.error('Error loading file list:', error)
             }
+        },
+        async loadPersistentIndicators() {
+            try {
+                const response = await fetch('/data/indicators.json')
+                if (response.ok) {
+                    this.persistentIndicatorsRaw = await response.json()
+                    this.clipPersistentIndicators()
+                } else {
+                    // indicators.json doesn't exist - that's fine
+                    this.persistentIndicatorsRaw = {}
+                    this.persistentIndicatorsClipped = []
+                }
+            } catch (e) {
+                // Network error or parse error
+                this.persistentIndicatorsRaw = {}
+                this.persistentIndicatorsClipped = []
+            }
+        },
+        clipPersistentIndicators(timeframe = null, chartData = null) {
+            // Clip persistent indicators to match chart's date range
+            // Use provided values or fall back to current chart
+            const tf = timeframe || this.currentTimeframe
+            const candles = chartData || this.chart?.data?.chart?.data
+
+            if (!candles?.length) {
+                this.persistentIndicatorsClipped = []
+                return []
+            }
+
+            const firstTs = candles[0][0]
+            const lastTs = candles[candles.length - 1][0]
+
+            // Get indicators for timeframe
+            const tfIndicators = this.persistentIndicatorsRaw[tf]?.indicators || []
+
+            const clipped = tfIndicators.map(indicator => ({
+                ...indicator,
+                group: indicator.group || 'Ungrouped',
+                data: indicator.data.filter(pt => pt[0] >= firstTs && pt[0] <= lastTs),
+                settings: {
+                    ...indicator.settings,
+                    display: this.persistentIndicatorVisibility[indicator.name] !== false
+                }
+            }))
+
+            this.persistentIndicatorsClipped = clipped
+            return clipped  // Return for immediate use
+        },
+        buildOffchartData(persistentIndicators, viewData = null) {
+            // Start with visible persistent indicators
+            const visiblePersistent = persistentIndicators.filter(
+                ind => ind.settings?.display !== false
+            )
+            let combinedOffchart = JSON.parse(JSON.stringify(visiblePersistent))
+
+            // Add view-specific offchart if view is active
+            if (this.displayedView && viewData?.offchart) {
+                combinedOffchart = combinedOffchart.concat(JSON.parse(JSON.stringify(viewData.offchart)))
+            }
+
+            return combinedOffchart
+        },
+        isPersistentIndicatorVisible(name) {
+            return this.persistentIndicatorVisibility[name] !== false
+        },
+        togglePersistentIndicatorVisibility(name) {
+            this.$set(this.persistentIndicatorVisibility, name, !this.isPersistentIndicatorVisible(name))
+            this.clipPersistentIndicators()
+            this.applyCurrentColoring()
+            // Force chart reset to render offchart changes
+            this.$nextTick(() => {
+                if (this.$refs.tradingVue) {
+                    this.$refs.tradingVue.resetChart(false)
+                }
+            })
+            this.saveStateToStorage()
+        },
+        toggleAccordion(viewTitle) {
+            this.$set(this.accordionExpandedViews, viewTitle,
+                      !this.accordionExpandedViews[viewTitle])
+        },
+        toggleViewIndicatorVisibility(viewTitle, indicatorName) {
+            // Now uses persistentIndicatorVisibility since all indicators are persistent
+            this.$set(this.persistentIndicatorVisibility, indicatorName,
+                      !this.isPersistentIndicatorVisible(indicatorName))
+            this.clipPersistentIndicators()
+            this.applyCurrentColoring()
+            // Force chart reset to render offchart changes
+            this.$nextTick(() => {
+                if (this.$refs.tradingVue) {
+                    this.$refs.tradingVue.resetChart(false)
+                }
+            })
+            this.saveStateToStorage()
         },
         initializeChart(data) {
             // Check if this is single-format (has chart.data array at root)
@@ -516,24 +693,26 @@ export default {
                 // Check if this is single-format (has chart.data array at root)
                 let newStart = null
                 let newEnd = null
+                let firstTf, firstTfData
                 if (data.chart && Array.isArray(data.chart.data)) {
                     // Single-timeframe format (data.json style)
                     this.charts = { 'default': data }
                     this.currentTimeframe = 'default'
+                    firstTf = 'default'
+                    firstTfData = data
                     this.originalChartData = JSON.parse(JSON.stringify(data.chart.data))
                     this.extractCandleColoringOptions(data, 'default')
                     if (data.chart.data.length >= 2) {
                         newStart = data.chart.data[0][0]
                         newEnd = data.chart.data[data.chart.data.length - 1][0]
                     }
-                    this.chart = new DataCube(this.prepareChartData(data, 'default'))
                 } else {
                     // Multi-timeframe format (data_tf.json style)
                     this.charts = data
                     const timeframes = Object.keys(data)
                     if (timeframes.length > 0) {
-                        const firstTf = timeframes[0]
-                        const firstTfData = data[firstTf]
+                        firstTf = timeframes[0]
+                        firstTfData = data[firstTf]
                         this.currentTimeframe = firstTf
                         this.originalChartData = JSON.parse(JSON.stringify(firstTfData.chart.data))
                         this.extractCandleColoringOptions(firstTfData, firstTf)
@@ -541,46 +720,61 @@ export default {
                             newStart = firstTfData.chart.data[0][0]
                             newEnd = firstTfData.chart.data[firstTfData.chart.data.length - 1][0]
                         }
-                        this.chart = new DataCube(this.prepareChartData(firstTfData, firstTf))
                     }
                 }
 
                 // Determine displayedView based on selectedView availability
                 const availableViews = this.candleColoringOptions.map(opt => opt.title)
                 if (availableViews.includes(this.selectedView)) {
-                    // Selected view exists - use it
                     this.displayedView = this.selectedView
                 } else if (availableViews.length > 0) {
-                    // Fallback to first view for display only (keep selectedView unchanged)
                     this.displayedView = availableViews[0]
                 } else {
                     this.displayedView = ''
                 }
 
-                // Apply displayed view
-                this.$nextTick(() => {
-                    this.applyCurrentColoring()
-                })
+                // Pre-clip persistent indicators using the new chart data
+                const clippedIndicators = this.clipPersistentIndicators(firstTf, firstTfData?.chart?.data)
 
-                // Check if datasets have same bounds (can restore range without flash)
+                // Get view data for current displayedView
+                let viewData = null
+                if (this.displayedView) {
+                    const selectedOption = this.candleColoringOptions.find(opt => opt.title === this.displayedView)
+                    viewData = selectedOption?.viewData
+                }
+
+                // Build combined offchart with persistent indicators BEFORE creating DataCube
+                const preparedData = this.prepareChartData(firstTfData, firstTf)
+                preparedData.offchart = this.buildOffchartData(clippedIndicators, viewData)
+
+                // Create DataCube with complete offchart data
+                this.chart = new DataCube(preparedData)
+
+                // Check if datasets have same bounds
                 const sameBounds = savedRange && savedRange[0] && savedRange[1] &&
                     prevStart !== null && newStart === prevStart && newEnd === prevEnd
 
-                if (sameBounds) {
-                    // Same dataset bounds - restore range without reset to avoid flash
-                    this.$nextTick(() => {
-                        if (this.$refs.tradingVue) {
-                            this.$refs.tradingVue.setRange(savedRange[0], savedRange[1])
-                        }
-                    })
-                } else {
-                    // Different dataset - force chart to redraw
-                    this.$nextTick(() => {
-                        if (this.$refs.tradingVue) {
-                            this.$refs.tradingVue.resetChart()
-                        }
-                    })
-                }
+                // Apply candle coloring and reset chart
+                this.$nextTick(() => {
+                    this.applyCurrentColoring()
+
+                    if (this.$refs.tradingVue) {
+                        this.$refs.tradingVue.resetChart(!sameBounds)
+                    }
+
+                    // Restore range if same bounds (needs double nextTick for chart to initialize)
+                    if (sameBounds && savedRange) {
+                        this.$nextTick(() => {
+                            this.$nextTick(() => {
+                                if (this.$refs.tradingVue) {
+                                    this.$refs.tradingVue.setRange(savedRange[0], savedRange[1])
+                                }
+                            })
+                        })
+                    }
+                })
+
+                this.saveStateToStorage()
             } catch (error) {
                 console.error('Error loading data file:', error)
             }
@@ -620,8 +814,65 @@ export default {
                     this.indicatorSettingsData.type = newType
                     this.indicatorSettingsData.settings = mergedSettings
                 }
+
+                this.saveStateToStorage()
             }
             // Modal stays open - user clicks Close to dismiss
+        },
+        // localStorage persistence methods
+        saveStateToStorage() {
+            const state = {
+                selectedDataFile: this.selectedDataFile,
+                selectedView: this.selectedView,
+                log_scale: this.log_scale,
+                indicatorVisibility: this.indicatorVisibility,
+                indicatorSettings: this.getIndicatorSettings(),
+                persistentIndicatorVisibility: this.persistentIndicatorVisibility,
+                accordionExpandedViews: this.accordionExpandedViews
+            }
+            localStorage.setItem('trading-vue-state', JSON.stringify(state))
+        },
+        loadStateFromStorage() {
+            const saved = localStorage.getItem('trading-vue-state')
+            return saved ? JSON.parse(saved) : null
+        },
+        getIndicatorSettings() {
+            // Extract current indicator settings by name
+            const settings = {}
+            if (this.chart && this.chart.data && this.chart.data.offchart) {
+                for (const ind of this.chart.data.offchart) {
+                    if (ind.name) {
+                        settings[ind.name] = {
+                            type: ind.type,
+                            settings: ind.settings || {}
+                        }
+                    }
+                }
+            }
+            return settings
+        },
+        applyRestoredIndicatorSettings(savedSettings) {
+            if (!this.chart || !this.chart.data || !this.chart.data.offchart || !savedSettings) return
+
+            for (let i = 0; i < this.chart.data.offchart.length; i++) {
+                const ind = this.chart.data.offchart[i]
+                const saved = savedSettings[ind.name]
+                if (saved) {
+                    if (saved.type) {
+                        this.$set(this.chart.data.offchart[i], 'type', saved.type)
+                    }
+                    if (saved.settings) {
+                        const merged = Object.assign({}, ind.settings || {}, saved.settings)
+                        this.$set(this.chart.data.offchart[i], 'settings', merged)
+                    }
+                }
+            }
+
+            this.$nextTick(() => {
+                if (this.$refs.tradingVue) {
+                    this.$refs.tradingVue.resetChart(false)
+                }
+            })
         },
         toggleIndicatorVisibility(index) {
             if (!this.chart.data.offchart || !this.chart.data.offchart[index]) return
@@ -654,14 +905,42 @@ export default {
                     this.$refs.tradingVue.resetChart(false)
                 }
             })
+
+            this.saveStateToStorage()
         }
     },
     mounted() {
         window.addEventListener('resize', this.onResize)
         this.loadDataFileList()
+        this.loadPersistentIndicators()
 
-        // Initialize with imported data
-        this.initializeChart(Data)
+        // Load saved state from localStorage
+        const savedState = this.loadStateFromStorage()
+
+        if (savedState) {
+            // Restore preferences
+            this.log_scale = savedState.log_scale ?? true
+            this.indicatorVisibility = savedState.indicatorVisibility || {}
+            this.selectedView = savedState.selectedView || ''
+            this.persistentIndicatorVisibility = savedState.persistentIndicatorVisibility || {}
+            this.accordionExpandedViews = savedState.accordionExpandedViews || {}
+
+            // If saved file is not the default, defer loading until file list arrives
+            if (savedState.selectedDataFile && savedState.selectedDataFile !== 'data.json') {
+                this.pendingFileLoad = savedState.selectedDataFile
+                this.pendingIndicatorSettings = savedState.indicatorSettings || {}
+                // Initialize with default data for now (will be replaced when file loads)
+                this.initializeChart(Data)
+            } else {
+                this.initializeChart(Data)
+                this.$nextTick(() => {
+                    this.applyRestoredIndicatorSettings(savedState.indicatorSettings || {})
+                })
+            }
+        } else {
+            // No saved state - initialize normally
+            this.initializeChart(Data)
+        }
 
         this.$nextTick(() => {
             window.dc = this.chart
@@ -703,7 +982,15 @@ export default {
             rectStart: null,
             rectCurrent: null,
             indicatorSettingsOpen: false,
-            indicatorSettingsData: null
+            indicatorSettingsData: null,
+            pendingFileLoad: null,           // File to load after file list arrives
+            pendingIndicatorSettings: null,  // Settings to apply after file loads
+            // Persistent indicators (from indicators.json)
+            persistentIndicatorsRaw: {},           // Raw data from indicators.json by timeframe
+            persistentIndicatorsClipped: [],       // Clipped to current data file's date range
+            persistentIndicatorVisibility: {},     // Visibility state by indicator name
+            // Accordion state for indicator groups
+            accordionExpandedViews: {}             // Track which accordion sections are expanded
         };
     },
     watch: {
@@ -712,6 +999,21 @@ export default {
                 this.$set(this.chart.data.chart, 'grid', {
                     logScale: value
                 })
+            }
+            this.saveStateToStorage()
+        },
+        dataFiles(newFiles) {
+            // Load pending file when file list arrives
+            if (this.pendingFileLoad && newFiles.includes(this.pendingFileLoad)) {
+                this.onFileSelected(this.pendingFileLoad).then(() => {
+                    this.applyRestoredIndicatorSettings(this.pendingIndicatorSettings)
+                    this.pendingFileLoad = null
+                    this.pendingIndicatorSettings = null
+                })
+            } else if (this.pendingFileLoad && newFiles.length > 0) {
+                // Saved file no longer exists - clear pending
+                this.pendingFileLoad = null
+                this.pendingIndicatorSettings = null
             }
         }
     }
@@ -1064,5 +1366,63 @@ body {
 
 .indicator-name.dimmed {
     color: #808a9d;
+}
+
+/* Accordion styles for view indicators */
+.accordion-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.accordion-item {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+}
+
+.accordion-item.current-view {
+    background: rgba(100, 181, 246, 0.1);
+    border-left: 2px solid #64b5f6;
+}
+
+.accordion-header {
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    cursor: pointer;
+    gap: 8px;
+}
+
+.accordion-header:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.accordion-arrow {
+    font-size: 10px;
+    transition: transform 0.2s;
+    color: #888;
+}
+
+.accordion-arrow.expanded {
+    transform: rotate(90deg);
+}
+
+.accordion-title {
+    flex: 1;
+    font-size: 12px;
+    color: #d1d4dc;
+    font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, sans-serif;
+}
+
+.indicator-count {
+    color: #666;
+    font-size: 11px;
+}
+
+.accordion-content {
+    padding: 4px 8px 8px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 </style>

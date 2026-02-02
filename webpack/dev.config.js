@@ -64,7 +64,7 @@ module.exports = (env, options) => ({
                 const dataDir = path.join(__dirname, '../data')
                 try {
                     const files = fs.readdirSync(dataDir)
-                        .filter(f => f.endsWith('.json') && !f.startsWith('bak'))
+                        .filter(f => f.endsWith('.json') && !f.startsWith('bak') && f !== 'indicators.json')
                         .sort()
                     res.json(files)
                 } catch(e) {
