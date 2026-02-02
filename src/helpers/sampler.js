@@ -1,8 +1,9 @@
 // Resamples candles
 
 import se from './script_engine.js'
+import Const from '../stuff/constants.js'
 
-const DEF_LIMIT = 5   // default buff length
+const { DEF_LIMIT } = Const
 
 export default function(T, auto = false) {
 

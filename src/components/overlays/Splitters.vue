@@ -60,9 +60,6 @@ export default {
     },
     // Define internal setting & constants here
     computed: {
-        sett() {
-            return this.$props.settings
-        },
         new_font() {
             return this.sett.font ||
             '12px ' + this.$props.font.split('px').pop()

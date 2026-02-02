@@ -71,9 +71,6 @@ export default {
     },
     // Define internal setting & constants here
     computed: {
-        sett() {
-            return this.$props.settings
-        },
         default_font() {
             return '12px ' + this.$props.font.split('px').pop()
         },

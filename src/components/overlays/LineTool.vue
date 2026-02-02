@@ -79,9 +79,6 @@ export default {
     },
     // Define internal setting & constants here
     computed: {
-        sett() {
-            return this.$props.settings
-        },
         p1() {
             return this.$props.settings.p1
         },

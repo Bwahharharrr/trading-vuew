@@ -2,27 +2,15 @@
 // Draws a segment, adds corresponding collision f-n
 
 import Math2 from '../../stuff/math.js'
-import Utils from '../../stuff/utils.js'
+import PrimitiveBase from './primitive-base.js'
 
-export default class Seg {
-
-    // Overlay ref, canvas ctx
-    constructor(overlay, ctx) {
-        this.ctx = ctx
-        this.comp = overlay
-        this.T = overlay.$props.config.TOOL_COLL
-        if (Utils.is_mobile) this.T *= 2
-    }
+export default class Seg extends PrimitiveBase {
 
     // p1[t, $], p2[t, $] (time-price coordinates)
     draw(p1, p2) {
 
-        const layout = this.comp.$props.layout
-
-        let x1 = layout.t2screen(p1[0])
-        let y1 = layout.$2screen(p1[1])
-        let x2 = layout.t2screen(p2[0])
-        let y2 = layout.$2screen(p2[1])
+        let [x1, y1] = this.toScreen(p1)
+        let [x2, y2] = this.toScreen(p2)
 
         this.ctx.moveTo(x1, y1)
         this.ctx.lineTo(x2, y2)

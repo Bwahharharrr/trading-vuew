@@ -129,6 +129,11 @@ export default {
             deep: true
         }
     },
+    computed: {
+        sett() {
+            return this.$props.settings
+        }
+    },
     data() { return { uxs_count: 0, last_ux_id: null } },
     render(h) { return h() }
 }

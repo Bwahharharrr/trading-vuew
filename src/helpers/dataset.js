@@ -1,7 +1,7 @@
 
 // Dataset proxy between vuejs & WebWorker
 
-import { now } from './script_utils.js'
+import Utils from '../stuff/utils.js'
 
 export default class Dataset {
 
@@ -134,7 +134,7 @@ export default class Dataset {
 export class DatasetWW {
 
     constructor(id, data) {
-        this.last_upd = now()
+        this.last_upd = Utils.now()
         this.id = id
         if (Array.isArray(data)) {
             // Regular array
@@ -163,7 +163,7 @@ export class DatasetWW {
                     arr.push(dp)
                 }
             }
-            se.data[id].last_upd = now()
+            se.data[id].last_upd = Utils.now()
         }
     }
 
@@ -182,7 +182,7 @@ export class DatasetWW {
 
     // On dataset operation
     op(se, op) {
-        this.last_upd = now()
+        this.last_upd = Utils.now()
         switch(op.type) {
             case 'set':
                 this.data = op.data

@@ -95,9 +95,6 @@ export default {
     },
     // Define internal setting & constants here
     computed: {
-        sett() {
-            return this.$props.settings
-        },
         line_width() {
             return this.sett.lineWidth || 0.75
         },

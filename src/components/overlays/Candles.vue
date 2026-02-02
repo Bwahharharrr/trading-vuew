@@ -62,9 +62,6 @@ export default {
 
     // Define internal setting & constants here
     computed: {
-        sett() {
-            return this.$props.settings
-        },
         show_volume() {
             return 'showVolume' in this.sett ?
                 this.sett.showVolume : true

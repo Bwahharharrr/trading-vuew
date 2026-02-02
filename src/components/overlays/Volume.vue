@@ -58,9 +58,6 @@ export default {
 
     // Define internal setting & constants here
     computed: {
-        sett() {
-            return this.$props.settings
-        },
         colorVolUp() {
             return this.sett.colorVolUp ||
             this.$props.colors.volUp

@@ -6,8 +6,10 @@ import Utils from '../stuff/utils.js'
 import * as u from './script_utils.js'
 import symstd from './symstd.js'
 import TS from './script_ts.js'
+import Const from '../stuff/constants.js'
+import scriptState from './script_state.js'
 
-const DEF_LIMIT = 5   // default buff length
+const { DEF_LIMIT } = Const
 const WAIT_EXEC = 10  // merge script execs, ms
 
 class ScriptEngine {
@@ -24,6 +26,21 @@ class ScriptEngine {
         this.mods = {}          // Modules (extensions)
         this.std_plus = {}      // Functions to inject
         this.tf = undefined     // Main chart TF
+
+        // Set up function references in shared state (breaks circular deps)
+        scriptState.send = this.send.bind(this)
+        scriptState.std_inject = this.std_inject.bind(this)
+        scriptState.match_ds = this.match_ds.bind(this)
+    }
+
+    // Sync runtime state to shared module (for script_env and script_std)
+    syncState() {
+        scriptState.t = this.t
+        scriptState.tf = this.tf
+        scriptState.iter = this.iter
+        scriptState.data = this.data
+        scriptState.shared = this.shared
+        scriptState.mods = this.mods
     }
 
     exec_all() {
@@ -192,6 +209,7 @@ class ScriptEngine {
 
             this.iter = i
             this.t = ohlcv[i][0]
+            this.syncState()
             this.step(ohlcv[i], unshift)
 
             this.shared.onclose = false
@@ -235,6 +253,7 @@ class ScriptEngine {
         this.running = true
         this.task = task
 
+        this.syncState()
         return true
     }
 
@@ -299,6 +318,7 @@ class ScriptEngine {
 
                 this.iter = i - start
                 this.t = ohlcv[i][0]
+                this.syncState()
                 this.step(ohlcv[i])
                 this.shared.onclose = i !== ohlcv.length - 1
 

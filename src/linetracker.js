@@ -63,9 +63,6 @@ export default {
     },
     // Define internal setting & constants here
     computed: {
-        sett() {
-            return this.$props.settings;
-        },
         linecolor() {
             return this.sett.linecolor || '#FFFFFF';
         },

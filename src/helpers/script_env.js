@@ -5,13 +5,12 @@
 // other overlays & dependencies
 
 import ScriptStd from './script_std.js'
-import se from './script_engine.js'
+import se from './script_state.js'
 import * as u from './script_utils.js'
 import TS from './script_ts.js'
+import Const from '../stuff/constants.js'
 
-const FDEFS1 = /(function |)([$A-Z_][0-9A-Z_$\.]*)[\s]*?\((.*?\s*)\)/mi
-const FDEFS2 = /(function |)([$A-Z_][0-9A-Z_$\.]*)[\s]*?\((.*\s*)\)/gmis
-const DEF_LIMIT = 5
+const { DEF_LIMIT, FDEFS1, FDEFS2 } = Const
 
 export default class ScriptEnv {
 

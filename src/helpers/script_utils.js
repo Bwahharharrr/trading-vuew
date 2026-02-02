@@ -1,11 +1,7 @@
 
 import Const from '../stuff/constants.js'
 
-const FDEFS = /(function |)([$A-Z_][0-9A-Z_$\.]*)[\s]*?\((.*?)\)/gmi
-const SBRACKETS = /([$A-Z_][0-9A-Z_$\.]*)[\s]*?\[([^"^\[^\]]+?)\]/gmi
-const TFSTR = /(\d+)(\w*)/gm
-
-const BUF_INC = 5
+const { BUF_INC, FDEFS, SBRACKETS, TFSTR } = Const
 var tf_cache = {}
 
 export function f_args(src) {
@@ -196,8 +192,4 @@ export function update(data, val) {
     } else {
         data[i] = val
     }
-}
-
-export function now() {
-    return (new Date()).getTime()
 }

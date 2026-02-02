@@ -1,4 +1,20 @@
 
+// Script buffer constants
+const DEF_LIMIT = 5   // default buffer length
+const BUF_INC = 5     // buffer increment for time series
+
+// Function definition regex patterns for script parsing
+// FDEFS: Basic function matching (non-greedy, global, multi-line, case-insensitive)
+const FDEFS = /(function |)([$A-Z_][0-9A-Z_$\.]*)[\s]*?\((.*?)\)/gmi
+// FDEFS1: Single match with trailing whitespace (non-global)
+const FDEFS1 = /(function |)([$A-Z_][0-9A-Z_$\.]*)[\s]*?\((.*?\s*)\)/mi
+// FDEFS2: Multi-line with dotall for spanning across lines
+const FDEFS2 = /(function |)([$A-Z_][0-9A-Z_$\.]*)[\s]*?\((.*\s*)\)/gmis
+// SBRACKETS: Array bracket access pattern
+const SBRACKETS = /([$A-Z_][0-9A-Z_$\.]*)[\s]*?\[([^"^\[^\]]+?)\]/gmi
+// TFSTR: Timeframe string pattern (e.g., "15m", "1h")
+const TFSTR = /(\d+)(\w*)/gm
+
 const SECOND = 1000
 const MINUTE = SECOND * 60
 const MINUTE3 = MINUTE * 3
@@ -109,6 +125,13 @@ const MAP_UNIT = {
 }
 
 export default {
+    DEF_LIMIT,
+    BUF_INC,
+    FDEFS,
+    FDEFS1,
+    FDEFS2,
+    SBRACKETS,
+    TFSTR,
     SECOND: SECOND,
     MINUTE: MINUTE,
     MINUTE5: MINUTE5,
