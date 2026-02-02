@@ -321,6 +321,7 @@ export default {
         open_indicator_settings(indicatorInfo) {
             this.$emit('open-indicator-settings', indicatorInfo)
         },
+        // Note: close-indicator is handled via custom_event() below
         custom_event(d) {
             if ('args' in d) {
                 this.$emit(d.event, ...d.args)

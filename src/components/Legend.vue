@@ -32,6 +32,15 @@
                 <path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
             </svg>
         </button>
+        <button
+            v-if="grid_id > 0"
+            class="t-vue-close-btn"
+            @click.stop="closeIndicator(ind)"
+            title="Remove indicator">
+            <svg viewBox="0 0 24 24" width="14" height="14">
+                <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+        </button>
         <button-group
             v-bind:buttons="common.buttons"
             v-bind:config="common.config"
@@ -196,6 +205,13 @@ export default {
                 settings: indicator.settings,
                 gridId: this.$props.grid_id
             })
+        },
+        closeIndicator(indicator) {
+            this.$emit('close-indicator', {
+                name: indicator.name,
+                index: indicator.index,
+                gridId: this.$props.grid_id
+            })
         }
     }
 }
@@ -262,6 +278,28 @@ export default {
     background: rgba(53, 167, 118, 0.1);
 }
 .t-vue-settings-btn svg {
+    display: block;
+}
+.t-vue-close-btn {
+    background: none;
+    border: none;
+    color: #808a9d;
+    cursor: pointer;
+    padding: 2px 4px;
+    margin-left: 2px;
+    border-radius: 3px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    position: relative;
+    z-index: 10;
+}
+.t-vue-close-btn:hover {
+    color: #e54077;
+    background: rgba(229, 64, 119, 0.1);
+}
+.t-vue-close-btn svg {
     display: block;
 }
 .t-vue-ivalue {

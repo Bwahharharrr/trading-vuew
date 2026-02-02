@@ -9,7 +9,8 @@
             v-bind:layout_override="legendLayoutOverride"
             v-on:legend-button-click="button_click"
             v-on:legend-dblclick="legend_dblclick"
-            v-on:open-indicator-settings="open_indicator_settings">
+            v-on:open-indicator-settings="open_indicator_settings"
+            v-on:close-indicator="close_indicator">
         </chart-legend>
         <grid v-bind="grid_props" ref="grid"
             v-bind:grid_id="grid_id"
@@ -102,6 +103,13 @@ export default {
             // Emit as custom event to be handled by Chart.vue -> App.vue
             this.$emit('custom-event', {
                 event: 'open-indicator-settings',
+                args: [indicatorInfo]
+            })
+        },
+        close_indicator(indicatorInfo) {
+            // Emit as custom event to be handled by Chart.vue -> App.vue
+            this.$emit('custom-event', {
+                event: 'close-indicator',
                 args: [indicatorInfo]
             })
         },

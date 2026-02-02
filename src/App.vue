@@ -10,7 +10,8 @@
                     :overlays="overlays"
                     :chart-config="config"
                     :toolbar="true"
-                    @open-indicator-settings="openIndicatorSettings">
+                    @open-indicator-settings="openIndicatorSettings"
+                @close-indicator="onCloseIndicator">
             </trading-vue>
 
             <!-- Left toolbar for drawing tools -->
@@ -782,6 +783,23 @@ export default {
         openIndicatorSettings(indicatorInfo) {
             this.indicatorSettingsData = indicatorInfo
             this.indicatorSettingsOpen = true
+        },
+        onCloseIndicator(payload) {
+            const { name } = payload
+
+            // Check if this is a persistent indicator
+            const isPersistent = this.persistentIndicatorsClipped.some(ind => ind.name === name)
+
+            if (isPersistent) {
+                // Toggle off persistent indicator
+                this.togglePersistentIndicatorVisibility(name)
+            } else {
+                // Find the indicator by name in the actual offchart array
+                const offchartIndex = this.chart.data.offchart.findIndex(ind => ind.name === name)
+                if (offchartIndex !== -1) {
+                    this.toggleIndicatorVisibility(offchartIndex)
+                }
+            }
         },
         closeIndicatorSettings() {
             this.indicatorSettingsOpen = false

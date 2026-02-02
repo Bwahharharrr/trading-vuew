@@ -249,6 +249,7 @@ export default {
             if (d.event === 'open-indicator-settings') {
                 this.$emit('open-indicator-settings', d.args[0])
             }
+            // Note: close-indicator is handled via custom-event mechanism in TradingVue.vue
         },
         update_layout(clac_tf, forceResize = false) {
             if (clac_tf) this.calc_interval()
