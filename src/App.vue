@@ -190,9 +190,9 @@ import TradingVue from './TradingVue.vue'
 import IndicatorSettings from './components/IndicatorSettings.vue'
 import Data from '../data/data.json'
 import DataCube from '../src/helpers/datacube.js'
-import BuysAndSells from './buysandsells.js'
-import Balance from './balance.js'
-import LineTracker from './linetracker.js'
+import BuysAndSells from './components/overlays/BuysAndSells.js'
+import Balance from './components/overlays/Balance.js'
+import LineTracker from './components/overlays/LineTracker.js'
 
 // App mixins (decomposed concerns)
 import { ViewManager, IndicatorManager, FileManager, ChartState, DrawingTools } from './mixins/app/index.js'

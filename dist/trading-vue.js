@@ -330,6 +330,22 @@ if(false) // removed by dead control flow
 
 /***/ }),
 
+/***/ 145:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   A: () => (/* binding */ _arrayLikeToArray)
+/* harmony export */ });
+function _arrayLikeToArray(r, a) {
+  (null == a || a > r.length) && (a = r.length);
+  for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e];
+  return n;
+}
+
+
+/***/ }),
+
 /***/ 152:
 /***/ ((module, __unused_webpack_exports, __webpack_require__) => {
 
@@ -3395,6 +3411,187 @@ module.exports = exports;
 
 /***/ }),
 
+/***/ 288:
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   A: () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+// Math/Geometry
+
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
+  // Distance from point to line
+  // p1 = point, (p2, p3) = line
+  point2line: function point2line(p1, p2, p3) {
+    var _this$tri = this.tri(p1, p2, p3),
+      area = _this$tri.area,
+      base = _this$tri.base;
+    return Math.abs(this.tri_h(area, base));
+  },
+  // Distance from point to segment
+  // p1 = point, (p2, p3) = segment
+  point2seg: function point2seg(p1, p2, p3) {
+    var _this$tri2 = this.tri(p1, p2, p3),
+      area = _this$tri2.area,
+      base = _this$tri2.base;
+    // Vector projection
+    var proj = this.dot_prod(p1, p2, p3) / base;
+    // Distance from left pin
+    var l1 = Math.max(-proj, 0);
+    // Distance from right pin
+    var l2 = Math.max(proj - base, 0);
+    // Normal
+    var h = Math.abs(this.tri_h(area, base));
+    return Math.max(h, l1, l2);
+  },
+  // Distance from point to ray
+  // p1 = point, (p2, p3) = ray
+  point2ray: function point2ray(p1, p2, p3) {
+    var _this$tri3 = this.tri(p1, p2, p3),
+      area = _this$tri3.area,
+      base = _this$tri3.base;
+    // Vector projection
+    var proj = this.dot_prod(p1, p2, p3) / base;
+    // Distance from left pin
+    var l1 = Math.max(-proj, 0);
+    // Normal
+    var h = Math.abs(this.tri_h(area, base));
+    return Math.max(h, l1);
+  },
+  tri: function tri(p1, p2, p3) {
+    var area = this.area(p1, p2, p3);
+    var dx = p3[0] - p2[0];
+    var dy = p3[1] - p2[1];
+    var base = Math.sqrt(dx * dx + dy * dy);
+    return {
+      area: area,
+      base: base
+    };
+  },
+  /* Area of triangle:
+          p1
+        /    \
+      p2  _  p3
+  */
+  area: function area(p1, p2, p3) {
+    return p1[0] * (p2[1] - p3[1]) + p2[0] * (p3[1] - p1[1]) + p3[0] * (p1[1] - p2[1]);
+  },
+  // Triangle height
+  tri_h: function tri_h(area, base) {
+    return area / base;
+  },
+  // Dot product of (p2, p3) and (p2, p1)
+  dot_prod: function dot_prod(p1, p2, p3) {
+    var v1 = [p3[0] - p2[0], p3[1] - p2[1]];
+    var v2 = [p1[0] - p2[0], p1[1] - p2[1]];
+    return v1[0] * v2[0] + v1[1] * v2[1];
+  },
+  // Symmetrical log
+  log: function log(x) {
+    // TODO: log for small values
+    return Math.sign(x) * Math.log(Math.abs(x) + 1);
+  },
+  // Symmetrical exp
+  exp: function exp(x) {
+    return Math.sign(x) * (Math.exp(Math.abs(x)) - 1);
+  },
+  // Middle line on log scale based on range & px height
+  log_mid: function log_mid(r, h) {
+    var log_hi = this.log(r[0]);
+    var log_lo = this.log(r[1]);
+    var px = h / 2;
+    var gx = log_hi - px * (log_hi - log_lo) / h;
+    return this.exp(gx);
+  },
+  // Return new adjusted range, based on the previous
+  // range, new $_hi, target middle line
+  re_range: function re_range(r1, hi2, mid) {
+    var log_hi1 = this.log(r1[0]);
+    var log_lo1 = this.log(r1[1]);
+    var log_hi2 = this.log(hi2);
+    var log_$ = this.log(mid);
+    var W = (log_hi2 - log_$) * (log_hi1 - log_lo1) / (log_hi1 - log_$);
+    return this.exp(log_hi2 - W);
+  } // Return new adjusted range, based on the previous
+  // range, new $_hi, target middle line + dy (shift)
+  // WASTE
+  /*range_shift(r1, hi2, mid, dy, h) {
+      let log_hi1 = this.log(r1[0])
+      let log_lo1 = this.log(r1[1])
+      let log_hi2 = this.log(hi2)
+      let log_$ = this.log(mid)
+       let W = h * (log_hi2 - log_$) /
+              (h * (log_hi1 - log_$) / (log_hi1 - log_lo1) + dy)
+       return this.exp(log_hi2 - W)
+   }*/
+});
+
+/***/ }),
+
+/***/ 296:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+
+// EXPORTS
+__webpack_require__.d(__webpack_exports__, {
+  A: () => (/* binding */ _slicedToArray)
+});
+
+;// ./node_modules/@babel/runtime/helpers/esm/arrayWithHoles.js
+function _arrayWithHoles(r) {
+  if (Array.isArray(r)) return r;
+}
+
+;// ./node_modules/@babel/runtime/helpers/esm/iterableToArrayLimit.js
+function _iterableToArrayLimit(r, l) {
+  var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"];
+  if (null != t) {
+    var e,
+      n,
+      i,
+      u,
+      a = [],
+      f = !0,
+      o = !1;
+    try {
+      if (i = (t = t.call(r)).next, 0 === l) {
+        if (Object(t) !== t) return;
+        f = !1;
+      } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0);
+    } catch (r) {
+      o = !0, n = r;
+    } finally {
+      try {
+        if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return;
+      } finally {
+        if (o) throw n;
+      }
+    }
+    return a;
+  }
+}
+
+// EXTERNAL MODULE: ./node_modules/@babel/runtime/helpers/esm/unsupportedIterableToArray.js
+var unsupportedIterableToArray = __webpack_require__(800);
+;// ./node_modules/@babel/runtime/helpers/esm/nonIterableRest.js
+function _nonIterableRest() {
+  throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
+}
+
+;// ./node_modules/@babel/runtime/helpers/esm/slicedToArray.js
+
+
+
+
+function _slicedToArray(r, e) {
+  return _arrayWithHoles(r) || _iterableToArrayLimit(r, e) || (0,unsupportedIterableToArray/* default */.A)(r, e) || _nonIterableRest();
+}
+
+
+/***/ }),
+
 /***/ 314:
 /***/ ((module) => {
 
@@ -3556,6 +3753,48 @@ module.exports = exports;
 
 /***/ }),
 
+/***/ 458:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+
+// EXPORTS
+__webpack_require__.d(__webpack_exports__, {
+  A: () => (/* binding */ _toConsumableArray)
+});
+
+// EXTERNAL MODULE: ./node_modules/@babel/runtime/helpers/esm/arrayLikeToArray.js
+var arrayLikeToArray = __webpack_require__(145);
+;// ./node_modules/@babel/runtime/helpers/esm/arrayWithoutHoles.js
+
+function _arrayWithoutHoles(r) {
+  if (Array.isArray(r)) return (0,arrayLikeToArray/* default */.A)(r);
+}
+
+;// ./node_modules/@babel/runtime/helpers/esm/iterableToArray.js
+function _iterableToArray(r) {
+  if ("undefined" != typeof Symbol && null != r[Symbol.iterator] || null != r["@@iterator"]) return Array.from(r);
+}
+
+// EXTERNAL MODULE: ./node_modules/@babel/runtime/helpers/esm/unsupportedIterableToArray.js
+var unsupportedIterableToArray = __webpack_require__(800);
+;// ./node_modules/@babel/runtime/helpers/esm/nonIterableSpread.js
+function _nonIterableSpread() {
+  throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
+}
+
+;// ./node_modules/@babel/runtime/helpers/esm/toConsumableArray.js
+
+
+
+
+function _toConsumableArray(r) {
+  return _arrayWithoutHoles(r) || _iterableToArray(r) || (0,unsupportedIterableToArray/* default */.A)(r) || _nonIterableSpread();
+}
+
+
+/***/ }),
+
 /***/ 484:
 /***/ ((module, exports, __webpack_require__) => {
 
@@ -3567,6 +3806,314 @@ exports.push([module.id, "\n.trading-vue-section {\n    height: 0;\n    position
 // Exports
 module.exports = exports;
 
+
+/***/ }),
+
+/***/ 493:
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   A: () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+/* harmony import */ var _babel_runtime_helpers_toConsumableArray__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(458);
+/* harmony import */ var arrayslicer__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(74);
+/* harmony import */ var arrayslicer__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(arrayslicer__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _constants_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(577);
+
+
+
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
+  clamp: function clamp(num, min, max) {
+    return num <= min ? min : num >= max ? max : num;
+  },
+  add_zero: function add_zero(i) {
+    if (i < 10) {
+      i = "0" + i;
+    }
+    return i;
+  },
+  // Start of the day (zero millisecond)
+  day_start: function day_start(t) {
+    var start = new Date(t);
+    return start.setUTCHours(0, 0, 0, 0);
+  },
+  // Start of the month
+  month_start: function month_start(t) {
+    var date = new Date(t);
+    return Date.UTC(date.getFullYear(), date.getMonth(), 1);
+  },
+  // Start of the year
+  year_start: function year_start(t) {
+    return Date.UTC(new Date(t).getFullYear());
+  },
+  get_year: function get_year(t) {
+    if (!t) return undefined;
+    return new Date(t).getUTCFullYear();
+  },
+  get_month: function get_month(t) {
+    if (!t) return undefined;
+    return new Date(t).getUTCMonth();
+  },
+  // Nearest in array
+  nearest_a: function nearest_a(x, array) {
+    var dist = Infinity;
+    var val = null;
+    var index = -1;
+    for (var i = 0; i < array.length; i++) {
+      var xi = array[i];
+      if (Math.abs(xi - x) < dist) {
+        dist = Math.abs(xi - x);
+        val = xi;
+        index = i;
+      }
+    }
+    return [index, val];
+  },
+  round: function round(num, decimals) {
+    if (decimals === void 0) {
+      decimals = 8;
+    }
+    return parseFloat(num.toFixed(decimals));
+  },
+  // Strip? No, it's ugly floats in js
+  strip: function strip(number) {
+    return parseFloat(parseFloat(number).toPrecision(12));
+  },
+  get_day: function get_day(t) {
+    return t ? new Date(t).getDate() : null;
+  },
+  // Update array keeping the same reference
+  overwrite: function overwrite(arr, new_arr) {
+    arr.splice.apply(arr, [0, arr.length].concat((0,_babel_runtime_helpers_toConsumableArray__WEBPACK_IMPORTED_MODULE_2__/* ["default"] */ .A)(new_arr)));
+  },
+  // Copy layout in reactive way
+  copy_layout: function copy_layout(obj, new_obj) {
+    for (var k in obj) {
+      if (Array.isArray(obj[k])) {
+        // (some offchart indicators are added/removed)
+        // we need to update layout in a reactive way
+        if (obj[k].length !== new_obj[k].length) {
+          this.overwrite(obj[k], new_obj[k]);
+          continue;
+        }
+        for (var m in obj[k]) {
+          Object.assign(obj[k][m], new_obj[k][m]);
+        }
+      } else {
+        Object.assign(obj[k], new_obj[k]);
+      }
+    }
+  },
+  // Detects candles interval
+  detect_interval: function detect_interval(ohlcv) {
+    var len = Math.min(ohlcv.length - 1, 99);
+    var min = Infinity;
+    ohlcv.slice(0, len).forEach(function (x, i) {
+      var d = ohlcv[i + 1][0] - x[0];
+      if (d === d && d < min) min = d;
+    });
+    // This saves monthly chart from being awkward
+    if (min >= _constants_js__WEBPACK_IMPORTED_MODULE_1__/* ["default"] */ .A.MONTH && min <= _constants_js__WEBPACK_IMPORTED_MODULE_1__/* ["default"] */ .A.DAY * 30) {
+      return _constants_js__WEBPACK_IMPORTED_MODULE_1__/* ["default"] */ .A.DAY * 31;
+    }
+    return min;
+  },
+  // Gets numberic part of overlay id (e.g 'EMA_1' = > 1)
+  get_num_id: function get_num_id(id) {
+    return parseInt(id.split('_').pop());
+  },
+  // Fast filter. Really fast, like 10X
+  fast_filter: function fast_filter(arr, t1, t2) {
+    if (!arr.length) return [arr, undefined];
+    try {
+      var ia = new (arrayslicer__WEBPACK_IMPORTED_MODULE_0___default())(arr, "0");
+      var res = ia.getRange(t1, t2);
+      var i0 = ia.valpos[t1].next;
+      return [res, i0];
+    } catch (e) {
+      // Something wrong with fancy slice lib
+      // Fast fix: fallback to filter
+      return [arr.filter(function (x) {
+        return x[0] >= t1 && x[0] <= t2;
+      }), 0];
+    }
+  },
+  // Fast filter (index-based)
+  fast_filter_i: function fast_filter_i(arr, t1, t2) {
+    if (!arr.length) return [arr, undefined];
+    var i1 = Math.floor(t1);
+    if (i1 < 0) i1 = 0;
+    var i2 = Math.floor(t2 + 1);
+    var res = arr.slice(i1, i2);
+    return [res, i1];
+  },
+  // Nearest indexes (left and right)
+  fast_nearest: function fast_nearest(arr, t1) {
+    var ia = new (arrayslicer__WEBPACK_IMPORTED_MODULE_0___default())(arr, "0");
+    ia.fetch(t1);
+    return [ia.nextlow, ia.nexthigh];
+  },
+  now: function now() {
+    return new Date().getTime();
+  },
+  pause: function pause(delay) {
+    return new Promise(function (rs, rj) {
+      return setTimeout(rs, delay);
+    });
+  },
+  // Limit crazy wheel delta values
+  smart_wheel: function smart_wheel(delta) {
+    var abs = Math.abs(delta);
+    if (abs > 500) {
+      return (200 + Math.log(abs)) * Math.sign(delta);
+    }
+    return delta;
+  },
+  // Parse the original mouse event to find deltaX
+  get_deltaX: function get_deltaX(event) {
+    return event.originalEvent.deltaX / 12;
+  },
+  // Parse the original mouse event to find deltaY
+  get_deltaY: function get_deltaY(event) {
+    return event.originalEvent.deltaY / 12;
+  },
+  // Apply opacity to a hex color
+  apply_opacity: function apply_opacity(c, op) {
+    if (c.length === 7) {
+      var n = Math.floor(op * 255);
+      n = this.clamp(n, 0, 255);
+      c += n.toString(16);
+    }
+    return c;
+  },
+  // Parse timeframe or return value in ms
+  parse_tf: function parse_tf(smth) {
+    if (typeof smth === 'string') {
+      return _constants_js__WEBPACK_IMPORTED_MODULE_1__/* ["default"] */ .A.map_unit[smth];
+    } else {
+      return smth;
+    }
+  },
+  // Detect index shift between the main data sub
+  // and the overlay's sub (for IB-mode)
+  index_shift: function index_shift(sub, data) {
+    // Find the second timestamp (by value)
+    if (!data.length) return 0;
+    var first = data[0][0];
+    var second;
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][0] !== first) {
+        second = data[i][0];
+        break;
+      }
+    }
+    for (var j = 0; j < sub.length; j++) {
+      if (sub[j][0] === second) {
+        return j - i;
+      }
+    }
+    return 0;
+  },
+  // Fallback fix for Brave browser
+  // https://github.com/brave/brave-browser/issues/1738
+  measureText: function measureText(ctx, text, tv_id) {
+    var m = ctx.measureTextOrg(text);
+    if (m.width === 0) {
+      var doc = document;
+      var id = 'tvjs-measure-text';
+      var el = doc.getElementById(id);
+      if (!el) {
+        var base = doc.getElementById(tv_id);
+        el = doc.createElement("div");
+        el.id = id;
+        el.style.position = 'absolute';
+        el.style.top = '-1000px';
+        base.appendChild(el);
+      }
+      if (ctx.font) el.style.font = ctx.font;
+      el.innerText = text.replace(/ /g, '.');
+      return {
+        width: el.offsetWidth
+      };
+    } else {
+      return m;
+    }
+  },
+  uuid: function uuid(temp) {
+    if (temp === void 0) {
+      temp = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx';
+    }
+    return temp.replace(/[xy]/g, function (c) {
+      var r = Math.random() * 16 | 0,
+        v = c == 'x' ? r : r & 0x3 | 0x8;
+      return v.toString(16);
+    });
+  },
+  uuid2: function uuid2() {
+    return this.uuid('xxxxxxxxxxxx');
+  },
+  // Delayed warning, f = condition lambda fn
+  warn: function warn(f, text, delay) {
+    if (delay === void 0) {
+      delay = 0;
+    }
+    setTimeout(function () {
+      if (f()) console.warn(text);
+    }, delay);
+  },
+  // Checks if script props updated
+  // (and not style settings or something else)
+  is_scr_props_upd: function is_scr_props_upd(n, prev) {
+    var p = prev.find(function (x) {
+      return x.v.$uuid === n.v.$uuid;
+    });
+    if (!p) return false;
+    var props = n.p.settings.$props;
+    if (!props) return false;
+    return props.some(function (x) {
+      return n.v[x] !== p.v[x];
+    });
+  },
+  // Checks if it's time to make a script update
+  // (based on execInterval in ms)
+  delayed_exec: function delayed_exec(v) {
+    if (!v.script || !v.script.execInterval) return true;
+    var t = this.now();
+    var dt = v.script.execInterval;
+    if (!v.settings.$last_exec || t > v.settings.$last_exec + dt) {
+      v.settings.$last_exec = t;
+      return true;
+    }
+    return false;
+  },
+  // Format names such 'RSI, $length', where
+  // length - is one of the settings
+  format_name: function format_name(ov) {
+    if (!ov.name) return undefined;
+    var name = ov.name;
+    for (var k in ov.settings || {}) {
+      var val = ov.settings[k];
+      var reg = new RegExp("\\$".concat(k), 'g');
+      name = name.replace(reg, val);
+    }
+    return name;
+  },
+  // Default cursor mode
+  xmode: function xmode() {
+    return this.is_mobile ? 'explore' : 'default';
+  },
+  default_prevented: function default_prevented(event) {
+    if (event.original) {
+      return event.original.defaultPrevented;
+    }
+    return event.defaultPrevented;
+  },
+  // WTF with modern web development
+  is_mobile: function (w) {
+    return 'onorientationchange' in w && (!!navigator.maxTouchPoints || !!navigator.msMaxTouchPoints || 'ontouchstart' in w || w.DocumentTouch && document instanceof w.DocumentTouch);
+  }(typeof window !== 'undefined' ? window : {})
+});
 
 /***/ }),
 
@@ -3852,6 +4399,173 @@ var update = add("2e151f62", content, false, {});
 // Hot Module Replacement
 if(false) // removed by dead control flow
 {}
+
+/***/ }),
+
+/***/ 577:
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   A: () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+// Script buffer constants
+var DEF_LIMIT = 5; // default buffer length
+var BUF_INC = 5; // buffer increment for time series
+
+// Function definition regex patterns for script parsing
+// FDEFS: Basic function matching (non-greedy, global, multi-line, case-insensitive)
+var FDEFS = /(function |)([$A-Z_][0-9A-Z_$\.]*)[\s]*?\((.*?)\)/gmi;
+// FDEFS1: Single match with trailing whitespace (non-global)
+var FDEFS1 = /(function |)([$A-Z_][0-9A-Z_$\.]*)[\s]*?\((.*?\s*)\)/mi;
+// FDEFS2: Multi-line with dotall for spanning across lines
+var FDEFS2 = /(function |)([$A-Z_][0-9A-Z_$\.]*)[\s]*?\(([^]*\s*)\)/gmi;
+// SBRACKETS: Array bracket access pattern
+var SBRACKETS = /([$A-Z_][0-9A-Z_$\.]*)[\s]*?\[([^"^\[^\]]+?)\]/gmi;
+// TFSTR: Timeframe string pattern (e.g., "15m", "1h")
+var TFSTR = /(\d+)(\w*)/gm;
+var SECOND = 1000;
+var MINUTE = SECOND * 60;
+var MINUTE3 = MINUTE * 3;
+var MINUTE5 = MINUTE * 5;
+var MINUTE15 = MINUTE * 15;
+var MINUTE30 = MINUTE * 30;
+var HOUR = MINUTE * 60;
+var HOUR4 = HOUR * 4;
+var HOUR12 = HOUR * 12;
+var DAY = HOUR * 24;
+var WEEK = DAY * 7;
+var MONTH = WEEK * 4;
+var YEAR = DAY * 365;
+var MONTHMAP = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// Grid time steps
+var TIMESCALES = [YEAR * 10, YEAR * 5, YEAR * 3, YEAR * 2, YEAR, MONTH * 6, MONTH * 4, MONTH * 3, MONTH * 2, MONTH, DAY * 15, DAY * 10, DAY * 7, DAY * 5, DAY * 3, DAY * 2, DAY, HOUR * 12, HOUR * 6, HOUR * 3, HOUR * 1.5, HOUR, MINUTE30, MINUTE15, MINUTE * 10, MINUTE5, MINUTE * 2, MINUTE];
+
+// Grid $ steps
+var $SCALES = [0.05, 0.1, 0.2, 0.25, 0.5, 0.8, 1, 2, 5];
+
+// Default overlay color palette
+var OVERLAY_COLORS = ['#42b28a', '#5691ce', '#612ff9', '#d50b90', '#ff2316'];
+var ChartConfig = {
+  SBMIN: 60,
+  // Minimal sidebar px
+  SBMAX: Infinity,
+  // Max sidebar, px
+  TOOLBAR: 57,
+  // Toolbar width px
+  RIGHTBAR: 250,
+  // Right panel width px
+  TB_ICON: 25,
+  // Toolbar icon size px
+  TB_ITEM_M: 6,
+  // Toolbar item margin px
+  TB_ICON_BRI: 1,
+  // Toolbar icon brightness
+  TB_ICON_HOLD: 420,
+  // ms, wait to expand
+  TB_BORDER: 1,
+  // Toolbar border px
+  TB_B_STYLE: 'dotted',
+  // Toolbar border style
+  TOOL_COLL: 7,
+  // Tool collision threshold
+  EXPAND: 0.15,
+  // %/100 of range
+  CANDLEW: 0.6,
+  // %/100 of step
+  GRIDX: 100,
+  // px
+  GRIDY: 47,
+  // px
+  BOTBAR: 28,
+  // px
+  PANHEIGHT: 22,
+  // px
+  DEFAULT_LEN: 50,
+  // candles
+  MINIMUM_LEN: 5,
+  // candles,
+  MIN_ZOOM: 25,
+  // candles
+  MAX_ZOOM: 1000,
+  // candles,
+  VOLSCALE: 0.15,
+  // %/100 of height
+  UX_OPACITY: 0.9,
+  // Ux background opacity
+  ZOOM_MODE: 'tv',
+  // 'tv' or 'tl'
+  L_BTN_SIZE: 21,
+  // Legend Button size, px
+  L_BTN_MARGIN: '-6px 0 -6px 0',
+  // css margin
+  SCROLL_WHEEL: 'prevent' // 'pass', 'click'
+};
+ChartConfig.FONT = "11px -apple-system,BlinkMacSystemFont,\n    Segoe UI,Roboto,Oxygen,Ubuntu,Cantarell,\n    Fira Sans,Droid Sans,Helvetica Neue,\n    sans-serif";
+var IB_TF_WARN = "When using IB mode you should specify " + "timeframe ('tf' filed in 'chart' object)," + "otherwise you can get an unexpected behaviour";
+var MAP_UNIT = {
+  "1s": SECOND,
+  "5s": SECOND * 5,
+  "10s": SECOND * 10,
+  "20s": SECOND * 20,
+  "30s": SECOND * 30,
+  "1m": MINUTE,
+  "3m": MINUTE3,
+  "5m": MINUTE5,
+  "15m": MINUTE15,
+  "30m": MINUTE30,
+  // Uppercase hour formats
+  "1H": HOUR,
+  "2H": HOUR * 2,
+  "3H": HOUR * 3,
+  "4H": HOUR4,
+  "6H": HOUR * 6,
+  "8H": HOUR * 8,
+  "12H": HOUR12,
+  // Lowercase hour formats
+  "1h": HOUR,
+  "2h": HOUR * 2,
+  "3h": HOUR * 3,
+  "4h": HOUR4,
+  "6h": HOUR * 6,
+  "8h": HOUR * 8,
+  "12h": HOUR12,
+  // Day/Week/Month/Year (both cases)
+  "1D": DAY,
+  "1d": DAY,
+  "1W": WEEK,
+  "1w": WEEK,
+  "1M": MONTH,
+  "1Y": YEAR
+};
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
+  DEF_LIMIT: DEF_LIMIT,
+  BUF_INC: BUF_INC,
+  FDEFS: FDEFS,
+  FDEFS1: FDEFS1,
+  FDEFS2: FDEFS2,
+  SBRACKETS: SBRACKETS,
+  TFSTR: TFSTR,
+  SECOND: SECOND,
+  MINUTE: MINUTE,
+  MINUTE5: MINUTE5,
+  MINUTE15: MINUTE15,
+  MINUTE30: MINUTE30,
+  HOUR: HOUR,
+  HOUR4: HOUR4,
+  DAY: DAY,
+  WEEK: WEEK,
+  MONTH: MONTH,
+  YEAR: YEAR,
+  MONTHMAP: MONTHMAP,
+  TIMESCALES: TIMESCALES,
+  $SCALES: $SCALES,
+  ChartConfig: ChartConfig,
+  map_unit: MAP_UNIT,
+  IB_TF_WARN: IB_TF_WARN,
+  OVERLAY_COLORS: OVERLAY_COLORS
+});
 
 /***/ }),
 
@@ -4281,6 +4995,877 @@ module.exports = _typeof, module.exports.__esModule = true, module.exports["defa
 
 /***/ }),
 
+/***/ 749:
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+
+// EXPORTS
+__webpack_require__.d(__webpack_exports__, {
+  A: () => (/* binding */ layout)
+});
+
+// EXTERNAL MODULE: ./node_modules/@babel/runtime/helpers/esm/slicedToArray.js + 3 modules
+var slicedToArray = __webpack_require__(296);
+// EXTERNAL MODULE: ./node_modules/@babel/runtime/helpers/esm/toConsumableArray.js + 3 modules
+var toConsumableArray = __webpack_require__(458);
+// EXTERNAL MODULE: ./src/stuff/constants.js
+var constants = __webpack_require__(577);
+// EXTERNAL MODULE: ./src/stuff/utils.js
+var utils = __webpack_require__(493);
+// EXTERNAL MODULE: ./src/stuff/math.js
+var math = __webpack_require__(288);
+;// ./src/components/js/layout_fn.js
+// Layout functional interface
+
+
+
+/* harmony default export */ function layout_fn(self, range) {
+  var ib = self.ti_map.ib;
+  var dt = range[1] - range[0];
+  var r = self.spacex / dt;
+  var ls = self.grid.logScale || false;
+  Object.assign(self, {
+    // Time to screen coordinates
+    t2screen: function t2screen(t) {
+      if (ib) t = self.ti_map.smth2i(t);
+      return Math.floor((t - range[0]) * r) - 0.5;
+    },
+    // $ to screen coordinates
+    $2screen: function $2screen(y) {
+      if (ls) y = math/* default */.A.log(y);
+      return Math.floor(y * self.A + self.B) - 0.5;
+    },
+    // Time-axis nearest step
+    t_magnet: function t_magnet(t) {
+      if (ib) t = self.ti_map.smth2i(t);
+      var cn = self.candles || self.master_grid.candles;
+      var arr = cn.map(function (x) {
+        return x.raw[0];
+      });
+      var i = utils/* default */.A.nearest_a(t, arr)[0];
+      if (!cn[i]) return;
+      return Math.floor(cn[i].x) - 0.5;
+    },
+    // Screen-Y to dollar value (or whatever)
+    screen2$: function screen2$(y) {
+      if (ls) return math/* default */.A.exp((y - self.B) / self.A);
+      return (y - self.B) / self.A;
+    },
+    // Screen-X to timestamp
+    screen2t: function screen2t(x) {
+      // TODO: most likely Math.floor not needed
+      // return Math.floor(range[0] + x / r)
+      return range[0] + x / r;
+    },
+    // $-axis nearest step
+    $_magnet: function $_magnet(price) {},
+    // Nearest candlestick
+    c_magnet: function c_magnet(t) {
+      var cn = self.candles || self.master_grid.candles;
+      var arr = cn.map(function (x) {
+        return x.raw[0];
+      });
+      var i = utils/* default */.A.nearest_a(t, arr)[0];
+      return cn[i];
+    },
+    // Nearest data points
+    data_magnet: function data_magnet(t) {/* TODO: implement */}
+  });
+  return self;
+}
+;// ./src/components/js/log_scale.js
+// Log-scale mode helpers
+
+// TODO: all-negative numbers (sometimes wrong scaling)
+
+
+/* harmony default export */ const log_scale = ({
+  candle: function candle(self, mid, p, $p) {
+    return {
+      x: mid,
+      w: self.px_step * $p.config.CANDLEW,
+      o: Math.floor(math/* default */.A.log(p[1]) * self.A + self.B),
+      h: Math.floor(math/* default */.A.log(p[2]) * self.A + self.B),
+      l: Math.floor(math/* default */.A.log(p[3]) * self.A + self.B),
+      c: Math.floor(math/* default */.A.log(p[4]) * self.A + self.B),
+      raw: p
+    };
+  },
+  expand: function expand(self, height) {
+    // expand log scale
+    var A = -height / (math/* default */.A.log(self.$_hi) - math/* default */.A.log(self.$_lo));
+    var B = -math/* default */.A.log(self.$_hi) * A;
+    var top = -height * 0.1;
+    var bot = height * 1.1;
+    self.$_hi = math/* default */.A.exp((top - B) / A);
+    self.$_lo = math/* default */.A.exp((bot - B) / A);
+  }
+});
+;// ./src/components/js/grid_maker.js
+
+
+
+
+
+
+var TIMESCALES = constants/* default */.A.TIMESCALES,
+  $SCALES = constants/* default */.A.$SCALES,
+  WEEK = constants/* default */.A.WEEK,
+  MONTH = constants/* default */.A.MONTH,
+  YEAR = constants/* default */.A.YEAR,
+  HOUR = constants/* default */.A.HOUR,
+  DAY = constants/* default */.A.DAY;
+var MAX_INT = Number.MAX_SAFE_INTEGER;
+
+// master_grid - ref to the master grid
+function GridMaker(id, params, master_grid) {
+  if (master_grid === void 0) {
+    master_grid = null;
+  }
+  var sub = params.sub,
+    interval = params.interval,
+    range = params.range,
+    ctx = params.ctx,
+    $p = params.$p,
+    layers_meta = params.layers_meta,
+    height = params.height,
+    y_t = params.y_t,
+    ti_map = params.ti_map,
+    grid = params.grid,
+    timezone = params.timezone;
+  var self = {
+    ti_map: ti_map
+  };
+  var lm = layers_meta[id];
+  var y_range_fn = null;
+  var ls = grid.logScale;
+  if (lm && Object.keys(lm).length) {
+    // Gets last y_range fn()
+    var yrs = Object.values(lm).filter(function (x) {
+      return x.y_range;
+    });
+    // The first y_range() determines the range
+    if (yrs.length) y_range_fn = yrs[0].y_range;
+  }
+
+  // Calc vertical ($/₿) range
+  function calc_$range() {
+    if (!master_grid) {
+      // $ candlestick range
+      if (y_range_fn) {
+        var _y_range_fn = y_range_fn(hi, lo),
+          _y_range_fn2 = (0,slicedToArray/* default */.A)(_y_range_fn, 2),
+          hi = _y_range_fn2[0],
+          lo = _y_range_fn2[1];
+      } else {
+        hi = -Infinity, lo = Infinity;
+        for (var i = 0, n = sub.length; i < n; i++) {
+          var x = sub[i];
+          if (x[2] > hi) hi = x[2];
+          if (x[3] < lo) lo = x[3];
+        }
+      }
+    } else {
+      // Offchart indicator range
+      hi = -Infinity, lo = Infinity;
+      for (var i = 0; i < sub.length; i++) {
+        for (var j = 1; j < sub[i].length; j++) {
+          var v = sub[i][j];
+          if (v > hi) hi = v;
+          if (v < lo) lo = v;
+        }
+      }
+      if (y_range_fn) {
+        var _y_range_fn3 = y_range_fn(hi, lo),
+          _y_range_fn4 = (0,slicedToArray/* default */.A)(_y_range_fn3, 3),
+          hi = _y_range_fn4[0],
+          lo = _y_range_fn4[1],
+          exp = _y_range_fn4[2];
+      }
+    }
+
+    // Fixed y-range in non-auto mode
+    if (y_t && !y_t.auto && y_t.range) {
+      self.$_hi = y_t.range[0];
+      self.$_lo = y_t.range[1];
+    } else {
+      if (!ls) {
+        exp = exp === false ? 0 : 1;
+        self.$_hi = hi + (hi - lo) * $p.config.EXPAND * exp;
+        self.$_lo = lo - (hi - lo) * $p.config.EXPAND * exp;
+      } else {
+        self.$_hi = hi;
+        self.$_lo = lo;
+        log_scale.expand(self, height);
+      }
+      if (self.$_hi === self.$_lo) {
+        if (!ls) {
+          self.$_hi *= 1.05; // Expand if height range === 0
+          self.$_lo *= 0.95;
+        } else {
+          log_scale.expand(self, height);
+        }
+      }
+    }
+  }
+  function calc_sidebar() {
+    if (sub.length < 2) {
+      self.prec = 0;
+      self.sb = $p.config.SBMIN;
+      return;
+    }
+
+    // TODO: improve sidebar width calculation
+    // at transition point, when one precision is
+    // replaced with another
+
+    // Gets formated levels (their lengths),
+    // calculates max and measures the sidebar length
+    // from it:
+
+    // TODO: add custom formatter f()
+
+    self.prec = calc_precision(sub);
+    var lens = [];
+    lens.push(self.$_hi.toFixed(self.prec).length);
+    lens.push(self.$_lo.toFixed(self.prec).length);
+    var str = '0'.repeat(Math.max.apply(Math, lens)) + '    ';
+    self.sb = ctx.measureText(str).width;
+    self.sb = Math.max(Math.floor(self.sb), $p.config.SBMIN);
+    self.sb = Math.min(self.sb, $p.config.SBMAX);
+  }
+
+  // Calculate $ precision for the Y-axis
+  function calc_precision(data) {
+    var max_r = 0,
+      max_l = 0;
+    var min = Infinity;
+    var max = -Infinity;
+
+    // Speed UP
+    for (var i = 0, n = data.length; i < n; i++) {
+      var x = data[i];
+      if (x[1] > max) max = x[1];else if (x[1] < min) min = x[1];
+    }
+    // Get max lengths of integer and fractional parts
+    [min, max].forEach(function (x) {
+      // Fix undefined bug
+      var str = x != null ? x.toString() : '';
+      if (x < 0.000001) {
+        // Parsing the exponential form. Gosh this
+        // smells trickily
+        var _str$split = str.split('e-'),
+          _str$split2 = (0,slicedToArray/* default */.A)(_str$split, 2),
+          ls = _str$split2[0],
+          rs = _str$split2[1];
+        var _ls$split = ls.split('.'),
+          _ls$split2 = (0,slicedToArray/* default */.A)(_ls$split, 2),
+          l = _ls$split2[0],
+          r = _ls$split2[1];
+        if (!r) r = '';
+        r = {
+          length: r.length + parseInt(rs) || 0
+        };
+      } else {
+        var _str$split3 = str.split('.'),
+          _str$split4 = (0,slicedToArray/* default */.A)(_str$split3, 2),
+          l = _str$split4[0],
+          r = _str$split4[1];
+      }
+      if (r && r.length > max_r) {
+        max_r = r.length;
+      }
+      if (l && l.length > max_l) {
+        max_l = l.length;
+      }
+    });
+
+    // Select precision scheme depending
+    // on the left and right part lengths
+    //
+    var even = max_r - max_r % 2 + 2;
+    if (max_l === 1) {
+      return Math.min(8, Math.max(2, even));
+    }
+    if (max_l <= 2) {
+      return Math.min(4, Math.max(2, even));
+    }
+    return 2;
+  }
+  function calc_positions() {
+    if (sub.length < 2) return;
+    var dt = range[1] - range[0];
+
+    // A pixel space available to draw on (x-axis)
+    self.spacex = $p.width - self.sb;
+
+    // Candle capacity
+    var capacity = dt / interval;
+    self.px_step = self.spacex / capacity;
+
+    // px / time ratio
+    var r = self.spacex / dt;
+    self.startx = (sub[0][0] - range[0]) * r;
+
+    // Candle Y-transform: (A = scale, B = shift)
+    if (!grid.logScale) {
+      self.A = -height / (self.$_hi - self.$_lo);
+      self.B = -self.$_hi * self.A;
+    } else {
+      self.A = -height / (math/* default */.A.log(self.$_hi) - math/* default */.A.log(self.$_lo));
+      self.B = -math/* default */.A.log(self.$_hi) * self.A;
+    }
+  }
+
+  // Select nearest good-loking t step (m is target scale)
+  function time_step() {
+    var k = ti_map.ib ? 60000 : 1;
+    var xrange = (range[1] - range[0]) * k;
+    var m = xrange * ($p.config.GRIDX / $p.width);
+    var s = TIMESCALES;
+    return utils/* default */.A.nearest_a(m, s)[1] / k;
+  }
+
+  // Select nearest good-loking $ step (m is target scale)
+  function dollar_step() {
+    var yrange = self.$_hi - self.$_lo;
+    var m = yrange * ($p.config.GRIDY / height);
+    var p = parseInt(yrange.toExponential().split('e')[1]);
+    var d = Math.pow(10, p);
+    var s = $SCALES.map(function (x) {
+      return x * d;
+    });
+
+    // TODO: center the range (look at RSI for example,
+    // it looks ugly when "80" is near the top)
+    return utils/* default */.A.strip(utils/* default */.A.nearest_a(m, s)[1]);
+  }
+  function dollar_mult() {
+    var mult_hi = dollar_mult_hi();
+    var mult_lo = dollar_mult_lo();
+    return Math.max(mult_hi, mult_lo);
+  }
+
+  // Price step multiplier (for the log-scale mode)
+  function dollar_mult_hi() {
+    var h = Math.min(self.B, height);
+    if (h < $p.config.GRIDY) return 1;
+    var n = h / $p.config.GRIDY; // target grid N
+    var yrange = self.$_hi;
+    if (self.$_lo > 0) {
+      var yratio = self.$_hi / self.$_lo;
+    } else {
+      yratio = self.$_hi / 1; // TODO: small values
+    }
+    var m = yrange * ($p.config.GRIDY / h);
+    var p = parseInt(yrange.toExponential().split('e')[1]);
+    return Math.pow(yratio, 1 / n);
+  }
+  function dollar_mult_lo() {
+    var h = Math.min(height - self.B, height);
+    if (h < $p.config.GRIDY) return 1;
+    var n = h / $p.config.GRIDY; // target grid N
+    var yrange = Math.abs(self.$_lo);
+    if (self.$_hi < 0 && self.$_lo < 0) {
+      var yratio = Math.abs(self.$_lo / self.$_hi);
+    } else {
+      yratio = Math.abs(self.$_lo) / 1;
+    }
+    var m = yrange * ($p.config.GRIDY / h);
+    var p = parseInt(yrange.toExponential().split('e')[1]);
+    return Math.pow(yratio, 1 / n);
+  }
+  function grid_x() {
+    // If this is a subgrid, no need to calc a timeline,
+    // we just borrow it from the master_grid
+    if (!master_grid) {
+      self.t_step = time_step();
+      self.xs = [];
+      var dt = range[1] - range[0];
+      var r = self.spacex / dt;
+
+      /* TODO: remove the left-side glitch
+       let year_0 = Utils.get_year(sub[0][0])
+      for (var t0 = year_0; t0 < range[0]; t0 += self.t_step) {}
+       let m0 = Utils.get_month(t0)*/
+
+      for (var i = 0; i < sub.length; i++) {
+        var p = sub[i];
+        var prev = sub[i - 1] || [];
+        var prev_xs = self.xs[self.xs.length - 1] || [0, []];
+        var x = Math.floor((p[0] - range[0]) * r);
+        insert_line(prev, p, x);
+
+        // Filtering lines that are too near
+        var xs = self.xs[self.xs.length - 1] || [0, []];
+        if (prev_xs === xs) continue;
+        if (xs[1][0] - prev_xs[1][0] < self.t_step * 0.8) {
+          // prev_xs is a higher "rank" label
+          if (xs[2] <= prev_xs[2]) {
+            self.xs.pop();
+          } else {
+            // Otherwise
+            self.xs.splice(self.xs.length - 2, 1);
+          }
+        }
+      }
+
+      // TODO: fix grid extension for bigger timeframes
+      if (interval < WEEK && r > 0) {
+        extend_left(dt, r);
+        extend_right(dt, r);
+      }
+    } else {
+      self.t_step = master_grid.t_step;
+      self.px_step = master_grid.px_step;
+      self.startx = master_grid.startx;
+      self.xs = master_grid.xs;
+    }
+  }
+  function insert_line(prev, p, x, m0) {
+    var prev_t = ti_map.ib ? ti_map.i2t(prev[0]) : prev[0];
+    var p_t = ti_map.ib ? ti_map.i2t(p[0]) : p[0];
+    if (ti_map.tf < DAY) {
+      prev_t += timezone * HOUR;
+      p_t += timezone * HOUR;
+    }
+    var d = timezone * HOUR;
+
+    // TODO: take this block =========> (see below)
+    if ((prev[0] || interval === YEAR) && utils/* default */.A.get_year(p_t) !== utils/* default */.A.get_year(prev_t)) {
+      self.xs.push([x, p, YEAR]); // [px, [...], rank]
+    } else if (prev[0] && utils/* default */.A.get_month(p_t) !== utils/* default */.A.get_month(prev_t)) {
+      self.xs.push([x, p, MONTH]);
+    }
+    // TODO: should be added if this day !== prev day
+    // And the same for 'botbar.js', TODO(*)
+    else if (utils/* default */.A.day_start(p_t) === p_t) {
+      self.xs.push([x, p, DAY]);
+    } else if (p[0] % self.t_step === 0) {
+      self.xs.push([x, p, interval]);
+    }
+  }
+  function extend_left(dt, r) {
+    if (!self.xs.length || !isFinite(r)) return;
+    var t = self.xs[0][1][0];
+    while (true) {
+      t -= self.t_step;
+      var x = Math.floor((t - range[0]) * r);
+      if (x < 0) break;
+      // TODO: ==========> And insert it here somehow
+      if (t % interval === 0) {
+        self.xs.unshift([x, [t], interval]);
+      }
+    }
+  }
+  function extend_right(dt, r) {
+    if (!self.xs.length || !isFinite(r)) return;
+    var t = self.xs[self.xs.length - 1][1][0];
+    while (true) {
+      t += self.t_step;
+      var x = Math.floor((t - range[0]) * r);
+      if (x > self.spacex) break;
+      if (t % interval === 0) {
+        self.xs.push([x, [t], interval]);
+      }
+    }
+  }
+  function grid_y() {
+    // Prevent duplicate levels
+    var m = Math.pow(10, -self.prec);
+    self.$_step = Math.max(m, dollar_step());
+    self.ys = [];
+    var y1 = self.$_lo - self.$_lo % self.$_step;
+    for (var y$ = y1; y$ <= self.$_hi; y$ += self.$_step) {
+      var y = Math.floor(y$ * self.A + self.B);
+      if (y > height) continue;
+      self.ys.push([y, utils/* default */.A.strip(y$)]);
+    }
+  }
+  function grid_y_log() {
+    // TODO: Prevent duplicate levels, is this even
+    // a problem here ?
+    self.$_mult = dollar_mult();
+    self.ys = [];
+    if (!sub.length) return;
+    var v = Math.abs(sub[sub.length - 1][1] || 1);
+    var y1 = search_start_pos(v);
+    var y2 = search_start_neg(-v);
+    var yp = -Infinity; // Previous y value
+    var n = height / $p.config.GRIDY; // target grid N
+
+    var q = 1 + (self.$_mult - 1) / 2;
+
+    // Over 0
+    for (var y$ = y1; y$ > 0; y$ /= self.$_mult) {
+      y$ = log_rounder(y$, q);
+      var y = Math.floor(math/* default */.A.log(y$) * self.A + self.B);
+      self.ys.push([y, utils/* default */.A.strip(y$)]);
+      if (y > height) break;
+      if (y - yp < $p.config.GRIDY * 0.7) break;
+      if (self.ys.length > n + 1) break;
+      yp = y;
+    }
+
+    // Under 0
+    yp = Infinity;
+    for (var y$ = y2; y$ < 0; y$ /= self.$_mult) {
+      y$ = log_rounder(y$, q);
+      var _y = Math.floor(math/* default */.A.log(y$) * self.A + self.B);
+      if (yp - _y < $p.config.GRIDY * 0.7) break;
+      self.ys.push([_y, utils/* default */.A.strip(y$)]);
+      if (_y < 0) break;
+      if (self.ys.length > n * 3 + 1) break;
+      yp = _y;
+    }
+
+    // TODO: remove lines near to 0
+  }
+
+  // Search a start for the top grid so that
+  // the fixed value always included
+  function search_start_pos(value) {
+    var N = height / $p.config.GRIDY; // target grid N
+    var y = Infinity,
+      y$ = value,
+      count = 0;
+    while (y > 0) {
+      y = Math.floor(math/* default */.A.log(y$) * self.A + self.B);
+      y$ *= self.$_mult;
+      if (count++ > N * 3) return 0; // Prevents deadloops
+    }
+    return y$;
+  }
+  function search_start_neg(value) {
+    var N = height / $p.config.GRIDY; // target grid N
+    var y = -Infinity,
+      y$ = value,
+      count = 0;
+    while (y < height) {
+      y = Math.floor(math/* default */.A.log(y$) * self.A + self.B);
+      y$ *= self.$_mult;
+      if (count++ > N * 3) break; // Prevents deadloops
+    }
+    return y$;
+  }
+
+  // Make log scale levels look great again
+  function log_rounder(x, quality) {
+    var s = Math.sign(x);
+    x = Math.abs(x);
+    if (x > 10) {
+      for (var div = 10; div < MAX_INT; div *= 10) {
+        var nice = Math.floor(x / div) * div;
+        if (x / nice > quality) {
+          // More than 10% off
+          break;
+        }
+      }
+      div /= 10;
+      return s * Math.floor(x / div) * div;
+    } else if (x < 1) {
+      for (var ro = 10; ro >= 1; ro--) {
+        var _nice = utils/* default */.A.round(x, ro);
+        if (x / _nice > quality) {
+          // More than 10% off
+          break;
+        }
+      }
+      return s * utils/* default */.A.round(x, ro + 1);
+    } else {
+      return s * Math.floor(x);
+    }
+  }
+  function apply_sizes() {
+    self.width = $p.width - self.sb;
+    self.height = height;
+  }
+  calc_$range();
+  calc_sidebar();
+  return {
+    // First we need to calculate max sidebar width
+    // (among all grids). Then we can actually make
+    // them
+    create: function create() {
+      calc_positions();
+      grid_x();
+      if (grid.logScale) {
+        grid_y_log();
+      } else {
+        grid_y();
+      }
+      apply_sizes();
+
+      // Link to the master grid (candlesticks)
+      if (master_grid) {
+        self.master_grid = master_grid;
+      }
+      self.grid = grid; // Grid params
+
+      // Here we add some helpful functions for
+      // plugin creators
+      return layout_fn(self, range);
+    },
+    get_layout: function get_layout() {
+      return self;
+    },
+    set_sidebar: function set_sidebar(v) {
+      return self.sb = v;
+    },
+    get_sidebar: function get_sidebar() {
+      return self.sb;
+    }
+  };
+}
+/* harmony default export */ const grid_maker = (GridMaker);
+;// ./src/components/js/layout.js
+
+
+function _createForOfIteratorHelper(r, e) { var t = "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (!t) { if (Array.isArray(r) || (t = _unsupportedIterableToArray(r)) || e && r && "number" == typeof r.length) { t && (r = t); var _n = 0, F = function F() {}; return { s: F, n: function n() { return _n >= r.length ? { done: !0 } : { done: !1, value: r[_n++] }; }, e: function e(r) { throw r; }, f: F }; } throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); } var o, a = !0, u = !1; return { s: function s() { t = t.call(r); }, n: function n() { var r = t.next(); return a = r.done, r; }, e: function e(r) { u = !0, o = r; }, f: function f() { try { a || null == t["return"] || t["return"](); } finally { if (u) throw o; } } }; }
+function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
+function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
+// Calculates all necessary s*it to build the chart
+// Heights, widths, transforms, ... = everything
+// Why such a mess you ask? Well, that's because
+// one components size can depend on other component
+// data formatting (e.g. grid width depends on sidebar precision)
+// So it's better to calc all in one place.
+
+
+
+
+
+function Layout(params) {
+  var chart = params.chart,
+    sub = params.sub,
+    offsub = params.offsub,
+    interval = params.interval,
+    range = params.range,
+    ctx = params.ctx,
+    layers_meta = params.layers_meta,
+    ti_map = params.ti_map,
+    $p = params.$props,
+    y_ts = params.y_transforms,
+    customGridHeights = params.customGridHeights,
+    minimizedGrids = params.minimizedGrids;
+  var mgrid = chart.grid || {};
+  offsub = offsub.filter(function (x, i) {
+    // Skip offchart overlays with custom grid id,
+    // because they will be mergred with the existing grids
+    return !(x.grid && x.grid.id);
+  });
+
+  // Minimum height for minimized grids (title bar only)
+  var MINIMIZED_HEIGHT = 28;
+
+  // Splits space between main chart
+  // and offchart indicator grids
+  function grid_hs() {
+    var height = $p.height - $p.config.BOTBAR;
+
+    // If custom pixel heights or minimized grids are provided, use custom calculation
+    var hasCustomHeights = customGridHeights && Object.keys(customGridHeights).length > 0;
+    var hasMinimizedGrids = minimizedGrids && Object.keys(minimizedGrids).length > 0;
+    if (hasCustomHeights || hasMinimizedGrids) {
+      return custom_hs(height);
+    }
+
+    // When at least one height defined (default = 1),
+    // Pxs calculated as: (sum of weights) / number
+    if (mgrid.height || offsub.find(function (x) {
+      return x.grid.height;
+    })) {
+      return weighted_hs(mgrid, height);
+    }
+    var n = offsub.length;
+    var off_h = 2 * Math.sqrt(n) / 7 / (n || 1);
+
+    // Offchart grid height
+    var px = Math.floor(height * off_h);
+
+    // Main grid height
+    var m = height - px * n;
+    return [m].concat(Array(n).fill(px));
+  }
+
+  // Use custom pixel heights directly
+  function custom_hs(height) {
+    var n = offsub.length + 1; // main + offcharts
+    var hs = [];
+
+    // Check for minimized grids
+    var minimized = minimizedGrids || {};
+
+    // Calculate heights for each grid
+    for (var _i = 0; _i < n; _i++) {
+      if (minimized[_i]) {
+        hs.push(MINIMIZED_HEIGHT);
+      } else if (customGridHeights && customGridHeights[_i] !== undefined) {
+        hs.push(customGridHeights[_i]);
+      } else {
+        hs.push(null); // Will be calculated
+      }
+    }
+
+    // Calculate total used height and remaining
+    var usedHeight = hs.filter(function (h) {
+      return h !== null;
+    }).reduce(function (a, b) {
+      return a + b;
+    }, 0);
+    var nullCount = hs.filter(function (h) {
+      return h === null;
+    }).length;
+    if (nullCount > 0) {
+      var remainingHeight = height - usedHeight;
+      var defaultHeight = Math.floor(remainingHeight / nullCount);
+      hs = hs.map(function (h) {
+        return h === null ? defaultHeight : h;
+      });
+    }
+
+    // Ensure total matches available height
+    var total = hs.reduce(function (a, b) {
+      return a + b;
+    }, 0);
+    if (total !== height && hs.length > 0) {
+      hs[0] += height - total;
+    }
+    return hs;
+  }
+  function weighted_hs(grid, height) {
+    var hs = [{
+      grid: grid
+    }].concat((0,toConsumableArray/* default */.A)(offsub)).map(function (x) {
+      return x.grid.height || 1;
+    });
+    var sum = hs.reduce(function (a, b) {
+      return a + b;
+    }, 0);
+    hs = hs.map(function (x) {
+      return Math.floor(x / sum * height);
+    });
+
+    // Refine the height if Math.floor decreased px sum
+    sum = hs.reduce(function (a, b) {
+      return a + b;
+    }, 0);
+    for (var i = 0; i < height - sum; i++) hs[i % hs.length]++;
+    return hs;
+  }
+  function candles_n_vol() {
+    self.candles = [];
+    self.volume = [];
+    var maxv = Math.max.apply(Math, (0,toConsumableArray/* default */.A)(sub.map(function (x) {
+      return x[5];
+    })));
+    var vs = $p.config.VOLSCALE * $p.height / maxv;
+    var x1,
+      x2,
+      mid,
+      prev = undefined;
+    var splitter = self.px_step > 5 ? 1 : 0;
+    var hf_px_step = self.px_step * 0.5;
+    for (var i = 0; i < sub.length; i++) {
+      var p = sub[i];
+      mid = self.t2screen(p[0]) + 0.5;
+      self.candles.push(mgrid.logScale ? log_scale.candle(self, mid, p, $p) : {
+        x: mid,
+        w: self.px_step * $p.config.CANDLEW,
+        o: Math.floor(p[1] * self.A + self.B),
+        h: Math.floor(p[2] * self.A + self.B),
+        l: Math.floor(p[3] * self.A + self.B),
+        c: Math.floor(p[4] * self.A + self.B),
+        z: p[6],
+        raw: p
+      });
+      // Clear volume bar if there is a time gap
+      if (sub[i - 1] && p[0] - sub[i - 1][0] > interval) {
+        prev = null;
+      }
+      x1 = prev || Math.floor(mid - hf_px_step);
+      x2 = Math.floor(mid + hf_px_step) - 0.5;
+      self.volume.push({
+        x1: x1,
+        x2: x2,
+        h: p[5] * vs,
+        /* green: p[4] >= p[1], */
+        z: p[6],
+        raw: p
+      });
+      prev = x2 + splitter;
+    }
+  }
+
+  // Main grid
+  var hs = grid_hs();
+  var specs = {
+    sub: sub,
+    interval: interval,
+    range: range,
+    ctx: ctx,
+    $p: $p,
+    layers_meta: layers_meta,
+    ti_map: ti_map,
+    height: hs[0],
+    y_t: y_ts[0],
+    grid: mgrid,
+    timezone: $p.timezone
+  };
+  var gms = [new grid_maker(0, specs)];
+
+  // Sub grids
+  var _iterator = _createForOfIteratorHelper(offsub.entries()),
+    _step;
+  try {
+    for (_iterator.s(); !(_step = _iterator.n()).done;) {
+      var _step$value = (0,slicedToArray/* default */.A)(_step.value, 2),
+        i = _step$value[0],
+        _step$value$ = _step$value[1],
+        data = _step$value$.data,
+        grid = _step$value$.grid;
+      specs.sub = data;
+      specs.height = hs[i + 1];
+      specs.y_t = y_ts[i + 1];
+      specs.grid = grid || {};
+      gms.push(new grid_maker(i + 1, specs, gms[0].get_layout()));
+    }
+
+    // Max sidebar among all grinds
+  } catch (err) {
+    _iterator.e(err);
+  } finally {
+    _iterator.f();
+  }
+  var sb = Math.max.apply(Math, (0,toConsumableArray/* default */.A)(gms.map(function (x) {
+    return x.get_sidebar();
+  })));
+  var grids = [],
+    offset = 0;
+  for (i = 0; i < gms.length; i++) {
+    gms[i].set_sidebar(sb);
+    grids.push(gms[i].create());
+    grids[i].id = i;
+    grids[i].offset = offset;
+    offset += grids[i].height;
+  }
+  var self = grids[0];
+  candles_n_vol();
+  return {
+    grids: grids,
+    botbar: {
+      width: $p.width,
+      height: $p.config.BOTBAR,
+      offset: offset,
+      xs: grids[0] ? grids[0].xs : []
+    }
+  };
+}
+/* harmony default export */ const layout = (Layout);
+
+/***/ }),
+
 /***/ 756:
 /***/ ((module, __unused_webpack_exports, __webpack_require__) => {
 
@@ -4319,6 +5904,26 @@ var update = add("2a395bbc", content, false, {});
 // Hot Module Replacement
 if(false) // removed by dead control flow
 {}
+
+/***/ }),
+
+/***/ 800:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   A: () => (/* binding */ _unsupportedIterableToArray)
+/* harmony export */ });
+/* harmony import */ var _arrayLikeToArray_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(145);
+
+function _unsupportedIterableToArray(r, a) {
+  if (r) {
+    if ("string" == typeof r) return (0,_arrayLikeToArray_js__WEBPACK_IMPORTED_MODULE_0__/* ["default"] */ .A)(r, a);
+    var t = {}.toString.call(r).slice(8, -1);
+    return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? (0,_arrayLikeToArray_js__WEBPACK_IMPORTED_MODULE_0__/* ["default"] */ .A)(r, a) : void 0;
+  }
+}
+
 
 /***/ }),
 
@@ -5098,13 +6703,13 @@ __webpack_require__.r(__webpack_exports__);
 // EXPORTS
 __webpack_require__.d(__webpack_exports__, {
   Candle: () => (/* reexport */ CandleExt),
-  Constants: () => (/* reexport */ constants),
+  Constants: () => (/* reexport */ constants/* default */.A),
   DataCube: () => (/* reexport */ DataCube),
   Interface: () => (/* reexport */ mixins_interface),
   Overlay: () => (/* reexport */ overlay),
   Tool: () => (/* reexport */ tool),
   TradingVue: () => (/* reexport */ TradingVue),
-  Utils: () => (/* reexport */ utils),
+  Utils: () => (/* reexport */ utils/* default */.A),
   Volbar: () => (/* reexport */ VolbarExt),
   "default": () => (/* binding */ src),
   layout_cnv: () => (/* reexport */ layout_cnv),
@@ -5181,204 +6786,12 @@ render._withStripped = true;
 
 ;// ./src/TradingVue.vue?vue&type=template&id=1a7a1650
 
-;// ./node_modules/@babel/runtime/helpers/esm/arrayLikeToArray.js
-function _arrayLikeToArray(r, a) {
-  (null == a || a > r.length) && (a = r.length);
-  for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e];
-  return n;
-}
-
-;// ./node_modules/@babel/runtime/helpers/esm/arrayWithoutHoles.js
-
-function _arrayWithoutHoles(r) {
-  if (Array.isArray(r)) return _arrayLikeToArray(r);
-}
-
-;// ./node_modules/@babel/runtime/helpers/esm/iterableToArray.js
-function _iterableToArray(r) {
-  if ("undefined" != typeof Symbol && null != r[Symbol.iterator] || null != r["@@iterator"]) return Array.from(r);
-}
-
-;// ./node_modules/@babel/runtime/helpers/esm/unsupportedIterableToArray.js
-
-function _unsupportedIterableToArray(r, a) {
-  if (r) {
-    if ("string" == typeof r) return _arrayLikeToArray(r, a);
-    var t = {}.toString.call(r).slice(8, -1);
-    return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0;
-  }
-}
-
-;// ./node_modules/@babel/runtime/helpers/esm/nonIterableSpread.js
-function _nonIterableSpread() {
-  throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
-}
-
-;// ./node_modules/@babel/runtime/helpers/esm/toConsumableArray.js
-
-
-
-
-function _toConsumableArray(r) {
-  return _arrayWithoutHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableSpread();
-}
-
-;// ./src/stuff/constants.js
-// Script buffer constants
-var DEF_LIMIT = 5; // default buffer length
-var BUF_INC = 5; // buffer increment for time series
-
-// Function definition regex patterns for script parsing
-// FDEFS: Basic function matching (non-greedy, global, multi-line, case-insensitive)
-var FDEFS = /(function |)([$A-Z_][0-9A-Z_$\.]*)[\s]*?\((.*?)\)/gmi;
-// FDEFS1: Single match with trailing whitespace (non-global)
-var FDEFS1 = /(function |)([$A-Z_][0-9A-Z_$\.]*)[\s]*?\((.*?\s*)\)/mi;
-// FDEFS2: Multi-line with dotall for spanning across lines
-var FDEFS2 = /(function |)([$A-Z_][0-9A-Z_$\.]*)[\s]*?\(([^]*\s*)\)/gmi;
-// SBRACKETS: Array bracket access pattern
-var SBRACKETS = /([$A-Z_][0-9A-Z_$\.]*)[\s]*?\[([^"^\[^\]]+?)\]/gmi;
-// TFSTR: Timeframe string pattern (e.g., "15m", "1h")
-var TFSTR = /(\d+)(\w*)/gm;
-var SECOND = 1000;
-var MINUTE = SECOND * 60;
-var MINUTE3 = MINUTE * 3;
-var MINUTE5 = MINUTE * 5;
-var MINUTE15 = MINUTE * 15;
-var MINUTE30 = MINUTE * 30;
-var HOUR = MINUTE * 60;
-var HOUR4 = HOUR * 4;
-var HOUR12 = HOUR * 12;
-var DAY = HOUR * 24;
-var WEEK = DAY * 7;
-var MONTH = WEEK * 4;
-var YEAR = DAY * 365;
-var MONTHMAP = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-// Grid time steps
-var TIMESCALES = [YEAR * 10, YEAR * 5, YEAR * 3, YEAR * 2, YEAR, MONTH * 6, MONTH * 4, MONTH * 3, MONTH * 2, MONTH, DAY * 15, DAY * 10, DAY * 7, DAY * 5, DAY * 3, DAY * 2, DAY, HOUR * 12, HOUR * 6, HOUR * 3, HOUR * 1.5, HOUR, MINUTE30, MINUTE15, MINUTE * 10, MINUTE5, MINUTE * 2, MINUTE];
-
-// Grid $ steps
-var $SCALES = [0.05, 0.1, 0.2, 0.25, 0.5, 0.8, 1, 2, 5];
-var ChartConfig = {
-  SBMIN: 60,
-  // Minimal sidebar px
-  SBMAX: Infinity,
-  // Max sidebar, px
-  TOOLBAR: 57,
-  // Toolbar width px
-  RIGHTBAR: 250,
-  // Right panel width px
-  TB_ICON: 25,
-  // Toolbar icon size px
-  TB_ITEM_M: 6,
-  // Toolbar item margin px
-  TB_ICON_BRI: 1,
-  // Toolbar icon brightness
-  TB_ICON_HOLD: 420,
-  // ms, wait to expand
-  TB_BORDER: 1,
-  // Toolbar border px
-  TB_B_STYLE: 'dotted',
-  // Toolbar border style
-  TOOL_COLL: 7,
-  // Tool collision threshold
-  EXPAND: 0.15,
-  // %/100 of range
-  CANDLEW: 0.6,
-  // %/100 of step
-  GRIDX: 100,
-  // px
-  GRIDY: 47,
-  // px
-  BOTBAR: 28,
-  // px
-  PANHEIGHT: 22,
-  // px
-  DEFAULT_LEN: 50,
-  // candles
-  MINIMUM_LEN: 5,
-  // candles,
-  MIN_ZOOM: 25,
-  // candles
-  MAX_ZOOM: 1000,
-  // candles,
-  VOLSCALE: 0.15,
-  // %/100 of height
-  UX_OPACITY: 0.9,
-  // Ux background opacity
-  ZOOM_MODE: 'tv',
-  // 'tv' or 'tl'
-  L_BTN_SIZE: 21,
-  // Legend Button size, px
-  L_BTN_MARGIN: '-6px 0 -6px 0',
-  // css margin
-  SCROLL_WHEEL: 'prevent' // 'pass', 'click'
-};
-ChartConfig.FONT = "11px -apple-system,BlinkMacSystemFont,\n    Segoe UI,Roboto,Oxygen,Ubuntu,Cantarell,\n    Fira Sans,Droid Sans,Helvetica Neue,\n    sans-serif";
-var IB_TF_WARN = "When using IB mode you should specify " + "timeframe ('tf' filed in 'chart' object)," + "otherwise you can get an unexpected behaviour";
-var MAP_UNIT = {
-  "1s": SECOND,
-  "5s": SECOND * 5,
-  "10s": SECOND * 10,
-  "20s": SECOND * 20,
-  "30s": SECOND * 30,
-  "1m": MINUTE,
-  "3m": MINUTE3,
-  "5m": MINUTE5,
-  "15m": MINUTE15,
-  "30m": MINUTE30,
-  // Uppercase hour formats
-  "1H": HOUR,
-  "2H": HOUR * 2,
-  "3H": HOUR * 3,
-  "4H": HOUR4,
-  "6H": HOUR * 6,
-  "8H": HOUR * 8,
-  "12H": HOUR12,
-  // Lowercase hour formats
-  "1h": HOUR,
-  "2h": HOUR * 2,
-  "3h": HOUR * 3,
-  "4h": HOUR4,
-  "6h": HOUR * 6,
-  "8h": HOUR * 8,
-  "12h": HOUR12,
-  // Day/Week/Month/Year (both cases)
-  "1D": DAY,
-  "1d": DAY,
-  "1W": WEEK,
-  "1w": WEEK,
-  "1M": MONTH,
-  "1Y": YEAR
-};
-/* harmony default export */ const constants = ({
-  DEF_LIMIT: DEF_LIMIT,
-  BUF_INC: BUF_INC,
-  FDEFS: FDEFS,
-  FDEFS1: FDEFS1,
-  FDEFS2: FDEFS2,
-  SBRACKETS: SBRACKETS,
-  TFSTR: TFSTR,
-  SECOND: SECOND,
-  MINUTE: MINUTE,
-  MINUTE5: MINUTE5,
-  MINUTE15: MINUTE15,
-  MINUTE30: MINUTE30,
-  HOUR: HOUR,
-  HOUR4: HOUR4,
-  DAY: DAY,
-  WEEK: WEEK,
-  MONTH: MONTH,
-  YEAR: YEAR,
-  MONTHMAP: MONTHMAP,
-  TIMESCALES: TIMESCALES,
-  $SCALES: $SCALES,
-  ChartConfig: ChartConfig,
-  map_unit: MAP_UNIT,
-  IB_TF_WARN: IB_TF_WARN
-});
-;// ./node_modules/babel-loader/lib/index.js!./node_modules/vue-loader/lib/loaders/templateLoader.js??ruleSet[1].rules[2]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./src/components/Chart.vue?vue&type=template&id=b1f0b6a6
-var Chartvue_type_template_id_b1f0b6a6_render = function render() {
+// EXTERNAL MODULE: ./node_modules/@babel/runtime/helpers/esm/toConsumableArray.js + 3 modules
+var toConsumableArray = __webpack_require__(458);
+// EXTERNAL MODULE: ./src/stuff/constants.js
+var constants = __webpack_require__(577);
+;// ./node_modules/babel-loader/lib/index.js!./node_modules/vue-loader/lib/loaders/templateLoader.js??ruleSet[1].rules[2]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./src/components/Chart.vue?vue&type=template&id=aad2b4ba
+var Chartvue_type_template_id_aad2b4ba_render = function render() {
   var _vm = this,
     _c = _vm._self._c;
   return _c("div", {
@@ -5431,58 +6844,10 @@ var Chartvue_type_template_id_b1f0b6a6_render = function render() {
     }
   }, "botbar", _vm.botbar_props, false))], 2);
 };
-var Chartvue_type_template_id_b1f0b6a6_staticRenderFns = [];
-Chartvue_type_template_id_b1f0b6a6_render._withStripped = true;
+var Chartvue_type_template_id_aad2b4ba_staticRenderFns = [];
+Chartvue_type_template_id_aad2b4ba_render._withStripped = true;
 
-;// ./src/components/Chart.vue?vue&type=template&id=b1f0b6a6
-
-;// ./node_modules/@babel/runtime/helpers/esm/arrayWithHoles.js
-function _arrayWithHoles(r) {
-  if (Array.isArray(r)) return r;
-}
-
-;// ./node_modules/@babel/runtime/helpers/esm/iterableToArrayLimit.js
-function _iterableToArrayLimit(r, l) {
-  var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"];
-  if (null != t) {
-    var e,
-      n,
-      i,
-      u,
-      a = [],
-      f = !0,
-      o = !1;
-    try {
-      if (i = (t = t.call(r)).next, 0 === l) {
-        if (Object(t) !== t) return;
-        f = !1;
-      } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0);
-    } catch (r) {
-      o = !0, n = r;
-    } finally {
-      try {
-        if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return;
-      } finally {
-        if (o) throw n;
-      }
-    }
-    return a;
-  }
-}
-
-;// ./node_modules/@babel/runtime/helpers/esm/nonIterableRest.js
-function _nonIterableRest() {
-  throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
-}
-
-;// ./node_modules/@babel/runtime/helpers/esm/slicedToArray.js
-
-
-
-
-function _slicedToArray(r, e) {
-  return _arrayWithHoles(r) || _iterableToArrayLimit(r, e) || _unsupportedIterableToArray(r, e) || _nonIterableRest();
-}
+;// ./src/components/Chart.vue?vue&type=template&id=aad2b4ba
 
 ;// ./src/stuff/context.js
 // Canvas context for text measurments
@@ -5494,1261 +6859,8 @@ function Context($p) {
   return ctx;
 }
 /* harmony default export */ const context = (Context);
-// EXTERNAL MODULE: ./node_modules/arrayslicer/lib/index.js
-var lib = __webpack_require__(74);
-var lib_default = /*#__PURE__*/__webpack_require__.n(lib);
-;// ./src/stuff/utils.js
-
-
-
-/* harmony default export */ const utils = ({
-  clamp: function clamp(num, min, max) {
-    return num <= min ? min : num >= max ? max : num;
-  },
-  add_zero: function add_zero(i) {
-    if (i < 10) {
-      i = "0" + i;
-    }
-    return i;
-  },
-  // Start of the day (zero millisecond)
-  day_start: function day_start(t) {
-    var start = new Date(t);
-    return start.setUTCHours(0, 0, 0, 0);
-  },
-  // Start of the month
-  month_start: function month_start(t) {
-    var date = new Date(t);
-    return Date.UTC(date.getFullYear(), date.getMonth(), 1);
-  },
-  // Start of the year
-  year_start: function year_start(t) {
-    return Date.UTC(new Date(t).getFullYear());
-  },
-  get_year: function get_year(t) {
-    if (!t) return undefined;
-    return new Date(t).getUTCFullYear();
-  },
-  get_month: function get_month(t) {
-    if (!t) return undefined;
-    return new Date(t).getUTCMonth();
-  },
-  // Nearest in array
-  nearest_a: function nearest_a(x, array) {
-    var dist = Infinity;
-    var val = null;
-    var index = -1;
-    for (var i = 0; i < array.length; i++) {
-      var xi = array[i];
-      if (Math.abs(xi - x) < dist) {
-        dist = Math.abs(xi - x);
-        val = xi;
-        index = i;
-      }
-    }
-    return [index, val];
-  },
-  round: function round(num, decimals) {
-    if (decimals === void 0) {
-      decimals = 8;
-    }
-    return parseFloat(num.toFixed(decimals));
-  },
-  // Strip? No, it's ugly floats in js
-  strip: function strip(number) {
-    return parseFloat(parseFloat(number).toPrecision(12));
-  },
-  get_day: function get_day(t) {
-    return t ? new Date(t).getDate() : null;
-  },
-  // Update array keeping the same reference
-  overwrite: function overwrite(arr, new_arr) {
-    arr.splice.apply(arr, [0, arr.length].concat(_toConsumableArray(new_arr)));
-  },
-  // Copy layout in reactive way
-  copy_layout: function copy_layout(obj, new_obj) {
-    for (var k in obj) {
-      if (Array.isArray(obj[k])) {
-        // (some offchart indicators are added/removed)
-        // we need to update layout in a reactive way
-        if (obj[k].length !== new_obj[k].length) {
-          this.overwrite(obj[k], new_obj[k]);
-          continue;
-        }
-        for (var m in obj[k]) {
-          Object.assign(obj[k][m], new_obj[k][m]);
-        }
-      } else {
-        Object.assign(obj[k], new_obj[k]);
-      }
-    }
-  },
-  // Detects candles interval
-  detect_interval: function detect_interval(ohlcv) {
-    var len = Math.min(ohlcv.length - 1, 99);
-    var min = Infinity;
-    ohlcv.slice(0, len).forEach(function (x, i) {
-      var d = ohlcv[i + 1][0] - x[0];
-      if (d === d && d < min) min = d;
-    });
-    // This saves monthly chart from being awkward
-    if (min >= constants.MONTH && min <= constants.DAY * 30) {
-      return constants.DAY * 31;
-    }
-    return min;
-  },
-  // Gets numberic part of overlay id (e.g 'EMA_1' = > 1)
-  get_num_id: function get_num_id(id) {
-    return parseInt(id.split('_').pop());
-  },
-  // Fast filter. Really fast, like 10X
-  fast_filter: function fast_filter(arr, t1, t2) {
-    if (!arr.length) return [arr, undefined];
-    try {
-      var ia = new (lib_default())(arr, "0");
-      var res = ia.getRange(t1, t2);
-      var i0 = ia.valpos[t1].next;
-      return [res, i0];
-    } catch (e) {
-      // Something wrong with fancy slice lib
-      // Fast fix: fallback to filter
-      return [arr.filter(function (x) {
-        return x[0] >= t1 && x[0] <= t2;
-      }), 0];
-    }
-  },
-  // Fast filter (index-based)
-  fast_filter_i: function fast_filter_i(arr, t1, t2) {
-    if (!arr.length) return [arr, undefined];
-    var i1 = Math.floor(t1);
-    if (i1 < 0) i1 = 0;
-    var i2 = Math.floor(t2 + 1);
-    var res = arr.slice(i1, i2);
-    return [res, i1];
-  },
-  // Nearest indexes (left and right)
-  fast_nearest: function fast_nearest(arr, t1) {
-    var ia = new (lib_default())(arr, "0");
-    ia.fetch(t1);
-    return [ia.nextlow, ia.nexthigh];
-  },
-  now: function now() {
-    return new Date().getTime();
-  },
-  pause: function pause(delay) {
-    return new Promise(function (rs, rj) {
-      return setTimeout(rs, delay);
-    });
-  },
-  // Limit crazy wheel delta values
-  smart_wheel: function smart_wheel(delta) {
-    var abs = Math.abs(delta);
-    if (abs > 500) {
-      return (200 + Math.log(abs)) * Math.sign(delta);
-    }
-    return delta;
-  },
-  // Parse the original mouse event to find deltaX
-  get_deltaX: function get_deltaX(event) {
-    return event.originalEvent.deltaX / 12;
-  },
-  // Parse the original mouse event to find deltaY
-  get_deltaY: function get_deltaY(event) {
-    return event.originalEvent.deltaY / 12;
-  },
-  // Apply opacity to a hex color
-  apply_opacity: function apply_opacity(c, op) {
-    if (c.length === 7) {
-      var n = Math.floor(op * 255);
-      n = this.clamp(n, 0, 255);
-      c += n.toString(16);
-    }
-    return c;
-  },
-  // Parse timeframe or return value in ms
-  parse_tf: function parse_tf(smth) {
-    if (typeof smth === 'string') {
-      return constants.map_unit[smth];
-    } else {
-      return smth;
-    }
-  },
-  // Detect index shift between the main data sub
-  // and the overlay's sub (for IB-mode)
-  index_shift: function index_shift(sub, data) {
-    // Find the second timestamp (by value)
-    if (!data.length) return 0;
-    var first = data[0][0];
-    var second;
-    for (var i = 1; i < data.length; i++) {
-      if (data[i][0] !== first) {
-        second = data[i][0];
-        break;
-      }
-    }
-    for (var j = 0; j < sub.length; j++) {
-      if (sub[j][0] === second) {
-        return j - i;
-      }
-    }
-    return 0;
-  },
-  // Fallback fix for Brave browser
-  // https://github.com/brave/brave-browser/issues/1738
-  measureText: function measureText(ctx, text, tv_id) {
-    var m = ctx.measureTextOrg(text);
-    if (m.width === 0) {
-      var doc = document;
-      var id = 'tvjs-measure-text';
-      var el = doc.getElementById(id);
-      if (!el) {
-        var base = doc.getElementById(tv_id);
-        el = doc.createElement("div");
-        el.id = id;
-        el.style.position = 'absolute';
-        el.style.top = '-1000px';
-        base.appendChild(el);
-      }
-      if (ctx.font) el.style.font = ctx.font;
-      el.innerText = text.replace(/ /g, '.');
-      return {
-        width: el.offsetWidth
-      };
-    } else {
-      return m;
-    }
-  },
-  uuid: function uuid(temp) {
-    if (temp === void 0) {
-      temp = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx';
-    }
-    return temp.replace(/[xy]/g, function (c) {
-      var r = Math.random() * 16 | 0,
-        v = c == 'x' ? r : r & 0x3 | 0x8;
-      return v.toString(16);
-    });
-  },
-  uuid2: function uuid2() {
-    return this.uuid('xxxxxxxxxxxx');
-  },
-  // Delayed warning, f = condition lambda fn
-  warn: function warn(f, text, delay) {
-    if (delay === void 0) {
-      delay = 0;
-    }
-    setTimeout(function () {
-      if (f()) console.warn(text);
-    }, delay);
-  },
-  // Checks if script props updated
-  // (and not style settings or something else)
-  is_scr_props_upd: function is_scr_props_upd(n, prev) {
-    var p = prev.find(function (x) {
-      return x.v.$uuid === n.v.$uuid;
-    });
-    if (!p) return false;
-    var props = n.p.settings.$props;
-    if (!props) return false;
-    return props.some(function (x) {
-      return n.v[x] !== p.v[x];
-    });
-  },
-  // Checks if it's time to make a script update
-  // (based on execInterval in ms)
-  delayed_exec: function delayed_exec(v) {
-    if (!v.script || !v.script.execInterval) return true;
-    var t = this.now();
-    var dt = v.script.execInterval;
-    if (!v.settings.$last_exec || t > v.settings.$last_exec + dt) {
-      v.settings.$last_exec = t;
-      return true;
-    }
-    return false;
-  },
-  // Format names such 'RSI, $length', where
-  // length - is one of the settings
-  format_name: function format_name(ov) {
-    if (!ov.name) return undefined;
-    var name = ov.name;
-    for (var k in ov.settings || {}) {
-      var val = ov.settings[k];
-      var reg = new RegExp("\\$".concat(k), 'g');
-      name = name.replace(reg, val);
-    }
-    return name;
-  },
-  // Default cursor mode
-  xmode: function xmode() {
-    return this.is_mobile ? 'explore' : 'default';
-  },
-  default_prevented: function default_prevented(event) {
-    if (event.original) {
-      return event.original.defaultPrevented;
-    }
-    return event.defaultPrevented;
-  },
-  // WTF with modern web development
-  is_mobile: function (w) {
-    return 'onorientationchange' in w && (!!navigator.maxTouchPoints || !!navigator.msMaxTouchPoints || 'ontouchstart' in w || w.DocumentTouch && document instanceof w.DocumentTouch);
-  }(typeof window !== 'undefined' ? window : {})
-});
-;// ./src/stuff/math.js
-// Math/Geometry
-
-/* harmony default export */ const math = ({
-  // Distance from point to line
-  // p1 = point, (p2, p3) = line
-  point2line: function point2line(p1, p2, p3) {
-    var _this$tri = this.tri(p1, p2, p3),
-      area = _this$tri.area,
-      base = _this$tri.base;
-    return Math.abs(this.tri_h(area, base));
-  },
-  // Distance from point to segment
-  // p1 = point, (p2, p3) = segment
-  point2seg: function point2seg(p1, p2, p3) {
-    var _this$tri2 = this.tri(p1, p2, p3),
-      area = _this$tri2.area,
-      base = _this$tri2.base;
-    // Vector projection
-    var proj = this.dot_prod(p1, p2, p3) / base;
-    // Distance from left pin
-    var l1 = Math.max(-proj, 0);
-    // Distance from right pin
-    var l2 = Math.max(proj - base, 0);
-    // Normal
-    var h = Math.abs(this.tri_h(area, base));
-    return Math.max(h, l1, l2);
-  },
-  // Distance from point to ray
-  // p1 = point, (p2, p3) = ray
-  point2ray: function point2ray(p1, p2, p3) {
-    var _this$tri3 = this.tri(p1, p2, p3),
-      area = _this$tri3.area,
-      base = _this$tri3.base;
-    // Vector projection
-    var proj = this.dot_prod(p1, p2, p3) / base;
-    // Distance from left pin
-    var l1 = Math.max(-proj, 0);
-    // Normal
-    var h = Math.abs(this.tri_h(area, base));
-    return Math.max(h, l1);
-  },
-  tri: function tri(p1, p2, p3) {
-    var area = this.area(p1, p2, p3);
-    var dx = p3[0] - p2[0];
-    var dy = p3[1] - p2[1];
-    var base = Math.sqrt(dx * dx + dy * dy);
-    return {
-      area: area,
-      base: base
-    };
-  },
-  /* Area of triangle:
-          p1
-        /    \
-      p2  _  p3
-  */
-  area: function area(p1, p2, p3) {
-    return p1[0] * (p2[1] - p3[1]) + p2[0] * (p3[1] - p1[1]) + p3[0] * (p1[1] - p2[1]);
-  },
-  // Triangle height
-  tri_h: function tri_h(area, base) {
-    return area / base;
-  },
-  // Dot product of (p2, p3) and (p2, p1)
-  dot_prod: function dot_prod(p1, p2, p3) {
-    var v1 = [p3[0] - p2[0], p3[1] - p2[1]];
-    var v2 = [p1[0] - p2[0], p1[1] - p2[1]];
-    return v1[0] * v2[0] + v1[1] * v2[1];
-  },
-  // Symmetrical log
-  log: function log(x) {
-    // TODO: log for small values
-    return Math.sign(x) * Math.log(Math.abs(x) + 1);
-  },
-  // Symmetrical exp
-  exp: function exp(x) {
-    return Math.sign(x) * (Math.exp(Math.abs(x)) - 1);
-  },
-  // Middle line on log scale based on range & px height
-  log_mid: function log_mid(r, h) {
-    var log_hi = this.log(r[0]);
-    var log_lo = this.log(r[1]);
-    var px = h / 2;
-    var gx = log_hi - px * (log_hi - log_lo) / h;
-    return this.exp(gx);
-  },
-  // Return new adjusted range, based on the previous
-  // range, new $_hi, target middle line
-  re_range: function re_range(r1, hi2, mid) {
-    var log_hi1 = this.log(r1[0]);
-    var log_lo1 = this.log(r1[1]);
-    var log_hi2 = this.log(hi2);
-    var log_$ = this.log(mid);
-    var W = (log_hi2 - log_$) * (log_hi1 - log_lo1) / (log_hi1 - log_$);
-    return this.exp(log_hi2 - W);
-  } // Return new adjusted range, based on the previous
-  // range, new $_hi, target middle line + dy (shift)
-  // WASTE
-  /*range_shift(r1, hi2, mid, dy, h) {
-      let log_hi1 = this.log(r1[0])
-      let log_lo1 = this.log(r1[1])
-      let log_hi2 = this.log(hi2)
-      let log_$ = this.log(mid)
-       let W = h * (log_hi2 - log_$) /
-              (h * (log_hi1 - log_$) / (log_hi1 - log_lo1) + dy)
-       return this.exp(log_hi2 - W)
-   }*/
-});
-;// ./src/components/js/layout_fn.js
-// Layout functional interface
-
-
-
-/* harmony default export */ function layout_fn(self, range) {
-  var ib = self.ti_map.ib;
-  var dt = range[1] - range[0];
-  var r = self.spacex / dt;
-  var ls = self.grid.logScale || false;
-  Object.assign(self, {
-    // Time to screen coordinates
-    t2screen: function t2screen(t) {
-      if (ib) t = self.ti_map.smth2i(t);
-      return Math.floor((t - range[0]) * r) - 0.5;
-    },
-    // $ to screen coordinates
-    $2screen: function $2screen(y) {
-      if (ls) y = math.log(y);
-      return Math.floor(y * self.A + self.B) - 0.5;
-    },
-    // Time-axis nearest step
-    t_magnet: function t_magnet(t) {
-      if (ib) t = self.ti_map.smth2i(t);
-      var cn = self.candles || self.master_grid.candles;
-      var arr = cn.map(function (x) {
-        return x.raw[0];
-      });
-      var i = utils.nearest_a(t, arr)[0];
-      if (!cn[i]) return;
-      return Math.floor(cn[i].x) - 0.5;
-    },
-    // Screen-Y to dollar value (or whatever)
-    screen2$: function screen2$(y) {
-      if (ls) return math.exp((y - self.B) / self.A);
-      return (y - self.B) / self.A;
-    },
-    // Screen-X to timestamp
-    screen2t: function screen2t(x) {
-      // TODO: most likely Math.floor not needed
-      // return Math.floor(range[0] + x / r)
-      return range[0] + x / r;
-    },
-    // $-axis nearest step
-    $_magnet: function $_magnet(price) {},
-    // Nearest candlestick
-    c_magnet: function c_magnet(t) {
-      var cn = self.candles || self.master_grid.candles;
-      var arr = cn.map(function (x) {
-        return x.raw[0];
-      });
-      var i = utils.nearest_a(t, arr)[0];
-      return cn[i];
-    },
-    // Nearest data points
-    data_magnet: function data_magnet(t) {/* TODO: implement */}
-  });
-  return self;
-}
-;// ./src/components/js/log_scale.js
-// Log-scale mode helpers
-
-// TODO: all-negative numbers (sometimes wrong scaling)
-
-
-/* harmony default export */ const log_scale = ({
-  candle: function candle(self, mid, p, $p) {
-    return {
-      x: mid,
-      w: self.px_step * $p.config.CANDLEW,
-      o: Math.floor(math.log(p[1]) * self.A + self.B),
-      h: Math.floor(math.log(p[2]) * self.A + self.B),
-      l: Math.floor(math.log(p[3]) * self.A + self.B),
-      c: Math.floor(math.log(p[4]) * self.A + self.B),
-      raw: p
-    };
-  },
-  expand: function expand(self, height) {
-    // expand log scale
-    var A = -height / (math.log(self.$_hi) - math.log(self.$_lo));
-    var B = -math.log(self.$_hi) * A;
-    var top = -height * 0.1;
-    var bot = height * 1.1;
-    self.$_hi = math.exp((top - B) / A);
-    self.$_lo = math.exp((bot - B) / A);
-  }
-});
-;// ./src/components/js/grid_maker.js
-
-
-
-
-
-
-var grid_maker_TIMESCALES = constants.TIMESCALES,
-  grid_maker_$SCALES = constants.$SCALES,
-  grid_maker_WEEK = constants.WEEK,
-  grid_maker_MONTH = constants.MONTH,
-  grid_maker_YEAR = constants.YEAR,
-  grid_maker_HOUR = constants.HOUR,
-  grid_maker_DAY = constants.DAY;
-var MAX_INT = Number.MAX_SAFE_INTEGER;
-
-// master_grid - ref to the master grid
-function GridMaker(id, params, master_grid) {
-  if (master_grid === void 0) {
-    master_grid = null;
-  }
-  var sub = params.sub,
-    interval = params.interval,
-    range = params.range,
-    ctx = params.ctx,
-    $p = params.$p,
-    layers_meta = params.layers_meta,
-    height = params.height,
-    y_t = params.y_t,
-    ti_map = params.ti_map,
-    grid = params.grid,
-    timezone = params.timezone;
-  var self = {
-    ti_map: ti_map
-  };
-  var lm = layers_meta[id];
-  var y_range_fn = null;
-  var ls = grid.logScale;
-  if (lm && Object.keys(lm).length) {
-    // Gets last y_range fn()
-    var yrs = Object.values(lm).filter(function (x) {
-      return x.y_range;
-    });
-    // The first y_range() determines the range
-    if (yrs.length) y_range_fn = yrs[0].y_range;
-  }
-
-  // Calc vertical ($/₿) range
-  function calc_$range() {
-    if (!master_grid) {
-      // $ candlestick range
-      if (y_range_fn) {
-        var _y_range_fn = y_range_fn(hi, lo),
-          _y_range_fn2 = _slicedToArray(_y_range_fn, 2),
-          hi = _y_range_fn2[0],
-          lo = _y_range_fn2[1];
-      } else {
-        hi = -Infinity, lo = Infinity;
-        for (var i = 0, n = sub.length; i < n; i++) {
-          var x = sub[i];
-          if (x[2] > hi) hi = x[2];
-          if (x[3] < lo) lo = x[3];
-        }
-      }
-    } else {
-      // Offchart indicator range
-      hi = -Infinity, lo = Infinity;
-      for (var i = 0; i < sub.length; i++) {
-        for (var j = 1; j < sub[i].length; j++) {
-          var v = sub[i][j];
-          if (v > hi) hi = v;
-          if (v < lo) lo = v;
-        }
-      }
-      if (y_range_fn) {
-        var _y_range_fn3 = y_range_fn(hi, lo),
-          _y_range_fn4 = _slicedToArray(_y_range_fn3, 3),
-          hi = _y_range_fn4[0],
-          lo = _y_range_fn4[1],
-          exp = _y_range_fn4[2];
-      }
-    }
-
-    // Fixed y-range in non-auto mode
-    if (y_t && !y_t.auto && y_t.range) {
-      self.$_hi = y_t.range[0];
-      self.$_lo = y_t.range[1];
-    } else {
-      if (!ls) {
-        exp = exp === false ? 0 : 1;
-        self.$_hi = hi + (hi - lo) * $p.config.EXPAND * exp;
-        self.$_lo = lo - (hi - lo) * $p.config.EXPAND * exp;
-      } else {
-        self.$_hi = hi;
-        self.$_lo = lo;
-        log_scale.expand(self, height);
-      }
-      if (self.$_hi === self.$_lo) {
-        if (!ls) {
-          self.$_hi *= 1.05; // Expand if height range === 0
-          self.$_lo *= 0.95;
-        } else {
-          log_scale.expand(self, height);
-        }
-      }
-    }
-  }
-  function calc_sidebar() {
-    if (sub.length < 2) {
-      self.prec = 0;
-      self.sb = $p.config.SBMIN;
-      return;
-    }
-
-    // TODO: improve sidebar width calculation
-    // at transition point, when one precision is
-    // replaced with another
-
-    // Gets formated levels (their lengths),
-    // calculates max and measures the sidebar length
-    // from it:
-
-    // TODO: add custom formatter f()
-
-    self.prec = calc_precision(sub);
-    var lens = [];
-    lens.push(self.$_hi.toFixed(self.prec).length);
-    lens.push(self.$_lo.toFixed(self.prec).length);
-    var str = '0'.repeat(Math.max.apply(Math, lens)) + '    ';
-    self.sb = ctx.measureText(str).width;
-    self.sb = Math.max(Math.floor(self.sb), $p.config.SBMIN);
-    self.sb = Math.min(self.sb, $p.config.SBMAX);
-  }
-
-  // Calculate $ precision for the Y-axis
-  function calc_precision(data) {
-    var max_r = 0,
-      max_l = 0;
-    var min = Infinity;
-    var max = -Infinity;
-
-    // Speed UP
-    for (var i = 0, n = data.length; i < n; i++) {
-      var x = data[i];
-      if (x[1] > max) max = x[1];else if (x[1] < min) min = x[1];
-    }
-    // Get max lengths of integer and fractional parts
-    [min, max].forEach(function (x) {
-      // Fix undefined bug
-      var str = x != null ? x.toString() : '';
-      if (x < 0.000001) {
-        // Parsing the exponential form. Gosh this
-        // smells trickily
-        var _str$split = str.split('e-'),
-          _str$split2 = _slicedToArray(_str$split, 2),
-          ls = _str$split2[0],
-          rs = _str$split2[1];
-        var _ls$split = ls.split('.'),
-          _ls$split2 = _slicedToArray(_ls$split, 2),
-          l = _ls$split2[0],
-          r = _ls$split2[1];
-        if (!r) r = '';
-        r = {
-          length: r.length + parseInt(rs) || 0
-        };
-      } else {
-        var _str$split3 = str.split('.'),
-          _str$split4 = _slicedToArray(_str$split3, 2),
-          l = _str$split4[0],
-          r = _str$split4[1];
-      }
-      if (r && r.length > max_r) {
-        max_r = r.length;
-      }
-      if (l && l.length > max_l) {
-        max_l = l.length;
-      }
-    });
-
-    // Select precision scheme depending
-    // on the left and right part lengths
-    //
-    var even = max_r - max_r % 2 + 2;
-    if (max_l === 1) {
-      return Math.min(8, Math.max(2, even));
-    }
-    if (max_l <= 2) {
-      return Math.min(4, Math.max(2, even));
-    }
-    return 2;
-  }
-  function calc_positions() {
-    if (sub.length < 2) return;
-    var dt = range[1] - range[0];
-
-    // A pixel space available to draw on (x-axis)
-    self.spacex = $p.width - self.sb;
-
-    // Candle capacity
-    var capacity = dt / interval;
-    self.px_step = self.spacex / capacity;
-
-    // px / time ratio
-    var r = self.spacex / dt;
-    self.startx = (sub[0][0] - range[0]) * r;
-
-    // Candle Y-transform: (A = scale, B = shift)
-    if (!grid.logScale) {
-      self.A = -height / (self.$_hi - self.$_lo);
-      self.B = -self.$_hi * self.A;
-    } else {
-      self.A = -height / (math.log(self.$_hi) - math.log(self.$_lo));
-      self.B = -math.log(self.$_hi) * self.A;
-    }
-  }
-
-  // Select nearest good-loking t step (m is target scale)
-  function time_step() {
-    var k = ti_map.ib ? 60000 : 1;
-    var xrange = (range[1] - range[0]) * k;
-    var m = xrange * ($p.config.GRIDX / $p.width);
-    var s = grid_maker_TIMESCALES;
-    return utils.nearest_a(m, s)[1] / k;
-  }
-
-  // Select nearest good-loking $ step (m is target scale)
-  function dollar_step() {
-    var yrange = self.$_hi - self.$_lo;
-    var m = yrange * ($p.config.GRIDY / height);
-    var p = parseInt(yrange.toExponential().split('e')[1]);
-    var d = Math.pow(10, p);
-    var s = grid_maker_$SCALES.map(function (x) {
-      return x * d;
-    });
-
-    // TODO: center the range (look at RSI for example,
-    // it looks ugly when "80" is near the top)
-    return utils.strip(utils.nearest_a(m, s)[1]);
-  }
-  function dollar_mult() {
-    var mult_hi = dollar_mult_hi();
-    var mult_lo = dollar_mult_lo();
-    return Math.max(mult_hi, mult_lo);
-  }
-
-  // Price step multiplier (for the log-scale mode)
-  function dollar_mult_hi() {
-    var h = Math.min(self.B, height);
-    if (h < $p.config.GRIDY) return 1;
-    var n = h / $p.config.GRIDY; // target grid N
-    var yrange = self.$_hi;
-    if (self.$_lo > 0) {
-      var yratio = self.$_hi / self.$_lo;
-    } else {
-      yratio = self.$_hi / 1; // TODO: small values
-    }
-    var m = yrange * ($p.config.GRIDY / h);
-    var p = parseInt(yrange.toExponential().split('e')[1]);
-    return Math.pow(yratio, 1 / n);
-  }
-  function dollar_mult_lo() {
-    var h = Math.min(height - self.B, height);
-    if (h < $p.config.GRIDY) return 1;
-    var n = h / $p.config.GRIDY; // target grid N
-    var yrange = Math.abs(self.$_lo);
-    if (self.$_hi < 0 && self.$_lo < 0) {
-      var yratio = Math.abs(self.$_lo / self.$_hi);
-    } else {
-      yratio = Math.abs(self.$_lo) / 1;
-    }
-    var m = yrange * ($p.config.GRIDY / h);
-    var p = parseInt(yrange.toExponential().split('e')[1]);
-    return Math.pow(yratio, 1 / n);
-  }
-  function grid_x() {
-    // If this is a subgrid, no need to calc a timeline,
-    // we just borrow it from the master_grid
-    if (!master_grid) {
-      self.t_step = time_step();
-      self.xs = [];
-      var dt = range[1] - range[0];
-      var r = self.spacex / dt;
-
-      /* TODO: remove the left-side glitch
-       let year_0 = Utils.get_year(sub[0][0])
-      for (var t0 = year_0; t0 < range[0]; t0 += self.t_step) {}
-       let m0 = Utils.get_month(t0)*/
-
-      for (var i = 0; i < sub.length; i++) {
-        var p = sub[i];
-        var prev = sub[i - 1] || [];
-        var prev_xs = self.xs[self.xs.length - 1] || [0, []];
-        var x = Math.floor((p[0] - range[0]) * r);
-        insert_line(prev, p, x);
-
-        // Filtering lines that are too near
-        var xs = self.xs[self.xs.length - 1] || [0, []];
-        if (prev_xs === xs) continue;
-        if (xs[1][0] - prev_xs[1][0] < self.t_step * 0.8) {
-          // prev_xs is a higher "rank" label
-          if (xs[2] <= prev_xs[2]) {
-            self.xs.pop();
-          } else {
-            // Otherwise
-            self.xs.splice(self.xs.length - 2, 1);
-          }
-        }
-      }
-
-      // TODO: fix grid extension for bigger timeframes
-      if (interval < grid_maker_WEEK && r > 0) {
-        extend_left(dt, r);
-        extend_right(dt, r);
-      }
-    } else {
-      self.t_step = master_grid.t_step;
-      self.px_step = master_grid.px_step;
-      self.startx = master_grid.startx;
-      self.xs = master_grid.xs;
-    }
-  }
-  function insert_line(prev, p, x, m0) {
-    var prev_t = ti_map.ib ? ti_map.i2t(prev[0]) : prev[0];
-    var p_t = ti_map.ib ? ti_map.i2t(p[0]) : p[0];
-    if (ti_map.tf < grid_maker_DAY) {
-      prev_t += timezone * grid_maker_HOUR;
-      p_t += timezone * grid_maker_HOUR;
-    }
-    var d = timezone * grid_maker_HOUR;
-
-    // TODO: take this block =========> (see below)
-    if ((prev[0] || interval === grid_maker_YEAR) && utils.get_year(p_t) !== utils.get_year(prev_t)) {
-      self.xs.push([x, p, grid_maker_YEAR]); // [px, [...], rank]
-    } else if (prev[0] && utils.get_month(p_t) !== utils.get_month(prev_t)) {
-      self.xs.push([x, p, grid_maker_MONTH]);
-    }
-    // TODO: should be added if this day !== prev day
-    // And the same for 'botbar.js', TODO(*)
-    else if (utils.day_start(p_t) === p_t) {
-      self.xs.push([x, p, grid_maker_DAY]);
-    } else if (p[0] % self.t_step === 0) {
-      self.xs.push([x, p, interval]);
-    }
-  }
-  function extend_left(dt, r) {
-    if (!self.xs.length || !isFinite(r)) return;
-    var t = self.xs[0][1][0];
-    while (true) {
-      t -= self.t_step;
-      var x = Math.floor((t - range[0]) * r);
-      if (x < 0) break;
-      // TODO: ==========> And insert it here somehow
-      if (t % interval === 0) {
-        self.xs.unshift([x, [t], interval]);
-      }
-    }
-  }
-  function extend_right(dt, r) {
-    if (!self.xs.length || !isFinite(r)) return;
-    var t = self.xs[self.xs.length - 1][1][0];
-    while (true) {
-      t += self.t_step;
-      var x = Math.floor((t - range[0]) * r);
-      if (x > self.spacex) break;
-      if (t % interval === 0) {
-        self.xs.push([x, [t], interval]);
-      }
-    }
-  }
-  function grid_y() {
-    // Prevent duplicate levels
-    var m = Math.pow(10, -self.prec);
-    self.$_step = Math.max(m, dollar_step());
-    self.ys = [];
-    var y1 = self.$_lo - self.$_lo % self.$_step;
-    for (var y$ = y1; y$ <= self.$_hi; y$ += self.$_step) {
-      var y = Math.floor(y$ * self.A + self.B);
-      if (y > height) continue;
-      self.ys.push([y, utils.strip(y$)]);
-    }
-  }
-  function grid_y_log() {
-    // TODO: Prevent duplicate levels, is this even
-    // a problem here ?
-    self.$_mult = dollar_mult();
-    self.ys = [];
-    if (!sub.length) return;
-    var v = Math.abs(sub[sub.length - 1][1] || 1);
-    var y1 = search_start_pos(v);
-    var y2 = search_start_neg(-v);
-    var yp = -Infinity; // Previous y value
-    var n = height / $p.config.GRIDY; // target grid N
-
-    var q = 1 + (self.$_mult - 1) / 2;
-
-    // Over 0
-    for (var y$ = y1; y$ > 0; y$ /= self.$_mult) {
-      y$ = log_rounder(y$, q);
-      var y = Math.floor(math.log(y$) * self.A + self.B);
-      self.ys.push([y, utils.strip(y$)]);
-      if (y > height) break;
-      if (y - yp < $p.config.GRIDY * 0.7) break;
-      if (self.ys.length > n + 1) break;
-      yp = y;
-    }
-
-    // Under 0
-    yp = Infinity;
-    for (var y$ = y2; y$ < 0; y$ /= self.$_mult) {
-      y$ = log_rounder(y$, q);
-      var _y = Math.floor(math.log(y$) * self.A + self.B);
-      if (yp - _y < $p.config.GRIDY * 0.7) break;
-      self.ys.push([_y, utils.strip(y$)]);
-      if (_y < 0) break;
-      if (self.ys.length > n * 3 + 1) break;
-      yp = _y;
-    }
-
-    // TODO: remove lines near to 0
-  }
-
-  // Search a start for the top grid so that
-  // the fixed value always included
-  function search_start_pos(value) {
-    var N = height / $p.config.GRIDY; // target grid N
-    var y = Infinity,
-      y$ = value,
-      count = 0;
-    while (y > 0) {
-      y = Math.floor(math.log(y$) * self.A + self.B);
-      y$ *= self.$_mult;
-      if (count++ > N * 3) return 0; // Prevents deadloops
-    }
-    return y$;
-  }
-  function search_start_neg(value) {
-    var N = height / $p.config.GRIDY; // target grid N
-    var y = -Infinity,
-      y$ = value,
-      count = 0;
-    while (y < height) {
-      y = Math.floor(math.log(y$) * self.A + self.B);
-      y$ *= self.$_mult;
-      if (count++ > N * 3) break; // Prevents deadloops
-    }
-    return y$;
-  }
-
-  // Make log scale levels look great again
-  function log_rounder(x, quality) {
-    var s = Math.sign(x);
-    x = Math.abs(x);
-    if (x > 10) {
-      for (var div = 10; div < MAX_INT; div *= 10) {
-        var nice = Math.floor(x / div) * div;
-        if (x / nice > quality) {
-          // More than 10% off
-          break;
-        }
-      }
-      div /= 10;
-      return s * Math.floor(x / div) * div;
-    } else if (x < 1) {
-      for (var ro = 10; ro >= 1; ro--) {
-        var _nice = utils.round(x, ro);
-        if (x / _nice > quality) {
-          // More than 10% off
-          break;
-        }
-      }
-      return s * utils.round(x, ro + 1);
-    } else {
-      return s * Math.floor(x);
-    }
-  }
-  function apply_sizes() {
-    self.width = $p.width - self.sb;
-    self.height = height;
-  }
-  calc_$range();
-  calc_sidebar();
-  return {
-    // First we need to calculate max sidebar width
-    // (among all grids). Then we can actually make
-    // them
-    create: function create() {
-      calc_positions();
-      grid_x();
-      if (grid.logScale) {
-        grid_y_log();
-      } else {
-        grid_y();
-      }
-      apply_sizes();
-
-      // Link to the master grid (candlesticks)
-      if (master_grid) {
-        self.master_grid = master_grid;
-      }
-      self.grid = grid; // Grid params
-
-      // Here we add some helpful functions for
-      // plugin creators
-      return layout_fn(self, range);
-    },
-    get_layout: function get_layout() {
-      return self;
-    },
-    set_sidebar: function set_sidebar(v) {
-      return self.sb = v;
-    },
-    get_sidebar: function get_sidebar() {
-      return self.sb;
-    }
-  };
-}
-/* harmony default export */ const grid_maker = (GridMaker);
-;// ./src/components/js/layout.js
-
-
-function _createForOfIteratorHelper(r, e) { var t = "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (!t) { if (Array.isArray(r) || (t = layout_unsupportedIterableToArray(r)) || e && r && "number" == typeof r.length) { t && (r = t); var _n = 0, F = function F() {}; return { s: F, n: function n() { return _n >= r.length ? { done: !0 } : { done: !1, value: r[_n++] }; }, e: function e(r) { throw r; }, f: F }; } throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); } var o, a = !0, u = !1; return { s: function s() { t = t.call(r); }, n: function n() { var r = t.next(); return a = r.done, r; }, e: function e(r) { u = !0, o = r; }, f: function f() { try { a || null == t["return"] || t["return"](); } finally { if (u) throw o; } } }; }
-function layout_unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return layout_arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? layout_arrayLikeToArray(r, a) : void 0; } }
-function layout_arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
-// Calculates all necessary s*it to build the chart
-// Heights, widths, transforms, ... = everything
-// Why such a mess you ask? Well, that's because
-// one components size can depend on other component
-// data formatting (e.g. grid width depends on sidebar precision)
-// So it's better to calc all in one place.
-
-
-
-
-
-function Layout(params) {
-  var chart = params.chart,
-    sub = params.sub,
-    offsub = params.offsub,
-    interval = params.interval,
-    range = params.range,
-    ctx = params.ctx,
-    layers_meta = params.layers_meta,
-    ti_map = params.ti_map,
-    $p = params.$props,
-    y_ts = params.y_transforms,
-    customGridHeights = params.customGridHeights,
-    minimizedGrids = params.minimizedGrids;
-  var mgrid = chart.grid || {};
-  offsub = offsub.filter(function (x, i) {
-    // Skip offchart overlays with custom grid id,
-    // because they will be mergred with the existing grids
-    return !(x.grid && x.grid.id);
-  });
-
-  // Minimum height for minimized grids (title bar only)
-  var MINIMIZED_HEIGHT = 28;
-
-  // Splits space between main chart
-  // and offchart indicator grids
-  function grid_hs() {
-    var height = $p.height - $p.config.BOTBAR;
-
-    // If custom pixel heights or minimized grids are provided, use custom calculation
-    var hasCustomHeights = customGridHeights && Object.keys(customGridHeights).length > 0;
-    var hasMinimizedGrids = minimizedGrids && Object.keys(minimizedGrids).length > 0;
-    if (hasCustomHeights || hasMinimizedGrids) {
-      return custom_hs(height);
-    }
-
-    // When at least one height defined (default = 1),
-    // Pxs calculated as: (sum of weights) / number
-    if (mgrid.height || offsub.find(function (x) {
-      return x.grid.height;
-    })) {
-      return weighted_hs(mgrid, height);
-    }
-    var n = offsub.length;
-    var off_h = 2 * Math.sqrt(n) / 7 / (n || 1);
-
-    // Offchart grid height
-    var px = Math.floor(height * off_h);
-
-    // Main grid height
-    var m = height - px * n;
-    return [m].concat(Array(n).fill(px));
-  }
-
-  // Use custom pixel heights directly
-  function custom_hs(height) {
-    var n = offsub.length + 1; // main + offcharts
-    var hs = [];
-
-    // Check for minimized grids
-    var minimized = minimizedGrids || {};
-
-    // Calculate heights for each grid
-    for (var _i = 0; _i < n; _i++) {
-      if (minimized[_i]) {
-        hs.push(MINIMIZED_HEIGHT);
-      } else if (customGridHeights && customGridHeights[_i] !== undefined) {
-        hs.push(customGridHeights[_i]);
-      } else {
-        hs.push(null); // Will be calculated
-      }
-    }
-
-    // Calculate total used height and remaining
-    var usedHeight = hs.filter(function (h) {
-      return h !== null;
-    }).reduce(function (a, b) {
-      return a + b;
-    }, 0);
-    var nullCount = hs.filter(function (h) {
-      return h === null;
-    }).length;
-    if (nullCount > 0) {
-      var remainingHeight = height - usedHeight;
-      var defaultHeight = Math.floor(remainingHeight / nullCount);
-      hs = hs.map(function (h) {
-        return h === null ? defaultHeight : h;
-      });
-    }
-
-    // Ensure total matches available height
-    var total = hs.reduce(function (a, b) {
-      return a + b;
-    }, 0);
-    if (total !== height && hs.length > 0) {
-      hs[0] += height - total;
-    }
-    return hs;
-  }
-  function weighted_hs(grid, height) {
-    var hs = [{
-      grid: grid
-    }].concat(_toConsumableArray(offsub)).map(function (x) {
-      return x.grid.height || 1;
-    });
-    var sum = hs.reduce(function (a, b) {
-      return a + b;
-    }, 0);
-    hs = hs.map(function (x) {
-      return Math.floor(x / sum * height);
-    });
-
-    // Refine the height if Math.floor decreased px sum
-    sum = hs.reduce(function (a, b) {
-      return a + b;
-    }, 0);
-    for (var i = 0; i < height - sum; i++) hs[i % hs.length]++;
-    return hs;
-  }
-  function candles_n_vol() {
-    self.candles = [];
-    self.volume = [];
-    var maxv = Math.max.apply(Math, _toConsumableArray(sub.map(function (x) {
-      return x[5];
-    })));
-    var vs = $p.config.VOLSCALE * $p.height / maxv;
-    var x1,
-      x2,
-      mid,
-      prev = undefined;
-    var splitter = self.px_step > 5 ? 1 : 0;
-    var hf_px_step = self.px_step * 0.5;
-    for (var i = 0; i < sub.length; i++) {
-      var p = sub[i];
-      mid = self.t2screen(p[0]) + 0.5;
-      self.candles.push(mgrid.logScale ? log_scale.candle(self, mid, p, $p) : {
-        x: mid,
-        w: self.px_step * $p.config.CANDLEW,
-        o: Math.floor(p[1] * self.A + self.B),
-        h: Math.floor(p[2] * self.A + self.B),
-        l: Math.floor(p[3] * self.A + self.B),
-        c: Math.floor(p[4] * self.A + self.B),
-        z: p[6],
-        raw: p
-      });
-      // Clear volume bar if there is a time gap
-      if (sub[i - 1] && p[0] - sub[i - 1][0] > interval) {
-        prev = null;
-      }
-      x1 = prev || Math.floor(mid - hf_px_step);
-      x2 = Math.floor(mid + hf_px_step) - 0.5;
-      self.volume.push({
-        x1: x1,
-        x2: x2,
-        h: p[5] * vs,
-        /* green: p[4] >= p[1], */
-        z: p[6],
-        raw: p
-      });
-      prev = x2 + splitter;
-    }
-  }
-
-  // Main grid
-  var hs = grid_hs();
-  var specs = {
-    sub: sub,
-    interval: interval,
-    range: range,
-    ctx: ctx,
-    $p: $p,
-    layers_meta: layers_meta,
-    ti_map: ti_map,
-    height: hs[0],
-    y_t: y_ts[0],
-    grid: mgrid,
-    timezone: $p.timezone
-  };
-  var gms = [new grid_maker(0, specs)];
-
-  // Sub grids
-  var _iterator = _createForOfIteratorHelper(offsub.entries()),
-    _step;
-  try {
-    for (_iterator.s(); !(_step = _iterator.n()).done;) {
-      var _step$value = _slicedToArray(_step.value, 2),
-        i = _step$value[0],
-        _step$value$ = _step$value[1],
-        data = _step$value$.data,
-        grid = _step$value$.grid;
-      specs.sub = data;
-      specs.height = hs[i + 1];
-      specs.y_t = y_ts[i + 1];
-      specs.grid = grid || {};
-      gms.push(new grid_maker(i + 1, specs, gms[0].get_layout()));
-    }
-
-    // Max sidebar among all grinds
-  } catch (err) {
-    _iterator.e(err);
-  } finally {
-    _iterator.f();
-  }
-  var sb = Math.max.apply(Math, _toConsumableArray(gms.map(function (x) {
-    return x.get_sidebar();
-  })));
-  var grids = [],
-    offset = 0;
-  for (i = 0; i < gms.length; i++) {
-    gms[i].set_sidebar(sb);
-    grids.push(gms[i].create());
-    grids[i].id = i;
-    grids[i].offset = offset;
-    offset += grids[i].height;
-  }
-  var self = grids[0];
-  candles_n_vol();
-  return {
-    grids: grids,
-    botbar: {
-      width: $p.width,
-      height: $p.config.BOTBAR,
-      offset: offset,
-      xs: grids[0] ? grids[0].xs : []
-    }
-  };
-}
-/* harmony default export */ const js_layout = (Layout);
+// EXTERNAL MODULE: ./src/stuff/utils.js
+var utils = __webpack_require__(493);
 ;// ./node_modules/@babel/runtime/helpers/esm/classCallCheck.js
 function classCallCheck_classCallCheck(a, n) {
   if (!(a instanceof n)) throw new TypeError("Cannot call a class as a function");
@@ -6804,9 +6916,9 @@ function createClass_createClass(e, r, t) {
 
 
 
-function updater_createForOfIteratorHelper(r, e) { var t = "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (!t) { if (Array.isArray(r) || (t = updater_unsupportedIterableToArray(r)) || e && r && "number" == typeof r.length) { t && (r = t); var _n = 0, F = function F() {}; return { s: F, n: function n() { return _n >= r.length ? { done: !0 } : { done: !1, value: r[_n++] }; }, e: function e(r) { throw r; }, f: F }; } throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); } var o, a = !0, u = !1; return { s: function s() { t = t.call(r); }, n: function n() { var r = t.next(); return a = r.done, r; }, e: function e(r) { u = !0, o = r; }, f: function f() { try { a || null == t["return"] || t["return"](); } finally { if (u) throw o; } } }; }
-function updater_unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return updater_arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? updater_arrayLikeToArray(r, a) : void 0; } }
-function updater_arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
+function _createForOfIteratorHelper(r, e) { var t = "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (!t) { if (Array.isArray(r) || (t = _unsupportedIterableToArray(r)) || e && r && "number" == typeof r.length) { t && (r = t); var _n = 0, F = function F() {}; return { s: F, n: function n() { return _n >= r.length ? { done: !0 } : { done: !1, value: r[_n++] }; }, e: function e(r) { throw r; }, f: F }; } throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); } var o, a = !0, u = !1; return { s: function s() { t = t.call(r); }, n: function n() { var r = t.next(); return a = r.done, r; }, e: function e(r) { u = !0, o = r; }, f: function f() { try { a || null == t["return"] || t["return"](); } finally { if (u) throw o; } } }; }
+function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
+function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
 // Cursor updater: calculates current values for
 // OHLCV and all other indicators
 
@@ -6831,7 +6943,7 @@ var CursorUpdater = /*#__PURE__*/function () {
       // grid: { id: N }
       this.cursor.grid_id = e.grid_id;
       var once = true;
-      var _iterator = updater_createForOfIteratorHelper(this.grids),
+      var _iterator = _createForOfIteratorHelper(this.grids),
         _step;
       try {
         for (_iterator.s(); !(_step = _iterator.n()).done;) {
@@ -6874,12 +6986,12 @@ var CursorUpdater = /*#__PURE__*/function () {
         var m = data.filter(function (x) {
           return x.grid.id === grid.id;
         });
-        data = [_d[grid.id - 1]].concat(_toConsumableArray(m));
+        data = [_d[grid.id - 1]].concat((0,toConsumableArray/* default */.A)(m));
       }
       var t = grid.screen2t(e.x);
       var ids = {},
         res = {};
-      var _iterator2 = updater_createForOfIteratorHelper(data),
+      var _iterator2 = _createForOfIteratorHelper(data),
         _step2;
       try {
         for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
@@ -6887,7 +6999,7 @@ var CursorUpdater = /*#__PURE__*/function () {
           var ts = d.data.map(function (x) {
             return x[0];
           });
-          var i = utils.nearest_a(t, ts)[0];
+          var i = utils/* default */.A.nearest_a(t, ts)[0];
           d.type in ids ? ids[d.type]++ : ids[d.type] = 0;
           res["".concat(d.type, "_").concat(ids[d.type])] = d.data[i];
         }
@@ -6907,7 +7019,7 @@ var CursorUpdater = /*#__PURE__*/function () {
       var xs = data.map(function (x) {
         return grid.t2screen(x[0]) + 0.5;
       });
-      var i = utils.nearest_a(e.x, xs)[0];
+      var i = utils/* default */.A.nearest_a(e.x, xs)[0];
       if (!xs[i]) return {};
       return {
         x: Math.floor(xs[i]) - 0.5,
@@ -6991,6 +7103,136 @@ Sectionvue_type_template_id_d047b52a_render._withStripped = true;
 
 ;// ./src/components/Section.vue?vue&type=template&id=d047b52a
 
+// EXTERNAL MODULE: ./node_modules/hammerjs/hammer.js
+var hammer = __webpack_require__(168);
+// EXTERNAL MODULE: ./node_modules/hamsterjs/hamster.js
+var hamster = __webpack_require__(240);
+var hamster_default = /*#__PURE__*/__webpack_require__.n(hamster);
+;// ./src/components/js/grid/zoom-manager.js
+
+
+// Zoom handling: wheel zoom, pinch zoom, trackpad scroll
+
+
+var ZoomManager = /*#__PURE__*/function () {
+  function ZoomManager(grid) {
+    classCallCheck_classCallCheck(this, ZoomManager);
+    this.grid = grid;
+  }
+  return createClass_createClass(ZoomManager, [{
+    key: "range",
+    get: function get() {
+      return this.grid.range;
+    }
+  }, {
+    key: "data",
+    get: function get() {
+      return this.grid.data;
+    }
+  }, {
+    key: "layout",
+    get: function get() {
+      return this.grid.layout;
+    }
+  }, {
+    key: "interval",
+    get: function get() {
+      return this.grid.interval;
+    }
+  }, {
+    key: "canvas",
+    get: function get() {
+      return this.grid.canvas;
+    }
+  }, {
+    key: "comp",
+    get: function get() {
+      return this.grid.comp;
+    }
+  }, {
+    key: "$p",
+    get: function get() {
+      return this.grid.$p;
+    }
+  }, {
+    key: "id",
+    get: function get() {
+      return this.grid.id;
+    }
+  }, {
+    key: "mousezoom",
+    value: function mousezoom(delta, event) {
+      var wmode = this.grid.wmode;
+      if (wmode !== 'pass') {
+        if (wmode === 'click' && !this.$p.meta.activated) {
+          return;
+        }
+        event.originalEvent.preventDefault();
+        event.preventDefault();
+      }
+      event.deltaX = event.deltaX || utils/* default */.A.get_deltaX(event);
+      event.deltaY = event.deltaY || utils/* default */.A.get_deltaY(event);
+      if (Math.abs(event.deltaX) > 0) {
+        this.grid.trackpad = true;
+        if (Math.abs(event.deltaX) >= Math.abs(event.deltaY)) {
+          delta *= 0.1;
+        }
+        this.trackpad_scroll(event);
+      }
+      if (this.grid.trackpad) delta *= 0.032;
+      delta = utils/* default */.A.smart_wheel(delta);
+      if (delta < 0 && this.data.length <= this.grid.MIN_ZOOM) return;
+      if (delta > 0 && this.data.length > this.grid.MAX_ZOOM) return;
+      var k = this.interval / 1000;
+      var diff = delta * k * this.data.length;
+      var tl = this.comp.config.ZOOM_MODE === 'tl';
+      if (event.originalEvent.ctrlKey || tl) {
+        var offset = event.originalEvent.offsetX;
+        var diff1 = offset / (this.canvas.width - 1) * diff;
+        var diff2 = diff - diff1;
+        this.range[0] -= diff1;
+        this.range[1] += diff2;
+      } else {
+        this.range[0] -= diff;
+      }
+      if (tl) {
+        var _offset = event.originalEvent.offsetY;
+        var _diff = _offset / (this.canvas.height - 1) * 2;
+        var _diff2 = 2 - _diff;
+        var z = diff / (this.range[1] - this.range[0]);
+        this.comp.$emit('rezoom-range', {
+          grid_id: this.id,
+          z: z,
+          diff1: _diff,
+          diff2: _diff2
+        });
+      }
+      this.grid.change_range();
+    }
+  }, {
+    key: "pinchzoom",
+    value: function pinchzoom(scale) {
+      var pinch = this.grid.pinch;
+      if (!pinch) return;
+      if (scale > 1 && this.data.length <= this.grid.MIN_ZOOM) return;
+      if (scale < 1 && this.data.length > this.grid.MAX_ZOOM) return;
+      var t = pinch.t;
+      var nt = t * 1 / scale;
+      this.range[0] = pinch.r[0] - (nt - t) * 0.5;
+      this.range[1] = pinch.r[1] + (nt - t) * 0.5;
+      this.grid.change_range();
+    }
+  }, {
+    key: "trackpad_scroll",
+    value: function trackpad_scroll(event) {
+      var dt = this.range[1] - this.range[0];
+      this.range[0] += event.deltaX * dt * 0.011;
+      this.range[1] += event.deltaX * dt * 0.011;
+      this.grid.change_range();
+    }
+  }]);
+}();
+
 ;// ./src/stuff/frame.js
 
 
@@ -7002,15 +7244,15 @@ var FrameAnimation = /*#__PURE__*/function () {
   function FrameAnimation(cb) {
     var _this = this;
     classCallCheck_classCallCheck(this, FrameAnimation);
-    this.t0 = this.t = utils.now();
+    this.t0 = this.t = utils/* default */.A.now();
     this.id = setInterval(function () {
       // The prev frame took too long
-      if (utils.now() - _this.t > 100) return;
-      if (utils.now() - _this.t0 > 1200) {
+      if (utils/* default */.A.now() - _this.t > 100) return;
+      if (utils/* default */.A.now() - _this.t0 > 1200) {
         _this.stop();
       }
       if (_this.id) cb(_this);
-      _this.t = utils.now();
+      _this.t = utils/* default */.A.now();
     }, 16);
   }
   return createClass_createClass(FrameAnimation, [{
@@ -7022,36 +7264,350 @@ var FrameAnimation = /*#__PURE__*/function () {
   }]);
 }();
 
-// EXTERNAL MODULE: ./node_modules/hammerjs/hammer.js
-var hammer = __webpack_require__(168);
-// EXTERNAL MODULE: ./node_modules/hamsterjs/hamster.js
-var hamster = __webpack_require__(240);
-var hamster_default = /*#__PURE__*/__webpack_require__.n(hamster);
+// EXTERNAL MODULE: ./src/stuff/math.js
+var math = __webpack_require__(288);
+;// ./src/components/js/grid/pan-manager.js
+
+
+// Pan/drag handling with momentum animation
+
+
+
+
+var PanManager = /*#__PURE__*/function () {
+  function PanManager(grid) {
+    classCallCheck_classCallCheck(this, PanManager);
+    this.grid = grid;
+    this.fade = null;
+  }
+  return createClass_createClass(PanManager, [{
+    key: "range",
+    get: function get() {
+      return this.grid.range;
+    }
+  }, {
+    key: "layout",
+    get: function get() {
+      return this.grid.layout;
+    }
+  }, {
+    key: "comp",
+    get: function get() {
+      return this.grid.comp;
+    }
+  }, {
+    key: "$p",
+    get: function get() {
+      return this.grid.$p;
+    }
+  }, {
+    key: "id",
+    get: function get() {
+      return this.grid.id;
+    }
+  }, {
+    key: "mousedrag",
+    value: function mousedrag(x, y) {
+      var drug = this.grid.drug;
+      if (!drug) return;
+      var dt = drug.t * (drug.x - x) / this.layout.width;
+      var d$ = this.layout.$_hi - this.layout.$_lo;
+      d$ *= (drug.y - y) / this.layout.height;
+      var offset = drug.o + d$;
+      var ls = this.layout.grid.logScale;
+      if (ls && drug.y_r) {
+        var dy = drug.y - y;
+        var range = drug.y_r.slice();
+        range[0] = math/* default */.A.exp((0 - drug.B + dy) / this.layout.A);
+        range[1] = math/* default */.A.exp((this.layout.height - drug.B + dy) / this.layout.A);
+      }
+      if (drug.y_r && this.$p.y_transform && !this.$p.y_transform.auto) {
+        this.comp.$emit('sidebar-transform', {
+          grid_id: this.id,
+          range: ls ? range || drug.y_r : [drug.y_r[0] - offset, drug.y_r[1] - offset]
+        });
+      }
+      this.range[0] = drug.r[0] + dt;
+      this.range[1] = drug.r[1] + dt;
+      this.grid.change_range();
+    }
+  }, {
+    key: "pan_fade",
+    value: function pan_fade(event) {
+      var _this = this;
+      var drug = this.grid.drug;
+      if (!drug) return;
+      var dt = utils/* default */.A.now() - drug.t0;
+      var dx = this.range[1] - drug.r[1];
+      var v = 42 * dx / dt;
+      var v0 = Math.abs(v * 0.01);
+      if (dt > 500) return;
+      if (this.fade) this.fade.stop();
+      this.fade = new FrameAnimation(function (self) {
+        v *= 0.85;
+        if (Math.abs(v) < v0) {
+          self.stop();
+        }
+        _this.range[0] += v;
+        _this.range[1] += v;
+        _this.grid.change_range();
+      });
+    }
+  }, {
+    key: "stopFade",
+    value: function stopFade() {
+      if (this.fade) this.fade.stop();
+    }
+  }]);
+}();
+
+// EXTERNAL MODULE: ./node_modules/@babel/runtime/helpers/esm/slicedToArray.js + 3 modules
+var slicedToArray = __webpack_require__(296);
+;// ./src/components/js/grid/grid-renderer.js
+
+
+
+
+function grid_renderer_createForOfIteratorHelper(r, e) { var t = "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (!t) { if (Array.isArray(r) || (t = grid_renderer_unsupportedIterableToArray(r)) || e && r && "number" == typeof r.length) { t && (r = t); var _n = 0, F = function F() {}; return { s: F, n: function n() { return _n >= r.length ? { done: !0 } : { done: !1, value: r[_n++] }; }, e: function e(r) { throw r; }, f: F }; } throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); } var o, a = !0, u = !1; return { s: function s() { t = t.call(r); }, n: function n() { var r = t.next(); return a = r.done, r; }, e: function e(r) { u = !0, o = r; }, f: function f() { try { a || null == t["return"] || t["return"](); } finally { if (u) throw o; } } }; }
+function grid_renderer_unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return grid_renderer_arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? grid_renderer_arrayLikeToArray(r, a) : void 0; } }
+function grid_renderer_arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
+// Grid rendering: canvas drawing, overlay management
+var GridRenderer = /*#__PURE__*/function () {
+  function GridRenderer(grid) {
+    classCallCheck_classCallCheck(this, GridRenderer);
+    this.grid = grid;
+    this.overlays = [];
+    this.crosshair = null;
+  }
+  return createClass_createClass(GridRenderer, [{
+    key: "ctx",
+    get: function get() {
+      return this.grid.ctx;
+    }
+  }, {
+    key: "layout",
+    get: function get() {
+      return this.grid.layout;
+    }
+  }, {
+    key: "$p",
+    get: function get() {
+      return this.grid.$p;
+    }
+  }, {
+    key: "data",
+    get: function get() {
+      return this.grid.data;
+    }
+  }, {
+    key: "range",
+    get: function get() {
+      return this.grid.range;
+    }
+  }, {
+    key: "interval",
+    get: function get() {
+      return this.grid.interval;
+    }
+  }, {
+    key: "cursor",
+    get: function get() {
+      return this.grid.cursor;
+    }
+  }, {
+    key: "id",
+    get: function get() {
+      return this.grid.id;
+    }
+  }, {
+    key: "new_layer",
+    value: function new_layer(layer) {
+      if (layer.name === 'crosshair') {
+        this.crosshair = layer;
+      } else {
+        this.overlays.push(layer);
+      }
+      this.update();
+    }
+  }, {
+    key: "del_layer",
+    value: function del_layer(id) {
+      this.overlays = this.overlays.filter(function (x) {
+        return x.id !== id;
+      });
+      this.update();
+    }
+  }, {
+    key: "show_hide_layer",
+    value: function show_hide_layer(event) {
+      var l = this.overlays.filter(function (x) {
+        return x.id === event.id;
+      });
+      if (l.length) l[0].display = event.display;
+    }
+  }, {
+    key: "update",
+    value: function update() {
+      var _this = this;
+      var comp = this.grid.comp;
+      var layout = comp.layoutOverride || this.$p.layout.grids[this.id];
+      this.grid.layout = layout;
+      this.grid.interval = this.$p.interval;
+      if (!layout) return;
+      this.ctx.clearRect(0, 0, this.grid.canvas.width, this.grid.canvas.height);
+      if (this.$p.shaders.length) this.apply_shaders();
+      this.drawGrid();
+
+      // Sort overlays by z-index and render
+      var overlays = (0,toConsumableArray/* default */.A)(this.overlays);
+      overlays.sort(function (l1, l2) {
+        return l1.z - l2.z;
+      });
+      overlays.forEach(function (l) {
+        if (!l.display) return;
+        _this.ctx.save();
+        var r = l.renderer;
+        if (r.pre_draw) r.pre_draw(_this.ctx);
+        r.draw(_this.ctx);
+        if (r.post_draw) r.post_draw(_this.ctx);
+        _this.ctx.restore();
+      });
+      if (this.crosshair) {
+        this.crosshair.renderer.draw(this.ctx);
+      }
+    }
+  }, {
+    key: "apply_shaders",
+    value: function apply_shaders() {
+      var layout = this.$p.layout.grids[this.id];
+      var props = {
+        layout: layout,
+        range: this.range,
+        interval: this.interval,
+        tf: layout.ti_map.tf,
+        cursor: this.cursor,
+        colors: this.$p.colors,
+        sub: this.data,
+        font: this.$p.font,
+        config: this.$p.config,
+        meta: this.$p.meta
+      };
+      var _iterator = grid_renderer_createForOfIteratorHelper(this.$p.shaders),
+        _step;
+      try {
+        for (_iterator.s(); !(_step = _iterator.n()).done;) {
+          var s = _step.value;
+          this.ctx.save();
+          s.draw(this.ctx, props);
+          this.ctx.restore();
+        }
+      } catch (err) {
+        _iterator.e(err);
+      } finally {
+        _iterator.f();
+      }
+    }
+  }, {
+    key: "drawGrid",
+    value: function drawGrid() {
+      this.ctx.strokeStyle = this.$p.colors.grid;
+      this.ctx.beginPath();
+      var ymax = this.layout.height;
+      var _iterator2 = grid_renderer_createForOfIteratorHelper(this.layout.xs),
+        _step2;
+      try {
+        for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
+          var _step2$value = (0,slicedToArray/* default */.A)(_step2.value, 2),
+            x = _step2$value[0],
+            p = _step2$value[1];
+          this.ctx.moveTo(x - 0.5, 0);
+          this.ctx.lineTo(x - 0.5, ymax);
+        }
+      } catch (err) {
+        _iterator2.e(err);
+      } finally {
+        _iterator2.f();
+      }
+      var _iterator3 = grid_renderer_createForOfIteratorHelper(this.layout.ys),
+        _step3;
+      try {
+        for (_iterator3.s(); !(_step3 = _iterator3.n()).done;) {
+          var _step3$value = (0,slicedToArray/* default */.A)(_step3.value, 2),
+            y = _step3$value[0],
+            y$ = _step3$value[1];
+          this.ctx.moveTo(0, y - 0.5);
+          this.ctx.lineTo(this.layout.width, y - 0.5);
+        }
+      } catch (err) {
+        _iterator3.e(err);
+      } finally {
+        _iterator3.f();
+      }
+      this.ctx.stroke();
+      if (this.$p.grid_id) this.drawUpperBorder();
+    }
+  }, {
+    key: "drawUpperBorder",
+    value: function drawUpperBorder() {
+      this.ctx.strokeStyle = this.$p.colors.scale;
+      this.ctx.beginPath();
+      this.ctx.moveTo(0, 0.5);
+      this.ctx.lineTo(this.layout.width, 0.5);
+      this.ctx.stroke();
+    }
+
+    // Propagate mouse event to overlays
+  }, {
+    key: "propagate",
+    value: function propagate(name, event) {
+      var _iterator4 = grid_renderer_createForOfIteratorHelper(this.overlays),
+        _step4;
+      try {
+        for (_iterator4.s(); !(_step4 = _iterator4.n()).done;) {
+          var layer = _step4.value;
+          if (layer.renderer[name]) {
+            layer.renderer[name](event);
+          }
+          var mouse = layer.renderer.mouse;
+          var keys = layer.renderer.keys;
+          if (mouse.listeners) {
+            mouse.emit(name, event);
+          }
+          if (keys && keys.listeners) {
+            keys.emit(name, event);
+          }
+        }
+      } catch (err) {
+        _iterator4.e(err);
+      } finally {
+        _iterator4.f();
+      }
+    }
+  }]);
+}();
+
+;// ./src/components/js/grid/index.js
+// Grid modules index
+
+
+
+
 ;// ./src/components/js/grid.js
 
 
-
-
-function grid_createForOfIteratorHelper(r, e) { var t = "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (!t) { if (Array.isArray(r) || (t = grid_unsupportedIterableToArray(r)) || e && r && "number" == typeof r.length) { t && (r = t); var _n = 0, F = function F() {}; return { s: F, n: function n() { return _n >= r.length ? { done: !0 } : { done: !1, value: r[_n++] }; }, e: function e(r) { throw r; }, f: F }; } throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); } var o, a = !0, u = !1; return { s: function s() { t = t.call(r); }, n: function n() { var r = t.next(); return a = r.done, r; }, e: function e(r) { u = !0, o = r; }, f: function f() { try { a || null == t["return"] || t["return"](); } finally { if (u) throw o; } } }; }
-function grid_unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return grid_arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? grid_arrayLikeToArray(r, a) : void 0; } }
-function grid_arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
-// Grid.js listens to various user-generated events,
-// emits Vue-events if something has changed (e.g. range)
-// Think of it as an I/O system for Grid.vue
+// Grid.js - I/O system for Grid.vue
+// Orchestrates zoom, pan, and rendering modules
 
 
 
 
 
-
-
-// Grid is good.
 var Grid = /*#__PURE__*/function () {
   function Grid(canvas, comp) {
     classCallCheck_classCallCheck(this, Grid);
     this.MIN_ZOOM = comp.config.MIN_ZOOM;
     this.MAX_ZOOM = comp.config.MAX_ZOOM;
-    if (utils.is_mobile) this.MIN_ZOOM *= 0.5;
+    if (utils/* default */.A.is_mobile) this.MIN_ZOOM *= 0.5;
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.comp = comp;
@@ -7064,21 +7620,36 @@ var Grid = /*#__PURE__*/function () {
     this.cursor = comp.$props.cursor;
     this.offset_x = 0;
     this.offset_y = 0;
-    this.deltas = 0; // Wheel delta events
+    this.deltas = 0;
     this.wmode = this.$p.config.SCROLL_WHEEL;
+    this.trackpad = false;
+
+    // Initialize modules
+    this.zoomManager = new ZoomManager(this);
+    this.panManager = new PanManager(this);
+    this.renderer = new GridRenderer(this);
     this.listeners();
-    this.overlays = [];
   }
+
+  // Delegate to renderer
   return createClass_createClass(Grid, [{
+    key: "overlays",
+    get: function get() {
+      return this.renderer.overlays;
+    },
+    set: function set(v) {
+      this.renderer.overlays = v;
+    }
+  }, {
     key: "listeners",
     value: function listeners() {
       var _this = this;
       this.hm = hamster_default()(this.canvas);
       this.hm.wheel(function (event, delta) {
-        return _this.mousezoom(-delta * 50, event);
+        return _this.zoomManager.mousezoom(-delta * 50, event);
       });
       var mc = this.mc = new hammer.Manager(this.canvas);
-      var T = utils.is_mobile ? 10 : 0;
+      var T = utils/* default */.A.is_mobile ? 10 : 0;
       mc.add(new hammer.Pan({
         threshold: T
       }));
@@ -7089,7 +7660,7 @@ var Grid = /*#__PURE__*/function () {
       mc.get('pinch').set({
         enable: true
       });
-      if (utils.is_mobile) mc.add(new hammer.Press());
+      if (utils/* default */.A.is_mobile) mc.add(new hammer.Press());
       mc.on('panstart', function (event) {
         if (_this.cursor.scroll_lock) return;
         if (_this.cursor.mode === 'aim') {
@@ -7104,7 +7675,7 @@ var Grid = /*#__PURE__*/function () {
           o: tfrm ? tfrm.offset || 0 : 0,
           y_r: tfrm && tfrm.range ? tfrm.range.slice() : undefined,
           B: _this.layout.B,
-          t0: utils.now()
+          t0: utils/* default */.A.now()
         };
         _this.comp.$emit('cursor-changed', {
           grid_id: _this.id,
@@ -7114,12 +7685,12 @@ var Grid = /*#__PURE__*/function () {
         _this.comp.$emit('cursor-locked', true);
       });
       mc.on('panmove', function (event) {
-        if (utils.is_mobile) {
+        if (utils/* default */.A.is_mobile) {
           _this.calc_offset();
-          _this.propagate('mousemove', _this.touch2mouse(event));
+          _this.renderer.propagate('mousemove', _this.touch2mouse(event));
         }
         if (_this.drug) {
-          _this.mousedrag(_this.drug.x + event.deltaX, _this.drug.y + event.deltaY);
+          _this.panManager.mousedrag(_this.drug.x + event.deltaX, _this.drug.y + event.deltaY);
           _this.comp.$emit('cursor-changed', {
             grid_id: _this.id,
             x: event.center.x + _this.offset_x,
@@ -7130,21 +7701,18 @@ var Grid = /*#__PURE__*/function () {
         }
       });
       mc.on('panend', function (event) {
-        if (utils.is_mobile && _this.drug) {
-          _this.pan_fade(event);
+        if (utils/* default */.A.is_mobile && _this.drug) {
+          _this.panManager.pan_fade(event);
         }
         _this.drug = null;
         _this.comp.$emit('cursor-locked', false);
       });
       mc.on('tap', function (event) {
-        if (!utils.is_mobile) return;
+        if (!utils/* default */.A.is_mobile) return;
         _this.sim_mousedown(event);
-        if (_this.fade) _this.fade.stop();
+        _this.panManager.stopFade();
         _this.comp.$emit('cursor-changed', {});
         _this.comp.$emit('cursor-changed', {
-          /*grid_id: this.id,
-          x: undefined,//event.center.x + this.offset_x,
-          y: undefined,//event.center.y + this.offset_y,*/
           mode: 'explore'
         });
         _this.update();
@@ -7160,11 +7728,11 @@ var Grid = /*#__PURE__*/function () {
         _this.pinch = null;
       });
       mc.on('pinch', function (event) {
-        if (_this.pinch) _this.pinchzoom(event.scale);
+        if (_this.pinch) _this.zoomManager.pinchzoom(event.scale);
       });
       mc.on('press', function (event) {
-        if (!utils.is_mobile) return;
-        if (_this.fade) _this.fade.stop();
+        if (!utils/* default */.A.is_mobile) return;
+        _this.panManager.stopFade();
         _this.calc_offset();
         _this.emit_cursor_coord(event, {
           mode: 'aim'
@@ -7197,34 +7765,34 @@ var Grid = /*#__PURE__*/function () {
   }, {
     key: "mousemove",
     value: function mousemove(event) {
-      if (utils.is_mobile) return;
+      if (utils/* default */.A.is_mobile) return;
       this.comp.$emit('cursor-changed', {
         grid_id: this.id,
         x: event.layerX,
         y: event.layerY + this.layout.offset
       });
       this.calc_offset();
-      this.propagate('mousemove', event);
+      this.renderer.propagate('mousemove', event);
     }
   }, {
     key: "mouseout",
     value: function mouseout(event) {
-      if (utils.is_mobile) return;
+      if (utils/* default */.A.is_mobile) return;
       this.comp.$emit('cursor-changed', {});
-      this.propagate('mouseout', event);
+      this.renderer.propagate('mouseout', event);
     }
   }, {
     key: "mouseup",
     value: function mouseup(event) {
       this.drug = null;
       this.comp.$emit('cursor-locked', false);
-      this.propagate('mouseup', event);
+      this.renderer.propagate('mouseup', event);
     }
   }, {
     key: "mousedown",
     value: function mousedown(event) {
-      if (utils.is_mobile) return;
-      this.propagate('mousedown', event);
+      if (utils/* default */.A.is_mobile) return;
+      this.renderer.propagate('mousedown', event);
       this.comp.$emit('cursor-locked', true);
       if (event.defaultPrevented) return;
       this.comp.$emit('custom-event', {
@@ -7232,8 +7800,6 @@ var Grid = /*#__PURE__*/function () {
         args: [this.id, event]
       });
     }
-
-    // Simulated mousedown (for mobile)
   }, {
     key: "sim_mousedown",
     value: function sim_mousedown(event) {
@@ -7243,15 +7809,13 @@ var Grid = /*#__PURE__*/function () {
         event: 'grid-mousedown',
         args: [this.id, event]
       });
-      this.propagate('mousemove', this.touch2mouse(event));
+      this.renderer.propagate('mousemove', this.touch2mouse(event));
       this.update();
-      this.propagate('mousedown', this.touch2mouse(event));
+      this.renderer.propagate('mousedown', this.touch2mouse(event));
       setTimeout(function () {
-        _this2.propagate('click', _this2.touch2mouse(event));
+        _this2.renderer.propagate('click', _this2.touch2mouse(event));
       });
     }
-
-    // Convert touch to "mouse" event
   }, {
     key: "touch2mouse",
     value: function touch2mouse(e) {
@@ -7268,7 +7832,7 @@ var Grid = /*#__PURE__*/function () {
   }, {
     key: "click",
     value: function click(event) {
-      this.propagate('click', event);
+      this.renderer.propagate('click', event);
     }
   }, {
     key: "emit_cursor_coord",
@@ -7283,323 +7847,49 @@ var Grid = /*#__PURE__*/function () {
       }, add));
     }
   }, {
-    key: "pan_fade",
-    value: function pan_fade(event) {
-      var _this3 = this;
-      var dt = utils.now() - this.drug.t0;
-      var dx = this.range[1] - this.drug.r[1];
-      var v = 42 * dx / dt;
-      var v0 = Math.abs(v * 0.01);
-      if (dt > 500) return;
-      if (this.fade) this.fade.stop();
-      this.fade = new FrameAnimation(function (self) {
-        v *= 0.85;
-        if (Math.abs(v) < v0) {
-          self.stop();
-        }
-        _this3.range[0] += v;
-        _this3.range[1] += v;
-        _this3.change_range();
-      });
-    }
-  }, {
     key: "calc_offset",
     value: function calc_offset() {
       var rect = this.canvas.getBoundingClientRect();
       this.offset_x = -rect.x;
       this.offset_y = -rect.y;
     }
+
+    // Delegate layer management to renderer
   }, {
     key: "new_layer",
     value: function new_layer(layer) {
-      if (layer.name === 'crosshair') {
-        this.crosshair = layer;
-      } else {
-        this.overlays.push(layer);
-      }
-      this.update();
+      this.renderer.new_layer(layer);
     }
   }, {
     key: "del_layer",
     value: function del_layer(id) {
-      this.overlays = this.overlays.filter(function (x) {
-        return x.id !== id;
-      });
-      this.update();
+      this.renderer.del_layer(id);
     }
   }, {
     key: "show_hide_layer",
     value: function show_hide_layer(event) {
-      var l = this.overlays.filter(function (x) {
-        return x.id === event.id;
-      });
-      if (l.length) l[0].display = event.display;
+      this.renderer.show_hide_layer(event);
     }
   }, {
     key: "update",
     value: function update() {
-      var _this4 = this;
-      // Update reference to the grid
-      // TODO: check what happens if data changes interval
-      // Use layoutOverride if available (for resize operations)
-      this.layout = this.comp.layoutOverride || this.$p.layout.grids[this.id];
-      this.interval = this.$p.interval;
-      if (!this.layout) return;
-      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-      if (this.$p.shaders.length) this.apply_shaders();
-      this.grid();
-      var overlays = [];
-      overlays.push.apply(overlays, _toConsumableArray(this.overlays));
-
-      // z-index sorting
-      overlays.sort(function (l1, l2) {
-        return l1.z - l2.z;
-      });
-      overlays.forEach(function (l) {
-        if (!l.display) return;
-        _this4.ctx.save();
-        var r = l.renderer;
-        if (r.pre_draw) r.pre_draw(_this4.ctx);
-        r.draw(_this4.ctx);
-        if (r.post_draw) r.post_draw(_this4.ctx);
-        _this4.ctx.restore();
-      });
-      if (this.crosshair) {
-        this.crosshair.renderer.draw(this.ctx);
-      }
+      this.renderer.update();
     }
   }, {
-    key: "apply_shaders",
-    value: function apply_shaders() {
-      var layout = this.$p.layout.grids[this.id];
-      var props = {
-        layout: layout,
-        range: this.range,
-        interval: this.interval,
-        tf: layout.ti_map.tf,
-        cursor: this.cursor,
-        colors: this.$p.colors,
-        sub: this.data,
-        font: this.$p.font,
-        config: this.$p.config,
-        meta: this.$p.meta
-      };
-      var _iterator = grid_createForOfIteratorHelper(this.$p.shaders),
-        _step;
-      try {
-        for (_iterator.s(); !(_step = _iterator.n()).done;) {
-          var s = _step.value;
-          this.ctx.save();
-          s.draw(this.ctx, props);
-          this.ctx.restore();
-        }
-      } catch (err) {
-        _iterator.e(err);
-      } finally {
-        _iterator.f();
-      }
-    }
-
-    // Actually draws the grid (for real)
-  }, {
-    key: "grid",
-    value: function grid() {
-      this.ctx.strokeStyle = this.$p.colors.grid;
-      this.ctx.beginPath();
-      var ymax = this.layout.height;
-      var _iterator2 = grid_createForOfIteratorHelper(this.layout.xs),
-        _step2;
-      try {
-        for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
-          var _step2$value = _slicedToArray(_step2.value, 2),
-            x = _step2$value[0],
-            p = _step2$value[1];
-          this.ctx.moveTo(x - 0.5, 0);
-          this.ctx.lineTo(x - 0.5, ymax);
-        }
-      } catch (err) {
-        _iterator2.e(err);
-      } finally {
-        _iterator2.f();
-      }
-      var _iterator3 = grid_createForOfIteratorHelper(this.layout.ys),
-        _step3;
-      try {
-        for (_iterator3.s(); !(_step3 = _iterator3.n()).done;) {
-          var _step3$value = _slicedToArray(_step3.value, 2),
-            y = _step3$value[0],
-            y$ = _step3$value[1];
-          this.ctx.moveTo(0, y - 0.5);
-          this.ctx.lineTo(this.layout.width, y - 0.5);
-        }
-      } catch (err) {
-        _iterator3.e(err);
-      } finally {
-        _iterator3.f();
-      }
-      this.ctx.stroke();
-      if (this.$p.grid_id) this.upper_border();
-    }
-  }, {
-    key: "upper_border",
-    value: function upper_border() {
-      this.ctx.strokeStyle = this.$p.colors.scale;
-      this.ctx.beginPath();
-      this.ctx.moveTo(0, 0.5);
-      this.ctx.lineTo(this.layout.width, 0.5);
-      this.ctx.stroke();
-    }
-  }, {
-    key: "mousezoom",
-    value: function mousezoom(delta, event) {
-      // TODO: for mobile
-      if (this.wmode !== 'pass') {
-        if (this.wmode === 'click' && !this.$p.meta.activated) {
-          return;
-        }
-        event.originalEvent.preventDefault();
-        event.preventDefault();
-      }
-      event.deltaX = event.deltaX || utils.get_deltaX(event);
-      event.deltaY = event.deltaY || utils.get_deltaY(event);
-      if (Math.abs(event.deltaX) > 0) {
-        this.trackpad = true;
-        if (Math.abs(event.deltaX) >= Math.abs(event.deltaY)) {
-          delta *= 0.1;
-        }
-        this.trackpad_scroll(event);
-      }
-      if (this.trackpad) delta *= 0.032;
-      delta = utils.smart_wheel(delta);
-
-      // TODO: mouse zooming is a little jerky,
-      // needs to follow f(mouse_wheel_speed) and
-      // if speed is low, scroll shoud be slower
-      if (delta < 0 && this.data.length <= this.MIN_ZOOM) return;
-      if (delta > 0 && this.data.length > this.MAX_ZOOM) return;
-      var k = this.interval / 1000;
-      var diff = delta * k * this.data.length;
-      var tl = this.comp.config.ZOOM_MODE === 'tl';
-      if (event.originalEvent.ctrlKey || tl) {
-        var offset = event.originalEvent.offsetX;
-        var diff1 = offset / (this.canvas.width - 1) * diff;
-        var diff2 = diff - diff1;
-        this.range[0] -= diff1;
-        this.range[1] += diff2;
-      } else {
-        this.range[0] -= diff;
-      }
-      if (tl) {
-        var _offset = event.originalEvent.offsetY;
-        var _diff = _offset / (this.canvas.height - 1) * 2;
-        var _diff2 = 2 - _diff;
-        var z = diff / (this.range[1] - this.range[0]);
-        //rezoom_range(z, diff_x, diff_y)
-        this.comp.$emit('rezoom-range', {
-          grid_id: this.id,
-          z: z,
-          diff1: _diff,
-          diff2: _diff2
-        });
-      }
-      this.change_range();
-    }
-  }, {
-    key: "mousedrag",
-    value: function mousedrag(x, y) {
-      var dt = this.drug.t * (this.drug.x - x) / this.layout.width;
-      var d$ = this.layout.$_hi - this.layout.$_lo;
-      d$ *= (this.drug.y - y) / this.layout.height;
-      var offset = this.drug.o + d$;
-      var ls = this.layout.grid.logScale;
-      if (ls && this.drug.y_r) {
-        var dy = this.drug.y - y;
-        var range = this.drug.y_r.slice();
-        range[0] = math.exp((0 - this.drug.B + dy) / this.layout.A);
-        range[1] = math.exp((this.layout.height - this.drug.B + dy) / this.layout.A);
-      }
-      if (this.drug.y_r && this.$p.y_transform && !this.$p.y_transform.auto) {
-        this.comp.$emit('sidebar-transform', {
-          grid_id: this.id,
-          range: ls ? range || this.drug.y_r : [this.drug.y_r[0] - offset, this.drug.y_r[1] - offset]
-        });
-      }
-      this.range[0] = this.drug.r[0] + dt;
-      this.range[1] = this.drug.r[1] + dt;
-      this.change_range();
-    }
-  }, {
-    key: "pinchzoom",
-    value: function pinchzoom(scale) {
-      if (scale > 1 && this.data.length <= this.MIN_ZOOM) return;
-      if (scale < 1 && this.data.length > this.MAX_ZOOM) return;
-      var t = this.pinch.t;
-      var nt = t * 1 / scale;
-      this.range[0] = this.pinch.r[0] - (nt - t) * 0.5;
-      this.range[1] = this.pinch.r[1] + (nt - t) * 0.5;
-      this.change_range();
-    }
-  }, {
-    key: "trackpad_scroll",
-    value: function trackpad_scroll(event) {
-      var dt = this.range[1] - this.range[0];
-      this.range[0] += event.deltaX * dt * 0.011;
-      this.range[1] += event.deltaX * dt * 0.011;
-      this.change_range();
+    key: "propagate",
+    value: function propagate(name, event) {
+      this.renderer.propagate(name, event);
     }
   }, {
     key: "change_range",
     value: function change_range() {
-      // TODO: better way to limit the view. Problem:
-      // when you are at the dead end of the data,
-      // and keep scrolling,
-      // the chart continues to scale down a little.
-      // Solution: I don't know yet
-
       if (!this.range.length || this.data.length < 2) return;
       var l = this.data.length - 1;
       var data = this.data;
       var range = this.range;
-      range[0] = utils.clamp(range[0], -Infinity, data[l][0] - this.interval * 5.5);
-      range[1] = utils.clamp(range[1], data[0][0] + this.interval * 5.5, Infinity);
-
-      // TODO: IMPORTANT scrolling is jerky The Problem caused
-      // by the long round trip of 'range-changed' event.
-      // First it propagates up to update layout in Chart.vue,
-      // then it moves back as watch() update. It takes 1-5 ms.
-      // And because the delay is different each time we see
-      // the lag. No smooth movement and it's annoying.
-      // Solution: we could try to calc the layout immediatly
-      // somewhere here. Still will hurt the sidebar & bottombar
+      range[0] = utils/* default */.A.clamp(range[0], -Infinity, data[l][0] - this.interval * 5.5);
+      range[1] = utils/* default */.A.clamp(range[1], data[0][0] + this.interval * 5.5, Infinity);
       this.comp.$emit('range-changed', range);
-    }
-
-    // Propagate mouse event to overlays
-  }, {
-    key: "propagate",
-    value: function propagate(name, event) {
-      var _iterator4 = grid_createForOfIteratorHelper(this.overlays),
-        _step4;
-      try {
-        for (_iterator4.s(); !(_step4 = _iterator4.n()).done;) {
-          var layer = _step4.value;
-          if (layer.renderer[name]) {
-            layer.renderer[name](event);
-          }
-          var mouse = layer.renderer.mouse;
-          var keys = layer.renderer.keys;
-          if (mouse.listeners) {
-            mouse.emit(name, event);
-          }
-          if (keys && keys.listeners) {
-            keys.emit(name, event);
-          }
-        }
-      } catch (err) {
-        _iterator4.e(err);
-      } finally {
-        _iterator4.f();
-      }
     }
   }, {
     key: "destroy",
@@ -7647,7 +7937,7 @@ var Grid = /*#__PURE__*/function () {
           ctx.measureTextOrg = ctx.measureText;
         }
         ctx.measureText = function (text) {
-          return utils.measureText(ctx, text, _this.$props.tv_id);
+          return utils/* default */.A.measureText(ctx, text, _this.$props.tv_id);
         };
       });
     },
@@ -8279,7 +8569,7 @@ UxWrappervue_type_template_id_26d7be98_render._withStripped = true;
     },
     background: function background() {
       var c = this.uxr.background || this.$props.colors.back;
-      return utils.apply_opacity(c, this.uxr.background_opacity || this.$props.config.UX_OPACITY);
+      return utils/* default */.A.apply_opacity(c, this.uxr.background_opacity || this.$props.config.UX_OPACITY);
     },
     inactive_btn_color: function inactive_btn_color() {
       return this.uxr.inactive_btn_color || this.$props.colors.grid;
@@ -8593,62 +8883,44 @@ var Mouse = /*#__PURE__*/function () {
     return h();
   }
 });
-;// ./node_modules/babel-loader/lib/index.js!./node_modules/vue-loader/lib/index.js??vue-loader-options!./src/components/overlays/Spline.vue?vue&type=script&lang=js
-// Spline renderer. (SMAs, EMAs, TEMAs...
-// you know what I mean)
-// TODO: make a real spline, not a bunch of lines...
+;// ./src/mixins/canvas-drawing.js
+function canvas_drawing_createForOfIteratorHelper(r, e) { var t = "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (!t) { if (Array.isArray(r) || (t = canvas_drawing_unsupportedIterableToArray(r)) || e && r && "number" == typeof r.length) { t && (r = t); var _n2 = 0, F = function F() {}; return { s: F, n: function n() { return _n2 >= r.length ? { done: !0 } : { done: !1, value: r[_n2++] }; }, e: function e(r) { throw r; }, f: F }; } throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); } var o, a = !0, u = !1; return { s: function s() { t = t.call(r); }, n: function n() { var r = t.next(); return a = r.done, r; }, e: function e(r) { u = !0, o = r; }, f: function f() { try { a || null == t["return"] || t["return"](); } finally { if (u) throw o; } } }; }
+function canvas_drawing_unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return canvas_drawing_arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? canvas_drawing_arrayLikeToArray(r, a) : void 0; } }
+function canvas_drawing_arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
+// Canvas drawing utilities for overlay components
+// Consolidates repeated drawing patterns across overlays
 
-// Adds all necessary stuff for you.
-
-/* harmony default export */ const Splinevue_type_script_lang_js = ({
-  name: 'Spline',
-  mixins: [overlay],
+/* harmony default export */ const canvas_drawing = ({
   methods: {
-    meta_info: function meta_info() {
-      return {
-        author: 'C451',
-        version: '1.1.2'
-      };
-    },
-    // Here goes your code. You are provided with:
-    // { All stuff is reactive }
-    // $props.layout -> positions of all chart elements +
-    //  some helper functions (see layout_fn.js)
-    // $props.interval -> candlestick time interval
-    // $props.sub -> current subset of candlestick data
-    // $props.data -> your indicator's data subset.
-    //  Comes "as is", should have the following format:
-    //  [[<timestamp>, ... ], ... ]
-    // $props.colors -> colors (see TradingVue.vue)
-    // $props.cursor -> current position of crosshair
-    // $props.settings -> indicator's custom settings
-    //  E.g. colors, line thickness, etc. You define it.
-    // $props.num -> indicator's layer number (of All
-    // layers in the current grid)
-    // $props.id -> indicator's id (e.g. EMA_0)
-    // ~
-    // Finally, let's make the canvas dirty!
-    draw: function draw(ctx) {
-      ctx.lineWidth = this.line_width;
-      ctx.strokeStyle = this.color;
-      ctx.beginPath();
+    /**
+     * Draw a data line with coordinate transformation and optional NaN skipping
+     * @param {CanvasRenderingContext2D} ctx - Canvas context
+     * @param {Array} data - Data array [[timestamp, value, ...], ...]
+     * @param {number} index - Data index to use for Y values (default: 1)
+     * @param {boolean} skipNaN - Whether to skip NaN/null values (default: true)
+     */
+    drawDataLine: function drawDataLine(ctx, data, index, skipNaN) {
+      if (index === void 0) {
+        index = 1;
+      }
+      if (skipNaN === void 0) {
+        skipNaN = true;
+      }
       var layout = this.$props.layout;
-      var i = this.data_index;
-      var data = this.$props.data;
-      if (!this.skip_nan) {
+      if (!skipNaN) {
         for (var k = 0, n = data.length; k < n; k++) {
           var p = data[k];
           var x = layout.t2screen(p[0]);
-          var y = layout.$2screen(p[i]);
+          var y = layout.$2screen(p[index]);
           ctx.lineTo(x, y);
         }
       } else {
         var skip = false;
-        for (var k = 0, n = data.length; k < n; k++) {
-          var _p = data[k];
+        for (var _k = 0, _n = data.length; _k < _n; _k++) {
+          var _p = data[_k];
           var _x = layout.t2screen(_p[0]);
-          var _y = layout.$2screen(_p[i]);
-          if (_p[i] == null || _y !== _y) {
+          var _y = layout.$2screen(_p[index]);
+          if (_p[index] == null || _y !== _y) {
             skip = true;
           } else {
             if (skip) ctx.moveTo(_x, _y);
@@ -8657,45 +8929,194 @@ var Mouse = /*#__PURE__*/function () {
           }
         }
       }
+    },
+    /**
+     * Draw a step line (horizontal then vertical segments)
+     * @param {CanvasRenderingContext2D} ctx - Canvas context
+     * @param {Array} data - Data array
+     * @param {number} index - Data index for Y values
+     */
+    drawStepLine: function drawStepLine(ctx, data, index) {
+      if (index === void 0) {
+        index = 1;
+      }
+      var layout = this.$props.layout;
+      var prevX = null;
+      var prevY = null;
+      for (var k = 0, n = data.length; k < n; k++) {
+        var p = data[k];
+        var x = layout.t2screen(p[0]);
+        var y = layout.$2screen(p[index]);
+        if (p[index] == null || y !== y) {
+          prevX = null;
+          prevY = null;
+          continue;
+        }
+        if (prevX !== null && prevY !== null) {
+          ctx.lineTo(x, prevY);
+          ctx.lineTo(x, y);
+        } else {
+          ctx.moveTo(x, y);
+        }
+        prevX = x;
+        prevY = y;
+      }
+    },
+    /**
+     * Draw a filled band/channel between two data indices
+     * @param {CanvasRenderingContext2D} ctx - Canvas context
+     * @param {Array} data - Data array
+     * @param {number} topIndex - Data index for top line
+     * @param {number} bottomIndex - Data index for bottom line
+     */
+    drawBandFill: function drawBandFill(ctx, data, topIndex, bottomIndex) {
+      var layout = this.$props.layout;
+      ctx.beginPath();
+      // Forward pass for top line
+      for (var i = 0; i < data.length; i++) {
+        var p = data[i];
+        var x = layout.t2screen(p[0]);
+        var y = layout.$2screen(p[topIndex] || undefined);
+        ctx.lineTo(x, y);
+      }
+      // Reverse pass for bottom line
+      for (var _i = data.length - 1; _i >= 0; _i--) {
+        var _p2 = data[_i];
+        var _x2 = layout.t2screen(_p2[0]);
+        var _y2 = layout.$2screen(_p2[bottomIndex] || undefined);
+        ctx.lineTo(_x2, _y2);
+      }
+      ctx.fill();
+    },
+    /**
+     * Draw multiple lines from a single data array
+     * @param {CanvasRenderingContext2D} ctx - Canvas context
+     * @param {Array} data - Data array
+     * @param {Array} indices - Array of data indices to draw
+     * @param {boolean} skipNaN - Whether to skip NaN values
+     */
+    drawMultiLines: function drawMultiLines(ctx, data, indices, skipNaN) {
+      if (skipNaN === void 0) {
+        skipNaN = true;
+      }
+      var _iterator = canvas_drawing_createForOfIteratorHelper(indices),
+        _step;
+      try {
+        for (_iterator.s(); !(_step = _iterator.n()).done;) {
+          var idx = _step.value;
+          ctx.beginPath();
+          this.drawDataLine(ctx, data, idx, skipNaN);
+          ctx.stroke();
+        }
+      } catch (err) {
+        _iterator.e(err);
+      } finally {
+        _iterator.f();
+      }
+    },
+    /**
+     * Setup stroke style on canvas context
+     * @param {CanvasRenderingContext2D} ctx - Canvas context
+     * @param {number} width - Line width
+     * @param {string} color - Stroke color
+     */
+    setupStroke: function setupStroke(ctx, width, color) {
+      ctx.lineWidth = width;
+      ctx.strokeStyle = color;
+    },
+    /**
+     * Setup fill and stroke style
+     * @param {CanvasRenderingContext2D} ctx - Canvas context
+     * @param {number} strokeWidth - Line width
+     * @param {string} strokeColor - Stroke color
+     * @param {string} fillColor - Fill color
+     */
+    setupFillAndStroke: function setupFillAndStroke(ctx, strokeWidth, strokeColor, fillColor) {
+      ctx.lineWidth = strokeWidth;
+      ctx.strokeStyle = strokeColor;
+      ctx.fillStyle = fillColor;
+    },
+    /**
+     * Iterate over data points with coordinate transformation
+     * @param {Array} data - Data array
+     * @param {Function} callback - Called with (point, x, y, index) for each point
+     * @param {Object} options - { index: 1, skipNaN: true }
+     */
+    iterateData: function iterateData(data, callback, options) {
+      if (options === void 0) {
+        options = {};
+      }
+      var layout = this.$props.layout;
+      var index = options.index || 1;
+      var skipNaN = options.skipNaN !== false;
+      for (var k = 0, n = data.length; k < n; k++) {
+        var p = data[k];
+        var x = layout.t2screen(p[0]);
+        var y = layout.$2screen(p[index]);
+        if (skipNaN && (p[index] == null || y !== y)) {
+          continue;
+        }
+        callback(p, x, y, k);
+      }
+    },
+    /**
+     * Transform a single point to screen coordinates
+     * @param {Array} point - Data point [timestamp, value, ...]
+     * @param {number} index - Data index for Y value
+     * @returns {Array} [x, y] screen coordinates
+     */
+    pointToScreen: function pointToScreen(point, index) {
+      if (index === void 0) {
+        index = 1;
+      }
+      var layout = this.$props.layout;
+      return [layout.t2screen(point[0]), layout.$2screen(point[index])];
+    }
+  }
+});
+;// ./node_modules/babel-loader/lib/index.js!./node_modules/vue-loader/lib/index.js??vue-loader-options!./src/components/overlays/Spline.vue?vue&type=script&lang=js
+// Spline renderer. (SMAs, EMAs, TEMAs, etc.)
+
+
+
+
+/* harmony default export */ const Splinevue_type_script_lang_js = ({
+  name: 'Spline',
+  mixins: [overlay, canvas_drawing],
+  methods: {
+    meta_info: function meta_info() {
+      return {
+        author: 'C451',
+        version: '1.1.2'
+      };
+    },
+    draw: function draw(ctx) {
+      this.setupStroke(ctx, this.line_width, this.color);
+      ctx.beginPath();
+      this.drawDataLine(ctx, this.$props.data, this.data_index, this.skip_nan);
       ctx.stroke();
     },
-    // For all data with these types overlay will be
-    // added to the renderer list. And '$props.data'
-    // will have the corresponding values. If you want to
-    // redefine the default behviour for a prticular
-    // indicator (let's say EMA),
-    // just create a new overlay with the same type:
-    // e.g. use_for() { return ['EMA'] }.
     use_for: function use_for() {
       return ['Spline', 'EMA', 'SMA'];
     },
-    // Colors for the legend, should have the
-    // same dimention as a data point (excl. timestamp)
     data_colors: function data_colors() {
       return [this.color];
     }
   },
-  // Define internal setting & constants here
   computed: {
     line_width: function line_width() {
       return this.sett.lineWidth || 0.75;
     },
     color: function color() {
       var n = this.$props.num % 5;
-      return this.sett.color || this.COLORS[n];
+      return this.sett.color || constants/* default */.A.OVERLAY_COLORS[n];
     },
     data_index: function data_index() {
       return this.sett.dataIndex || 1;
     },
-    // Don't connect separate parts if true
     skip_nan: function skip_nan() {
       return this.sett.skipNaN;
     }
-  },
-  data: function data() {
-    return {
-      COLORS: ['#42b28a', '#5691ce', '#612ff9', '#d50b90', '#ff2316']
-    };
   }
 });
 ;// ./src/components/overlays/Spline.vue?vue&type=script&lang=js
@@ -8721,11 +9142,14 @@ var Spline_component = normalizeComponent(
 
 /* harmony default export */ const Spline = (Spline_component.exports);
 ;// ./node_modules/babel-loader/lib/index.js!./node_modules/vue-loader/lib/index.js??vue-loader-options!./src/components/overlays/Splines.vue?vue&type=script&lang=js
-// Channel renderer. (Keltner, Bollinger)
+// Splines renderer - multiple lines from single data array (DMI, etc.)
+
+
+
 
 /* harmony default export */ const Splinesvue_type_script_lang_js = ({
   name: 'Splines',
-  mixins: [overlay],
+  mixins: [overlay, canvas_drawing],
   methods: {
     meta_info: function meta_info() {
       return {
@@ -8735,38 +9159,11 @@ var Spline_component = normalizeComponent(
     },
     draw: function draw(ctx) {
       for (var i = 0; i < this.lines_num; i++) {
-        var _i = i % this.clrx.length;
-        ctx.strokeStyle = this.clrx[_i];
-        ctx.lineWidth = this.widths[i] || this.line_width;
+        var colorIdx = i % this.clrx.length;
+        this.setupStroke(ctx, this.widths[i] || this.line_width, this.clrx[colorIdx]);
         ctx.beginPath();
-        this.draw_spline(ctx, i);
+        this.drawDataLine(ctx, this.$props.data, i + 1, this.skip_nan);
         ctx.stroke();
-      }
-    },
-    draw_spline: function draw_spline(ctx, i) {
-      var layout = this.$props.layout;
-      var data = this.$props.data;
-      if (!this.skip_nan) {
-        for (var k = 0, n = data.length; k < n; k++) {
-          var p = data[k];
-          var x = layout.t2screen(p[0]);
-          var y = layout.$2screen(p[i + 1]);
-          ctx.lineTo(x, y);
-        }
-      } else {
-        var skip = false;
-        for (var k = 0, n = data.length; k < n; k++) {
-          var _p = data[k];
-          var _x = layout.t2screen(_p[0]);
-          var _y = layout.$2screen(_p[i + 1]);
-          if (_p[i + 1] == null || _y !== _y) {
-            skip = true;
-          } else {
-            if (skip) ctx.moveTo(_x, _y);
-            ctx.lineTo(_x, _y);
-            skip = false;
-          }
-        }
       }
     },
     use_for: function use_for() {
@@ -8776,7 +9173,6 @@ var Spline_component = normalizeComponent(
       return this.clrx;
     }
   },
-  // Define internal setting & constants here
   computed: {
     line_width: function line_width() {
       return this.sett.lineWidth || 0.75;
@@ -8789,7 +9185,7 @@ var Spline_component = normalizeComponent(
       var n = this.$props.num;
       if (!colors.length) {
         for (var i = 0; i < this.lines_num; i++) {
-          colors.push(this.COLORS[(n + i) % 5]);
+          colors.push(constants/* default */.A.OVERLAY_COLORS[(n + i) % 5]);
         }
       }
       return colors;
@@ -8798,15 +9194,9 @@ var Spline_component = normalizeComponent(
       if (!this.$props.data[0]) return 0;
       return this.$props.data[0].length - 1;
     },
-    // Don't connect separate parts if true
     skip_nan: function skip_nan() {
       return this.sett.skipNaN;
     }
-  },
-  data: function data() {
-    return {
-      COLORS: ['#42b28a', '#5691ce', '#612ff9', '#d50b90', '#ff2316']
-    };
   }
 });
 ;// ./src/components/overlays/Splines.vue?vue&type=script&lang=js
@@ -9070,12 +9460,13 @@ var Trades_component = normalizeComponent(
 /* harmony default export */ const Trades = (Trades_component.exports);
 ;// ./node_modules/babel-loader/lib/index.js!./node_modules/vue-loader/lib/index.js??vue-loader-options!./src/components/overlays/Channel.vue?vue&type=script&lang=js
 // Channel renderer. (Keltner, Bollinger)
-// TODO: allow color transparency
-// TODO: improve performance: draw in one solid chunk
+
+
+
 
 /* harmony default export */ const Channelvue_type_script_lang_js = ({
   name: 'Channel',
-  mixins: [overlay],
+  mixins: [overlay, canvas_drawing],
   methods: {
     meta_info: function meta_info() {
       return {
@@ -9083,96 +9474,32 @@ var Trades_component = normalizeComponent(
         version: '1.0.1'
       };
     },
-    /*draw(ctx) {
-        ctx.lineWidth = this.line_width
-        ctx.strokeStyle = this.color
-        ctx.fillStyle = this.back_color
-         for (var i = 0; i < this.$props.data.length - 1; i++) {
-              let p1 = this.mapp(this.$props.data[i])
-            let p2 = this.mapp(this.$props.data[i+1])
-             if (!p2) continue
-            if (p1.y1 !== p1.y1) continue // Fix NaN
-             // Background
-            ctx.beginPath()
-            ctx.moveTo(p1.x, p1.y1)
-            ctx.lineTo(p2.x + 0.1, p2.y1)
-            ctx.lineTo(p2.x + 0.1, p2.y3)
-            ctx.lineTo(p1.x, p1.y3)
-            ctx.fill()
-             // Lines
-            ctx.beginPath()
-            ctx.moveTo(p1.x, p1.y1)
-            ctx.lineTo(p2.x, p2.y1)
-            if (this.show_mid) {
-                ctx.moveTo(p1.x, p1.y2)
-                ctx.lineTo(p2.x, p2.y2)
-            }
-            ctx.moveTo(p1.x, p1.y3)
-            ctx.lineTo(p2.x, p2.y3)
-            ctx.stroke()
-         }
-    },*/
     draw: function draw(ctx) {
-      // Background
-      var data = this.data;
-      var layout = this.layout;
-      ctx.beginPath();
+      var data = this.$props.data;
+
+      // Background fill between top (index 1) and bottom (index 3)
       ctx.fillStyle = this.back_color;
-      for (var i = 0; i < data.length; i++) {
-        var p = data[i];
-        var x = layout.t2screen(p[0]);
-        var y = layout.$2screen(p[1] || undefined);
-        ctx.lineTo(x, y);
-      }
-      for (var i = data.length - 1; i >= 0; i--) {
-        var _p = data[i];
-        var _x = layout.t2screen(_p[0]);
-        var _y = layout.$2screen(_p[3] || undefined);
-        ctx.lineTo(_x, _y);
-      }
-      ctx.fill();
+      this.drawBandFill(ctx, data, 1, 3);
 
       // Lines
-      ctx.lineWidth = this.line_width;
-      ctx.strokeStyle = this.color;
+      this.setupStroke(ctx, this.line_width, this.color);
 
-      // Top line
+      // Top line (index 1)
       ctx.beginPath();
-      for (var i = 0; i < data.length; i++) {
-        var _p2 = data[i];
-        var _x2 = layout.t2screen(_p2[0]);
-        var _y2 = layout.$2screen(_p2[1] || undefined);
-        ctx.lineTo(_x2, _y2);
-      }
+      this.drawDataLine(ctx, data, 1, false);
       ctx.stroke();
-      // Bottom line
+
+      // Bottom line (index 3)
       ctx.beginPath();
-      for (var i = 0; i < data.length; i++) {
-        var _p3 = data[i];
-        var _x3 = layout.t2screen(_p3[0]);
-        var _y3 = layout.$2screen(_p3[3] || undefined);
-        ctx.lineTo(_x3, _y3);
-      }
+      this.drawDataLine(ctx, data, 3, false);
       ctx.stroke();
-      // Middle line
-      if (!this.show_mid) return;
-      ctx.beginPath();
-      for (var i = 0; i < data.length; i++) {
-        var _p4 = data[i];
-        var _x4 = layout.t2screen(_p4[0]);
-        var _y4 = layout.$2screen(_p4[2] || undefined);
-        ctx.lineTo(_x4, _y4);
+
+      // Middle line (index 2) - optional
+      if (this.show_mid) {
+        ctx.beginPath();
+        this.drawDataLine(ctx, data, 2, false);
+        ctx.stroke();
       }
-      ctx.stroke();
-    },
-    mapp: function mapp(p) {
-      var layout = this.$props.layout;
-      return p && {
-        x: layout.t2screen(p[0]),
-        y1: layout.$2screen(p[1]),
-        y2: layout.$2screen(p[2]),
-        y3: layout.$2screen(p[3])
-      };
     },
     use_for: function use_for() {
       return ['Channel', 'KC', 'BB'];
@@ -9181,14 +9508,13 @@ var Trades_component = normalizeComponent(
       return [this.color, this.color, this.color];
     }
   },
-  // Define internal setting & constants here
   computed: {
     line_width: function line_width() {
       return this.sett.lineWidth || 0.75;
     },
     color: function color() {
       var n = this.$props.num % 5;
-      return this.sett.color || this.COLORS[n];
+      return this.sett.color || constants/* default */.A.OVERLAY_COLORS[n];
     },
     show_mid: function show_mid() {
       return 'showMid' in this.sett ? this.sett.showMid : true;
@@ -9196,11 +9522,6 @@ var Trades_component = normalizeComponent(
     back_color: function back_color() {
       return this.sett.backColor || this.color + '11';
     }
-  },
-  data: function data() {
-    return {
-      COLORS: ['#42b28a', '#5691ce', '#612ff9', '#d50b90', '#ff2316']
-    };
   }
 });
 ;// ./src/components/overlays/Channel.vue?vue&type=script&lang=js
@@ -9226,12 +9547,15 @@ var Channel_component = normalizeComponent(
 
 /* harmony default export */ const Channel = (Channel_component.exports);
 ;// ./node_modules/babel-loader/lib/index.js!./node_modules/vue-loader/lib/index.js??vue-loader-options!./src/components/overlays/Segment.vue?vue&type=script&lang=js
-// Segment renderer.
+
+// Segment renderer - draws a line between two points
+
+
 
 
 /* harmony default export */ const Segmentvue_type_script_lang_js = ({
   name: 'Segment',
-  mixins: [overlay],
+  mixins: [overlay, canvas_drawing],
   methods: {
     meta_info: function meta_info() {
       return {
@@ -9241,15 +9565,17 @@ var Channel_component = normalizeComponent(
     },
     draw: function draw(ctx) {
       if (!this.p1 || !this.p2) return;
-      ctx.lineWidth = this.line_width;
-      ctx.strokeStyle = this.color;
+      this.setupStroke(ctx, this.line_width, this.color);
       ctx.beginPath();
-      var layout = this.$props.layout;
-      var x1 = layout.t2screen(this.p1[0]);
-      var y1 = layout.$2screen(this.p1[1]);
+      var _this$pointToScreen = this.pointToScreen(this.p1),
+        _this$pointToScreen2 = (0,slicedToArray/* default */.A)(_this$pointToScreen, 2),
+        x1 = _this$pointToScreen2[0],
+        y1 = _this$pointToScreen2[1];
+      var _this$pointToScreen3 = this.pointToScreen(this.p2),
+        _this$pointToScreen4 = (0,slicedToArray/* default */.A)(_this$pointToScreen3, 2),
+        x2 = _this$pointToScreen4[0],
+        y2 = _this$pointToScreen4[1];
       ctx.moveTo(x1, y1);
-      var x2 = layout.t2screen(this.p2[0]);
-      var y2 = layout.$2screen(this.p2[1]);
       ctx.lineTo(x2, y2);
       ctx.stroke();
     },
@@ -9260,7 +9586,6 @@ var Channel_component = normalizeComponent(
       return [this.color];
     }
   },
-  // Define internal setting & constants here
   computed: {
     p1: function p1() {
       return this.$props.settings.p1;
@@ -9273,13 +9598,8 @@ var Channel_component = normalizeComponent(
     },
     color: function color() {
       var n = this.$props.num % 5;
-      return this.sett.color || this.COLORS[n];
+      return this.sett.color || constants/* default */.A.OVERLAY_COLORS[n];
     }
-  },
-  data: function data() {
-    return {
-      COLORS: ['#42b28a', '#5691ce', '#612ff9', '#d50b90', '#ff2316']
-    };
   }
 });
 ;// ./src/components/overlays/Segment.vue?vue&type=script&lang=js
@@ -9321,7 +9641,7 @@ function layout_cnv(self) {
 
   // The volume bar height is determined as a percentage of
   // the chart's height (VOLSCALE)
-  var maxv = Math.max.apply(Math, _toConsumableArray(sub.map(function (x) {
+  var maxv = Math.max.apply(Math, (0,toConsumableArray/* default */.A)(sub.map(function (x) {
     return x[5];
   })));
   var vs = $p.config.VOLSCALE * layout.height / maxv;
@@ -9334,7 +9654,7 @@ function layout_cnv(self) {
 
   // Subset interval against main interval
   var _new_interval = new_interval(layout, $p, sub),
-    _new_interval2 = _slicedToArray(_new_interval, 2),
+    _new_interval2 = (0,slicedToArray/* default */.A)(_new_interval, 2),
     interval2 = _new_interval2[0],
     ratio = _new_interval2[1];
   var px_step2 = layout.px_step * ratio;
@@ -9395,7 +9715,7 @@ function layout_vol(self) {
   } : function (p) {
     return p[4] >= p[1];
   };
-  var maxv = Math.max.apply(Math, _toConsumableArray(sub.map(function (x) {
+  var maxv = Math.max.apply(Math, (0,toConsumableArray/* default */.A)(sub.map(function (x) {
     return x[self._i1];
   })));
   var volscale = self.volscale || $p.config.VOLSCALE;
@@ -9407,7 +9727,7 @@ function layout_vol(self) {
 
   // Subset interval against main interval
   var _new_interval3 = new_interval(layout, $p, sub),
-    _new_interval4 = _slicedToArray(_new_interval3, 2),
+    _new_interval4 = (0,slicedToArray/* default */.A)(_new_interval3, 2),
     interval2 = _new_interval4[0],
     ratio = _new_interval4[1];
   var px_step2 = layout.px_step * ratio;
@@ -9441,7 +9761,7 @@ function new_interval(layout, $p, sub) {
   // Prefer using main chart interval to avoid detection issues with data gaps
   if (!layout.ti_map.ib) {
     // Use overlay's tf, or fall back to main chart interval, then detect
-    var interval2 = $p.tf || $p.interval || utils.detect_interval(sub);
+    var interval2 = $p.tf || $p.interval || utils/* default */.A.detect_interval(sub);
     var ratio = interval2 / $p.interval;
   } else {
     if ($p.tf) {
@@ -9449,7 +9769,7 @@ function new_interval(layout, $p, sub) {
       var interval2 = ratio;
     } else {
       // Use main chart interval if available
-      var interval2 = $p.interval || utils.detect_interval(sub);
+      var interval2 = $p.interval || utils/* default */.A.detect_interval(sub);
       var ratio = interval2 / $p.interval;
     }
   }
@@ -9824,9 +10144,9 @@ function Volumevue_type_script_lang_js_arrayLikeToArray(r, a) { (null == a || a 
       var _this = this;
       if (this._i1 === 5) {
         var sub = this.$props.sub;
-        return [Math.max.apply(Math, _toConsumableArray(sub.map(function (x) {
+        return [Math.max.apply(Math, (0,toConsumableArray/* default */.A)(sub.map(function (x) {
           return x[_this._i1];
-        }))), Math.min.apply(Math, _toConsumableArray(sub.map(function (x) {
+        }))), Math.min.apply(Math, (0,toConsumableArray/* default */.A)(sub.map(function (x) {
           return x[_this._i1];
         })))];
       } else {
@@ -10065,7 +10385,7 @@ function tool_arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.len
         if (_this.drag) _this.drag_update();
       });
       this.mouse.on('mousedown', function (e) {
-        if (utils.default_prevented(e)) return;
+        if (utils/* default */.A.default_prevented(e)) return;
         if (_this.collisions.some(function (f) {
           return f(_this.mouse.x, _this.mouse.y);
         })) {
@@ -10191,7 +10511,7 @@ var Pin = /*#__PURE__*/function () {
     classCallCheck_classCallCheck(this, Pin);
     this.RADIUS = comp.$props.config.PIN_RADIUS || 5.5;
     this.RADIUS_SQ = Math.pow(this.RADIUS + 7, 2);
-    if (utils.is_mobile) {
+    if (utils/* default */.A.is_mobile) {
       this.RADIUS += 2;
       this.RADIUS_SQ *= 2.5;
     }
@@ -10320,7 +10640,7 @@ var Pin = /*#__PURE__*/function () {
       if (force === void 0) {
         force = false;
       }
-      if (utils.default_prevented(event) && !force) return;
+      if (utils/* default */.A.default_prevented(event) && !force) return;
       switch (this.state) {
         case 'tracking':
           this.state = 'settled';
@@ -10428,7 +10748,7 @@ var PrimitiveBase = /*#__PURE__*/function () {
     this.ctx = ctx;
     this.comp = overlay;
     this.T = overlay.$props.config.TOOL_COLL;
-    if (utils.is_mobile) this.T *= 2;
+    if (utils/* default */.A.is_mobile) this.T *= 2;
   }
 
   // Get layout helper
@@ -10472,11 +10792,11 @@ var Seg = /*#__PURE__*/function (_PrimitiveBase) {
     // p1[t, $], p2[t, $] (time-price coordinates)
     function draw(p1, p2) {
       var _this$toScreen = this.toScreen(p1),
-        _this$toScreen2 = _slicedToArray(_this$toScreen, 2),
+        _this$toScreen2 = (0,slicedToArray/* default */.A)(_this$toScreen, 2),
         x1 = _this$toScreen2[0],
         y1 = _this$toScreen2[1];
       var _this$toScreen3 = this.toScreen(p2),
-        _this$toScreen4 = _slicedToArray(_this$toScreen3, 2),
+        _this$toScreen4 = (0,slicedToArray/* default */.A)(_this$toScreen3, 2),
         x2 = _this$toScreen4[0],
         y2 = _this$toScreen4[1];
       this.ctx.moveTo(x1, y1);
@@ -10490,7 +10810,7 @@ var Seg = /*#__PURE__*/function (_PrimitiveBase) {
     value: function make(p1, p2) {
       var _this = this;
       return function (x, y) {
-        return math.point2seg([x, y], p1, p2) < _this.T;
+        return math/* default */.A.point2seg([x, y], p1, p2) < _this.T;
       };
     }
   }]);
@@ -10522,11 +10842,11 @@ var Line = /*#__PURE__*/function (_PrimitiveBase) {
     function draw(p1, p2) {
       var layout = this.layout;
       var _this$toScreen = this.toScreen(p1),
-        _this$toScreen2 = _slicedToArray(_this$toScreen, 2),
+        _this$toScreen2 = (0,slicedToArray/* default */.A)(_this$toScreen, 2),
         x1 = _this$toScreen2[0],
         y1 = _this$toScreen2[1];
       var _this$toScreen3 = this.toScreen(p2),
-        _this$toScreen4 = _slicedToArray(_this$toScreen3, 2),
+        _this$toScreen4 = (0,slicedToArray/* default */.A)(_this$toScreen3, 2),
         x2 = _this$toScreen4[0],
         y2 = _this$toScreen4[1];
       this.ctx.moveTo(x1, y1);
@@ -10556,7 +10876,7 @@ var Line = /*#__PURE__*/function (_PrimitiveBase) {
     key: "make",
     value: function make(p1, p2) {
       var _this = this;
-      var f = this.ray ? math.point2ray.bind(math) : math.point2line.bind(math);
+      var f = this.ray ? math/* default */.A.point2ray.bind(math/* default */.A) : math/* default */.A.point2line.bind(math/* default */.A);
       return function (x, y) {
         return f([x, y], p1, p2) < _this.T;
       };
@@ -10900,7 +11220,7 @@ var LineTool_component = normalizeComponent(
       text = text.join('\n');
       // "Multiple" fillText
       var lines = text.split('\n');
-      var w = Math.max.apply(Math, _toConsumableArray(lines.map(function (x) {
+      var w = Math.max.apply(Math, (0,toConsumableArray/* default */.A)(lines.map(function (x) {
         return ctx.measureText(x).width + 20;
       })).concat([100]));
       var n = lines.length;
@@ -11013,12 +11333,13 @@ function StepLinevue_type_script_lang_js_createForOfIteratorHelper(r, e) { var t
 function StepLinevue_type_script_lang_js_unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return StepLinevue_type_script_lang_js_arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? StepLinevue_type_script_lang_js_arrayLikeToArray(r, a) : void 0; } }
 function StepLinevue_type_script_lang_js_arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
 // StepLine renderer - draws values as a step/stair pattern
-// Horizontal line at each value, vertical line to next value
+
+
 
 
 /* harmony default export */ const StepLinevue_type_script_lang_js = ({
   name: 'StepLine',
-  mixins: [overlay],
+  mixins: [overlay, canvas_drawing],
   methods: {
     meta_info: function meta_info() {
       return {
@@ -11027,35 +11348,10 @@ function StepLinevue_type_script_lang_js_arrayLikeToArray(r, a) { (null == a || 
       };
     },
     draw: function draw(ctx) {
-      ctx.lineWidth = this.line_width;
-      ctx.strokeStyle = this.color;
+      if (this.$props.data.length < 1) return;
+      this.setupStroke(ctx, this.line_width, this.color);
       ctx.beginPath();
-      var layout = this.$props.layout;
-      var data = this.$props.data;
-      var i = this.data_index;
-      if (data.length < 1) return;
-      var prevX = null;
-      var prevY = null;
-      for (var k = 0, n = data.length; k < n; k++) {
-        var p = data[k];
-        var x = layout.t2screen(p[0]);
-        var y = layout.$2screen(p[i]);
-        if (p[i] == null || y !== y) {
-          prevX = null;
-          prevY = null;
-          continue;
-        }
-        if (prevX !== null && prevY !== null) {
-          // Draw horizontal line from prev point to current x
-          ctx.lineTo(x, prevY);
-          // Draw vertical line to current y
-          ctx.lineTo(x, y);
-        } else {
-          ctx.moveTo(x, y);
-        }
-        prevX = x;
-        prevY = y;
-      }
+      this.drawStepLine(ctx, this.$props.data, this.data_index);
       ctx.stroke();
     },
     use_for: function use_for() {
@@ -11064,7 +11360,6 @@ function StepLinevue_type_script_lang_js_arrayLikeToArray(r, a) { (null == a || 
     data_colors: function data_colors() {
       return [this.color];
     },
-    // Calculate y-range for offchart display
     y_range: function y_range(hi, lo) {
       var data = this.$props.data;
       var i = this.data_index;
@@ -11096,16 +11391,11 @@ function StepLinevue_type_script_lang_js_arrayLikeToArray(r, a) { (null == a || 
     },
     color: function color() {
       var n = this.$props.num % 5;
-      return this.sett.color || this.COLORS[n];
+      return this.sett.color || constants/* default */.A.OVERLAY_COLORS[n];
     },
     data_index: function data_index() {
       return this.sett.dataIndex || 1;
     }
-  },
-  data: function data() {
-    return {
-      COLORS: ['#42b28a', '#5691ce', '#612ff9', '#d50b90', '#ff2316']
-    };
   }
 });
 ;// ./src/components/overlays/StepLine.vue?vue&type=script&lang=js
@@ -11799,7 +12089,7 @@ var Sidebar = /*#__PURE__*/function () {
         _this.drug = {
           y: event.center.y,
           z: _this.zoom,
-          mid: math.log_mid(_this.y_range, _this.layout.height),
+          mid: math/* default */.A.log_mid(_this.y_range, _this.layout.height),
           A: _this.layout.A,
           B: _this.layout.B
         };
@@ -11965,7 +12255,7 @@ var Sidebar = /*#__PURE__*/function () {
       var d = this.drug.y - event.center.y;
       var speed = d > 0 ? 3 : 1;
       var k = 1 + speed * d / this.layout.height;
-      return utils.clamp(this.drug.z * k, 0.005, 100);
+      return utils/* default */.A.clamp(this.drug.z * k, 0.005, 100);
     }
 
     // Not the best place to calculate y-range but
@@ -11995,7 +12285,7 @@ var Sidebar = /*#__PURE__*/function () {
 
         // Use old mapping to get a new range
         var f = function f(y) {
-          return math.exp((y - _this2.drug.B) / _this2.drug.A);
+          return math/* default */.A.exp((y - _this2.drug.B) / _this2.drug.A);
         };
         var copy = range.slice();
         range[0] = f(new_hi);
@@ -12019,15 +12309,15 @@ var Sidebar = /*#__PURE__*/function () {
       this.drug = {
         y: 0,
         z: this.zoom,
-        mid: math.log_mid(this.y_range, this.layout.height),
+        mid: math/* default */.A.log_mid(this.y_range, this.layout.height),
         A: this.layout.A,
         B: this.layout.B
       };
 
       // Calculate zoom based on wheel delta
-      delta = utils.smart_wheel(delta);
+      delta = utils/* default */.A.smart_wheel(delta);
       var k = delta * 0.002;
-      this.zoom = utils.clamp(this.zoom * (1 + k), 0.005, 100);
+      this.zoom = utils/* default */.A.clamp(this.zoom * (1 + k), 0.005, 100);
       this.comp.$emit('sidebar-transform', {
         grid_id: this.id,
         zoom: this.zoom,
@@ -12054,7 +12344,7 @@ var Sidebar = /*#__PURE__*/function () {
       this.drug = {
         y: 0,
         z: this.zoom,
-        mid: math.log_mid(this.y_range, this.layout.height),
+        mid: math/* default */.A.log_mid(this.y_range, this.layout.height),
         A: this.layout.A,
         B: this.layout.B
       };
@@ -12894,7 +13184,7 @@ function shaders_arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.
         p.data = [p.data[id - 1]];
         // Merge offchart overlays with custom ids with
         // the existing onse (by comparing the grid ids)
-        (_p$data = p.data).push.apply(_p$data, _toConsumableArray(all.filter(function (x) {
+        (_p$data = p.data).push.apply(_p$data, (0,toConsumableArray/* default */.A)(all.filter(function (x) {
           return x.grid && x.grid.id === id;
         })));
       }
@@ -12929,7 +13219,7 @@ function shaders_arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.
         var all = p.data;
         p.offchart = all;
         p.data = [p.data[id - 1]];
-        (_p$data2 = p.data).push.apply(_p$data2, _toConsumableArray(all.filter(function (x) {
+        (_p$data2 = p.data).push.apply(_p$data2, (0,toConsumableArray/* default */.A)(all.filter(function (x) {
           return x.grid && x.grid.id === id;
         })));
       }
@@ -13010,14 +13300,14 @@ function botbar_arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.l
 
 
 
-var botbar_MINUTE15 = constants.MINUTE15,
-  botbar_MINUTE = constants.MINUTE,
-  botbar_HOUR = constants.HOUR,
-  botbar_DAY = constants.DAY,
-  botbar_WEEK = constants.WEEK,
-  botbar_MONTH = constants.MONTH,
-  botbar_YEAR = constants.YEAR,
-  botbar_MONTHMAP = constants.MONTHMAP;
+var MINUTE15 = constants/* default */.A.MINUTE15,
+  MINUTE = constants/* default */.A.MINUTE,
+  HOUR = constants/* default */.A.HOUR,
+  DAY = constants/* default */.A.DAY,
+  WEEK = constants/* default */.A.WEEK,
+  MONTH = constants/* default */.A.MONTH,
+  YEAR = constants/* default */.A.YEAR,
+  MONTHMAP = constants/* default */.A.MONTHMAP;
 var Botbar = /*#__PURE__*/function () {
   function Botbar(canvas, comp) {
     classCallCheck_classCallCheck(this, Botbar);
@@ -13049,7 +13339,7 @@ var Botbar = /*#__PURE__*/function () {
       var dominated = this.data.length;
       if (delta < 0 && dominated <= this.MIN_ZOOM) return;
       if (delta > 0 && dominated > this.MAX_ZOOM) return;
-      delta = utils.smart_wheel(delta);
+      delta = utils/* default */.A.smart_wheel(delta);
       var interval = this.$p.interval;
       var k = interval / 1000;
       var diff = delta * k * dominated;
@@ -13154,21 +13444,21 @@ var Botbar = /*#__PURE__*/function () {
       t = this.grid_0.ti_map.i2t(t);
       var ti = this.$p.layout.grids[0].ti_map.tf;
       // Enable timezones only for tf < 1D
-      var k = ti < botbar_DAY ? 1 : 0;
-      var tZ = t + k * this.$p.timezone * botbar_HOUR;
+      var k = ti < DAY ? 1 : 0;
+      var tZ = t + k * this.$p.timezone * HOUR;
 
       //t += new Date(t).getTimezoneOffset() * MINUTE
       var d = new Date(tZ);
-      if (p[2] === botbar_YEAR || utils.year_start(t) === t) {
+      if (p[2] === YEAR || utils/* default */.A.year_start(t) === t) {
         return d.getUTCFullYear();
       }
-      if (p[2] === botbar_MONTH || utils.month_start(t) === t) {
-        return botbar_MONTHMAP[d.getUTCMonth()];
+      if (p[2] === MONTH || utils/* default */.A.month_start(t) === t) {
+        return MONTHMAP[d.getUTCMonth()];
       }
       // TODO(*) see grid_maker.js
-      if (utils.day_start(tZ) === tZ) return d.getUTCDate();
-      var h = utils.add_zero(d.getUTCHours());
-      var m = utils.add_zero(d.getUTCMinutes());
+      if (utils/* default */.A.day_start(tZ) === tZ) return d.getUTCDate();
+      var h = utils/* default */.A.add_zero(d.getUTCHours());
+      var m = utils/* default */.A.add_zero(d.getUTCMinutes());
       return h + ":" + m;
     }
   }, {
@@ -13179,24 +13469,24 @@ var Botbar = /*#__PURE__*/function () {
       //let ti = this.$p.interval
       var ti = this.$p.layout.grids[0].ti_map.tf;
       // Enable timezones only for tf < 1D
-      var k = ti < botbar_DAY ? 1 : 0;
+      var k = ti < DAY ? 1 : 0;
 
       //t += new Date(t).getTimezoneOffset() * MINUTE
-      var d = new Date(t + k * this.$p.timezone * botbar_HOUR);
-      if (ti === botbar_YEAR) {
+      var d = new Date(t + k * this.$p.timezone * HOUR);
+      if (ti === YEAR) {
         return d.getUTCFullYear();
       }
-      if (ti < botbar_YEAR) {
+      if (ti < YEAR) {
         var yr = '`' + "".concat(d.getUTCFullYear()).slice(-2);
-        var mo = botbar_MONTHMAP[d.getUTCMonth()];
+        var mo = MONTHMAP[d.getUTCMonth()];
         var dd = '01';
       }
-      if (ti <= botbar_WEEK) dd = d.getUTCDate();
+      if (ti <= WEEK) dd = d.getUTCDate();
       var date = "".concat(dd, " ").concat(mo, " ").concat(yr);
       var time = '';
-      if (ti < botbar_DAY) {
-        var h = utils.add_zero(d.getUTCHours());
-        var m = utils.add_zero(d.getUTCMinutes());
+      if (ti < DAY) {
+        var h = utils/* default */.A.add_zero(d.getUTCHours());
+        var m = utils/* default */.A.add_zero(d.getUTCMinutes());
         time = h + ":" + m;
       }
       return "".concat(date, "  ").concat(time);
@@ -13212,9 +13502,9 @@ var Botbar = /*#__PURE__*/function () {
     value: function lbl_highlight(t) {
       var ti = this.$p.interval;
       if (t === 0) return true;
-      if (utils.month_start(t) === t) return true;
-      if (utils.day_start(t) === t) return true;
-      if (ti <= botbar_MINUTE15 && t % botbar_HOUR === 0) return true;
+      if (utils/* default */.A.month_start(t) === t) return true;
+      if (utils/* default */.A.day_start(t) === t) return true;
+      if (ti <= MINUTE15 && t % HOUR === 0) return true;
       return false;
     }
   }, {
@@ -13589,7 +13879,7 @@ var GridResizer_component = normalizeComponent(
         try {
           // More precise method first
           var nt = this._data_t + 0.01; // fix for the filter lib
-          var res = utils.fast_nearest(this.ohlcv, nt);
+          var res = utils/* default */.A.fast_nearest(this.ohlcv, nt);
           var cndl = this.ohlcv[res[0]];
           var off = (nt - cndl[0]) / this.interval_ms;
           this["goto"](res[0] + off);
@@ -13610,6 +13900,8 @@ var GridResizer_component = normalizeComponent(
     };
   }
 });
+// EXTERNAL MODULE: ./src/components/js/layout.js + 3 modules
+var js_layout = __webpack_require__(749);
 ;// ./src/components/js/ti_mapping.js
 
 
@@ -13673,7 +13965,7 @@ var TI = /*#__PURE__*/function () {
         this.it_map[_i] = t;
 
         // Overwrite t with i
-        var copy = _toConsumableArray(res[i]);
+        var copy = (0,toConsumableArray/* default */.A)(res[i]);
         copy[0] = _i;
         this.sub_i.push(copy);
       }
@@ -13689,10 +13981,10 @@ var TI = /*#__PURE__*/function () {
       var k = 0; // Candlestick index
 
       if (mode === 'calc') {
-        var shift = utils.index_shift(this.sub, data);
+        var shift = utils/* default */.A.index_shift(this.sub, data);
         for (var i = 0; i < data.length; i++) {
           var _i = this.ss + i;
-          var copy = _toConsumableArray(data[i]);
+          var copy = (0,toConsumableArray/* default */.A)(data[i]);
           copy[0] = _i + shift;
           res.push(copy);
         }
@@ -13702,14 +13994,14 @@ var TI = /*#__PURE__*/function () {
       // If indicator data starts after ohlcv, calc the first index
       if (data.length) {
         try {
-          var k1 = utils.fast_nearest(this.sub, data[0][0])[0];
+          var k1 = utils/* default */.A.fast_nearest(this.sub, data[0][0])[0];
           if (k1 !== null && k1 >= 0) k = k1;
         } catch (e) {}
       }
       var t0 = this.sub[0][0];
       var tN = this.sub[this.sub.length - 1][0];
       for (var i = 0; i < data.length; i++) {
-        var _copy = _toConsumableArray(data[i]);
+        var _copy = (0,toConsumableArray/* default */.A)(data[i]);
         var tk = this.sub[k][0];
         var t = data[i][0];
         var index = this.ti_map[t];
@@ -13803,7 +14095,7 @@ var TI = /*#__PURE__*/function () {
       }
       try {
         // Linear Interpolation
-        var i = utils.fast_nearest(this.sub, t);
+        var i = utils/* default */.A.fast_nearest(this.sub, t);
         var tk = this.sub[i[0]][0];
         var tk2 = this.sub[i[1]][0];
         var _k = (t - tk) / (tk2 - tk);
@@ -13840,8 +14132,8 @@ var TI = /*#__PURE__*/function () {
     value: function gt2i(smth, ohlcv) {
       if (smth > MAX_ARR) {
         var E = 0.1; // Fixes the arrayslicer bug
-        var _Utils$fast_nearest = utils.fast_nearest(ohlcv, smth + E),
-          _Utils$fast_nearest2 = _slicedToArray(_Utils$fast_nearest, 2),
+        var _Utils$fast_nearest = utils/* default */.A.fast_nearest(ohlcv, smth + E),
+          _Utils$fast_nearest2 = (0,slicedToArray/* default */.A)(_Utils$fast_nearest, 2),
           i1 = _Utils$fast_nearest2[0],
           i2 = _Utils$fast_nearest2[1];
         if (typeof i1 === 'number') {
@@ -13856,54 +14148,20 @@ var TI = /*#__PURE__*/function () {
   }]);
 }();
 
-;// ./node_modules/babel-loader/lib/index.js!./node_modules/vue-loader/lib/index.js??vue-loader-options!./src/components/Chart.vue?vue&type=script&lang=js
+;// ./src/mixins/chart/chart-range.js
+
+// Chart range, layout, and data subset management
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-/* harmony default export */ const Chartvue_type_script_lang_js = ({
-  name: 'Chart',
-  props: ['title_txt', 'data', 'width', 'height', 'font', 'colors', 'overlays', 'tv_id', 'config', 'buttons', 'toolbar', 'ib', 'skin', 'timezone'],
-  mixins: [shaders, datatrack],
-  components: {
-    GridSection: Section,
-    Botbar: components_Botbar,
-    Keyboard: Keyboard,
-    GridResizer: GridResizer
-  },
-  created: function created() {
-    // Context for text measurements
-    this.ctx = new context(this.$props);
-
-    // Initial layout (All measurments for the chart)
-    this.init_range();
-    this.sub = this.subset();
-    utils.overwrite(this.range, this.range); // Fix for IB mode
-    this._layout = new js_layout(this);
-
-    // Updates current cursor values
-    this.updater = new updater(this);
-    this.update_last_values();
-    this.init_shaders(this.skin);
-  },
+/* harmony default export */ const chart_range = ({
   methods: {
     range_changed: function range_changed(r) {
-      // Overwite & keep the original references
-      // Quick fix for IB mode (switch 2 next lines)
-      // TODO: wtf?
       var sub = this.subset(r);
-      utils.overwrite(this.range, r);
-      utils.overwrite(this.sub, sub);
+      utils/* default */.A.overwrite(this.range, r);
+      utils/* default */.A.overwrite(this.sub, sub);
       this.update_layout();
       this.$emit('range-changed', r);
       if (this.$props.ib) this.save_data_t();
@@ -13915,34 +14173,22 @@ var TI = /*#__PURE__*/function () {
     setRange: function setRange(t1, t2) {
       this.range_changed([t1, t2]);
     },
-    cursor_changed: function cursor_changed(e) {
-      if (e.mode) this.cursor.mode = e.mode;
-      if (this.cursor.mode !== 'explore') {
-        this.updater.sync(e);
-      }
-      if (this._hook_xchanged) this.ce('?x-changed', e);
-    },
-    cursor_locked: function cursor_locked(state) {
-      if (this.cursor.scroll_lock && state) return;
-      this.cursor.locked = state;
-      if (this._hook_xlocked) this.ce('?x-locked', state);
-    },
     calc_interval: function calc_interval() {
       var _this = this;
-      var tf = utils.parse_tf(this.forced_tf);
+      var tf = utils/* default */.A.parse_tf(this.forced_tf);
       if (this.ohlcv.length < 2 && !tf) return;
-      this.interval_ms = tf || utils.detect_interval(this.ohlcv);
+      this.interval_ms = tf || utils/* default */.A.detect_interval(this.ohlcv);
       this.interval = this.$props.ib ? 1 : this.interval_ms;
-      utils.warn(function () {
+      utils/* default */.A.warn(function () {
         return _this.$props.ib && !_this.chart.tf;
-      }, constants.IB_TF_WARN, constants.SECOND);
+      }, constants/* default */.A.IB_TF_WARN, constants/* default */.A.SECOND);
     },
     set_ytransform: function set_ytransform(s) {
       var obj = this.y_transforms[s.grid_id] || {};
       Object.assign(obj, s);
       this.$set(this.y_transforms, s.grid_id, obj);
       this.update_layout();
-      utils.overwrite(this.range, this.range);
+      utils/* default */.A.overwrite(this.range, this.range);
     },
     default_range: function default_range() {
       var dl = this.$props.config.DEFAULT_LEN;
@@ -13956,9 +14202,9 @@ var TI = /*#__PURE__*/function () {
         s = l - dl, d = 0.5;
       }
       if (!this.$props.ib) {
-        utils.overwrite(this.range, [this.ohlcv[s][0] - this.interval * d, this.ohlcv[l][0] + this.interval * ml]);
+        utils/* default */.A.overwrite(this.range, [this.ohlcv[s][0] - this.interval * d, this.ohlcv[l][0] + this.interval * ml]);
       } else {
-        utils.overwrite(this.range, [s - this.interval * d, l + this.interval * ml]);
+        utils/* default */.A.overwrite(this.range, [s - this.interval * d, l + this.interval * ml]);
       }
     },
     subset: function subset(range) {
@@ -13966,7 +14212,7 @@ var TI = /*#__PURE__*/function () {
         range = this.range;
       }
       var _this$filter = this.filter(this.ohlcv, range[0] - this.interval, range[1]),
-        _this$filter2 = _slicedToArray(_this$filter, 2),
+        _this$filter2 = (0,slicedToArray/* default */.A)(_this$filter, 2),
         res = _this$filter2[0],
         index = _this$filter2[1];
       this.ti_map = new TI();
@@ -13977,6 +14223,55 @@ var TI = /*#__PURE__*/function () {
         return this.ti_map.sub_i;
       }
       return [];
+    },
+    init_range: function init_range() {
+      this.calc_interval();
+      this.default_range();
+    },
+    update_layout: function update_layout(clac_tf, forceResize) {
+      if (forceResize === void 0) {
+        forceResize = false;
+      }
+      if (clac_tf) this.calc_interval();
+      this._layout = new js_layout/* default */.A(this);
+      this.rerender++;
+      var layout = this._layout;
+      if (forceResize) {
+        if (this.$refs.sec) {
+          this.$refs.sec.forEach(function (section, i) {
+            var grid = section && section.$refs.grid;
+            var sidebar = section && section.$refs['sb-' + i];
+            if (grid && grid.resize_from_layout) {
+              grid.resize_from_layout(layout);
+            }
+            if (sidebar && sidebar.resize_from_layout) {
+              sidebar.resize_from_layout(layout);
+            }
+            if (section && section.updateLegendPosition) {
+              section.updateLegendPosition(layout);
+            }
+          });
+        }
+      } else {
+        if (this.$refs.sec) {
+          this.$refs.sec.forEach(function (section, i) {
+            var grid = section && section.$refs.grid;
+            var sidebar = section && section.$refs['sb-' + i];
+            if (grid && grid.layoutOverride) {
+              grid.layoutOverride = null;
+              if (grid.renderer) grid.renderer.layout = layout.grids[i];
+            }
+            if (sidebar && sidebar.layoutOverride) {
+              sidebar.layoutOverride = null;
+              if (sidebar.renderer) sidebar.renderer.layout = layout.grids[i];
+            }
+            if (section && section.clearLayoutOverride) {
+              section.clearLayoutOverride();
+            }
+          });
+        }
+      }
+      if (this._hook_update) this.ce('?chart-update', this._layout);
     },
     common_props: function common_props() {
       return {
@@ -13999,123 +14294,19 @@ var TI = /*#__PURE__*/function () {
     overlay_subset: function overlay_subset(source, side) {
       var _this2 = this;
       return source.map(function (d, i) {
-        var res = utils.fast_filter(d.data, _this2.ti_map.i2t_mode(_this2.range[0] - _this2.interval, d.indexSrc), _this2.ti_map.i2t_mode(_this2.range[1], d.indexSrc));
+        var res = utils/* default */.A.fast_filter(d.data, _this2.ti_map.i2t_mode(_this2.range[0] - _this2.interval, d.indexSrc), _this2.ti_map.i2t_mode(_this2.range[1], d.indexSrc));
         return {
           type: d.type,
-          name: utils.format_name(d),
+          name: utils/* default */.A.format_name(d),
           data: _this2.ti_map.parse(res[0] || [], d.indexSrc || 'map'),
           settings: d.settings || _this2.settings_ov,
           grid: d.grid || {},
-          tf: utils.parse_tf(d.tf),
+          tf: utils/* default */.A.parse_tf(d.tf),
           i0: res[1],
           loading: d.loading,
           last: (_this2.last_values[side] || [])[i]
         };
       });
-    },
-    section_props: function section_props(i) {
-      return i === 0 ? this.main_section : this.sub_section;
-    },
-    init_range: function init_range() {
-      this.calc_interval();
-      this.default_range();
-    },
-    layer_meta_props: function layer_meta_props(d) {
-      // TODO: check reactivity when layout is changed
-      if (!(d.grid_id in this.layers_meta)) {
-        this.$set(this.layers_meta, d.grid_id, {});
-      }
-      this.$set(this.layers_meta[d.grid_id], d.layer_id, d);
-
-      // Rerender
-      this.update_layout();
-    },
-    remove_meta_props: function remove_meta_props(grid_id, layer_id) {
-      if (grid_id in this.layers_meta) {
-        this.$delete(this.layers_meta[grid_id], layer_id);
-      }
-    },
-    emit_custom_event: function emit_custom_event(d) {
-      this.on_shader_event(d, 'botbar');
-      this.$emit('custom-event', d);
-      if (d.event === 'remove-layer-meta') {
-        this.remove_meta_props.apply(this, _toConsumableArray(d.args));
-      }
-      // Handle double-click on off-chart grid to minimize
-      if (d.event === 'grid-dblclick') {
-        this.on_toggle_minimize(d.args[0]);
-      }
-      // Handle double-click on main chart to minimize all off-charts
-      if (d.event === 'minimize-all-offcharts') {
-        this.minimize_all_offcharts();
-      }
-      // Handle open indicator settings modal
-      if (d.event === 'open-indicator-settings') {
-        this.$emit('open-indicator-settings', d.args[0]);
-      }
-      // Note: close-indicator is handled via custom-event mechanism in TradingVue.vue
-    },
-    update_layout: function update_layout(clac_tf, forceResize) {
-      if (forceResize === void 0) {
-        forceResize = false;
-      }
-      if (clac_tf) this.calc_interval();
-      // Create new layout and assign directly (triggers Vue reactivity)
-      this._layout = new js_layout(this);
-      this.rerender++;
-      var layout = this._layout;
-      if (forceResize) {
-        // During active resize, force immediate visual updates
-        if (this.$refs.sec) {
-          this.$refs.sec.forEach(function (section, i) {
-            var grid = section && section.$refs.grid;
-            var sidebar = section && section.$refs['sb-' + i];
-            // Update via resize_from_layout for immediate feedback
-            if (grid && grid.resize_from_layout) {
-              grid.resize_from_layout(layout);
-            }
-            if (sidebar && sidebar.resize_from_layout) {
-              sidebar.resize_from_layout(layout);
-            }
-            // Update legend position
-            if (section && section.updateLegendPosition) {
-              section.updateLegendPosition(layout);
-            }
-          });
-        }
-      } else {
-        // Normal update - clear any layoutOverride so Vue reactivity takes over
-        if (this.$refs.sec) {
-          this.$refs.sec.forEach(function (section, i) {
-            var grid = section && section.$refs.grid;
-            var sidebar = section && section.$refs['sb-' + i];
-            if (grid && grid.layoutOverride) {
-              grid.layoutOverride = null;
-              if (grid.renderer) grid.renderer.layout = layout.grids[i];
-            }
-            if (sidebar && sidebar.layoutOverride) {
-              sidebar.layoutOverride = null;
-              if (sidebar.renderer) sidebar.renderer.layout = layout.grids[i];
-            }
-            // Clear legend layout override
-            if (section && section.clearLayoutOverride) {
-              section.clearLayoutOverride();
-            }
-          });
-        }
-      }
-      if (this._hook_update) this.ce('?chart-update', this._layout);
-    },
-    legend_button_click: function legend_button_click(event) {
-      this.$emit('legend-button-click', event);
-    },
-    register_kb: function register_kb(event) {
-      if (!this.$refs.keyboard) return;
-      this.$refs.keyboard.register(event);
-    },
-    remove_kb: function remove_kb(event) {
-      if (!this.$refs.keyboard) return;
-      this.$refs.keyboard.remove(event);
     },
     update_last_values: function update_last_values() {
       var _this3 = this;
@@ -14132,52 +14323,104 @@ var TI = /*#__PURE__*/function () {
         var d = x.data || [];
         _this3.last_values.offchart[i] = d[d.length - 1];
       });
+    }
+  },
+  data: function data() {
+    return {
+      sub: [],
+      range: [],
+      interval: 0,
+      interval_ms: 0,
+      y_transforms: {},
+      sub_start: undefined,
+      last_candle: [],
+      last_values: {},
+      rerender: 0,
+      _layout: null
+    };
+  },
+  watch: {
+    width: function width() {
+      this.update_layout();
+      if (this._hook_resize) this.ce('?chart-resize');
     },
-    // Hook events for extensions
-    ce: function ce(event) {
-      for (var _len = arguments.length, args = new Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
-        args[_key - 1] = arguments[_key];
+    height: function height() {
+      this.update_layout();
+      if (this._hook_resize) this.ce('?chart-resize');
+    },
+    ib: function ib(nw) {
+      if (!nw) {
+        var t1 = this.ti_map.i2t(this.range[0]);
+        var t2 = this.ti_map.i2t(this.range[1]);
+        utils/* default */.A.overwrite(this.range, [t1, t2]);
+        this.interval = this.interval_ms;
+      } else {
+        this.init_range();
+        utils/* default */.A.overwrite(this.range, this.range);
+        this.interval = 1;
       }
-      this.emit_custom_event({
-        event: event,
-        args: args
-      });
+      var sub = this.subset();
+      utils/* default */.A.overwrite(this.sub, sub);
+      this.update_layout();
     },
-    // Set hooks list (called from an extension)
-    hooks: function hooks() {
-      var _this4 = this;
-      for (var _len2 = arguments.length, list = new Array(_len2), _key2 = 0; _key2 < _len2; _key2++) {
-        list[_key2] = arguments[_key2];
-      }
-      list.forEach(function (x) {
-        return _this4["_hook_".concat(x)] = true;
-      });
+    timezone: function timezone() {
+      this.update_layout();
     },
-    // Grid resize handlers
+    colors: function colors() {
+      utils/* default */.A.overwrite(this.range, this.range);
+    },
+    forced_tf: function forced_tf(n, p) {
+      this.calc_interval();
+      this.update_layout(true);
+      this.ce('exec-all-scripts');
+    },
+    data: {
+      handler: function handler(n, p) {
+        if (!this.sub.length) this.init_range();
+        var sub = this.subset();
+        if (this.sub.length || sub.length) {
+          utils/* default */.A.overwrite(this.sub, sub);
+        }
+        var nw = this.data_changed();
+        this.update_layout(nw);
+        utils/* default */.A.overwrite(this.range, this.range);
+        this.cursor.scroll_lock = !!n.scrollLock;
+        if (n.scrollLock && this.cursor.locked) {
+          this.cursor.locked = false;
+        }
+        if (this._hook_data) this.ce('?chart-data', nw);
+        this.update_last_values();
+        this.rerender++;
+      },
+      deep: true
+    }
+  }
+});
+;// ./src/mixins/chart/chart-resize.js
+// Chart grid resize and minimize functionality
+
+/* harmony default export */ const chart_resize = ({
+  methods: {
     on_resize_grids: function on_resize_grids(e) {
       this.isResizing = true;
       this.$set(this.customGridHeights, e.gridAbove, e.heightAbove);
       this.$set(this.customGridHeights, e.gridBelow, e.heightBelow);
-      this.update_layout(false, true); // forceResize = true
+      this.update_layout(false, true);
     },
     on_resize_complete: function on_resize_complete() {
-      var _this5 = this;
-      // Save heights for restore after minimize
+      var _this = this;
       var grids = this._layout.grids;
       grids.forEach(function (g, i) {
-        if (!_this5.minimizedGrids[i]) {
-          _this5.$set(_this5.savedGridHeights, i, g.height);
+        if (!_this.minimizedGrids[i]) {
+          _this.$set(_this.savedGridHeights, i, g.height);
         }
       });
-      // End resize mode - layoutOverride stays set until next normal update
       this.isResizing = false;
     },
     on_toggle_minimize: function on_toggle_minimize(gridId) {
       var isMinimized = this.minimizedGrids[gridId];
       if (isMinimized) {
-        // Restore from minimized state
         this.$set(this.minimizedGrids, gridId, false);
-        // Restore saved height
         if (this.savedGridHeights[gridId]) {
           this.$set(this.customGridHeights, gridId, this.savedGridHeights[gridId]);
         } else {
@@ -14185,33 +14428,24 @@ var TI = /*#__PURE__*/function () {
         }
       } else {
         var _this$_layout$grids$g;
-        // Save current height before minimizing
         var currentHeight = (_this$_layout$grids$g = this._layout.grids[gridId]) === null || _this$_layout$grids$g === void 0 ? void 0 : _this$_layout$grids$g.height;
         if (currentHeight) {
           this.$set(this.savedGridHeights, gridId, currentHeight);
         }
-        // Minimize
         this.$set(this.minimizedGrids, gridId, true);
       }
-
-      // Redistribute remaining space to other grids
       this.redistribute_heights(gridId, isMinimized);
-      // Use forceResize to trigger immediate visual updates
       this.update_layout(false, true);
     },
     redistribute_heights: function redistribute_heights(changedGridId, wasMinimized) {
       var grids = this._layout.grids;
       var MINIMIZED_HEIGHT = 28;
-      var MIN_MAIN_CHART_HEIGHT = 100; // Minimum height for main chart
-      var MIN_OFFCHART_HEIGHT = 50; // Minimum height for off-charts when donating space
-
+      var MIN_MAIN_CHART_HEIGHT = 100;
+      var MIN_OFFCHART_HEIGHT = 50;
       if (wasMinimized) {
         var _grids$;
-        // EXPANDING: first try main chart, then off-charts above
         var restoreHeight = this.savedGridHeights[changedGridId] || 150;
         var remainingDelta = restoreHeight - MINIMIZED_HEIGHT;
-
-        // First, try to take from main chart
         var mainChartHeight = this.customGridHeights[0] || ((_grids$ = grids[0]) === null || _grids$ === void 0 ? void 0 : _grids$.height) || 100;
         var mainAvailable = Math.max(0, mainChartHeight - MIN_MAIN_CHART_HEIGHT);
         var takeFromMain = Math.min(remainingDelta, mainAvailable);
@@ -14219,13 +14453,10 @@ var TI = /*#__PURE__*/function () {
           this.$set(this.customGridHeights, 0, mainChartHeight - takeFromMain);
           remainingDelta -= takeFromMain;
         }
-
-        // If still need more space, take from off-charts above (starting from closest)
         if (remainingDelta > 0) {
           for (var i = changedGridId - 1; i >= 1; i--) {
             var _grids$i;
-            if (this.minimizedGrids[i]) continue; // Skip minimized grids
-
+            if (this.minimizedGrids[i]) continue;
             var gridHeight = this.customGridHeights[i] || ((_grids$i = grids[i]) === null || _grids$i === void 0 ? void 0 : _grids$i.height) || 100;
             var available = Math.max(0, gridHeight - MIN_OFFCHART_HEIGHT);
             var takeAmount = Math.min(remainingDelta, available);
@@ -14236,20 +14467,14 @@ var TI = /*#__PURE__*/function () {
             if (remainingDelta <= 0) break;
           }
         }
-
-        // Set the actual height we could achieve
         var actualHeight = restoreHeight - remainingDelta;
         if (actualHeight > MINIMIZED_HEIGHT) {
           this.$set(this.customGridHeights, changedGridId, actualHeight);
         }
       } else {
         var _grids$targetGridId;
-        // MINIMIZING: give space to grid directly above
-        // This moves the bar down (grid above expands)
         var gridAboveId = changedGridId - 1;
         if (gridAboveId < 0) return;
-
-        // Find target grid (skip minimized grids)
         var targetGridId = gridAboveId;
         if (this.minimizedGrids[gridAboveId]) {
           for (var _i = gridAboveId; _i >= 0; _i--) {
@@ -14268,8 +14493,6 @@ var TI = /*#__PURE__*/function () {
     minimize_all_offcharts: function minimize_all_offcharts() {
       var grids = this._layout.grids;
       var MINIMIZED_HEIGHT = 28;
-
-      // Check if any off-chart is NOT minimized
       var hasExpandedOffchart = false;
       for (var i = 1; i < grids.length; i++) {
         if (!this.minimizedGrids[i]) {
@@ -14279,37 +14502,27 @@ var TI = /*#__PURE__*/function () {
       }
       if (hasExpandedOffchart) {
         var _grids$2;
-        // Minimize all off-charts: save heights and give space to main chart
         var totalHeightGained = 0;
         for (var _i2 = 1; _i2 < grids.length; _i2++) {
           if (!this.minimizedGrids[_i2]) {
             var _grids$_i;
-            // Save current height before minimizing
             var currentHeight = this.customGridHeights[_i2] || ((_grids$_i = grids[_i2]) === null || _grids$_i === void 0 ? void 0 : _grids$_i.height);
             if (currentHeight) {
               this.$set(this.savedGridHeights, _i2, currentHeight);
               totalHeightGained += currentHeight - MINIMIZED_HEIGHT;
             }
-            // Mark as minimized
             this.$set(this.minimizedGrids, _i2, true);
           }
         }
-
-        // Give all gained space to main chart
         var mainHeight = this.customGridHeights[0] || ((_grids$2 = grids[0]) === null || _grids$2 === void 0 ? void 0 : _grids$2.height) || 100;
         this.$set(this.customGridHeights, 0, mainHeight + totalHeightGained);
       } else {
         var _grids$3;
-        // All are minimized - expand all off-charts
         var totalHeightNeeded = 0;
-
-        // Calculate total height needed to restore all
         for (var _i3 = 1; _i3 < grids.length; _i3++) {
           var restoreHeight = this.savedGridHeights[_i3] || 150;
           totalHeightNeeded += restoreHeight - MINIMIZED_HEIGHT;
         }
-
-        // Take space from main chart
         var _mainHeight = this.customGridHeights[0] || ((_grids$3 = grids[0]) === null || _grids$3 === void 0 ? void 0 : _grids$3.height) || 100;
         var MIN_MAIN_CHART_HEIGHT = 100;
         var available = Math.max(0, _mainHeight - MIN_MAIN_CHART_HEIGHT);
@@ -14317,8 +14530,6 @@ var TI = /*#__PURE__*/function () {
         if (takeFromMain > 0) {
           this.$set(this.customGridHeights, 0, _mainHeight - takeFromMain);
         }
-
-        // Expand all off-charts (proportionally if not enough space)
         var ratio = takeFromMain / totalHeightNeeded;
         for (var _i4 = 1; _i4 < grids.length; _i4++) {
           this.$set(this.minimizedGrids, _i4, false);
@@ -14327,18 +14538,183 @@ var TI = /*#__PURE__*/function () {
           this.$set(this.customGridHeights, _i4, actualHeight);
         }
       }
-
-      // Update layout with force resize
       this.update_layout(false, true);
     }
   },
+  data: function data() {
+    return {
+      customGridHeights: {},
+      minimizedGrids: {},
+      savedGridHeights: {},
+      isResizing: false
+    };
+  }
+});
+;// ./src/mixins/chart/chart-cursor.js
+// Chart cursor and keyboard input handling
+
+
+/* harmony default export */ const chart_cursor = ({
+  methods: {
+    cursor_changed: function cursor_changed(e) {
+      if (e.mode) this.cursor.mode = e.mode;
+      if (this.cursor.mode !== 'explore') {
+        this.updater.sync(e);
+      }
+      if (this._hook_xchanged) this.ce('?x-changed', e);
+    },
+    cursor_locked: function cursor_locked(state) {
+      if (this.cursor.scroll_lock && state) return;
+      this.cursor.locked = state;
+      if (this._hook_xlocked) this.ce('?x-locked', state);
+    },
+    register_kb: function register_kb(event) {
+      if (!this.$refs.keyboard) return;
+      this.$refs.keyboard.register(event);
+    },
+    remove_kb: function remove_kb(event) {
+      if (!this.$refs.keyboard) return;
+      this.$refs.keyboard.remove(event);
+    }
+  },
+  data: function data() {
+    return {
+      cursor: {
+        x: null,
+        y: null,
+        t: null,
+        y$: null,
+        grid_id: null,
+        locked: false,
+        values: {},
+        scroll_lock: false,
+        mode: utils/* default */.A.xmode()
+      }
+    };
+  }
+});
+;// ./src/mixins/chart/chart-events.js
+
+// Chart event dispatch and extension hooks
+
+/* harmony default export */ const chart_events = ({
+  methods: {
+    emit_custom_event: function emit_custom_event(d) {
+      this.on_shader_event(d, 'botbar');
+      this.$emit('custom-event', d);
+      if (d.event === 'remove-layer-meta') {
+        this.remove_meta_props.apply(this, (0,toConsumableArray/* default */.A)(d.args));
+      }
+      if (d.event === 'grid-dblclick') {
+        this.on_toggle_minimize(d.args[0]);
+      }
+      if (d.event === 'minimize-all-offcharts') {
+        this.minimize_all_offcharts();
+      }
+      if (d.event === 'open-indicator-settings') {
+        this.$emit('open-indicator-settings', d.args[0]);
+      }
+    },
+    layer_meta_props: function layer_meta_props(d) {
+      if (!(d.grid_id in this.layers_meta)) {
+        this.$set(this.layers_meta, d.grid_id, {});
+      }
+      this.$set(this.layers_meta[d.grid_id], d.layer_id, d);
+      this.update_layout();
+    },
+    remove_meta_props: function remove_meta_props(grid_id, layer_id) {
+      if (grid_id in this.layers_meta) {
+        this.$delete(this.layers_meta[grid_id], layer_id);
+      }
+    },
+    legend_button_click: function legend_button_click(event) {
+      this.$emit('legend-button-click', event);
+    },
+    // Hook events for extensions
+    ce: function ce(event) {
+      for (var _len = arguments.length, args = new Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
+        args[_key - 1] = arguments[_key];
+      }
+      this.emit_custom_event({
+        event: event,
+        args: args
+      });
+    },
+    // Set hooks list (called from an extension)
+    hooks: function hooks() {
+      var _this = this;
+      for (var _len2 = arguments.length, list = new Array(_len2), _key2 = 0; _key2 < _len2; _key2++) {
+        list[_key2] = arguments[_key2];
+      }
+      list.forEach(function (x) {
+        return _this["_hook_".concat(x)] = true;
+      });
+    }
+  },
+  data: function data() {
+    return {
+      layers_meta: {}
+    };
+  }
+});
+;// ./src/mixins/chart/index.js
+// Chart mixins - decomposed Chart.vue concerns
+
+
+
+
+
+;// ./node_modules/babel-loader/lib/index.js!./node_modules/vue-loader/lib/index.js??vue-loader-options!./src/components/Chart.vue?vue&type=script&lang=js
+
+
+
+
+
+
+
+
+
+
+// Decomposed chart mixins
+
+/* harmony default export */ const Chartvue_type_script_lang_js = ({
+  name: 'Chart',
+  props: ['title_txt', 'data', 'width', 'height', 'font', 'colors', 'overlays', 'tv_id', 'config', 'buttons', 'toolbar', 'ib', 'skin', 'timezone'],
+  mixins: [shaders, datatrack, chart_range, chart_resize, chart_cursor, chart_events],
+  components: {
+    GridSection: Section,
+    Botbar: components_Botbar,
+    Keyboard: Keyboard,
+    GridResizer: GridResizer
+  },
+  created: function created() {
+    // Context for text measurements
+    this.ctx = new context(this.$props);
+
+    // Initial layout
+    this.init_range();
+    this.sub = this.subset();
+    utils/* default */.A.overwrite(this.range, this.range);
+
+    // Import Layout here to avoid circular dependency in mixin
+    var Layout = (__webpack_require__(749)/* ["default"] */ .A);
+    this._layout = new Layout(this);
+
+    // Updates current cursor values
+    this.updater = new updater(this);
+    this.update_last_values();
+    this.init_shaders(this.skin);
+  },
+  methods: {
+    section_props: function section_props(i) {
+      return i === 0 ? this.main_section : this.sub_section;
+    }
+  },
   computed: {
-    // Component-specific props subsets:
     main_section: function main_section() {
-      // Access _layout directly to ensure Vue tracks it as a dependency
       var layout = this._layout;
       var p = Object.assign({}, this.common_props());
-      p.layout = layout; // Ensure we use the tracked reference
+      p.layout = layout;
       p.data = this.overlay_subset(this.onchart, 'onchart');
       p.data.push({
         type: this.chart.type || 'Candles',
@@ -14353,16 +14729,14 @@ var TI = /*#__PURE__*/function () {
       return p;
     },
     sub_section: function sub_section() {
-      // Access _layout directly to ensure Vue tracks it as a dependency
       var layout = this._layout;
       var p = Object.assign({}, this.common_props());
-      p.layout = layout; // Ensure we use the tracked reference
+      p.layout = layout;
       p.data = this.overlay_subset(this.offchart, 'offchart');
       p.overlays = this.$props.overlays;
       return p;
     },
     botbar_props: function botbar_props() {
-      // Access _layout directly to ensure Vue tracks it as a dependency
       var layout = this._layout;
       var p = Object.assign({}, this.common_props());
       p.layout = layout;
@@ -14374,7 +14748,6 @@ var TI = /*#__PURE__*/function () {
     offsub: function offsub() {
       return this.overlay_subset(this.offchart, 'offchart');
     },
-    // Datasets: candles, onchart, offchart indicators
     ohlcv: function ohlcv() {
       return this.$props.data.ohlcv || this.chart.data || [];
     },
@@ -14388,20 +14761,19 @@ var TI = /*#__PURE__*/function () {
     },
     offchart: function offchart() {
       var all = this.$props.data.offchart || [];
-      // Filter out hidden indicators (settings.display === false)
       return all.filter(function (x) {
         if (!x.settings) return true;
         return x.settings.display !== false;
       });
     },
     filter: function filter() {
-      return this.$props.ib ? utils.fast_filter_i : utils.fast_filter;
+      return this.$props.ib ? utils/* default */.A.fast_filter_i : utils/* default */.A.fast_filter;
     },
     styles: function styles() {
       var w = this.$props.toolbar ? this.$props.config.TOOLBAR : 0;
       return {
         'margin-left': "".concat(w, "px"),
-        'position': 'relative' // Ensure GridResizer is positioned relative to chart
+        'position': 'relative'
       };
     },
     meta: function meta() {
@@ -14415,8 +14787,6 @@ var TI = /*#__PURE__*/function () {
       return this.chart.tf;
     },
     resizerIndices: function resizerIndices() {
-      // Returns array of grid indices that need resizers (1, 2, 3, ...)
-      // Resizer at index i sits between grid i-1 and grid i
       var count = this._layout.grids.length;
       var indices = [];
       for (var i = 1; i < count; i++) {
@@ -14427,108 +14797,13 @@ var TI = /*#__PURE__*/function () {
   },
   data: function data() {
     return {
-      // Current data slice
-      sub: [],
-      // Time range
-      range: [],
-      // Candlestick interval
-      interval: 0,
-      // Crosshair states
-      cursor: {
-        x: null,
-        y: null,
-        t: null,
-        y$: null,
-        grid_id: null,
-        locked: false,
-        values: {},
-        scroll_lock: false,
-        mode: utils.xmode()
-      },
-      // A trick to re-render botbar
-      rerender: 0,
-      // Layers meta-props (changing behaviour)
-      layers_meta: {},
-      // Y-transforms (for y-zoom and -shift)
-      y_transforms: {},
       // Default OHLCV settings (when using DataStructure v1.0)
       settings_ohlcv: {},
       // Default overlay settings
       settings_ov: {},
       // Meta data
-      last_candle: [],
-      last_values: {},
-      sub_start: undefined,
-      activated: false,
-      // Grid resize state
-      customGridHeights: {},
-      minimizedGrids: {},
-      savedGridHeights: {},
-      isResizing: false,
-      // Layout object (needs to be reactive for grid resizing)
-      _layout: null
+      activated: false
     };
-  },
-  watch: {
-    width: function width() {
-      this.update_layout();
-      if (this._hook_resize) this.ce('?chart-resize');
-    },
-    height: function height() {
-      this.update_layout();
-      if (this._hook_resize) this.ce('?chart-resize');
-    },
-    ib: function ib(nw) {
-      if (!nw) {
-        // Change range index => time
-        var t1 = this.ti_map.i2t(this.range[0]);
-        var t2 = this.ti_map.i2t(this.range[1]);
-        utils.overwrite(this.range, [t1, t2]);
-        this.interval = this.interval_ms;
-      } else {
-        this.init_range(); // TODO: calc index range instead
-        utils.overwrite(this.range, this.range);
-        this.interval = 1;
-      }
-      var sub = this.subset();
-      utils.overwrite(this.sub, sub);
-      this.update_layout();
-    },
-    timezone: function timezone() {
-      this.update_layout();
-    },
-    colors: function colors() {
-      utils.overwrite(this.range, this.range);
-    },
-    forced_tf: function forced_tf(n, p) {
-      // Recalculate interval when timeframe changes
-      this.calc_interval();
-      this.update_layout(true);
-      this.ce('exec-all-scripts');
-    },
-    data: {
-      handler: function handler(n, p) {
-        if (!this.sub.length) this.init_range();
-        var sub = this.subset();
-        // Fixes Infinite loop warn, when the subset is empty
-        // TODO: Consider removing 'sub' from data entirely
-        if (this.sub.length || sub.length) {
-          utils.overwrite(this.sub, sub);
-        }
-        var nw = this.data_changed();
-        this.update_layout(nw);
-        utils.overwrite(this.range, this.range);
-        this.cursor.scroll_lock = !!n.scrollLock;
-        if (n.scrollLock && this.cursor.locked) {
-          this.cursor.locked = false;
-        }
-        if (this._hook_data) this.ce('?chart-data', nw);
-        this.update_last_values();
-        // TODO: update legend values for overalys
-        this.rerender++;
-      },
-      deep: true
-    }
   }
 });
 ;// ./src/components/Chart.vue?vue&type=script&lang=js
@@ -14543,8 +14818,8 @@ var TI = /*#__PURE__*/function () {
 ;
 var Chart_component = normalizeComponent(
   components_Chartvue_type_script_lang_js,
-  Chartvue_type_template_id_b1f0b6a6_render,
-  Chartvue_type_template_id_b1f0b6a6_staticRenderFns,
+  Chartvue_type_template_id_aad2b4ba_render,
+  Chartvue_type_template_id_aad2b4ba_staticRenderFns,
   false,
   null,
   null,
@@ -14776,7 +15051,7 @@ var ItemList_component = normalizeComponent(
   methods: {
     mousedown: function mousedown(e) {
       var _this = this;
-      this.click_start = utils.now();
+      this.click_start = utils/* default */.A.now();
       this.click_id = setTimeout(function () {
         _this.show_exp_list = true;
       }, this.config.TB_ICON_HOLD);
@@ -14791,7 +15066,7 @@ var ItemList_component = normalizeComponent(
       if (this.show_exp_list) e.stopPropagation();
     },
     emit_selected: function emit_selected(src) {
-      if (utils.now() - this.click_start > this.config.TB_ICON_HOLD) return;
+      if (utils/* default */.A.now() - this.click_start > this.config.TB_ICON_HOLD) return;
       clearTimeout(this.click_id);
       //if (Utils.is_mobile && src === 'click') return
       // TODO: double firing
@@ -15465,7 +15740,7 @@ function TradingVuevue_type_script_lang_js_arrayLikeToArray(r, a) { (null == a |
     },
     font: {
       type: String,
-      "default": constants.ChartConfig.FONT
+      "default": constants/* default */.A.ChartConfig.FONT
     },
     toolbar: {
       type: Boolean,
@@ -15542,7 +15817,7 @@ function TradingVuevue_type_script_lang_js_arrayLikeToArray(r, a) { (null == a |
       return chart_props;
     },
     chart_config: function chart_config() {
-      return Object.assign({}, constants.ChartConfig, this.$props.chartConfig);
+      return Object.assign({}, constants/* default */.A.ChartConfig, this.$props.chartConfig);
     },
     decubed: function decubed() {
       var data = this.$props.data;
@@ -15570,7 +15845,7 @@ function TradingVuevue_type_script_lang_js_arrayLikeToArray(r, a) { (null == a |
       try {
         for (_iterator.s(); !(_step = _iterator.n()).done;) {
           var x = _step.value;
-          arr.push.apply(arr, _toConsumableArray(Object.values(x.overlays)));
+          arr.push.apply(arr, (0,toConsumableArray/* default */.A)(Object.values(x.overlays)));
         }
       } catch (err) {
         _iterator.e(err);
@@ -15609,7 +15884,7 @@ function TradingVuevue_type_script_lang_js_arrayLikeToArray(r, a) { (null == a |
         // Double nextTick ensures layout and overlays are created
         this.$nextTick(function () {
           _this.$nextTick(function () {
-            _this.setRange.apply(_this, _toConsumableArray(range));
+            _this.setRange.apply(_this, (0,toConsumableArray/* default */.A)(range));
           });
         });
       }
@@ -15679,7 +15954,7 @@ function TradingVuevue_type_script_lang_js_arrayLikeToArray(r, a) { (null == a |
     // Note: close-indicator is handled via custom_event() below
     custom_event: function custom_event(d) {
       if ('args' in d) {
-        this.$emit.apply(this, [d.event].concat(_toConsumableArray(d.args)));
+        this.$emit.apply(this, [d.event].concat((0,toConsumableArray/* default */.A)(d.args)));
       } else {
         this.$emit(d.event);
       }
@@ -15790,7 +16065,7 @@ function _asyncToGenerator(n) {
 var regenerator = __webpack_require__(756);
 var regenerator_default = /*#__PURE__*/__webpack_require__.n(regenerator);
 ;// ./src/helpers/tmp/ww$$$.json
-const ww$$$_namespaceObject = /*#__PURE__*/JSON.parse('["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"]');
+const ww$$$_namespaceObject = /*#__PURE__*/JSON.parse('["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="]');
 // EXTERNAL MODULE: ./node_modules/lz-string/libs/lz-string.js
 var lz_string = __webpack_require__(992);
 var lz_string_default = /*#__PURE__*/__webpack_require__.n(lz_string);
@@ -15905,7 +16180,7 @@ var WebWork = /*#__PURE__*/function () {
           while (1) switch (_context.prev = _context.next) {
             case 0:
               return _context.abrupt("return", new Promise(function (rs, rj) {
-                var id = utils.uuid();
+                var id = utils/* default */.A.uuid();
                 _this3.send({
                   type: type,
                   id: id,
@@ -15930,7 +16205,7 @@ var WebWork = /*#__PURE__*/function () {
   }, {
     key: "just",
     value: function just(type, data, tx_keys) {
-      var id = utils.uuid();
+      var id = utils/* default */.A.uuid();
       this.send({
         type: type,
         id: id,
@@ -16380,7 +16655,7 @@ var DCEvents = /*#__PURE__*/function () {
           this.change_settings(args);
           break;
         case 'range-changed':
-          this.scripts_onrange.apply(this, _toConsumableArray(args));
+          this.scripts_onrange.apply(this, (0,toConsumableArray/* default */.A)(args));
           break;
         case 'scroll-lock':
           this.on_scroll_lock(args[0]);
@@ -16414,7 +16689,7 @@ var DCEvents = /*#__PURE__*/function () {
         });
         if (!arr.length && n.p.settings.$props) {
           var id = n.p.settings.$uuid;
-          if (utils.is_scr_props_upd(n, prev) && utils.delayed_exec(n.p)) {
+          if (utils/* default */.A.is_scr_props_upd(n, prev) && utils/* default */.A.delayed_exec(n.p)) {
             delta[id] = n.v;
             changed = true;
             _this2.tv.$set(n.p, 'loading', true);
@@ -16512,7 +16787,7 @@ var DCEvents = /*#__PURE__*/function () {
         // TODO: remove unnecessary script initializations
         var s = obj.settings;
         var props = args[0].src.props || {};
-        if (!s.$uuid) s.$uuid = "".concat(obj.type, "-").concat(utils.uuid2());
+        if (!s.$uuid) s.$uuid = "".concat(obj.type, "-").concat(utils/* default */.A.uuid2());
         args[0].uuid = s.$uuid;
         args[0].sett = s;
         for (var k in props || {}) {
@@ -16570,7 +16845,7 @@ var DCEvents = /*#__PURE__*/function () {
       this.get('.').forEach(function (v) {
         if (v.script && v.script.execOnRange && v.settings.$uuid) {
           // TODO: execInterrupt flag?
-          if (utils.delayed_exec(v)) {
+          if (utils/* default */.A.delayed_exec(v)) {
             delta[v.settings.$uuid] = v.settings;
           }
         }
@@ -16723,7 +16998,7 @@ var DCEvents = /*#__PURE__*/function () {
           id: grid_id
         }
       });
-      sett.$uuid = "".concat(id, "-").concat(utils.now());
+      sett.$uuid = "".concat(id, "-").concat(utils/* default */.A.now());
       this.tv.$set(this.data, 'selected', sett.$uuid);
       this.add_trash_icon();
     }
@@ -16802,7 +17077,7 @@ var DCEvents = /*#__PURE__*/function () {
     value: function remove_trash_icon() {
       // TODO: Does not call Toolbar render (distr version)
       var type = 'System:Remove';
-      utils.overwrite(this.data.tools, this.data.tools.filter(function (x) {
+      utils/* default */.A.overwrite(this.data.tools, this.data.tools.filter(function (x) {
         return x.type !== type;
       }));
     }
@@ -17026,7 +17301,7 @@ var DCCore = /*#__PURE__*/function (_DCEvents) {
               }
               this.loading = true;
               _context.next = 9;
-              return utils.pause(250);
+              return utils/* default */.A.pause(250);
             case 9:
               // Load bigger chunks
               range = range.slice(); // copy
@@ -17074,7 +17349,7 @@ var DCCore = /*#__PURE__*/function (_DCEvents) {
       }
       this.loading = false;
       if (this.last_chunk) {
-        this.range_changed.apply(this, _toConsumableArray(this.last_chunk).concat([true]));
+        this.range_changed.apply(this, (0,toConsumableArray/* default */.A)(this.last_chunk).concat([true]));
         this.last_chunk = null;
       }
     }
@@ -17154,14 +17429,14 @@ var DCCore = /*#__PURE__*/function (_DCEvents) {
       var candle = data['candle'];
       var tf = this.tv.$refs.chart.interval_ms;
       var t_next = last[0] + tf;
-      var now = data.t || utils.now();
+      var now = data.t || utils/* default */.A.now();
       var t = now >= t_next ? now - now % tf : last[0];
 
       // Update the entire candle
       if (candle.length >= 6) {
         t = candle[0];
       } else {
-        candle = [t].concat(_toConsumableArray(candle));
+        candle = [t].concat((0,toConsumableArray/* default */.A)(candle));
       }
       this.agg.push('ohlcv', candle);
       this.update_overlays(data, t, tf);
@@ -17178,7 +17453,7 @@ var DCCore = /*#__PURE__*/function (_DCEvents) {
       if (!tf) {
         return console.warn('Define the main timeframe');
       }
-      var now = data.t || utils.now();
+      var now = data.t || utils/* default */.A.now();
       if (!last) last = [now - now % tf];
       var t_next = last[0] + tf;
       var t = now >= t_next ? now - now % tf : last[0];
@@ -17219,7 +17494,7 @@ var DCCore = /*#__PURE__*/function (_DCEvents) {
           val = data[k];
         }
         if (!k.includes('.data')) k += '.data';
-        this.agg.push(k, [t].concat(_toConsumableArray(val)), tf);
+        this.agg.push(k, [t].concat((0,toConsumableArray/* default */.A)(val)), tf);
       }
     }
 
@@ -17263,7 +17538,7 @@ var DCCore = /*#__PURE__*/function (_DCEvents) {
           ])*/
           var on = this.query_search(query, ['onchart', tuple[0], tuple[1]]);
           var off = this.query_search(query, ['offchart', tuple[0], tuple[1]]);
-          result = [].concat(_toConsumableArray(on), _toConsumableArray(off));
+          result = [].concat((0,toConsumableArray/* default */.A)(on), (0,toConsumableArray/* default */.A)(off));
           break;
       }
       return result.filter(function (x) {
@@ -17343,8 +17618,8 @@ var DCCore = /*#__PURE__*/function (_DCEvents) {
           od = _this$ts_overlap.od,
           d1 = _this$ts_overlap.d1,
           d2 = _this$ts_overlap.d2;
-        (_obj$v = obj.v).splice.apply(_obj$v, _toConsumableArray(d1));
-        (_data = data).splice.apply(_data, _toConsumableArray(d2));
+        (_obj$v = obj.v).splice.apply(_obj$v, (0,toConsumableArray/* default */.A)(d1));
+        (_data = data).splice.apply(_data, (0,toConsumableArray/* default */.A)(d2));
 
         // Dst === Overlap === Src
         if (!obj.v.length && !data.length) {
@@ -17430,7 +17705,7 @@ var DCCore = /*#__PURE__*/function (_DCEvents) {
         // Psh(...) is faster but can overflow the stack
         if (o.length < 100000 && src.length < 100000) {
           var _dst;
-          (_dst = dst).push.apply(_dst, _toConsumableArray(o).concat(_toConsumableArray(src)));
+          (_dst = dst).push.apply(_dst, (0,toConsumableArray/* default */.A)(o).concat((0,toConsumableArray/* default */.A)(src)));
           return dst;
         } else {
           return dst.concat(o, src);
@@ -17441,7 +17716,7 @@ var DCCore = /*#__PURE__*/function (_DCEvents) {
         // Push(...) is faster but can overflow the stack
         if (o.length < 100000 && src.length < 100000) {
           var _src;
-          (_src = src).push.apply(_src, _toConsumableArray(o).concat(_toConsumableArray(dst)));
+          (_src = src).push.apply(_src, (0,toConsumableArray/* default */.A)(o).concat((0,toConsumableArray/* default */.A)(dst)));
           return src;
         } else {
           return src.concat(o, dst);
@@ -17534,7 +17809,7 @@ var AggTool = /*#__PURE__*/function () {
       }
       tf = parseInt(tf);
       var old = this.symbols[sym];
-      var t = utils.now();
+      var t = utils/* default */.A.now();
       var isds = sym.includes('datasets.');
       this.data_changed = true;
       if (!old) {
@@ -17953,8 +18228,8 @@ if (typeof window !== 'undefined' && window.Vue) {
   window.TradingVueLib = {
     TradingVue: TradingVue,
     Overlay: overlay,
-    Utils: utils,
-    Constants: constants,
+    Utils: utils/* default */.A,
+    Constants: constants/* default */.A,
     Candle: CandleExt,
     Volbar: VolbarExt,
     layout_cnv: layout_cnv,

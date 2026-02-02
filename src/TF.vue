@@ -28,7 +28,7 @@ import TfSelector from './TFSelector.vue'
 import Data from '../data/data_tf.json'
 import Utils from '../src/stuff/utils.js'
 import DataCube from '../src/helpers/datacube.js'
-import TestOverlay from './TestOverlay.vue'
+import TestOverlay from './components/overlays/TestOverlay.js'
 
 export default {
     name: 'Timeframes',

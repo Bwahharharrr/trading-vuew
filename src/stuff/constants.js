@@ -47,6 +47,12 @@ const TIMESCALES = [
 // Grid $ steps
 const $SCALES = [0.05, 0.1, 0.2, 0.25, 0.5, 0.8, 1, 2, 5]
 
+// Default overlay color palette
+const OVERLAY_COLORS = [
+    '#42b28a', '#5691ce', '#612ff9',
+    '#d50b90', '#ff2316'
+]
+
 const ChartConfig = {
     SBMIN: 60,       // Minimal sidebar px
     SBMAX: Infinity, // Max sidebar, px
@@ -148,5 +154,6 @@ export default {
     $SCALES: $SCALES,
     ChartConfig: ChartConfig,
     map_unit: MAP_UNIT,
-    IB_TF_WARN
+    IB_TF_WARN,
+    OVERLAY_COLORS
 }
