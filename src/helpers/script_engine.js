@@ -28,9 +28,11 @@ class ScriptEngine {
         this.tf = undefined     // Main chart TF
 
         // Set up function references in shared state (breaks circular deps)
-        scriptState.send = this.send.bind(this)
-        scriptState.std_inject = this.std_inject.bind(this)
-        scriptState.match_ds = this.match_ds.bind(this)
+        // Use arrow functions to defer method lookup until call time,
+        // since this.send is defined externally after construction
+        scriptState.send = (...args) => this.send(...args)
+        scriptState.std_inject = (...args) => this.std_inject(...args)
+        scriptState.match_ds = (...args) => this.match_ds(...args)
     }
 
     // Sync runtime state to shared module (for script_env and script_std)

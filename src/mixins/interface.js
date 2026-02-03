@@ -6,28 +6,20 @@
 export default {
     props: ['ux', 'updater', 'colors', 'wrapper'],
     mounted() {
-        this._$emit = this.$emit
-        this.$emit = this.custom_event
         if (this.init) this.init()
     },
     methods: {
         close() {
-            this.$emit('custom-event', {
-                event: 'close-interface',
-                args: [this.$props.ux.uuid]
-            })
+            this.custom_event('close-interface', this.$props.ux.uuid)
         },
         // TODO: emit all the way to the uxlist
         // add apply the changes there
         modify(obj) {
-            this.$emit('custom-event', {
-                event: 'modify-interface',
-                args: [this.$props.ux.uuid, obj]
-            })
+            this.custom_event('modify-interface', this.$props.ux.uuid, obj)
         },
         custom_event(event, ...args) {
             if (event.split(':')[0] === 'hook') return
-            this._$emit('custom-event', {event, args})
+            this.$emit('custom-event', {event, args})
         }
     },
     computed: {
