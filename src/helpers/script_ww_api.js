@@ -5,7 +5,32 @@
 import worker_data from './tmp/ww$$$.json'
 import Utils from '../stuff/utils.js'
 import lz from 'lz-string'
+import { toRaw, isReactive, isRef } from 'vue'
 import {} from './script_ww.js' // For webworker-loader to find the ww
+
+// Deep unwrap Vue 3 reactive proxies for postMessage compatibility
+function deepToRaw(obj) {
+    if (obj === null || typeof obj !== 'object') {
+        return obj
+    }
+
+    // Unwrap Vue reactive/ref proxies
+    if (isReactive(obj) || isRef(obj)) {
+        obj = toRaw(obj)
+    }
+
+    if (Array.isArray(obj)) {
+        return obj.map(item => deepToRaw(item))
+    }
+
+    const result = {}
+    for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            result[key] = deepToRaw(obj[key])
+        }
+    }
+    return result
+}
 
 class WebWork {
 
@@ -50,11 +75,13 @@ class WebWork {
         if (this.dc.sett.node_url) {
             return this.send_node(msg, tx_keys)
         }
+        // Deep unwrap Vue 3 reactive proxies before postMessage
+        const rawMsg = deepToRaw(msg)
         if (tx_keys) {
-            let tx_objs = tx_keys.map(k => msg.data[k])
-            this.worker.postMessage(msg, tx_objs)
+            let tx_objs = tx_keys.map(k => rawMsg.data[k])
+            this.worker.postMessage(rawMsg, tx_objs)
         } else {
-            this.worker.postMessage(msg)
+            this.worker.postMessage(rawMsg)
         }
     }
 

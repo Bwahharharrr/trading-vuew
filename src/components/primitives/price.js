@@ -63,9 +63,9 @@ export default class Price {
 
     last_bar() {
 
-        if (!this.comp.data.length) return undefined
+        if (!this.comp.$props.data.length) return undefined
         let layout = this.comp.$props.layout
-        let last = this.comp.data[this.comp.data.length - 1]
+        let last = this.comp.$props.data[this.comp.$props.data.length - 1]
         let y = layout.$2screen(last[4])
         //let cndl = layout.c_magnet(last[0])
         return {

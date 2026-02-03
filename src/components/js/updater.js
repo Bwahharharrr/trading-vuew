@@ -12,7 +12,7 @@ class CursorUpdater {
 
     // Get fresh grid references from the current layout
     get grids() {
-        return this.comp._layout.grids
+        return this.comp.chartLayout.grids
     }
 
     sync(e) {
@@ -29,7 +29,7 @@ class CursorUpdater {
                     if (this.cursor.t) once = false
                 }
                 if(c.values) {
-                    this.comp.$set(this.cursor.values, grid.id, c.values)
+                    this.cursor.values[grid.id] = c.values
                 }
             }
             if (grid.id !== e.grid_id) continue

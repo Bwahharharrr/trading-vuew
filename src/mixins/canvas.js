@@ -1,6 +1,7 @@
 // Interactive canvas-based component
 // Should implement: mousemove, mouseout, mouseup, mousedown, click
 
+import { h } from 'vue'
 import Utils from '../stuff/utils.js'
 
 export default {
@@ -8,6 +9,7 @@ export default {
         setup() {
             const id = `${this.$props.tv_id}-${this._id}-canvas`
             const canvas = document.getElementById(id)
+            if (!canvas) return  // Guard against missing canvas during deferred init
             let dpr = window.devicePixelRatio || 1
             canvas.style.width = `${this._attrs.width}px`
             canvas.style.height = `${this._attrs.height}px`
@@ -33,7 +35,8 @@ export default {
                     Utils.measureText(ctx, text, this.$props.tv_id)
             })
         },
-        create_canvas(h, id, props) {
+        create_canvas(h_arg, id, props) {
+            // Note: h_arg is ignored in Vue 3, we use the imported h
             this._id = id
             this._attrs = props.attrs
             return h('div', {
@@ -46,16 +49,14 @@ export default {
                 }
             }, [
                 h('canvas', {
-                    on: {
-                        mousemove: e => this.renderer.mousemove(e),
-                        mouseout: e => this.renderer.mouseout(e),
-                        mouseup: e => this.renderer.mouseup(e),
-                        mousedown: e => this.renderer.mousedown(e),
-                        dblclick: e => this.on_dblclick && this.on_dblclick(e)
-                    },
-                    attrs: Object.assign({
-                        id: `${this.$props.tv_id}-${id}-canvas`
-                    }, props.attrs),
+                    onMousemove: e => this.renderer && this.renderer.mousemove(e),
+                    onMouseout: e => this.renderer && this.renderer.mouseout(e),
+                    onMouseup: e => this.renderer && this.renderer.mouseup(e),
+                    onMousedown: e => this.renderer && this.renderer.mousedown(e),
+                    onDblclick: e => this.on_dblclick && this.on_dblclick(e),
+                    id: `${this.$props.tv_id}-${id}-canvas`,
+                    width: props.attrs.width,
+                    height: props.attrs.height,
                     ref: 'canvas',
                     style: props.style,
                 })

@@ -250,7 +250,7 @@ export default {
             window.tv = this.$refs.tradingVue
         })
     },
-    beforeDestroy() {
+    beforeUnmount() {
         window.removeEventListener('resize', this.onResize)
     }
 }

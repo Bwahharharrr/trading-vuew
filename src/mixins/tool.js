@@ -27,7 +27,7 @@ export default {
                     this.mouse.x, this.mouse.y,
                 ))) {
                     if (!this.selected) {
-                        this.$emit('object-selected')
+                        this.custom_event('object-selected')
                     }
                     this.start_drag()
                     e.preventDefault()
@@ -36,7 +36,7 @@ export default {
             })
             this.mouse.on('mouseup', e => {
                 this.drag = null
-                this.$emit('scroll-lock', false)
+                this.custom_event('scroll-lock', false)
             })
 
             this.keys = new Keys(this)
@@ -52,7 +52,7 @@ export default {
             }
         },
         set_state(name) {
-            this.$emit('change-settings', {
+            this.custom_event('change-settings', {
                  $state: name
             })
         },
@@ -73,10 +73,10 @@ export default {
             this.collisions = []
         },
         remove_tool() {
-            if (this.selected) this.$emit('remove-tool')
+            if (this.selected) this.custom_event('remove-tool')
         },
         start_drag() {
-            this.$emit('scroll-lock', true)
+            this.custom_event('scroll-lock', true)
             let cursor = this.$props.cursor
             this.drag = { t: cursor.t, y$: cursor.y$ }
             this.pins.forEach(x => x.rec_position())

@@ -99,7 +99,7 @@ export default {
             }
 
             // Update the chart candle data
-            this.$set(this.chart.data.chart, 'data', newData)
+            this.chart.data.chart.data = newData
 
             // Handle view-specific offchart indicators
             this.applyViewOffchart(viewData)
@@ -162,7 +162,7 @@ export default {
             }
 
             // Update chart offchart
-            this.$set(this.chart.data, 'offchart', combinedOffchart)
+            this.chart.data.offchart = combinedOffchart
         },
 
         buildOffchartData(persistentIndicators, viewData = null) {

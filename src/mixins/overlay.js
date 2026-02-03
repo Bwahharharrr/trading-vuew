@@ -123,7 +123,7 @@ export default {
     },
     computed: {
         sett() {
-            return this.$props.settings
+            return this.$props.settings || {}
         }
     },
     data() { return { uxs_count: 0, last_ux_id: null } },

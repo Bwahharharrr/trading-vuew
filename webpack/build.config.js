@@ -1,4 +1,4 @@
-const VueLoaderPlugin = require('vue-loader/lib/plugin')
+const { VueLoaderPlugin } = require('vue-loader')
 const TerserPlugin = require('terser-webpack-plugin')
 
 const webpack = require('webpack')
@@ -30,6 +30,11 @@ let common = {
         library: 'TradingVueJs',
         libraryTarget: 'umd',
         //libraryExport: "default"
+    },
+    resolve: {
+        alias: {
+            'vue': 'vue/dist/vue.esm-bundler.js'
+        }
     },
     performance: {
         maxEntrypointSize: 1024000,
@@ -74,6 +79,11 @@ let common = {
         new VueLoaderPlugin(),
         new webpack.BannerPlugin({
             banner: BANNER
+        }),
+        new webpack.DefinePlugin({
+            __VUE_OPTIONS_API__: 'true',
+            __VUE_PROD_DEVTOOLS__: 'false',
+            __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: 'false'
         })
     ]
 }

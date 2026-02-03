@@ -77,6 +77,8 @@ export default {
     },
 
     // Update array keeping the same reference
+    // Vue 3: Use splice as single atomic operation to avoid intermediate empty state
+    // (arr.length = 0 followed by push causes renders to see empty array)
     overwrite(arr, new_arr) {
         arr.splice(0, arr.length, ...new_arr)
     },

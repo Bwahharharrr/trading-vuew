@@ -39,7 +39,7 @@ export default {
         set_ytransform(s) {
             let obj = this.y_transforms[s.grid_id] || {}
             Object.assign(obj, s)
-            this.$set(this.y_transforms, s.grid_id, obj)
+            this.y_transforms[s.grid_id] = obj
             this.update_layout()
             Utils.overwrite(this.range, this.range)
         },
@@ -91,10 +91,42 @@ export default {
 
         update_layout(clac_tf, forceResize = false) {
             if (clac_tf) this.calc_interval()
-            this._layout = new Layout(this)
+
+            // CRITICAL: Ensure range is valid before creating layout
+            // If range is not set, try to initialize it
+            if (this.range[0] === undefined || this.range[1] === undefined) {
+                if (this.ohlcv && this.ohlcv.length >= 2) {
+                    this.init_range()
+                    // Also need to recompute subset with new range
+                    const sub = this.subset()
+                    Utils.overwrite(this.sub, sub)
+                } else {
+                    return  // Can't create layout without valid range and data
+                }
+            }
+
+            // CRITICAL: Create plain object with unwrapped values for Layout
+            // Vue 3 reactive proxies don't spread correctly - use direct index access
+            const rangeArr = [this.range[0], this.range[1]]  // Direct access, not spread
+            const subArr = Array.from(this.sub)  // Use Array.from instead of spread
+            const layoutParams = {
+                chart: this.chart,
+                sub: subArr,
+                offsub: this.offsub,
+                interval: this.interval,
+                range: rangeArr,
+                ctx: this.ctx,
+                layers_meta: this.layers_meta,
+                ti_map: this.ti_map,
+                $props: this.$props,
+                y_transforms: this.y_transforms,
+                customGridHeights: this.customGridHeights,
+                minimizedGrids: this.minimizedGrids
+            }
+            this.chartLayout = new Layout(layoutParams)
             this.rerender++
 
-            const layout = this._layout
+            const layout = this.chartLayout
             if (forceResize) {
                 if (this.$refs.sec) {
                     this.$refs.sec.forEach((section, i) => {
@@ -130,13 +162,13 @@ export default {
                     })
                 }
             }
-            if (this._hook_update) this.ce('?chart-update', this._layout)
+            if (this._hook_update) this.ce('?chart-update', this.chartLayout)
         },
 
         common_props() {
             return {
                 title_txt: this.chart.name || this.$props.title_txt,
-                layout: this._layout,
+                layout: this.chartLayout,
                 sub: this.sub,
                 range: this.range,
                 interval: this.interval,
@@ -201,16 +233,20 @@ export default {
             last_candle: [],
             last_values: {},
             rerender: 0,
-            _layout: null
+            chartLayout: null
+        }
+    },
+
+    computed: {
+        // Computed property to consolidate width/height watching
+        dimensions() {
+            return `${this.width}x${this.height}`
         }
     },
 
     watch: {
-        width() {
-            this.update_layout()
-            if (this._hook_resize) this.ce('?chart-resize')
-        },
-        height() {
+        // Consolidated width/height watcher using computed
+        dimensions() {
             this.update_layout()
             if (this._hook_resize) this.ce('?chart-resize')
         },

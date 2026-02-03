@@ -1,6 +1,8 @@
 <script>
 // The side bar (yep, that thing with a bunch of $$$)
+// Optimized for Vue 3: no $forceUpdate, targeted watchers
 
+import { h, nextTick } from 'vue'
 import Sidebar from './js/sidebar.js'
 import Canvas from '../mixins/canvas.js'
 
@@ -14,15 +16,23 @@ export default {
     mixins: [Canvas],
     mounted() {
         const el = this.$refs['canvas']
+        if (!el) {
+            // Canvas not created yet (render returned loading state)
+            return
+        }
         this.renderer = new Sidebar(el, this)
         this.setup()
         this.redraw()
     },
-    render(h) {
+    render() {
         const id = this.$props.grid_id
         // Use layout override if available (for resize operations)
         const layout = this.layoutOverride ||
-            this.$props.layout.grids[id]
+            (this.$props.layout?.grids?.[id])
+        // Guard against missing layout during initialization
+        if (!layout) {
+            return h('div', { class: 'trading-vue-sidebar-loading' })
+        }
         return this.create_canvas(h, `sidebar-${id}`, {
             position: {
                 x: layout.width,
@@ -58,9 +68,9 @@ export default {
                 if (this.renderer) {
                     this.renderer.layout = grid
                 }
-                // Force re-render and setup
-                this.$forceUpdate()
-                this.$nextTick(() => {
+                // Trigger re-render via reactive key (replaces $forceUpdate)
+                this.renderKey++
+                nextTick(() => {
                     this.setup()
                 })
             }
@@ -69,23 +79,67 @@ export default {
     data() {
         return {
             // Override layout for resize operations (bypassing Vue reactivity)
-            layoutOverride: null
+            layoutOverride: null,
+            // Reactive key for triggering re-renders (replaces $forceUpdate)
+            renderKey: 0
+        }
+    },
+    computed: {
+        // Computed hash keys for efficient change detection (replaces deep watchers)
+        rangeKey() {
+            const r = this.$props.range
+            if (!r || r.length < 2) return ''
+            return `${r[0]},${r[1]}`
+        },
+        layoutKey() {
+            const id = this.$props.grid_id
+            const grid = this.$props.layout?.grids?.[id]
+            if (!grid) return ''
+            return `${grid.sb},${grid.height},${grid.offset},${grid.width}`
         }
     },
     watch: {
-        range: {
-            handler: function() { this.redraw() },
-            deep: true
+        // Initialize renderer when layout becomes available (deferred init)
+        layoutKey: {
+            handler(newKey, oldKey) {
+                const id = this.$props.grid_id
+                const grid = this.$props.layout?.grids?.[id]
+                if (!this.renderer && grid) {
+                    // Wait for Vue to re-render with canvas element
+                    nextTick(() => {
+                        if (this.renderer) return  // Already initialized
+                        const el = this.$refs['canvas']
+                        if (!el) return  // Canvas still not ready
+                        this.renderer = new Sidebar(el, this)
+                        this.setup()
+                        this.redraw()
+                    })
+                }
+            },
+            immediate: false
         },
-        cursor: {
-            handler: function() { this.redraw() },
-            deep: true
+        // Watch range using computed hash key
+        rangeKey(newKey, oldKey) {
+            if (!newKey || newKey === oldKey) return
+            this.redraw()
+        },
+        // Watch cursor y$ (price) changes only - sidebar shows price
+        'cursor.y$': function(newY) {
+            if (this._cursorRafPending) return
+            this._cursorRafPending = true
+            requestAnimationFrame(() => {
+                this._cursorRafPending = false
+                this.redraw()
+            })
         },
         rerender() {
-            this.$nextTick(() => this.redraw())
+            nextTick(() => this.redraw())
+        },
+        renderKey() {
+            nextTick(() => this.redraw())
         }
     },
-    beforeDestroy () {
+    beforeUnmount () {
         if(this.renderer) this.renderer.destroy()
     }
 }

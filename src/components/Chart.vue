@@ -2,7 +2,7 @@
     <!-- Chart components combined together -->
     <div class="trading-vue-chart" :style="styles">
         <keyboard ref="keyboard"></keyboard>
-        <grid-section v-for="(grid, i) in this._layout.grids"
+        <grid-section v-for="(grid, i) in (this.chartLayout?.grids || [])"
             :key="grid.id" ref="sec"
             v-bind:common="section_props(i)"
             v-bind:grid_id="i"
@@ -20,7 +20,7 @@
         <grid-resizer v-for="i in resizerIndices"
             :key="'resizer-' + i"
             :grid_id="i"
-            :layout="_layout"
+            :layout="chartLayout"
             :colors="colors"
             v-on:resize-grids="on_resize_grids"
             v-on:resize-complete="on_resize_complete"
@@ -73,7 +73,25 @@ export default {
 
         // Import Layout here to avoid circular dependency in mixin
         const Layout = require('./js/layout.js').default
-        this._layout = new Layout(this)
+        // CRITICAL: Create plain object with unwrapped values for Layout
+        // Vue 3 reactive proxies don't spread correctly - use direct index access
+        const rangeArr = [this.range[0], this.range[1]]  // Direct access, not spread
+        const subArr = Array.from(this.sub)  // Use Array.from instead of spread
+        const layoutParams = {
+            chart: this.chart,
+            sub: subArr,
+            offsub: this.offsub,
+            interval: this.interval,
+            range: rangeArr,
+            ctx: this.ctx,
+            layers_meta: this.layers_meta,
+            ti_map: this.ti_map,
+            $props: this.$props,
+            y_transforms: this.y_transforms,
+            customGridHeights: this.customGridHeights,
+            minimizedGrids: this.minimizedGrids
+        }
+        this.chartLayout = new Layout(layoutParams)
 
         // Updates current cursor values
         this.updater = new CursorUpdater(this)
@@ -88,7 +106,7 @@ export default {
     },
     computed: {
         main_section() {
-            const layout = this._layout
+            const layout = this.chartLayout
             let p = Object.assign({}, this.common_props())
             p.layout = layout
             p.data = this.overlay_subset(this.onchart, 'onchart')
@@ -105,7 +123,7 @@ export default {
             return p
         },
         sub_section() {
-            const layout = this._layout
+            const layout = this.chartLayout
             let p = Object.assign({}, this.common_props())
             p.layout = layout
             p.data = this.overlay_subset(this.offchart, 'offchart')
@@ -113,7 +131,10 @@ export default {
             return p
         },
         botbar_props() {
-            const layout = this._layout
+            const layout = this.chartLayout
+            if (!layout || !layout.botbar) {
+                return {}
+            }
             let p = Object.assign({}, this.common_props())
             p.layout = layout
             p.width = layout.botbar.width
@@ -162,7 +183,10 @@ export default {
             return this.chart.tf
         },
         resizerIndices() {
-            const count = this._layout.grids.length
+            if (!this.chartLayout || !this.chartLayout.grids) {
+                return []
+            }
+            const count = this.chartLayout.grids.length
             let indices = []
             for (let i = 1; i < count; i++) {
                 indices.push(i)

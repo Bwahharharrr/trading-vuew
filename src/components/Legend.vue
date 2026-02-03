@@ -1,12 +1,13 @@
 <template>
 <div class="trading-vue-legend"
+     v-if="common"
      v-bind:style="calc_style"
      @dblclick="on_dblclick">
     <div v-if="grid_id === 0"
          class="trading-vue-ohlcv"
-        :style = "{ 'max-width': common.width + 'px' }">
+        :style = "{ 'max-width': (common?.layout?.grids?.[0]?.width || 200) + 'px' }">
         <span class="t-vue-title"
-             :style="{ color: common.colors.title }">
+             :style="{ color: common?.colors?.title }">
               {{common.title_txt}}
         </span>
         <span v-if="show_values">
@@ -17,7 +18,7 @@
             V<span class="t-vue-lspan" >{{ohlcv[4]}}</span>
         </span>
         <span v-if="!show_values" class="t-vue-lspan"
-            :style="{color: common.colors.text}">
+            :style="{color: common?.colors?.text}">
             {{(common.meta.last || [])[4]}}
         </span>
     </div>
@@ -52,17 +53,18 @@
             v-on:legend-button-click="button_click">
         </button-group>
         <span class="t-vue-ivalues" v-if="ind.v">
-            <span class="t-vue-lspan t-vue-ivalue"
-                v-if="show_values"
-                v-for="v in ind.values" :style="{ color: v.color }">
-                {{v.value}}
-            </span>
+            <template v-if="show_values">
+                <span class="t-vue-lspan t-vue-ivalue"
+                    v-for="(v, idx) in ind.values" :key="idx" :style="{ color: v.color }">
+                    {{v.value}}
+                </span>
+            </template>
         </span>
         <span v-if="ind.unk" class="t-vue-unknown">
             (Unknown type)
         </span>
         <transition name="tvjs-appear">
-            <spinner :colors="common.colors" v-if="ind.loading">
+            <spinner :colors="common?.colors" v-if="ind.loading">
             </spinner>
         </transition>
     </div>
@@ -81,10 +83,10 @@ export default {
     components: { ButtonGroup, Spinner },
     computed: {
         ohlcv() {
-            if (!this.$props.values || !this.$props.values.ohlcv) {
+            if (!this.$props.values || !this.$props.values.ohlcv || !this.layout) {
                 return Array(6).fill('n/a')
             }
-            const prec = this.layout.prec
+            const prec = this.layout.prec ?? 2
 
             // TODO: main the main legend more customizable
             let id = this.main_type + '_0'
@@ -109,6 +111,10 @@ export default {
             const f = this.format
             var types = {}
 
+            // Build index map first for O(n) lookup instead of O(n²)
+            const sourceData = this.off_data || this.json_data
+            const indexMap = new Map(sourceData.map((item, idx) => [item, idx]))
+
             return this.json_data.filter(
                 x => x.settings.legend !== false && !x.main
             ).map(x => {
@@ -117,7 +123,7 @@ export default {
                 return {
                     v: 'display' in x.settings ? x.settings.display : true,
                     name: x.name || id,
-                    index: (this.off_data || this.json_data).indexOf(x),
+                    index: indexMap.get(x) ?? -1,
                     id: id,
                     type: x.type,
                     settings: x.settings || {},
@@ -128,34 +134,35 @@ export default {
             })
         },
         calc_style() {
+            if (!this.layout) return { top: '10px', width: '100px' }
             let top = this.layout.height > 150 ? 10 : 5
-            let grids = this.$props.common.layout.grids
-            let w = grids[0] ? grids[0].width : undefined
+            let grids = this.$props.common?.layout?.grids
+            let w = grids?.[0]?.width ?? 100
             return {
-                top: `${this.layout.offset + top}px`,
+                top: `${(this.layout.offset || 0) + top}px`,
                 width: `${w-20}px`
             }
         },
         layout() {
             const id = this.$props.grid_id
             // Use layout override if available (for resize operations)
-            if (this.$props.layout_override) {
+            if (this.$props.layout_override?.grids?.[id]) {
                 return this.$props.layout_override.grids[id]
             }
-            return this.$props.common.layout.grids[id]
+            return this.$props.common?.layout?.grids?.[id]
         },
         json_data() {
-            return this.$props.common.data
+            return this.$props.common?.data || []
         },
         off_data() {
-            return this.$props.common.offchart
+            return this.$props.common?.offchart
         },
         main_type() {
-            let f = this.common.data.find(x => x.main)
+            let f = this.$props.common?.data?.find(x => x.main)
             return f ? f.type : undefined
         },
         show_values() {
-            return this.common.cursor.mode !== 'explore'
+            return this.$props.common?.cursor?.mode !== 'explore'
         }
     },
     methods: {

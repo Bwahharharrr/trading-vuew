@@ -4,11 +4,21 @@
 // one components size can depend on other component
 // data formatting (e.g. grid width depends on sidebar precision)
 // So it's better to calc all in one place.
+//
+// Performance optimized: candles/volume calculations are cached
 
 import GridMaker from './grid_maker.js'
 import Utils from '../../stuff/utils.js'
 import math from '../../stuff/math.js'
 import log_scale from './log_scale.js'
+
+// Layout cache for candles and volume computations
+// Key format: `${range[0]},${range[1]},${sub.length},${interval}`
+const layoutCache = {
+    key: '',
+    candles: null,
+    volume: null
+}
 
 function Layout(params) {
 
@@ -17,6 +27,14 @@ function Layout(params) {
         ti_map, $props:$p, y_transforms: y_ts,
         customGridHeights, minimizedGrids
     } = params
+
+    // CRITICAL FIX: Vue 3 reactive arrays may not destructure correctly
+    // Convert to plain array values to ensure we have the actual range
+    // Ensure range has actual values - if it's a Vue reactive array, spread it
+    const rangeValues = Array.isArray(range) ? [...range] : [range?.[0], range?.[1]]
+    if (rangeValues[0] !== undefined && rangeValues[1] !== undefined) {
+        range = rangeValues
+    }
 
     let mgrid = chart.grid || {}
 
@@ -110,9 +128,25 @@ function Layout(params) {
     }
 
     function candles_n_vol() {
+        // Performance: Generate cache key based on inputs that affect output
+        const cacheKey = `${range[0]},${range[1]},${sub.length},${interval},${$p.height},${self.A},${self.B},${self.px_step}`
+
+        // Check if we can reuse cached candles/volume
+        if (layoutCache.key === cacheKey && layoutCache.candles && layoutCache.volume) {
+            self.candles = layoutCache.candles
+            self.volume = layoutCache.volume
+            return
+        }
 
         self.candles = []
         self.volume = []
+
+        if (!sub.length) {
+            layoutCache.key = cacheKey
+            layoutCache.candles = self.candles
+            layoutCache.volume = self.volume
+            return
+        }
 
         let maxv = Math.max(...sub.map(x => x[5]))
         let vs = $p.config.VOLSCALE * $p.height / maxv
@@ -121,17 +155,22 @@ function Layout(params) {
         let splitter = self.px_step > 5 ? 1 : 0
         let hf_px_step = self.px_step * 0.5
 
+        // Pre-calculate common values
+        const candleW = self.px_step * $p.config.CANDLEW
+        const A = self.A
+        const B = self.B
+
         for (var i = 0; i < sub.length; i++) {
             let p = sub[i]
             mid = self.t2screen(p[0]) + 0.5
             self.candles.push(mgrid.logScale ?
                 log_scale.candle(self, mid, p, $p): {
                 x: mid,
-                w: self.px_step * $p.config.CANDLEW,
-                o: Math.floor(p[1] * self.A + self.B),
-                h: Math.floor(p[2] * self.A + self.B),
-                l: Math.floor(p[3] * self.A + self.B),
-                c: Math.floor(p[4] * self.A + self.B),
+                w: candleW,
+                o: Math.floor(p[1] * A + B),
+                h: Math.floor(p[2] * A + B),
+                l: Math.floor(p[3] * A + B),
+                c: Math.floor(p[4] * A + B),
                 z: p[6],
                 raw: p
             })
@@ -145,12 +184,17 @@ function Layout(params) {
                 x1: x1,
                 x2: x2,
                 h: p[5] * vs,
-                /* green: p[4] >= p[1], */
+                green: p[4] >= p[1],
                 z: p[6],
                 raw: p
             })
             prev = x2 + splitter
         }
+
+        // Update cache
+        layoutCache.key = cacheKey
+        layoutCache.candles = self.candles
+        layoutCache.volume = self.volume
     }
 
     // Main grid

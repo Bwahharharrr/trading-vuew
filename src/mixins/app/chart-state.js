@@ -133,9 +133,9 @@ export default {
     watch: {
         log_scale(value) {
             if (this.chart.data.chart) {
-                this.$set(this.chart.data.chart, 'grid', {
+                this.chart.data.chart.grid = {
                     logScale: value
-                })
+                }
             }
             this.saveStateToStorage()
         }

@@ -8,8 +8,8 @@ var PANHEIGHT
 export default class Sidebar {
 
     constructor(canvas, comp, side = 'right') {
-
-        PANHEIGHT = comp.config.PANHEIGHT
+        const config = comp.$props.config || {}
+        PANHEIGHT = config.PANHEIGHT || 22
 
         this.canvas = canvas
         this.ctx = canvas.getContext('2d')
@@ -18,7 +18,7 @@ export default class Sidebar {
         this.data = this.$p.sub
         this.range = this.$p.range
         this.id = this.$p.grid_id
-        this.layout = this.$p.layout.grids[this.id]
+        this.layout = this.$p.layout?.grids?.[this.id]
 
         this.side = side
         this.listeners()

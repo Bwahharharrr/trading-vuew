@@ -19,10 +19,10 @@ export default {
             this.price = new Price(this)
         },
         draw(ctx) {
-
+            const isMainChart = this.$props.sub === this.$props.data
             // If data === main candlestick data
             // render as main chart:
-            if (this.$props.sub === this.$props.data) {
+            if (isMainChart) {
                 var cnv = {
                     candles: this.$props.layout.candles,
                     volume: this.$props.layout.volume,
@@ -51,8 +51,8 @@ export default {
         // In case it's added as offchart overlay
         y_range() {
             var hi = -Infinity, lo = Infinity
-            for (var i = 0, n = this.sub.length; i < n; i++) {
-                let x = this.sub[i]
+            for (var i = 0, n = this.$props.sub.length; i < n; i++) {
+                let x = this.$props.sub[i]
                 if (x[2] > hi) hi = x[2]
                 if (x[3] < lo) lo = x[3]
             }

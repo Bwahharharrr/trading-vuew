@@ -115,7 +115,7 @@ export default {
         },
 
         togglePersistentIndicatorVisibility(name) {
-            this.$set(this.persistentIndicatorVisibility, name, !this.isPersistentIndicatorVisible(name))
+            this.persistentIndicatorVisibility[name] = !this.isPersistentIndicatorVisible(name)
             this.clipPersistentIndicators()
             this.applyCurrentColoring()
             // Force chart reset to render offchart changes
@@ -128,14 +128,12 @@ export default {
         },
 
         toggleAccordion(viewTitle) {
-            this.$set(this.accordionExpandedViews, viewTitle,
-                      !this.accordionExpandedViews[viewTitle])
+            this.accordionExpandedViews[viewTitle] = !this.accordionExpandedViews[viewTitle]
         },
 
         toggleViewIndicatorVisibility(viewTitle, indicatorName) {
             // Now uses persistentIndicatorVisibility since all indicators are persistent
-            this.$set(this.persistentIndicatorVisibility, indicatorName,
-                      !this.isPersistentIndicatorVisible(indicatorName))
+            this.persistentIndicatorVisibility[indicatorName] = !this.isPersistentIndicatorVisible(indicatorName)
             this.clipPersistentIndicators()
             this.applyCurrentColoring()
             // Force chart reset to render offchart changes
@@ -161,7 +159,7 @@ export default {
 
             // Update settings with new display value
             const newSettings = Object.assign({}, currentSettings, { display: newDisplay })
-            this.$set(this.chart.data.offchart[index], 'settings', newSettings)
+            this.chart.data.offchart[index].settings = newSettings
 
             // Also update in the original charts data to persist across timeframe changes
             if (this.currentTimeframe && this.charts[this.currentTimeframe]) {
@@ -215,12 +213,12 @@ export default {
 
             // Update the offchart data type and settings immediately
             if (this.chart.data.offchart && this.chart.data.offchart[indicatorIndex]) {
-                this.$set(this.chart.data.offchart[indicatorIndex], 'type', newType)
+                this.chart.data.offchart[indicatorIndex].type = newType
 
                 // Merge new settings with existing settings
                 const currentSettings = this.chart.data.offchart[indicatorIndex].settings || {}
                 const mergedSettings = Object.assign({}, currentSettings, newSettings)
-                this.$set(this.chart.data.offchart[indicatorIndex], 'settings', mergedSettings)
+                this.chart.data.offchart[indicatorIndex].settings = mergedSettings
 
                 // Also update in the original charts data to persist across timeframe changes
                 if (this.currentTimeframe && this.charts[this.currentTimeframe]) {
@@ -266,11 +264,11 @@ export default {
                 const saved = savedSettings[ind.name]
                 if (saved) {
                     if (saved.type) {
-                        this.$set(this.chart.data.offchart[i], 'type', saved.type)
+                        this.chart.data.offchart[i].type = saved.type
                     }
                     if (saved.settings) {
                         const merged = Object.assign({}, ind.settings || {}, saved.settings)
-                        this.$set(this.chart.data.offchart[i], 'settings', merged)
+                        this.chart.data.offchart[i].settings = merged
                     }
                 }
             }

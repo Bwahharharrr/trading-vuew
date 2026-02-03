@@ -35,7 +35,9 @@
 </template>
 
 <script>
+// Optimized for Vue 3: removed hash hack, targeted watchers
 
+import { nextTick } from 'vue'
 import Grid from './Grid.vue'
 import Sidebar from './Sidebar.vue'
 import ChartLegend from './Legend.vue'
@@ -68,7 +70,7 @@ export default {
             this.$emit('sidebar-transform', s)
         },
         emit_meta_props(d) {
-            this.$set(this.meta_props, d.layer_id, d)
+            this.meta_props[d.layer_id] = d
             this.$emit('layer-meta-props', d)
         },
         emit_custom_event(d) {
@@ -113,11 +115,6 @@ export default {
                 args: [indicatorInfo]
             })
         },
-        ghash(val) {
-            // Measures grid heights configuration
-            let hs = val.layout.grids.map(x => x.height)
-            return hs.reduce((a, b) => a + b, '')
-        },
         // Update legend position during resize using layoutOverride
         updateLegendPosition(layout) {
             const id = this.$props.grid_id
@@ -125,60 +122,85 @@ export default {
             if (grid) {
                 // Set layout override so legend_props uses correct layout
                 this.legendLayoutOverride = layout
-                this.$forceUpdate()
+                // Trigger re-render via reactive key (replaces $forceUpdate)
+                this.rerender++
             }
         },
         // Clear the layout override (called after normal layout update)
         clearLayoutOverride() {
             this.legendLayoutOverride = null
+        },
+        // Helper to compute grid height key for change detection
+        getGridHeightKey(common) {
+            const grids = common?.layout?.grids
+            if (!grids) return ''
+            return grids.map(g => g?.height ?? 0).join(',')
         }
     },
     computed: {
         // Component-specific props subsets:
+        // Vue 3 fix: explicitly access common.layout to track reactivity
         grid_props() {
             const id = this.$props.grid_id
-            let p = Object.assign({}, this.$props.common)
+            const common = this.$props.common
+            // Force reactivity tracking on layout by explicit access
+            const layout = common?.layout
+            let p = { ...common }  // Spread for shallow copy
 
-            // Split offchart data between offchart grids
-            if (id > 0) {
-                let all = p.data
-                p.data = [p.data[id - 1]]
-                // Merge offchart overlays with custom ids with
-                // the existing onse (by comparing the grid ids)
-                p.data.push(...all.filter(
-                    x => x.grid && x.grid.id === id))
+            const grid = layout?.grids?.[id]
+            if (grid) {
+                // Split offchart data between offchart grids
+                if (id > 0 && p.data) {
+                    let all = p.data
+                    p.data = [p.data[id - 1]].filter(Boolean)
+                    // Merge offchart overlays with custom ids with
+                    // the existing ones (by comparing the grid ids)
+                    p.data.push(...all.filter(
+                        x => x.grid && x.grid.id === id))
+                }
+                p.width = grid.width
+                p.height = grid.height
             }
 
-            p.width = p.layout.grids[id].width
-            p.height = p.layout.grids[id].height
-            p.y_transform = p.y_ts[id]
+            p.y_transform = p.y_ts?.[id]
             p.shaders = this.grid_shaders
             return p
         },
         sidebar_props() {
             const id = this.$props.grid_id
-            let p = Object.assign({}, this.$props.common)
-            p.width = p.layout.grids[id].sb
-            p.height = p.layout.grids[id].height
-            p.y_transform = p.y_ts[id]
+            const common = this.$props.common
+            const layout = common?.layout
+            let p = { ...common }
+
+            const grid = layout?.grids?.[id]
+            if (grid) {
+                p.width = grid.sb
+                p.height = grid.height
+            }
+            p.y_transform = p.y_ts?.[id]
             p.shaders = this.sb_shaders
             return p
         },
         section_values() {
             const id = this.$props.grid_id
-            let p = Object.assign({}, this.$props.common)
-            p.width = p.layout.grids[id].width
-            return p.cursor.values[id]
+            const common = this.$props.common
+            const layout = common?.layout
+            let p = { ...common }
+            const grid = layout?.grids?.[id]
+            if (grid) p.width = grid.width
+            return p.cursor?.values?.[id]
         },
         legend_props() {
             const id = this.$props.grid_id
-            let p = Object.assign({}, this.$props.common)
+            const common = this.$props.common
+            const layout = common?.layout  // Force tracking
+            let p = { ...common }
 
             // Split offchart data between offchart grids
-            if (id > 0) {
+            if (id > 0 && p.data) {
                 let all = p.data
                 p.offchart = all
-                p.data = [p.data[id - 1]]
+                p.data = [p.data[id - 1]].filter(Boolean)
                 p.data.push(...all.filter(
                     x => x.grid && x.grid.id === id))
             }
@@ -188,34 +210,37 @@ export default {
             return this.meta_props
         },
         grid_shaders() {
-            return this.shaders.filter(x => x.target === 'grid')
+            return (this.shaders || []).filter(x => x.target === 'grid')
         },
         sb_shaders() {
-            return this.shaders.filter(x => x.target === 'sidebar')
+            return (this.shaders || []).filter(x => x.target === 'sidebar')
+        },
+        // Computed hash key for layout changes (replaces deep watcher)
+        layoutKey() {
+            const layout = this.$props.common?.layout
+            if (!layout) return ''
+            const gridsCount = layout.grids?.length ?? 0
+            const heights = layout.grids?.map(g => g?.height ?? 0).join(',') ?? ''
+            return `${gridsCount},${heights}`
         }
     },
     watch: {
-        common: {
-            handler: function (val, old_val) {
-                let newhash = this.ghash(val)
-                if (newhash !== this.last_ghash) {
-                    this.rerender++
-                }
-
-                if(val.data.length !== old_val.data.length) {
-                    // Look at this nasty trick!
-                    this.rerender++
-                }
-                 this.last_ghash = newhash
-            },
-            deep: true
+        // Watch layout changes using computed key (no deep watcher)
+        layoutKey(newKey, oldKey) {
+            if (!newKey || newKey === oldKey) return
+            this.rerender++
+        },
+        // Watch specific common properties (NOT deep - cursor changes would trigger too often)
+        'common.data.length': function(newLen, oldLen) {
+            if (newLen !== oldLen) {
+                this.rerender++
+            }
         }
     },
     data() {
         return {
             meta_props: {},
             rerender: 0,
-            last_ghash: '',
             legendLayoutOverride: null
         }
     }

@@ -1,4 +1,5 @@
 // Layout functional interface
+// Performance optimized with memoization for coordinate transforms
 
 import Utils from '../../stuff/utils.js'
 import math from '../../stuff/math.js'
@@ -10,16 +11,47 @@ export default function(self, range) {
     const r = self.spacex / dt
     const ls = self.grid.logScale || false
 
+    // Memoization caches - cleared automatically on layout recalculation
+    // since a new layout_fn instance is created each time
+    const t2screenCache = new Map()
+    const $2screenCache = new Map()
+    const screen2$Cache = new Map()
+
+    // Cache size limit to prevent unbounded memory growth
+    const MAX_CACHE_SIZE = 2000
+
     Object.assign(self, {
-        // Time to screen coordinates
+        // Time to screen coordinates (memoized)
         t2screen: t => {
-            if (ib) t = self.ti_map.smth2i(t)
-            return Math.floor((t - range[0]) * r) - 0.5
+            // Check cache first
+            let cached = t2screenCache.get(t)
+            if (cached !== undefined) return cached
+
+            let tVal = t
+            if (ib) tVal = self.ti_map.smth2i(t)
+            const result = Math.floor((tVal - range[0]) * r) - 0.5
+
+            // Store in cache with size limit
+            if (t2screenCache.size < MAX_CACHE_SIZE) {
+                t2screenCache.set(t, result)
+            }
+            return result
         },
-        // $ to screen coordinates
+        // $ to screen coordinates (memoized)
         $2screen: y => {
-            if (ls) y = math.log(y)
-            return Math.floor(y * self.A + self.B) - 0.5
+            // Check cache first
+            let cached = $2screenCache.get(y)
+            if (cached !== undefined) return cached
+
+            let yVal = y
+            if (ls) yVal = math.log(y)
+            const result = Math.floor(yVal * self.A + self.B) - 0.5
+
+            // Store in cache with size limit
+            if ($2screenCache.size < MAX_CACHE_SIZE) {
+                $2screenCache.set(y, result)
+            }
+            return result
         },
         // Time-axis nearest step
         t_magnet: t => {
@@ -30,10 +62,24 @@ export default function(self, range) {
             if (!cn[i]) return
             return Math.floor(cn[i].x) - 0.5
         },
-        // Screen-Y to dollar value (or whatever)
+        // Screen-Y to dollar value (memoized)
         screen2$: y => {
-            if (ls) return math.exp((y - self.B) / self.A)
-            return (y - self.B) / self.A
+            // Check cache first
+            let cached = screen2$Cache.get(y)
+            if (cached !== undefined) return cached
+
+            let result
+            if (ls) {
+                result = math.exp((y - self.B) / self.A)
+            } else {
+                result = (y - self.B) / self.A
+            }
+
+            // Store in cache with size limit
+            if (screen2$Cache.size < MAX_CACHE_SIZE) {
+                screen2$Cache.set(y, result)
+            }
+            return result
         },
         // Screen-X to timestamp
         screen2t: x => {
@@ -51,7 +97,13 @@ export default function(self, range) {
             return cn[i]
         },
         // Nearest data points
-        data_magnet: t => {  /* TODO: implement */ }
+        data_magnet: t => {  /* TODO: implement */ },
+        // Clear memoization caches (call when range changes significantly)
+        clearCoordCaches: () => {
+            t2screenCache.clear()
+            $2screenCache.clear()
+            screen2$Cache.clear()
+        }
     })
 
     return self

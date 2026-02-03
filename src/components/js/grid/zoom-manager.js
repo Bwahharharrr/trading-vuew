@@ -47,7 +47,7 @@ export default class ZoomManager {
 
         let k = this.interval / 1000
         let diff = delta * k * this.data.length
-        let tl = this.comp.config.ZOOM_MODE === 'tl'
+        let tl = this.$p.config?.ZOOM_MODE === 'tl'
 
         if (event.originalEvent.ctrlKey || tl) {
             let offset = event.originalEvent.offsetX

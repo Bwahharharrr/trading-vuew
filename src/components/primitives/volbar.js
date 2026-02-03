@@ -1,4 +1,6 @@
 
+// Volume bar primitive for Candles overlay
+
 export default class VolbarExt {
 
     constructor(overlay, ctx, data) {
@@ -14,10 +16,9 @@ export default class VolbarExt {
         let w = data.x2 - data.x1
         let h = Math.floor(data.h)
 
-        this.ctx.fillStyle = data.z  
-        /* this.ctx.fillStyle = data.green ?
+        this.ctx.fillStyle = data.green ?
             this.style.colorVolUp :
-            this.style.colorVolDw */
+            this.style.colorVolDw
 
         this.ctx.fillRect(
             Math.floor(data.x1),
@@ -25,7 +26,6 @@ export default class VolbarExt {
             Math.floor(w),
             Math.floor(h + 1)
         )
-
     }
 
 }

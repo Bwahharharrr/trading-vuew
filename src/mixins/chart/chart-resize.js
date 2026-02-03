@@ -1,19 +1,31 @@
 // Chart grid resize and minimize functionality
+// Performance optimized with throttled resize operations
 
 export default {
     methods: {
         on_resize_grids(e) {
             this.isResizing = true
-            this.$set(this.customGridHeights, e.gridAbove, e.heightAbove)
-            this.$set(this.customGridHeights, e.gridBelow, e.heightBelow)
-            this.update_layout(false, true)
+            this.customGridHeights[e.gridAbove] = e.heightAbove
+            this.customGridHeights[e.gridBelow] = e.heightBelow
+            // Use throttled update during resize for better performance
+            this._throttledResizeUpdate()
+        },
+
+        // Throttled resize update - max 60fps during resize operations
+        _throttledResizeUpdate() {
+            if (this._resizeThrottleRAF) return
+
+            this._resizeThrottleRAF = requestAnimationFrame(() => {
+                this._resizeThrottleRAF = null
+                this.update_layout(false, true)
+            })
         },
 
         on_resize_complete() {
-            const grids = this._layout.grids
+            const grids = this.chartLayout.grids
             grids.forEach((g, i) => {
                 if (!this.minimizedGrids[i]) {
-                    this.$set(this.savedGridHeights, i, g.height)
+                    this.savedGridHeights[i] = g.height
                 }
             })
             this.isResizing = false
@@ -23,18 +35,18 @@ export default {
             const isMinimized = this.minimizedGrids[gridId]
 
             if (isMinimized) {
-                this.$set(this.minimizedGrids, gridId, false)
+                this.minimizedGrids[gridId] = false
                 if (this.savedGridHeights[gridId]) {
-                    this.$set(this.customGridHeights, gridId, this.savedGridHeights[gridId])
+                    this.customGridHeights[gridId] = this.savedGridHeights[gridId]
                 } else {
-                    this.$delete(this.customGridHeights, gridId)
+                    delete this.customGridHeights[gridId]
                 }
             } else {
-                const currentHeight = this._layout.grids[gridId]?.height
+                const currentHeight = this.chartLayout.grids[gridId]?.height
                 if (currentHeight) {
-                    this.$set(this.savedGridHeights, gridId, currentHeight)
+                    this.savedGridHeights[gridId] = currentHeight
                 }
-                this.$set(this.minimizedGrids, gridId, true)
+                this.minimizedGrids[gridId] = true
             }
 
             this.redistribute_heights(gridId, isMinimized)
@@ -42,7 +54,7 @@ export default {
         },
 
         redistribute_heights(changedGridId, wasMinimized) {
-            const grids = this._layout.grids
+            const grids = this.chartLayout.grids
             const MINIMIZED_HEIGHT = 28
             const MIN_MAIN_CHART_HEIGHT = 100
             const MIN_OFFCHART_HEIGHT = 50
@@ -56,7 +68,7 @@ export default {
                 const takeFromMain = Math.min(remainingDelta, mainAvailable)
 
                 if (takeFromMain > 0) {
-                    this.$set(this.customGridHeights, 0, mainChartHeight - takeFromMain)
+                    this.customGridHeights[0] = mainChartHeight - takeFromMain
                     remainingDelta -= takeFromMain
                 }
 
@@ -69,7 +81,7 @@ export default {
                         const takeAmount = Math.min(remainingDelta, available)
 
                         if (takeAmount > 0) {
-                            this.$set(this.customGridHeights, i, gridHeight - takeAmount)
+                            this.customGridHeights[i] = gridHeight - takeAmount
                             remainingDelta -= takeAmount
                         }
 
@@ -79,7 +91,7 @@ export default {
 
                 const actualHeight = restoreHeight - remainingDelta
                 if (actualHeight > MINIMIZED_HEIGHT) {
-                    this.$set(this.customGridHeights, changedGridId, actualHeight)
+                    this.customGridHeights[changedGridId] = actualHeight
                 }
             } else {
                 const gridAboveId = changedGridId - 1
@@ -98,12 +110,12 @@ export default {
                 const targetHeight = this.customGridHeights[targetGridId] || grids[targetGridId]?.height || 100
                 const savedHeight = this.savedGridHeights[changedGridId] || 150
                 const heightDelta = savedHeight - MINIMIZED_HEIGHT
-                this.$set(this.customGridHeights, targetGridId, targetHeight + heightDelta)
+                this.customGridHeights[targetGridId] = targetHeight + heightDelta
             }
         },
 
         minimize_all_offcharts() {
-            const grids = this._layout.grids
+            const grids = this.chartLayout.grids
             const MINIMIZED_HEIGHT = 28
 
             let hasExpandedOffchart = false
@@ -121,15 +133,15 @@ export default {
                     if (!this.minimizedGrids[i]) {
                         const currentHeight = this.customGridHeights[i] || grids[i]?.height
                         if (currentHeight) {
-                            this.$set(this.savedGridHeights, i, currentHeight)
+                            this.savedGridHeights[i] = currentHeight
                             totalHeightGained += currentHeight - MINIMIZED_HEIGHT
                         }
-                        this.$set(this.minimizedGrids, i, true)
+                        this.minimizedGrids[i] = true
                     }
                 }
 
                 const mainHeight = this.customGridHeights[0] || grids[0]?.height || 100
-                this.$set(this.customGridHeights, 0, mainHeight + totalHeightGained)
+                this.customGridHeights[0] = mainHeight + totalHeightGained
             } else {
                 let totalHeightNeeded = 0
 
@@ -144,15 +156,15 @@ export default {
                 const takeFromMain = Math.min(totalHeightNeeded, available)
 
                 if (takeFromMain > 0) {
-                    this.$set(this.customGridHeights, 0, mainHeight - takeFromMain)
+                    this.customGridHeights[0] = mainHeight - takeFromMain
                 }
 
                 const ratio = takeFromMain / totalHeightNeeded
                 for (let i = 1; i < grids.length; i++) {
-                    this.$set(this.minimizedGrids, i, false)
+                    this.minimizedGrids[i] = false
                     const restoreHeight = this.savedGridHeights[i] || 150
                     const actualHeight = MINIMIZED_HEIGHT + (restoreHeight - MINIMIZED_HEIGHT) * (ratio < 1 ? ratio : 1)
-                    this.$set(this.customGridHeights, i, actualHeight)
+                    this.customGridHeights[i] = actualHeight
                 }
             }
 

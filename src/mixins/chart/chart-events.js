@@ -22,15 +22,16 @@ export default {
 
         layer_meta_props(d) {
             if (!(d.grid_id in this.layers_meta)) {
-                this.$set(this.layers_meta, d.grid_id, {})
+                this.layers_meta[d.grid_id] = {}
             }
-            this.$set(this.layers_meta[d.grid_id], d.layer_id, d)
+            this.layers_meta[d.grid_id][d.layer_id] = d
             this.update_layout()
         },
 
         remove_meta_props(grid_id, layer_id) {
             if (grid_id in this.layers_meta) {
-                this.$delete(this.layers_meta[grid_id], layer_id)
+                // Vue 3: use delete operator instead of this.$delete
+                delete this.layers_meta[grid_id][layer_id]
             }
         },
 

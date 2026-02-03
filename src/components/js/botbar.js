@@ -17,8 +17,9 @@ export default class Botbar {
         this.range = this.$p.range
         this.layout = this.$p.layout
 
-        this.MIN_ZOOM = comp.config.MIN_ZOOM
-        this.MAX_ZOOM = comp.config.MAX_ZOOM
+        const config = comp.$props.config || {}
+        this.MIN_ZOOM = config.MIN_ZOOM || 25
+        this.MAX_ZOOM = config.MAX_ZOOM || 100000
         this.listeners()
 
     }
@@ -126,7 +127,7 @@ export default class Botbar {
         let cursor = this.$p.cursor.x
         let x = Math.floor(cursor - panwidth * 0.5)
         let y = - 0.5
-        let panheight = this.comp.config.PANHEIGHT
+        let panheight = this.$p.config?.PANHEIGHT || 22
         this.ctx.fillRect(x, y, panwidth, panheight + 0.5)
 
         this.ctx.fillStyle = this.$p.colors.textHL

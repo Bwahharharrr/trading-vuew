@@ -59,11 +59,9 @@ export default {
                 // Call when current tool drawing is finished
                 // (Optionally) reset the mode back to 'Cursor'
                 this.set_state('finished')
-                this.$emit('drawing-mode-off')
+                this.custom_event('drawing-mode-off')
                 // Deselect the tool in shiftMode
-                if (this.shift) this._$emit('custom-event', {
-                    event: 'object-selected', args: []
-                })
+                if (this.shift) this.custom_event('object-selected')
             })
         },
         draw(ctx) {

@@ -9,8 +9,9 @@ import { ZoomManager, PanManager, GridRenderer } from './grid/index.js'
 export default class Grid {
 
     constructor(canvas, comp) {
-        this.MIN_ZOOM = comp.config.MIN_ZOOM
-        this.MAX_ZOOM = comp.config.MAX_ZOOM
+        const config = comp.$props.config || {}
+        this.MIN_ZOOM = config.MIN_ZOOM || 25
+        this.MAX_ZOOM = config.MAX_ZOOM || 100000
 
         if (Utils.is_mobile) this.MIN_ZOOM *= 0.5
 
@@ -19,15 +20,15 @@ export default class Grid {
         this.comp = comp
         this.$p = comp.$props
         this.data = this.$p.sub
-        this.range = this.$p.range
+        // Note: range is accessed via getter to always get current prop value
         this.id = this.$p.grid_id
-        this.layout = this.$p.layout.grids[this.id]
+        this.layout = this.$p.layout?.grids?.[this.id]
         this.interval = this.$p.interval
         this.cursor = comp.$props.cursor
         this.offset_x = 0
         this.offset_y = 0
         this.deltas = 0
-        this.wmode = this.$p.config.SCROLL_WHEEL
+        this.wmode = this.$p.config?.SCROLL_WHEEL
         this.trackpad = false
 
         // Initialize modules
@@ -37,6 +38,9 @@ export default class Grid {
 
         this.listeners()
     }
+
+    // Always access range from current props (Vue 3 reactivity fix)
+    get range() { return this.$p.range }
 
     // Delegate to renderer
     get overlays() { return this.renderer.overlays }
@@ -55,10 +59,15 @@ export default class Grid {
         if (Utils.is_mobile) mc.add(new Hammer.Press())
 
         mc.on('panstart', event => {
+            // Guard: don't start drag if range isn't valid yet
+            if (!this.range || this.range[0] === undefined || this.range[1] === undefined) {
+                return
+            }
             if (this.cursor.scroll_lock) return
             if (this.cursor.mode === 'aim') {
                 return this.emit_cursor_coord(event)
             }
+            this.calc_offset()
             let tfrm = this.$p.y_transform
             this.drug = {
                 x: event.center.x + this.offset_x,

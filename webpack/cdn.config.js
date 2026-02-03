@@ -1,4 +1,4 @@
-const VueLoaderPlugin = require('vue-loader/lib/plugin')
+const { VueLoaderPlugin } = require('vue-loader')
 const HtmlWebpackPlugin = require('html-webpack-plugin')
 const TerserPlugin = require('terser-webpack-plugin')
 const WWPlugin = require('./ww_plugin.js')
@@ -15,6 +15,11 @@ module.exports = [{
         filename: '[name].js',
         library: 'TradingVueJs',
         libraryTarget: 'umd'
+    },
+    resolve: {
+        alias: {
+            'vue': 'vue/dist/vue.esm-bundler.js'
+        }
     },
     module: {
         rules: [{
@@ -61,6 +66,11 @@ module.exports = [{
               `
         }),
         new WWPlugin(),
+        new webpack.DefinePlugin({
+            __VUE_OPTIONS_API__: 'true',
+            __VUE_PROD_DEVTOOLS__: 'false',
+            __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: 'false'
+        }),
         {
             apply(compiler) {
                 compiler.hooks.done.tap(this.constructor.name, stats => {
@@ -74,8 +84,8 @@ module.exports = [{
         }
     ],
     devServer: {
-        onListening: function(server) {
-            const port = server.listeningApp.address().port
+        onListening: function(devServer) {
+            const port = devServer.server.address().port
             global.port = port
         }
     }
@@ -99,7 +109,6 @@ module.exports = [{
         minimize: true,
         minimizer: [new TerserPlugin({
             include: /\.js$/,
-            sourceMap: false,
         })]
     },
     devtool: 'source-map'

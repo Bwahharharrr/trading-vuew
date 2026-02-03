@@ -1,4 +1,4 @@
-import { Overlay } from 'trading-vue-js'
+import Overlay from '../../mixins/overlay.js'
 
 export default {
     name: 'LineTracker',

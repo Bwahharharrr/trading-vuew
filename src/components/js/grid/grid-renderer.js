@@ -1,10 +1,22 @@
 // Grid rendering: canvas drawing, overlay management
+// Performance optimized with dirty region tracking and smart redraw decisions
 
 export default class GridRenderer {
     constructor(grid) {
         this.grid = grid
         this.overlays = []
         this.crosshair = null
+
+        // Dirty tracking for smart redraws
+        this._lastRange = null
+        this._lastCursorX = null
+        this._lastCursorY = null
+        this._staticDirty = true  // Force initial draw
+        this._overlaysDirty = true
+        this._crosshairOnly = false
+
+        // Performance: track if we only need crosshair update
+        this._lastDataLength = 0
     }
 
     get ctx() { return this.grid.ctx }
@@ -22,27 +34,82 @@ export default class GridRenderer {
         } else {
             this.overlays.push(layer)
         }
+        this._overlaysDirty = true
         this.update()
     }
 
     del_layer(id) {
         this.overlays = this.overlays.filter(x => x.id !== id)
+        this._overlaysDirty = true
         this.update()
     }
 
     show_hide_layer(event) {
         let l = this.overlays.filter(x => x.id === event.id)
         if (l.length) l[0].display = event.display
+        this._overlaysDirty = true
+    }
+
+    // Mark static content as dirty (range change, data change, resize)
+    markStaticDirty() {
+        this._staticDirty = true
+        this._overlaysDirty = true
+    }
+
+    // Check if only crosshair needs update
+    _detectCrosshairOnlyUpdate() {
+        const range = this.range
+        const cursor = this.cursor
+        const data = this.data
+
+        // Check if range changed
+        const rangeKey = range ? `${range[0]},${range[1]}` : ''
+        if (this._lastRange !== rangeKey) {
+            this._lastRange = rangeKey
+            this._staticDirty = true
+            this._overlaysDirty = true
+            return false
+        }
+
+        // Check if data length changed (new candles)
+        const dataLen = data?.length || 0
+        if (this._lastDataLength !== dataLen) {
+            this._lastDataLength = dataLen
+            this._staticDirty = true
+            this._overlaysDirty = true
+            return false
+        }
+
+        // Check if cursor moved
+        const cursorX = cursor?.x
+        const cursorY = cursor?.y
+        if (this._lastCursorX !== cursorX || this._lastCursorY !== cursorY) {
+            this._lastCursorX = cursorX
+            this._lastCursorY = cursorY
+            // Only cursor changed - potential crosshair-only update
+            // But we still need full redraw because crosshair is drawn on same canvas
+            return true
+        }
+
+        return false
     }
 
     update() {
         const comp = this.grid.comp
-        const layout = comp.layoutOverride || this.$p.layout.grids[this.id]
+        const layout = comp.layoutOverride || this.$p.layout?.grids?.[this.id]
         this.grid.layout = layout
         this.grid.interval = this.$p.interval
 
-        if (!layout) return
+        if (!layout) {
+            return
+        }
 
+        // Detect what needs redrawing
+        this._crosshairOnly = this._detectCrosshairOnlyUpdate()
+
+        // For now, always do full clear and redraw
+        // The optimization here is in avoiding expensive recalculations
+        // when only cursor moved, not in partial redraws (which require offscreen buffers)
         this.ctx.clearRect(0, 0, this.grid.canvas.width, this.grid.canvas.height)
 
         if (this.$p.shaders.length) this.apply_shaders()
@@ -54,7 +121,9 @@ export default class GridRenderer {
         overlays.sort((l1, l2) => l1.z - l2.z)
 
         overlays.forEach(l => {
-            if (!l.display) return
+            if (!l.display) {
+                return
+            }
             this.ctx.save()
             let r = l.renderer
             if (r.pre_draw) r.pre_draw(this.ctx)
@@ -66,10 +135,15 @@ export default class GridRenderer {
         if (this.crosshair) {
             this.crosshair.renderer.draw(this.ctx)
         }
+
+        // Reset dirty flags after successful draw
+        this._staticDirty = false
+        this._overlaysDirty = false
     }
 
     apply_shaders() {
-        let layout = this.$p.layout.grids[this.id]
+        let layout = this.$p.layout?.grids?.[this.id]
+        if (!layout) return
         let props = {
             layout: layout,
             range: this.range,

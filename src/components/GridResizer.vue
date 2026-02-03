@@ -100,7 +100,7 @@ export default {
             this.$emit('toggle-minimize', this.grid_id)
         }
     },
-    beforeDestroy() {
+    beforeUnmount() {
         document.removeEventListener('mousemove', this.onMouseMove)
         document.removeEventListener('mouseup', this.onMouseUp)
     }

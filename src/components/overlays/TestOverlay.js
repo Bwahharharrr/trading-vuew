@@ -3,7 +3,7 @@
 // TODO: make a real spline, not a bunch of lines...
 
 // Adds all necessary stuff for you.
-import { Overlay } from 'trading-vue-js'
+import Overlay from '../../mixins/overlay.js'
 
 export default {
     name: 'TestOverlay',

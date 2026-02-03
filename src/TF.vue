@@ -67,7 +67,7 @@ export default {
             }
         },
     },
-    beforeDestroy() {
+    beforeUnmount() {
         window.removeEventListener('resize', this.onResize)
     },
     data() {
@@ -84,9 +84,9 @@ export default {
     watch: {
         log_scale(value) {
             if (this.chart.data.chart) {
-                this.$set(this.chart.data.chart, 'grid', {
+                this.chart.data.chart['grid'] = {
                     logScale: value
-                })
+                }
             }
         }
     }
