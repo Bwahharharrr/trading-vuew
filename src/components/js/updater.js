@@ -44,18 +44,29 @@ class CursorUpdater {
         const s = grid.id === 0 ? 'main_section' : 'sub_section'
         let data = this.comp[s].data
 
+        // PERFORMANCE: Single-pass filter instead of two separate filter calls
         // Split offchart data between offchart grids
         if (grid.id > 0) {
-            // Sequential grids
-            let d = data.filter(x => x.grid.id === undefined)
-            // grids with custom ids (for merging)
-            let m = data.filter(x => x.grid.id === grid.id)
-            data = [d[grid.id - 1], ...m]
+            // Single pass to separate sequential grids from custom id grids
+            let d = []  // Sequential grids (no custom id)
+            let m = []  // Grids with custom ids matching this grid
+            for (let i = 0; i < data.length; i++) {
+                const x = data[i]
+                if (x.grid.id === undefined) {
+                    d.push(x)
+                } else if (x.grid.id === grid.id) {
+                    m.push(x)
+                }
+            }
+            // PERFORMANCE: Use concat instead of spread operator
+            data = [d[grid.id - 1]].concat(m)
         }
 
         const t = grid.screen2t(e.x)
         let ids = {}, res = {}
         for (var d of data) {
+            // PERFORMANCE: Direct timestamp access - still creates array but unavoidable
+            // for Utils.nearest_a which needs an array to search
             let ts = d.data.map(x => x[0])
             let i = Utils.nearest_a(t, ts)[0]
             d.type in ids ? (ids[d.type]++) : (ids[d.type] = 0)

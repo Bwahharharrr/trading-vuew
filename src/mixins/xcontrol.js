@@ -1,4 +1,7 @@
 // extensions control
+// PERFORMANCE: Uses markRaw to prevent Vue reactivity overhead on controller instances
+
+import { markRaw } from 'vue'
 
 export default {
     mounted() {
@@ -22,7 +25,9 @@ export default {
                     this.xSettings[name] // settings
                 )
                 nc.name = name
-                this.controllers.push(nc)
+                // PERFORMANCE: markRaw prevents Vue from adding reactivity to controller
+                // Controllers are complex objects that don't need deep reactivity tracking
+                this.controllers.push(markRaw(nc))
             }
             return this.controllers
         },
@@ -89,6 +94,15 @@ export default {
         colorpack() {
             let sel = this.skins[this.$props.skin]
             return sel ? sel.colors : undefined
+        },
+        // PERFORMANCE: Hash key for xSettings changes - avoids deep watch
+        xSettingsKey() {
+            const keys = Object.keys(this.xSettings || {}).sort()
+            // Track top-level structure changes
+            return keys.map(k => {
+                const v = this.xSettings[k]
+                return `${k}:${typeof v === 'object' ? Object.keys(v).length : v}`
+            }).join('|')
         }
     },
     watch: {
@@ -101,15 +115,15 @@ export default {
         extensions() {
             this.ctrllist()
         },
-        xSettings: {
-            handler(n, p) {
-                for (var ctrl of this.controllers) {
-                    if (ctrl.onsettings) {
-                        ctrl.onsettings(n, p)
-                    }
+        // PERFORMANCE: Use computed hash key instead of deep watch
+        // Deep watching xSettings traverses entire nested object on every change
+        xSettingsKey(newKey, oldKey) {
+            if (!newKey || newKey === oldKey) return
+            for (var ctrl of this.controllers) {
+                if (ctrl.onsettings) {
+                    ctrl.onsettings(this.xSettings, null)
                 }
-            },
-            deep: true
+            }
         }
     },
     data() {

@@ -85,15 +85,15 @@ export default {
         }
     },
     watch: {
-        data: {
-            handler(n) {
-                // For some reason Vue.js doesn't want to
-                // update 'tools' automatically when new item
-                // is pushed/removed. Yo, Vue, I herd you
-                // you want more dirty tricks?
-                if (n.tools) this.tool_count = n.tools.length
-            },
-            deep: true
+        // PERFORMANCE: Watch only tools.length instead of deep watching entire data object
+        toolsLength(newLen) {
+            this.tool_count = newLen
+        }
+    },
+    computed: {
+        // PERFORMANCE: Computed property for tools length - avoids deep watch
+        toolsLength() {
+            return this.data?.tools?.length ?? 0
         }
     },
     data() { return { tool_count: 0, sub_map: {} } }
