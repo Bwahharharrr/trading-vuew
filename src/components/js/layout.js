@@ -20,6 +20,16 @@ const layoutCache = {
     volume: null
 }
 
+// PERFORMANCE: Check if object has any own property without creating an array
+// Object.keys(obj).length > 0 creates an array just to check length
+// This is O(1) in the best case vs O(n) for Object.keys
+function hasAnyProperty(obj) {
+    for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) return true
+    }
+    return false
+}
+
 function Layout(params) {
 
     let {
@@ -53,9 +63,10 @@ function Layout(params) {
 
         const height = $p.height - $p.config.BOTBAR
 
-        // If custom pixel heights or minimized grids are provided, use custom calculation
-        const hasCustomHeights = customGridHeights && Object.keys(customGridHeights).length > 0
-        const hasMinimizedGrids = minimizedGrids && Object.keys(minimizedGrids).length > 0
+        // PERFORMANCE: Check for any property without Object.keys() allocation
+        // Object.keys() creates an array just to check length - this is O(1) instead of O(n)
+        const hasCustomHeights = customGridHeights && hasAnyProperty(customGridHeights)
+        const hasMinimizedGrids = minimizedGrids && hasAnyProperty(minimizedGrids)
         if (hasCustomHeights || hasMinimizedGrids) {
             return custom_hs(height)
         }
@@ -97,18 +108,31 @@ function Layout(params) {
             }
         }
 
-        // Calculate total used height and remaining
-        let usedHeight = hs.filter(h => h !== null).reduce((a, b) => a + b, 0)
-        let nullCount = hs.filter(h => h === null).length
+        // PERFORMANCE: Single-pass calculation instead of 3 separate filter/reduce calls
+        // Combines: filter+reduce for usedHeight, filter for nullCount, and final reduce
+        let usedHeight = 0
+        let nullCount = 0
+        for (let i = 0; i < hs.length; i++) {
+            if (hs[i] !== null) {
+                usedHeight += hs[i]
+            } else {
+                nullCount++
+            }
+        }
 
         if (nullCount > 0) {
             let remainingHeight = height - usedHeight
             let defaultHeight = Math.floor(remainingHeight / nullCount)
-            hs = hs.map(h => h === null ? defaultHeight : h)
+            for (let i = 0; i < hs.length; i++) {
+                if (hs[i] === null) hs[i] = defaultHeight
+            }
         }
 
-        // Ensure total matches available height
-        let total = hs.reduce((a, b) => a + b, 0)
+        // Ensure total matches available height (usedHeight was updated above)
+        let total = usedHeight + (nullCount > 0 ? Math.floor((height - usedHeight) / nullCount) * nullCount : 0)
+        // Recalculate actual total after modifications
+        total = 0
+        for (let i = 0; i < hs.length; i++) total += hs[i]
         if (total !== height && hs.length > 0) {
             hs[0] += (height - total)
         }
@@ -117,13 +141,24 @@ function Layout(params) {
     }
 
     function weighted_hs(grid, height) {
-        let hs = [{grid}, ...offsub].map(x => x.grid.height || 1)
-        let sum = hs.reduce((a, b) => a + b, 0)
-        hs = hs.map(x => Math.floor((x / sum) * height))
+        // PERFORMANCE: Single-pass sum instead of reduce, avoid intermediate map
+        const sources = [{grid}, ...offsub]
+        const hs = new Array(sources.length)
+        let sum = 0
+        for (let i = 0; i < sources.length; i++) {
+            hs[i] = sources[i].grid.height || 1
+            sum += hs[i]
+        }
+
+        // Calculate weighted heights in single pass
+        let newSum = 0
+        for (let i = 0; i < hs.length; i++) {
+            hs[i] = Math.floor((hs[i] / sum) * height)
+            newSum += hs[i]
+        }
 
         // Refine the height if Math.floor decreased px sum
-        sum = hs.reduce((a, b) => a + b, 0)
-        for (var i = 0; i < height - sum; i++) hs[i % hs.length]++
+        for (let i = 0; i < height - newSum; i++) hs[i % hs.length]++
         return hs
     }
 

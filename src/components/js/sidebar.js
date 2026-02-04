@@ -151,26 +151,31 @@ export default class Sidebar {
                 break
         }
 
-        this.ctx.fillStyle = this.$p.colors.text
-        this.ctx.beginPath()
+        // PERFORMANCE: Cache property lookups outside loop
+        const ctx = this.ctx
+        const layoutHeight = this.layout.height
+        const prec = this.layout.prec
+        const isLeft = side === 'left'
+        const x1Base = isLeft ? w - 0.5 : x - 0.5
+        const x2Offset = isLeft ? -4.5 : 4.5
+        const textOffset = isLeft ? -10 : 10
+        const textAlign = isLeft ? 'end' : 'start'
 
-        for (var p of points) {
+        ctx.fillStyle = this.$p.colors.text
+        ctx.beginPath()
+        ctx.textAlign = textAlign  // Set once outside loop
 
-            if (p[0] > this.layout.height) continue
+        for (let i = 0; i < points.length; i++) {
+            const p = points[i]
+            if (p[0] > layoutHeight) continue
 
-            var x1 = side === 'left' ? w - 0.5 : x - 0.5
-            var x2 = side === 'left' ? x1 - 4.5 : x1 + 4.5
-
-            this.ctx.moveTo(x1, p[0] - 0.5)
-            this.ctx.lineTo(x2, p[0] - 0.5)
-
-            var offst = side === 'left' ? - 10 : 10
-            this.ctx.textAlign = side === 'left' ? 'end' : 'start'
-            let d = this.layout.prec
-            this.ctx.fillText(p[1].toFixed(d), x1 + offst, p[0] + 4)
+            const y = p[0] - 0.5
+            ctx.moveTo(x1Base, y)
+            ctx.lineTo(x1Base + x2Offset, y)
+            ctx.fillText(p[1].toFixed(prec), x1Base + textOffset, p[0] + 4)
         }
 
-        this.ctx.stroke()
+        ctx.stroke()
 
         if (this.$p.grid_id) this.upper_border()
 
