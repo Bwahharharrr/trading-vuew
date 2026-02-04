@@ -340,6 +340,10 @@ Dataset watcher used `includes()` + `filter()` pattern - multiple O(n) scans per
 | 21 | HIGH | chart-state.js | fastDeepCopy replaces JSON |
 | 22 | HIGH | botbar.js | Cached Date object |
 | 23 | - | utils.js | Shared fastDeepCopy + getCachedDate |
+| 24 | HIGH | time.js | Date.now() vs new Date().getTime() |
+| 25 | HIGH | botbar.js | Optimized globalAlpha state changes |
+| 26 | MEDIUM | grid.js | Skip Object.assign when empty |
+| 27 | MEDIUM | Range.vue | Reset setLineDash after use |
 
 ---
 
@@ -363,3 +367,6 @@ Dataset watcher used `includes()` + `filter()` pattern - multiple O(n) scans per
 16. **Build index maps before mapping** - When you need indexOf inside map, pre-build a Map
 17. **Centralize utility functions** - Put shared optimizations like fastDeepCopy in utils.js
 18. **Cache Date objects** - Reuse Date when timestamp hasn't changed significantly
+19. **Use Date.now() not new Date().getTime()** - Avoids object allocation
+20. **Track canvas state changes** - Only change fillStyle/globalAlpha when value differs
+21. **Reset canvas state after use** - Always reset setLineDash, globalAlpha after drawing
