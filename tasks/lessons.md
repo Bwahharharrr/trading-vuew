@@ -268,6 +268,51 @@ Two separate `filter()` calls on same array for sequential vs custom grids.
 
 ---
 
+### Fix #16: O(n²) in UUID Change Detection (CRITICAL)
+**File:** `src/helpers/dc_events.js`
+
+### Problem
+`on_ids_changed()` used `Array.includes()` inside a filter loop - O(n) lookup for each of n elements.
+
+### Solution
+- Convert values array to Set for O(1) `has()` lookup
+- Total complexity reduced from O(n²) to O(n)
+
+---
+
+### Fix #17: O(n²) in Dataset Watcher (CRITICAL)
+**File:** `src/helpers/dataset.js`
+
+### Problem
+Dataset watcher used `includes()` + `filter()` pattern - multiple O(n) scans per element.
+
+### Solution
+- Pre-build Map from id to dataset object
+- Pre-build Sets for id existence checks
+- Single pass through each array
+
+### Impact
+- Eliminated quadratic blowup when many datasets change
+
+---
+
+### Fix #18: Watcher Getter Memory Allocation (CRITICAL)
+**File:** `src/helpers/dc_core.js`
+
+### Problem
+1. UUID watcher getter called `.map()` on every Vue reactivity check, allocating new array
+2. `query_search()` used `indexOf()` inside `map()` - O(n²)
+
+### Solution
+1. Cache UUID array, only regenerate when content key changes
+2. Build index Map for O(1) position lookups
+
+### Impact
+- Reduced memory churn during reactive updates
+- Query operations now O(n) instead of O(n²)
+
+---
+
 ## Updated Summary Table
 
 | Fix | Severity | Files Changed | Key Change |
@@ -287,6 +332,9 @@ Two separate `filter()` calls on same array for sequential vs custom grids.
 | 13 | MEDIUM | updater.js | Single-pass filter |
 | 14 | CRITICAL | updater.js | Binary search + screen cache |
 | 15 | HIGH | script_engine.js | Fast deep copy function |
+| 16 | CRITICAL | dc_events.js | Set for O(1) UUID lookup |
+| 17 | CRITICAL | dataset.js | Map/Set for watcher lookups |
+| 18 | CRITICAL | dc_core.js | Cached UUID array, index Map |
 
 ---
 
@@ -305,3 +353,6 @@ Two separate `filter()` calls on same array for sequential vs custom grids.
 11. **Avoid .map() in hot paths** - Use binary search directly on arrays when possible
 12. **Never use JSON.parse/stringify for deep copy** - Write custom fast copy functions
 13. **Use TypedArrays for numeric data** - Float64Array for positions, Uint32Array for indices
+14. **Use Set/Map for O(1) lookups** - Never use Array.includes/indexOf in loops
+15. **Avoid allocations in Vue watcher getters** - Cache arrays, return stable references
+16. **Build index maps before mapping** - When you need indexOf inside map, pre-build a Map
