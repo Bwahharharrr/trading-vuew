@@ -108,6 +108,10 @@ export default class Botbar {
         this.ctx.fillStyle = this.$p.colors.text
         this.ctx.beginPath()
 
+        // PERFORMANCE: Track globalAlpha state to avoid unnecessary changes
+        let dimmed = false
+        this.ctx.textAlign = 'center'  // Set once outside loop
+
         for (var p of this.layout.botbar.xs) {
 
             let lbl = this.format_date(p)
@@ -117,14 +121,15 @@ export default class Botbar {
             this.ctx.moveTo(p[0] - 0.5, 0)
             this.ctx.lineTo(p[0] - 0.5, 4.5)
 
-            if (!this.lbl_highlight(p[1][0])) {
-                this.ctx.globalAlpha = 0.85
+            const shouldDim = !this.lbl_highlight(p[1][0])
+            if (shouldDim !== dimmed) {
+                this.ctx.globalAlpha = shouldDim ? 0.85 : 1
+                dimmed = shouldDim
             }
-            this.ctx.textAlign = 'center'
             this.ctx.fillText(lbl, p[0], 18)
-            this.ctx.globalAlpha = 1
-
         }
+        // Reset globalAlpha if we ended in dimmed state
+        if (dimmed) this.ctx.globalAlpha = 1
 
         this.ctx.stroke()
         this.apply_shaders()

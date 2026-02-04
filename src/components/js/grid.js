@@ -251,11 +251,15 @@ export default class Grid {
     }
 
     emit_cursor_coord(event, add = {}) {
-        this.comp.$emit('cursor-changed', Object.assign({
+        // PERFORMANCE: Avoid Object.assign overhead when add is empty (common case)
+        const base = {
             grid_id: this.id,
             x: event.center.x + this.offset_x,
             y: event.center.y + this.offset_y + this.layout.offset
-        }, add))
+        }
+        // Only merge if add has properties
+        const hasAdd = Object.keys(add).length > 0
+        this.comp.$emit('cursor-changed', hasAdd ? Object.assign(base, add) : base)
     }
 
     // PERFORMANCE: Cache getBoundingClientRect to avoid layout thrashing

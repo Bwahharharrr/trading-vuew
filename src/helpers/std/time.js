@@ -48,7 +48,8 @@ export default {
      * @return {number} - timestamp
      */
     now() {
-        return new Date().getTime()
+        // PERFORMANCE: Date.now() is 5-10x faster than new Date().getTime()
+        return Date.now()
     },
 
     /** Returns seconds of a given timestamp

@@ -52,7 +52,7 @@ export default {
             ctx.stroke()
 
             ctx.strokeStyle = this.band_color
-            ctx.setLineDash([5]) // Will be removed after draw()
+            ctx.setLineDash([5])
             ctx.beginPath()
 
             // Fill the area between the bands
@@ -68,6 +68,8 @@ export default {
             ctx.lineTo(layout.width, lower)
 
             ctx.stroke()
+            // PERFORMANCE: Reset lineDash to prevent state leaking to other overlays
+            ctx.setLineDash([])
         },
 
         // For all data with these types overlay will be
