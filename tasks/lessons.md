@@ -347,6 +347,9 @@ Dataset watcher used `includes()` + `filter()` pattern - multiple O(n) scans per
 | 28 | CRITICAL | grid_maker.js | Math.log10 vs toExponential().split() |
 | 29 | HIGH | crosshair.js | Static dash pattern constant |
 | 30 | HIGH | sidebar.js | Cached toFixed() in panel() |
+| 31 | CRITICAL | layout.js | Single-pass loops vs filter/reduce chains |
+| 32 | HIGH | layout.js | hasAnyProperty() vs Object.keys().length |
+| 33 | HIGH | sidebar.js | Property caching in render loop |
 
 ---
 
@@ -376,3 +379,6 @@ Dataset watcher used `includes()` + `filter()` pattern - multiple O(n) scans per
 22. **Use Math.log10 for exponents** - Avoid toExponential().split() string parsing
 23. **Make constant arrays static** - setLineDash patterns, color arrays created once
 24. **Cache formatted strings** - toFixed(), toLocaleString() results when inputs unchanged
+25. **Single-pass loops** - Combine filter+reduce+map chains into one loop
+26. **Avoid Object.keys() for existence checks** - Use for...in with hasOwnProperty
+27. **Cache property chains outside loops** - this.x.y.z lookups add up in tight loops
