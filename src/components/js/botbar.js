@@ -5,6 +5,10 @@ import Hamster from 'hamsterjs'
 
 const { MINUTE15, MINUTE, HOUR, DAY, WEEK, MONTH, YEAR, MONTHMAP } = Const
 
+// PERFORMANCE: Cache for measureText results - avoids expensive canvas text measurement
+const measureTextCache = new Map()
+const MAX_CACHE_SIZE = 100
+
 export default class Botbar {
 
     constructor(canvas, comp) {
@@ -22,6 +26,26 @@ export default class Botbar {
         this.MAX_ZOOM = config.MAX_ZOOM || 100000
         this.listeners()
 
+    }
+
+    // PERFORMANCE: Cached measureText to avoid repeated canvas text measurement
+    measureTextCached(text) {
+        const font = this.ctx.font
+        const key = `${font}|${text}`
+
+        if (measureTextCache.has(key)) {
+            return measureTextCache.get(key)
+        }
+
+        // Evict oldest entries if cache is too large
+        if (measureTextCache.size >= MAX_CACHE_SIZE) {
+            const firstKey = measureTextCache.keys().next().value
+            measureTextCache.delete(firstKey)
+        }
+
+        const result = this.ctx.measureText(text)
+        measureTextCache.set(key, result.width)
+        return result.width
     }
 
     listeners() {
@@ -127,8 +151,8 @@ export default class Botbar {
         let lbl = this.format_cursor_x()
         this.ctx.fillStyle = this.$p.colors.panel
 
-        let measure = this.ctx.measureText(lbl + '    ')
-        let panwidth = Math.floor(measure.width)
+        // PERFORMANCE: Use cached measureText
+        let panwidth = Math.floor(this.measureTextCached(lbl + '    '))
         let cursor = this.$p.cursor.x
         let x = Math.floor(cursor - panwidth * 0.5)
         let y = - 0.5

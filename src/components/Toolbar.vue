@@ -82,18 +82,16 @@ export default {
                 }
             }
             return arr
+        },
+        // PERFORMANCE: Computed property for tools length - avoids deep watch
+        toolsLength() {
+            return this.data?.tools?.length ?? 0
         }
     },
     watch: {
         // PERFORMANCE: Watch only tools.length instead of deep watching entire data object
         toolsLength(newLen) {
             this.tool_count = newLen
-        }
-    },
-    computed: {
-        // PERFORMANCE: Computed property for tools length - avoids deep watch
-        toolsLength() {
-            return this.data?.tools?.length ?? 0
         }
     },
     data() { return { tool_count: 0, sub_map: {} } }
