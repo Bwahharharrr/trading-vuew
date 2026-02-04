@@ -133,9 +133,10 @@ export default class DCEvents {
 
     // When the set of $uuids is changed
     on_ids_changed(values, prev) {
-
-        let rem = prev.filter(
-            x => x !== undefined && !values.includes(x))
+        // PERFORMANCE: Use Set for O(1) lookup instead of Array.includes() O(n)
+        // This changes O(n²) to O(n) for the entire operation
+        const valuesSet = new Set(values)
+        let rem = prev.filter(x => x !== undefined && !valuesSet.has(x))
 
         if (rem.length) {
             this.ww.just('remove-scripts', rem)

@@ -27,8 +27,22 @@ export default class DCCore extends DCEvents {
             )
 
             // Listen to all indices changes
+            // PERFORMANCE: Cache the UUID array to avoid creating new array on every getter call
+            // The getter returns a comma-joined string for efficient Vue comparison
+            this._cachedIds = null
+            this._cachedIdsKey = null
             this._idsUnwatch = this.tv.$watch(
-                () => this.get('.').map(x => x.settings.$uuid),
+                () => {
+                    const items = this.get('.')
+                    const ids = items.map(x => x.settings.$uuid)
+                    const key = ids.join(',')
+                    // Only update cache when key changes
+                    if (key !== this._cachedIdsKey) {
+                        this._cachedIdsKey = key
+                        this._cachedIds = ids
+                    }
+                    return this._cachedIds
+                },
                 (n, p) => this.on_ids_changed(n, p)
             )
 
@@ -339,9 +353,13 @@ export default class DCCore extends DCEvents {
             }))
         }
 
-        return arr.map((x, i) => ({
-            p: this.data[side],
-            i: this.data[side].indexOf(x),
+        // PERFORMANCE: Build index map for O(1) lookup instead of indexOf O(n) per element
+        // This changes O(n²) to O(n) for the entire operation
+        const sideData = this.data[side]
+        const indexMap = new Map(sideData.map((item, idx) => [item, idx]))
+        return arr.map(x => ({
+            p: sideData,
+            i: indexMap.get(x),
             v: x
         }))
     }

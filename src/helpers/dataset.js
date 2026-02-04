@@ -33,18 +33,22 @@ export default class Dataset {
 
     // Watch for the changes of descriptors
     static watcher(n, p) {
-        let nids = n.map(x => x.id)
-        let pids = p.map(x => x.id)
+        // PERFORMANCE: Use Sets and Maps for O(1) lookups instead of includes()+filter()
+        // This changes O(n²) to O(n) for the entire operation
+        const nMap = new Map(n.map(x => [x.id, x]))
+        const pSet = new Set(p.map(x => x.id))
+        const nSet = new Set(nMap.keys())
 
-        for (var id of nids) {
-            if (!pids.includes(id)) {
-                let ds = n.filter(x => x.id === id)[0]
+        // Find newly added datasets
+        for (const [id, ds] of nMap) {
+            if (!pSet.has(id)) {
                 this.dss[id] = new Dataset(this, ds)
             }
         }
 
-        for (var id of pids) {
-            if (!nids.includes(id) && this.dss[id]) {
+        // Find removed datasets
+        for (const id of pSet) {
+            if (!nSet.has(id) && this.dss[id]) {
                 this.dss[id].remove()
             }
         }
