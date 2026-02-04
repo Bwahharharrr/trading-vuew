@@ -19,6 +19,10 @@ export default class GridRenderer {
 
         // Performance: track if we only need crosshair update
         this._lastDataLength = 0
+
+        // PERFORMANCE: Cache sorted overlays to avoid sorting every frame
+        this._sortedOverlays = []
+        this._overlaysSortDirty = true
     }
 
     // Static canvas context (grid, candles, overlays)
@@ -43,6 +47,8 @@ export default class GridRenderer {
             this.crosshair = layer
         } else {
             this.overlays.push(layer)
+            // PERFORMANCE: Mark sorted cache as dirty
+            this._overlaysSortDirty = true
         }
         this._overlaysDirty = true
         this.update()
@@ -50,6 +56,8 @@ export default class GridRenderer {
 
     del_layer(id) {
         this.overlays = this.overlays.filter(x => x.id !== id)
+        // PERFORMANCE: Mark sorted cache as dirty
+        this._overlaysSortDirty = true
         this._overlaysDirty = true
         this.update()
     }
@@ -131,11 +139,14 @@ export default class GridRenderer {
 
         this.drawGrid()
 
-        // Sort overlays by z-index and render
-        let overlays = [...this.overlays]
-        overlays.sort((l1, l2) => l1.z - l2.z)
+        // PERFORMANCE: Cache sorted overlays - only re-sort when overlays change
+        if (this._overlaysSortDirty || this._sortedOverlays.length !== this.overlays.length) {
+            this._sortedOverlays = this.overlays.slice()
+            this._sortedOverlays.sort((l1, l2) => l1.z - l2.z)
+            this._overlaysSortDirty = false
+        }
 
-        overlays.forEach(l => {
+        this._sortedOverlays.forEach(l => {
             if (!l.display) return
             this.ctx.save()
             let r = l.renderer

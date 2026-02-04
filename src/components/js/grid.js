@@ -38,6 +38,10 @@ export default class Grid {
         this.wmode = this.$p.config?.SCROLL_WHEEL
         this.trackpad = false
 
+        // PERFORMANCE: Cache offset to avoid getBoundingClientRect on every mousemove
+        this._offsetCached = false
+        this._offsetCacheTime = 0
+
         // Initialize modules
         this.zoomManager = new ZoomManager(this)
         this.panManager = new PanManager(this)
@@ -254,10 +258,23 @@ export default class Grid {
         }, add))
     }
 
-    calc_offset() {
-        let rect = this.canvas.getBoundingClientRect()
-        this.offset_x = -rect.x
-        this.offset_y = -rect.y
+    // PERFORMANCE: Cache getBoundingClientRect to avoid layout thrashing
+    // Offset only changes on scroll, resize, or layout changes - not on every mousemove
+    calc_offset(force = false) {
+        const now = Date.now()
+        // Refresh cache every 100ms or when forced (resize, scroll, etc.)
+        if (force || !this._offsetCached || (now - this._offsetCacheTime) > 100) {
+            let rect = this.canvas.getBoundingClientRect()
+            this.offset_x = -rect.x
+            this.offset_y = -rect.y
+            this._offsetCached = true
+            this._offsetCacheTime = now
+        }
+    }
+
+    // Force offset recalculation (call on resize/scroll)
+    invalidate_offset() {
+        this._offsetCached = false
     }
 
     // Delegate layer management to renderer

@@ -12,6 +12,25 @@ import scriptState from './script_state.js'
 const { DEF_LIMIT } = Const
 const WAIT_EXEC = 10  // merge script execs, ms
 
+// Display-only settings that don't affect indicator computation
+// Changes to these should NOT trigger full re-execution
+const DISPLAY_ONLY_SETTINGS = new Set([
+    // Colors
+    'color', 'lineColor', 'fillColor', 'upColor', 'downColor',
+    'wickUpColor', 'wickDownColor', 'borderUpColor', 'borderDownColor',
+    'backgroundColor', 'textColor', 'labelColor', 'crossColor',
+    // Line styles
+    'lineWidth', 'lineStyle', 'lineDash', 'opacity', 'alpha',
+    // Display toggles
+    'showLabels', 'showLegend', 'showValues', 'showPrice',
+    'visible', 'display', 'showBands', 'showFill',
+    // Visual formatting
+    'precision', 'prec', 'zIndex', 'z'
+])
+
+// Yield frequency for long-running script execution (in iterations)
+const YIELD_FREQUENCY = 2000  // Yield every 2000 candles for better responsiveness
+
 class ScriptEngine {
 
     constructor() {
@@ -27,12 +46,113 @@ class ScriptEngine {
         this.std_plus = {}      // Functions to inject
         this.tf = undefined     // Main chart TF
 
+        // === PERFORMANCE OPTIMIZATION: Script output cache ===
+        // Caches computed outputs to avoid re-execution when only display settings change
+        this._outputCache = new Map()  // scriptId -> { hash, data, onchart, offchart }
+        this._dataHash = null          // Hash of current OHLCV data for cache invalidation
+
         // Set up function references in shared state (breaks circular deps)
         // Use arrow functions to defer method lookup until call time,
         // since this.send is defined externally after construction
         scriptState.send = (...args) => this.send(...args)
         scriptState.std_inject = (...args) => this.std_inject(...args)
         scriptState.match_ds = (...args) => this.match_ds(...args)
+    }
+
+    // === PERFORMANCE: Compute hash for computation-affecting settings ===
+    // Only settings NOT in DISPLAY_ONLY_SETTINGS affect computation
+    _computationHash(script) {
+        const props = script.src?.props || {}
+        const sett = script.sett || {}
+        const parts = []
+
+        // Include script source code hash (if code changes, must recompute)
+        if (script.src?.init) parts.push('i:' + script.src.init.toString().length)
+        if (script.src?.update) parts.push('u:' + script.src.update.toString().length)
+
+        // Include only computation-affecting props
+        for (const key in props) {
+            if (!DISPLAY_ONLY_SETTINGS.has(key)) {
+                const val = props[key].val !== undefined ? props[key].val : props[key].def
+                parts.push(`${key}:${JSON.stringify(val)}`)
+            }
+        }
+
+        // Include computation-affecting settings
+        for (const key in sett) {
+            if (!DISPLAY_ONLY_SETTINGS.has(key)) {
+                parts.push(`s.${key}:${JSON.stringify(sett[key])}`)
+            }
+        }
+
+        return parts.sort().join('|')
+    }
+
+    // === PERFORMANCE: Compute hash of OHLCV data for cache invalidation ===
+    _computeDataHash() {
+        const ohlcv = this.data?.ohlcv?.data
+        if (!ohlcv || !ohlcv.length) return ''
+        // Hash based on length and first/last timestamps
+        return `${ohlcv.length}:${ohlcv[0]?.[0]}:${ohlcv[ohlcv.length - 1]?.[0]}`
+    }
+
+    // === PERFORMANCE: Check if only display settings changed ===
+    _isDisplayOnlyChange(delta, scriptId) {
+        if (!delta || !delta[scriptId]) return false
+        const changes = delta[scriptId]
+        for (const key in changes) {
+            if (!DISPLAY_ONLY_SETTINGS.has(key)) {
+                return false  // Found a computation-affecting change
+            }
+        }
+        return true  // All changes are display-only
+    }
+
+    // === PERFORMANCE: Restore script output from cache ===
+    _restoreFromCache(scriptId) {
+        const cached = this._outputCache.get(scriptId)
+        if (!cached) return false
+
+        const script = this.map[scriptId]
+        if (!script || !script.env) return false
+
+        // Restore cached data
+        script.env.data = cached.data.slice()  // Shallow copy is sufficient
+        script.env.onchart = JSON.parse(JSON.stringify(cached.onchart || {}))
+        script.env.offchart = JSON.parse(JSON.stringify(cached.offchart || {}))
+
+        return true
+    }
+
+    // === PERFORMANCE: Save script output to cache ===
+    _saveToCache(scriptId) {
+        const script = this.map[scriptId]
+        if (!script || !script.env) return
+
+        const hash = this._computationHash(script)
+        this._outputCache.set(scriptId, {
+            hash,
+            dataHash: this._dataHash,
+            data: script.env.data.slice(),  // Shallow copy
+            onchart: JSON.parse(JSON.stringify(script.env.onchart || {})),
+            offchart: JSON.parse(JSON.stringify(script.env.offchart || {}))
+        })
+    }
+
+    // === PERFORMANCE: Check if cache is valid for a script ===
+    _isCacheValid(scriptId) {
+        const cached = this._outputCache.get(scriptId)
+        if (!cached) return false
+
+        const script = this.map[scriptId]
+        if (!script) return false
+
+        // Check if data changed
+        if (cached.dataHash !== this._dataHash) return false
+
+        // Check if computation settings changed
+        const currentHash = this._computationHash(script)
+        return cached.hash === currentHash
     }
 
     // Sync runtime state to shared module (for script_env and script_std)
@@ -52,6 +172,9 @@ class ScriptEngine {
         // Wait for the data
         if (!this.data.ohlcv) return
 
+        // === PERFORMANCE: Update data hash for cache invalidation ===
+        this._dataHash = this._computeDataHash()
+
         // Execute queue after all scripts & data are loaded
         this.exec_id = setTimeout(async () => {
 
@@ -66,6 +189,12 @@ class ScriptEngine {
 
             if (Object.keys(this.map).length) {
                 await this.run()
+
+                // === PERFORMANCE: Cache all script outputs ===
+                for (var id in this.map) {
+                    this._saveToCache(id)
+                }
+
                 this.drain_queues()
             }
 
@@ -83,26 +212,62 @@ class ScriptEngine {
 
         let sel = Object.keys(delta).filter(x => x in this.map)
 
-        if (!this.init_state(sel)) {
-            this.delta_queue.push(delta)
-            return
-        }
+        // === PERFORMANCE: Check which scripts actually need re-execution ===
+        const needsReExec = []
+        const displayOnlyChanges = []
 
-        for (var id in delta) {
+        for (var id of sel) {
             if (!this.map[id]) continue
 
+            // Check if this is a display-only change
+            if (this._isDisplayOnlyChange(delta, id) && this._isCacheValid(id)) {
+                displayOnlyChanges.push(id)
+            } else {
+                needsReExec.push(id)
+            }
+
+            // Apply the delta to props regardless
             let props = this.map[id].src.props || {}
             for (var k in props) {
                 if (k in delta[id]) {
                     props[k].val = delta[id][k]
                 }
             }
-
-            this.exec(this.map[id])
-
         }
 
-        await this.run(sel)
+        // === PERFORMANCE: Handle display-only changes without re-execution ===
+        if (displayOnlyChanges.length > 0) {
+            // Restore from cache and send updated data
+            for (var id of displayOnlyChanges) {
+                this._restoreFromCache(id)
+            }
+
+            // If ALL changes are display-only, skip expensive re-execution
+            if (needsReExec.length === 0) {
+                this.send('overlay-data', this.format_map(sel))
+                this.send_state()
+                return
+            }
+        }
+
+        // === Continue with normal re-execution for computation-affecting changes ===
+        if (!this.init_state(needsReExec)) {
+            this.delta_queue.push(delta)
+            return
+        }
+
+        for (var id of needsReExec) {
+            if (!this.map[id]) continue
+            this.exec(this.map[id])
+        }
+
+        await this.run(needsReExec)
+
+        // === PERFORMANCE: Cache the results for future use ===
+        for (var id of needsReExec) {
+            this._saveToCache(id)
+        }
+
         this.drain_queues()
         this.send_state()
 
@@ -308,14 +473,29 @@ class ScriptEngine {
 
             let ohlcv = this.data.ohlcv.data
             let start = this.start(ohlcv)
+            let total = ohlcv.length - start
             this.shared.event = 'step'
+
+            // === PERFORMANCE: Improved progress reporting and yielding ===
+            let lastProgress = 0
 
             for (var i = start; i < ohlcv.length; i++) {
 
-                // Make a pause to read new WW msg
-                // TODO: speedup pause()
-                // TODO: emit progress %
-                if (i % 5000 === 0) await Utils.pause(0)
+                // === PERFORMANCE: More frequent yielding for better responsiveness ===
+                // Yield every YIELD_FREQUENCY iterations instead of 5000
+                if (i % YIELD_FREQUENCY === 0) {
+                    await Utils.pause(0)
+
+                    // === PERFORMANCE: Emit progress percentage ===
+                    let progress = Math.floor(((i - start) / total) * 100)
+                    if (progress > lastProgress) {
+                        lastProgress = progress
+                        this.send('engine-state', {
+                            running: true,
+                            progress: progress
+                        })
+                    }
+                }
                 if (this.restarted()) return
 
                 this.iter = i - start
@@ -324,8 +504,6 @@ class ScriptEngine {
                 this.step(ohlcv[i])
                 this.shared.onclose = i !== ohlcv.length - 1
 
-                // SLOW DOWN TEST:
-                //for (var k = 1; k < 1000000; k++) {}
                 for (var m = 0; m < mfs1.length; m++) {
                     mfs1[m](sel) // pre_step
                 }

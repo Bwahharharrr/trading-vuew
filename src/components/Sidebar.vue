@@ -123,13 +123,19 @@ export default {
             if (!newKey || newKey === oldKey) return
             this.redraw()
         },
-        // Watch cursor y$ (price) changes only - sidebar shows price
+        // PERFORMANCE: Watch cursor y$ (price) changes only - use panel-only update
+        // This avoids redrawing all price labels when only the cursor panel needs updating
         'cursor.y$': function(newY) {
             if (this._cursorRafPending) return
             this._cursorRafPending = true
             requestAnimationFrame(() => {
                 this._cursorRafPending = false
-                this.redraw()
+                // Use optimized panel-only update instead of full redraw
+                if (this.renderer && this.renderer.updatePanelOnly) {
+                    this.renderer.updatePanelOnly()
+                } else {
+                    this.redraw()
+                }
             })
         },
         rerender() {

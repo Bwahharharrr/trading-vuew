@@ -14,7 +14,11 @@
 export default {
     name: 'GridResizer',
     props: ['grid_id', 'layout', 'colors'],
-    mounted() {},
+    mounted() {
+        // PERFORMANCE: Create throttled handler once
+        this._rafId = null
+        this._lastEvent = null
+    },
     data() {
         return {
             dragging: false,
@@ -58,30 +62,40 @@ export default {
         onMouseMove(e) {
             if (!this.dragging) return
 
-            const deltaY = e.clientY - this.startY
-            const gridAbove = this.grid_id - 1
-            const gridBelow = this.grid_id
+            // PERFORMANCE: RAF-throttle mousemove to prevent layout thrashing
+            // Store latest event and schedule processing
+            this._lastEvent = e
+            if (this._rafId !== null) return
 
-            // Calculate new heights
-            const minHeight = 28 // Minimum grid height (matches MINIMIZED_HEIGHT)
-            let newHeightAbove = this.startHeights[gridAbove] + deltaY
-            let newHeightBelow = this.startHeights[gridBelow] - deltaY
+            this._rafId = requestAnimationFrame(() => {
+                this._rafId = null
+                if (!this._lastEvent || !this.dragging) return
 
-            // Enforce minimum heights
-            if (newHeightAbove < minHeight) {
-                newHeightBelow = this.startHeights[gridBelow] + (this.startHeights[gridAbove] - minHeight)
-                newHeightAbove = minHeight
-            }
-            if (newHeightBelow < minHeight) {
-                newHeightAbove = this.startHeights[gridAbove] + (this.startHeights[gridBelow] - minHeight)
-                newHeightBelow = minHeight
-            }
+                const deltaY = this._lastEvent.clientY - this.startY
+                const gridAbove = this.grid_id - 1
+                const gridBelow = this.grid_id
 
-            this.$emit('resize-grids', {
-                gridAbove,
-                gridBelow,
-                heightAbove: newHeightAbove,
-                heightBelow: newHeightBelow
+                // Calculate new heights
+                const minHeight = 28 // Minimum grid height (matches MINIMIZED_HEIGHT)
+                let newHeightAbove = this.startHeights[gridAbove] + deltaY
+                let newHeightBelow = this.startHeights[gridBelow] - deltaY
+
+                // Enforce minimum heights
+                if (newHeightAbove < minHeight) {
+                    newHeightBelow = this.startHeights[gridBelow] + (this.startHeights[gridAbove] - minHeight)
+                    newHeightAbove = minHeight
+                }
+                if (newHeightBelow < minHeight) {
+                    newHeightAbove = this.startHeights[gridAbove] + (this.startHeights[gridBelow] - minHeight)
+                    newHeightBelow = minHeight
+                }
+
+                this.$emit('resize-grids', {
+                    gridAbove,
+                    gridBelow,
+                    heightAbove: newHeightAbove,
+                    heightBelow: newHeightBelow
+                })
             })
         },
         onMouseUp() {
@@ -103,6 +117,11 @@ export default {
     beforeUnmount() {
         document.removeEventListener('mousemove', this.onMouseMove)
         document.removeEventListener('mouseup', this.onMouseUp)
+        // PERFORMANCE: Cancel any pending RAF
+        if (this._rafId !== null) {
+            cancelAnimationFrame(this._rafId)
+            this._rafId = null
+        }
     }
 }
 </script>

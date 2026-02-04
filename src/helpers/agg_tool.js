@@ -1,4 +1,5 @@
 // Tick aggregation
+// PERFORMANCE: Uses RAF-coordinated updates to sync with render loop
 
 import Utils from '../stuff/utils.js'
 
@@ -7,10 +8,12 @@ export default class AggTool {
     constructor(dc, int = 100) {
 
         this.symbols = {}
-        this.int = int // Itarval in ms
+        this.int = int // Interval in ms
         this.dc = dc
         this.st_id = null
+        this.raf_id = null
         this.data_changed = false
+        this._lastUpdate = 0
 
     }
 
@@ -78,7 +81,34 @@ export default class AggTool {
             this.dc.ww.just('update-data', out)
             this.data_changed = false
         }
-        setTimeout(() => this.update(), this.int)
+        // PERFORMANCE: Use RAF-coordinated scheduling
+        // This ensures updates are synced with the render loop
+        this._scheduleNextUpdate()
+    }
+
+    // PERFORMANCE: RAF-coordinated update scheduling
+    // Combines setTimeout for minimum interval with RAF for render sync
+    _scheduleNextUpdate() {
+        const now = Date.now()
+        const elapsed = now - this._lastUpdate
+        const remaining = Math.max(0, this.int - elapsed)
+
+        // Clear any pending timers
+        if (this.st_id) {
+            clearTimeout(this.st_id)
+            this.st_id = null
+        }
+
+        // Schedule next update: wait for minimum interval, then sync with RAF
+        this.st_id = setTimeout(() => {
+            this.st_id = null
+            // Use RAF to sync with render loop
+            this.raf_id = requestAnimationFrame(() => {
+                this.raf_id = null
+                this._lastUpdate = Date.now()
+                this.update()
+            })
+        }, remaining)
     }
 
     refine(sym, upd) {
@@ -101,6 +131,19 @@ export default class AggTool {
     }
 
     clear() {
+        this.symbols = {}
+    }
+
+    // PERFORMANCE: Proper cleanup of timers
+    destroy() {
+        if (this.st_id) {
+            clearTimeout(this.st_id)
+            this.st_id = null
+        }
+        if (this.raf_id) {
+            cancelAnimationFrame(this.raf_id)
+            this.raf_id = null
+        }
         this.symbols = {}
     }
 

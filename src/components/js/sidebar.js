@@ -178,6 +178,46 @@ export default class Sidebar {
 
         if (this.$p.cursor.y && this.$p.cursor.y$) this.panel()
 
+        // PERFORMANCE: Store last panel position for optimized cursor-only updates
+        this._lastPanelY = this.$p.cursor.y
+
+    }
+
+    // PERFORMANCE: Update only the cursor panel without redrawing entire sidebar
+    // Called when only cursor.y$ changes (not range or layout)
+    updatePanelOnly() {
+        if (!this.$p.cursor.y || !this.$p.cursor.y$) {
+            // Clear old panel if cursor is gone
+            if (this._lastPanelY !== undefined) {
+                this._clearPanel(this._lastPanelY)
+                this._lastPanelY = undefined
+            }
+            return
+        }
+
+        // Clear old panel area
+        if (this._lastPanelY !== undefined && this._lastPanelY !== this.$p.cursor.y) {
+            this._clearPanel(this._lastPanelY)
+        }
+
+        // Draw new panel
+        this.panel()
+        this._lastPanelY = this.$p.cursor.y
+    }
+
+    // PERFORMANCE: Clear just the panel area
+    _clearPanel(panelY) {
+        const panwidth = this.layout.sb + 1
+        const x = -0.5
+        const y = panelY - PANHEIGHT * 0.5 - 0.5 - 1
+        // Clear slightly larger area to ensure clean redraw
+        this.ctx.clearRect(x - 1, y - 1, panwidth + 2, PANHEIGHT + 2)
+        // Redraw the scale line that may have been cleared
+        this.ctx.strokeStyle = this.$p.colors.scale
+        this.ctx.beginPath()
+        this.ctx.moveTo(0.5, y)
+        this.ctx.lineTo(0.5, y + PANHEIGHT + 2)
+        this.ctx.stroke()
     }
 
     apply_shaders() {

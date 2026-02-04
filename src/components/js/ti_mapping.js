@@ -45,6 +45,7 @@ export default class TI {
     }
 
     // Make maps for the main subset
+    // PERFORMANCE: Use slice() instead of spread operator to avoid excess allocations
     map_sub(res) {
 
         for (var i = 0; i < res.length; i++) {
@@ -53,8 +54,8 @@ export default class TI {
             this.ti_map[t] = _i
             this.it_map[_i] = t
 
-            // Overwrite t with i
-            let copy = [...res[i]]
+            // PERFORMANCE: slice() is faster than spread for array copying
+            let copy = res[i].slice()
             copy[0] = _i
             this.sub_i.push(copy)
 
@@ -75,7 +76,8 @@ export default class TI {
             let shift = Utils.index_shift(this.sub, data)
             for (var i = 0; i < data.length; i++) {
                 let _i = (this.ss + i)
-                let copy = [...data[i]]
+                // PERFORMANCE: slice() is faster than spread for array copying
+                let copy = data[i].slice()
                 copy[0] = _i + shift
                 res.push(copy)
             }
@@ -94,7 +96,8 @@ export default class TI {
         let tN = this.sub[this.sub.length - 1][0]
 
         for (var i = 0; i < data.length; i++) {
-            let copy = [...data[i]]
+            // PERFORMANCE: slice() is faster than spread for array copying
+            let copy = data[i].slice()
             let tk = this.sub[k][0]
             let t = data[i][0]
             let index = this.ti_map[t]

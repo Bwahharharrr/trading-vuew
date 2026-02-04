@@ -1,11 +1,11 @@
 <script>
 // Renedrer for candlesticks + volume (optional)
 // It can be used as the main chart or an indicator
+// PERFORMANCE: Uses static draw functions instead of creating objects per candle
 
 import Overlay from '../../mixins/overlay.js'
 import { layout_cnv } from '../js/layout_cnv.js'
-import Candle from '../primitives/candle.js'
-import Volbar from '../primitives/volbar.js'
+import { drawCandle, drawVolbar } from '../primitives/candle-draw.js'
 import Price from '../primitives/price.js'
 
 export default {
@@ -32,16 +32,19 @@ export default {
                 cnv = layout_cnv(this)
             }
 
+            // PERFORMANCE: Use static draw functions instead of creating new objects
+            // This eliminates GC pressure from creating 1000+ objects per frame
             if (this.show_volume) {
                 var cv = cnv.volume
+                const layoutHeight = this.$props.layout.height
                 for (var i = 0, n = cv.length; i < n; i++) {
-                    new Volbar(this, ctx, cv[i])
+                    drawVolbar(ctx, cv[i], this, layoutHeight)
                 }
             }
 
             var cc = cnv.candles
             for (var i = 0, n = cc.length; i < n; i++) {
-                new Candle(this, ctx, cc[i])
+                drawCandle(ctx, cc[i], this)
             }
 
             if (this.price_line) this.price.draw(ctx)
