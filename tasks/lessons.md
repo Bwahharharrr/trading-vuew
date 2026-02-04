@@ -344,6 +344,9 @@ Dataset watcher used `includes()` + `filter()` pattern - multiple O(n) scans per
 | 25 | HIGH | botbar.js | Optimized globalAlpha state changes |
 | 26 | MEDIUM | grid.js | Skip Object.assign when empty |
 | 27 | MEDIUM | Range.vue | Reset setLineDash after use |
+| 28 | CRITICAL | grid_maker.js | Math.log10 vs toExponential().split() |
+| 29 | HIGH | crosshair.js | Static dash pattern constant |
+| 30 | HIGH | sidebar.js | Cached toFixed() in panel() |
 
 ---
 
@@ -370,3 +373,6 @@ Dataset watcher used `includes()` + `filter()` pattern - multiple O(n) scans per
 19. **Use Date.now() not new Date().getTime()** - Avoids object allocation
 20. **Track canvas state changes** - Only change fillStyle/globalAlpha when value differs
 21. **Reset canvas state after use** - Always reset setLineDash, globalAlpha after drawing
+22. **Use Math.log10 for exponents** - Avoid toExponential().split() string parsing
+23. **Make constant arrays static** - setLineDash patterns, color arrays created once
+24. **Cache formatted strings** - toFixed(), toLocaleString() results when inputs unchanged
