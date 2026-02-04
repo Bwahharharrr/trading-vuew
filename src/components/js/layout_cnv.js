@@ -15,7 +15,7 @@ export function layout_cnv(self) {
 
     // The volume bar height is determined as a percentage of
     // the chart's height (VOLSCALE)
-    let maxv = Math.max(...sub.map(x => x[5]))
+    let maxv = Utils.maxAtIndex(sub, 5)
     let vs =  $p.config.VOLSCALE * layout.height / maxv
     var x1, x2, w, avg_w, mid, prev = undefined
 
@@ -81,7 +81,7 @@ export function layout_vol(self) {
     self._i1 = dim < 6 ? 1 : 5
     self._i2 = dim < 6 ? (p => p[2]) : (p => p[4] >= p[1])
 
-    let maxv = Math.max(...sub.map(x => x[self._i1]))
+    let maxv = Utils.maxAtIndex(sub, self._i1)
     let volscale = self.volscale || $p.config.VOLSCALE
     let vs = volscale * layout.height / maxv
     var x1, x2, mid, prev = undefined

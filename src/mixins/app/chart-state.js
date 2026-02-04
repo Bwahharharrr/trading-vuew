@@ -126,6 +126,12 @@ export default {
                 this.displayedView = availableViews[0]
                 this.$nextTick(() => {
                     this.applyCurrentColoring()
+                    // Force chart to redraw with colors applied
+                    this.$nextTick(() => {
+                        if (this.$refs.tradingVue) {
+                            this.$refs.tradingVue.resetChart()
+                        }
+                    })
                 })
             }
         }

@@ -4,19 +4,26 @@
 import * as Hammer from 'hammerjs'
 import Hamster from 'hamsterjs'
 import Utils from '../../stuff/utils.js'
+import { createCursorEventPool } from '../../stuff/pool.js'
 import { ZoomManager, PanManager, GridRenderer } from './grid/index.js'
 
 export default class Grid {
 
-    constructor(canvas, comp) {
+    constructor(canvas, comp, canvasDynamic = null) {
         const config = comp.$props.config || {}
         this.MIN_ZOOM = config.MIN_ZOOM || 25
         this.MAX_ZOOM = config.MAX_ZOOM || 100000
 
         if (Utils.is_mobile) this.MIN_ZOOM *= 0.5
 
+        // Static canvas for grid, candles, overlays
         this.canvas = canvas
         this.ctx = canvas.getContext('2d')
+
+        // Dynamic canvas for crosshair (optional - falls back to single canvas)
+        this.canvasDynamic = canvasDynamic
+        this.ctxDynamic = canvasDynamic ? canvasDynamic.getContext('2d') : null
+
         this.comp = comp
         this.$p = comp.$props
         this.data = this.$p.sub
@@ -36,6 +43,10 @@ export default class Grid {
         this.panManager = new PanManager(this)
         this.renderer = new GridRenderer(this)
 
+        // Object pool for cursor events to reduce GC pressure
+        this._cursorEventPool = createCursorEventPool()
+        this._pooledCursorEvent = this._cursorEventPool.acquire()
+
         this.listeners()
     }
 
@@ -47,10 +58,14 @@ export default class Grid {
     set overlays(v) { this.renderer.overlays = v }
 
     listeners() {
-        this.hm = Hamster(this.canvas)
-        this.hm.wheel((event, delta) => this.zoomManager.mousezoom(-delta * 50, event))
+        this.hm = Hamster(this.canvasDynamic || this.canvas)
+        // Throttle wheel events to ~60fps for smooth zoom
+        this._throttledWheel = Utils.rafThrottle((delta, event) => {
+            this.zoomManager.mousezoom(-delta * 50, event)
+        })
+        this.hm.wheel((event, delta) => this._throttledWheel(delta, event))
 
-        let mc = this.mc = new Hammer.Manager(this.canvas)
+        let mc = this.mc = new Hammer.Manager(this.canvasDynamic || this.canvas)
         let T = Utils.is_mobile ? 10 : 0
         mc.add(new Hammer.Pan({ threshold: T }))
         mc.add(new Hammer.Tap())
@@ -79,15 +94,17 @@ export default class Grid {
                 B: this.layout.B,
                 t0: Utils.now()
             }
-            this.comp.$emit('cursor-changed', {
-                grid_id: this.id,
-                x: event.center.x + this.offset_x,
-                y: event.center.y + this.offset_y
-            })
+            // Reuse pooled cursor event object
+            this._pooledCursorEvent.grid_id = this.id
+            this._pooledCursorEvent.x = event.center.x + this.offset_x
+            this._pooledCursorEvent.y = event.center.y + this.offset_y
+            this._pooledCursorEvent.mode = undefined
+            this.comp.$emit('cursor-changed', this._pooledCursorEvent)
             this.comp.$emit('cursor-locked', true)
         })
 
-        mc.on('panmove', event => {
+        // Throttle panmove for smoother drag performance
+        this._throttledPanmove = Utils.rafThrottle((event) => {
             if (Utils.is_mobile) {
                 this.calc_offset()
                 this.renderer.propagate('mousemove', this.touch2mouse(event))
@@ -97,15 +114,17 @@ export default class Grid {
                     this.drug.x + event.deltaX,
                     this.drug.y + event.deltaY
                 )
-                this.comp.$emit('cursor-changed', {
-                    grid_id: this.id,
-                    x: event.center.x + this.offset_x,
-                    y: event.center.y + this.offset_y
-                })
+                // Reuse pooled cursor event object
+                this._pooledCursorEvent.grid_id = this.id
+                this._pooledCursorEvent.x = event.center.x + this.offset_x
+                this._pooledCursorEvent.y = event.center.y + this.offset_y
+                this._pooledCursorEvent.mode = undefined
+                this.comp.$emit('cursor-changed', this._pooledCursorEvent)
             } else if (this.cursor.mode === 'aim') {
                 this.emit_cursor_coord(event)
             }
         })
+        mc.on('panmove', event => this._throttledPanmove(event))
 
         mc.on('panend', event => {
             if (Utils.is_mobile && this.drug) {
@@ -161,10 +180,12 @@ export default class Grid {
 
     mousemove(event) {
         if (Utils.is_mobile) return
+        // Guard against uninitialized state
+        if (!this.layout || !this.renderer) return
         this.comp.$emit('cursor-changed', {
             grid_id: this.id,
             x: event.layerX,
-            y: event.layerY + this.layout.offset
+            y: event.layerY + (this.layout.offset || 0)
         })
         this.calc_offset()
         this.renderer.propagate('mousemove', event)
@@ -172,6 +193,8 @@ export default class Grid {
 
     mouseout(event) {
         if (Utils.is_mobile) return
+        // Guard against uninitialized renderer
+        if (!this.renderer) return
         this.comp.$emit('cursor-changed', {})
         this.renderer.propagate('mouseout', event)
     }
@@ -179,11 +202,12 @@ export default class Grid {
     mouseup(event) {
         this.drug = null
         this.comp.$emit('cursor-locked', false)
-        this.renderer.propagate('mouseup', event)
+        if (this.renderer) this.renderer.propagate('mouseup', event)
     }
 
     mousedown(event) {
         if (Utils.is_mobile) return
+        if (!this.renderer) return
         this.renderer.propagate('mousedown', event)
         this.comp.$emit('cursor-locked', true)
         if (event.defaultPrevented) return
@@ -270,5 +294,12 @@ export default class Grid {
         rm("gestureend", this.gestureend)
         if (this.mc) this.mc.destroy()
         if (this.hm) this.hm.unwheel()
+        // Cancel any pending throttled callbacks
+        if (this._throttledWheel) this._throttledWheel.cancel()
+        if (this._throttledPanmove) this._throttledPanmove.cancel()
+        // Release pooled objects
+        if (this._cursorEventPool && this._pooledCursorEvent) {
+            this._cursorEventPool.release(this._pooledCursorEvent)
+        }
     }
 }

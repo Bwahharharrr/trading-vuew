@@ -16,9 +16,11 @@ export default class VolbarExt {
         let w = data.x2 - data.x1
         let h = Math.floor(data.h)
 
-        this.ctx.fillStyle = data.green ?
-            this.style.colorVolUp :
-            this.style.colorVolDw
+        const fillStyle = data.green ?
+            (this.style.colorVolUp || '#23a77642') :
+            (this.style.colorVolDw || '#e5415042')
+
+        this.ctx.fillStyle = fillStyle
 
         this.ctx.fillRect(
             Math.floor(data.x1),

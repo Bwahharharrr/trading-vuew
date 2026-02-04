@@ -26,7 +26,11 @@ export default class Botbar {
 
     listeners() {
         this.hm = Hamster(this.canvas)
-        this.hm.wheel((event, delta) => this.mousezoom(-delta * 50, event))
+        // Throttle wheel events to ~60fps
+        this._throttledWheel = Utils.rafThrottle((delta, event) => {
+            this.mousezoom(-delta * 50, event)
+        })
+        this.hm.wheel((event, delta) => this._throttledWheel(delta, event))
     }
 
     mousezoom(delta, event) {
@@ -53,6 +57,7 @@ export default class Botbar {
 
     destroy() {
         if (this.hm) this.hm.unwheel()
+        if (this._throttledWheel) this._throttledWheel.cancel()
     }
 
     update() {

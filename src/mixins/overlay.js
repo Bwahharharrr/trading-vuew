@@ -109,21 +109,26 @@ export default {
         }
     },
     watch: {
-        settings: {
-            handler: function(n, p) {
-                if (this.watch_uuid) this.watch_uuid(n, p)
-                this.$emit('show-grid-layer', {
-                    id: this.$props.id,
-                    display: 'display' in this.$props.settings ?
-                        this.$props.settings['display'] : true,
-                })
-            },
-            deep: true
+        // Optimized watcher: only trigger on display changes instead of deep watching all settings
+        settingsDisplayKey(newKey, oldKey) {
+            if (newKey === oldKey) return
+            if (this.watch_uuid) this.watch_uuid(this.$props.settings, {})
+            this.$emit('show-grid-layer', {
+                id: this.$props.id,
+                display: 'display' in this.$props.settings ?
+                    this.$props.settings['display'] : true,
+            })
         }
     },
     computed: {
         sett() {
             return this.$props.settings || {}
+        },
+        // Computed key for efficient display change detection
+        settingsDisplayKey() {
+            const s = this.$props.settings || {}
+            // Track display property and z-index which affect rendering
+            return `${s.display},${s['z-index']},${s.zIndex}`
         }
     },
     data() { return { uxs_count: 0, last_ux_id: null } },

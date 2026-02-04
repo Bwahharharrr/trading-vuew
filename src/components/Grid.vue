@@ -100,7 +100,11 @@ export default {
         // Note: $on removed in Vue 3, handle custom events via layer_events callback
     },
     beforeUnmount () {
-        if (this.renderer) this.renderer.destroy()
+        if (this.renderer) {
+            this.renderer.destroy()
+            // Nullify renderer so new layers go to pendingLayers during remount
+            this.renderer = null
+        }
     },
     mounted() {
         const el = this.$refs['canvas']
@@ -113,21 +117,9 @@ export default {
         this.rendererGeneration++
         const gen = this.rendererGeneration
 
-        // Preserve overlays and crosshair from old renderer if exists
-        const oldOverlays = this.renderer?.renderer?.overlays || []
-        const oldCrosshair = this.renderer?.renderer?.crosshair || null
-
-        this.renderer = new Grid(el, this)
-
-        // Restore preserved overlays to new renderer
-        if (oldOverlays.length > 0) {
-            for (const layer of oldOverlays) {
-                this.renderer.new_layer(layer)
-            }
-        }
-        if (oldCrosshair) {
-            this.renderer.renderer.crosshair = oldCrosshair
-        }
+        // Pass both static and dynamic canvas refs to Grid
+        const elDynamic = this.$refs['canvasDynamic']
+        this.renderer = new Grid(el, this, elDynamic)
 
         this.setup()
 
@@ -204,9 +196,9 @@ export default {
                 this.pendingLayers.push(layer)
                 return
             }
-            this.$nextTick(() => {
-                this.renderer.new_layer(layer)
-            })
+            // Synchronous when renderer ready - no $nextTick to avoid race condition
+            // where canvas setup completes before layer registration
+            this.renderer.new_layer(layer)
         },
         del_layer(layer) {
             // Call synchronously - do NOT use $nextTick here!
@@ -403,7 +395,8 @@ export default {
                             return  // Canvas still not ready
                         }
 
-                        this.renderer = new Grid(el, this)
+                        const elDynamic = this.$refs['canvasDynamic']
+                        this.renderer = new Grid(el, this, elDynamic)
                         this.setup()
                         // Flush pending layers that were queued before renderer was ready
                         for (const layer of this.pendingLayers) {

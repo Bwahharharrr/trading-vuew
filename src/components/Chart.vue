@@ -35,6 +35,7 @@
 
 <script>
 
+import { markRaw } from 'vue'
 import Context from '../stuff/context.js'
 import Utils from '../stuff/utils.js'
 import CursorUpdater from './js/updater.js'
@@ -91,7 +92,8 @@ export default {
             customGridHeights: this.customGridHeights,
             minimizedGrids: this.minimizedGrids
         }
-        this.chartLayout = new Layout(layoutParams)
+        // Use markRaw to prevent Vue from making Layout deeply reactive
+        this.chartLayout = markRaw(new Layout(layoutParams))
 
         // Updates current cursor values
         this.updater = new CursorUpdater(this)
@@ -102,6 +104,25 @@ export default {
     methods: {
         section_props(i) {
             return i === 0 ? this.main_section : this.sub_section
+        },
+
+        // Performance: Targeted update methods to avoid full chart reset
+
+        // Toggle visibility of a specific overlay
+        toggleOverlayVisibility(gridId, overlayId, display) {
+            const section = this.$refs.sec?.[gridId]
+            const grid = section?.$refs?.grid
+            if (grid?.renderer?.renderer) {
+                grid.renderer.renderer.show_hide_layer({ id: overlayId, display })
+                grid.redraw()
+            }
+        },
+
+        // Refresh offchart overlays without full reset
+        // Use when adding/removing offchart indicators
+        refreshOffchartOverlays() {
+            this.rerender++
+            this.$nextTick(() => this.update_layout())
         }
     },
     computed: {

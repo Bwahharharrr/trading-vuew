@@ -6,7 +6,7 @@ export default {
     methods: {
         cursor_changed(e) {
             if (e.mode) this.cursor.mode = e.mode
-            if (this.cursor.mode !== 'explore') {
+            if (this.cursor.mode !== 'explore' && this.updater) {
                 this.updater.sync(e)
             }
             if (this._hook_xchanged) this.ce('?x-changed', e)

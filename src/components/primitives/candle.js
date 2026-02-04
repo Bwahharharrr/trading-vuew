@@ -13,11 +13,11 @@ export default class CandleExt {
     draw(data) {
         const green = data.raw[4] >= data.raw[1]
         const body_color = data.raw[6] || (green ?
-            this.style.colorCandleUp :
-            this.style.colorCandleDw)
+            (this.style.colorCandleUp || '#23a776') :
+            (this.style.colorCandleDw || '#e54150'))
         const wick_color = green ?
-            this.style.colorWickUp :
-            this.style.colorWickDw
+            (this.style.colorWickUp || '#23a776') :
+            (this.style.colorWickDw || '#e54150')
 
         let w = Math.max(data.w, 1)
         let hw = Math.max(Math.floor(w * 0.5), 1)

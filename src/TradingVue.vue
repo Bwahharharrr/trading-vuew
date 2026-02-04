@@ -118,11 +118,11 @@ export default {
         },
         colorVolUp: {
             type: String,
-            default: '#79999e42'
+            default: '#23a77642'
         },
         colorVolDw: {
             type: String,
-            default: '#ef535042'
+            default: '#e5415042'
         },
         colorPanel: {
             type: String,
@@ -271,6 +271,24 @@ export default {
             this.$nextTick(() => this.custom_event({
                 event: 'chart-reset', args: []
             }))
+        },
+
+        // Performance: Targeted update methods to avoid full chart reset
+        // Use these instead of resetChart() when possible
+
+        // Toggle visibility of a specific overlay without full reset
+        toggleOverlayVisibility(gridId, overlayId, display) {
+            this.$refs.chart?.toggleOverlayVisibility(gridId, overlayId, display)
+        },
+
+        // Update layout without full chart reset
+        updateLayout(forceResize = false) {
+            this.$refs.chart?.update_layout(false, forceResize)
+        },
+
+        // Refresh offchart overlays (for add/remove operations)
+        refreshOffchartOverlays() {
+            this.$refs.chart?.refreshOffchartOverlays()
         },
         goto(t) {
             // TODO: limit goto & setRange (out of data error)

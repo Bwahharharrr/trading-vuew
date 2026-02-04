@@ -22,7 +22,7 @@ export default {
     props: ['config', 'items', 'colors', 'dc'],
     mounted() {
         window.addEventListener(
-            'mousedown', this.onmousedown
+            'mousedown', this.onmousedown, { passive: true }
         )
     },
     beforeUnmount() {

@@ -1,5 +1,7 @@
 // Grid rendering: canvas drawing, overlay management
-// Performance optimized with dirty region tracking and smart redraw decisions
+// Performance optimized with dual-canvas architecture:
+// - Static canvas: grid, candles, overlays (redrawn only when data/range changes)
+// - Dynamic canvas: crosshair (redrawn on every cursor move)
 
 export default class GridRenderer {
     constructor(grid) {
@@ -19,7 +21,15 @@ export default class GridRenderer {
         this._lastDataLength = 0
     }
 
+    // Static canvas context (grid, candles, overlays)
     get ctx() { return this.grid.ctx }
+
+    // Dynamic canvas context (crosshair) - falls back to static if not available
+    get ctxDynamic() { return this.grid.ctxDynamic || this.grid.ctx }
+
+    // Check if dual-canvas mode is active
+    get hasDualCanvas() { return !!this.grid.ctxDynamic }
+
     get layout() { return this.grid.layout }
     get $p() { return this.grid.$p }
     get data() { return this.grid.data }
@@ -107,9 +117,14 @@ export default class GridRenderer {
         // Detect what needs redrawing
         this._crosshairOnly = this._detectCrosshairOnlyUpdate()
 
-        // For now, always do full clear and redraw
-        // The optimization here is in avoiding expensive recalculations
-        // when only cursor moved, not in partial redraws (which require offscreen buffers)
+        // With dual-canvas mode, we can skip static redraw when only cursor moved
+        if (this.hasDualCanvas && this._crosshairOnly && !this._staticDirty && !this._overlaysDirty) {
+            // Only update dynamic layer (crosshair)
+            this.updateDynamic()
+            return
+        }
+
+        // Full redraw of static canvas
         this.ctx.clearRect(0, 0, this.grid.canvas.width, this.grid.canvas.height)
 
         if (this.$p.shaders.length) this.apply_shaders()
@@ -121,9 +136,7 @@ export default class GridRenderer {
         overlays.sort((l1, l2) => l1.z - l2.z)
 
         overlays.forEach(l => {
-            if (!l.display) {
-                return
-            }
+            if (!l.display) return
             this.ctx.save()
             let r = l.renderer
             if (r.pre_draw) r.pre_draw(this.ctx)
@@ -132,13 +145,31 @@ export default class GridRenderer {
             this.ctx.restore()
         })
 
-        if (this.crosshair) {
+        // Draw crosshair on dynamic canvas if available, otherwise on static
+        if (this.hasDualCanvas) {
+            this.updateDynamic()
+        } else if (this.crosshair) {
             this.crosshair.renderer.draw(this.ctx)
         }
 
         // Reset dirty flags after successful draw
         this._staticDirty = false
         this._overlaysDirty = false
+    }
+
+    // Update only the dynamic canvas (crosshair layer)
+    // This is much faster than full redraw for cursor-only changes
+    updateDynamic() {
+        if (!this.crosshair) return
+
+        const canvas = this.grid.canvasDynamic || this.grid.canvas
+        const ctx = this.ctxDynamic
+
+        // Clear dynamic canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+        // Draw crosshair
+        this.crosshair.renderer.draw(ctx)
     }
 
     apply_shaders() {

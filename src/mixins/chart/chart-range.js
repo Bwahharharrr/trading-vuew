@@ -1,5 +1,6 @@
 // Chart range, layout, and data subset management
 
+import { markRaw } from 'vue'
 import Utils from '../../stuff/utils.js'
 import Layout from '../../components/js/layout.js'
 import TI from '../../components/js/ti_mapping.js'
@@ -123,7 +124,9 @@ export default {
                 customGridHeights: this.customGridHeights,
                 minimizedGrids: this.minimizedGrids
             }
-            this.chartLayout = new Layout(layoutParams)
+            // Use markRaw to prevent Vue from making Layout deeply reactive
+            // Layout objects are complex and updated frequently - reactivity adds overhead
+            this.chartLayout = markRaw(new Layout(layoutParams))
             this.rerender++
 
             const layout = this.chartLayout
@@ -241,6 +244,21 @@ export default {
         // Computed property to consolidate width/height watching
         dimensions() {
             return `${this.width}x${this.height}`
+        },
+        // Optimized hash key for data changes - avoids deep watching
+        // Captures meaningful changes without traversing entire data tree
+        dataHashKey() {
+            const data = this.$props.data
+            if (!data) return ''
+            const ohlcv = data.ohlcv || data.chart?.data || []
+            const ohlcvLen = ohlcv.length
+            const firstTs = ohlcv[0]?.[0] ?? ''
+            const lastTs = ohlcv[ohlcvLen - 1]?.[0] ?? ''
+            const lastClose = ohlcv[ohlcvLen - 1]?.[4] ?? ''
+            // Track visible offchart indicators
+            const offchartVisible = (data.offchart || []).filter(x => x.settings?.display !== false).length
+            const scrollLock = data.scrollLock ? '1' : '0'
+            return `${ohlcvLen},${firstTs},${lastTs},${lastClose},${offchartVisible},${scrollLock}`
         }
     },
 
@@ -276,25 +294,25 @@ export default {
             this.update_layout(true)
             this.ce('exec-all-scripts')
         },
-        data: {
-            handler: function(n, p) {
-                if (!this.sub.length) this.init_range()
-                const sub = this.subset()
-                if (this.sub.length || sub.length) {
-                    Utils.overwrite(this.sub, sub)
-                }
-                let nw = this.data_changed()
-                this.update_layout(nw)
-                Utils.overwrite(this.range, this.range)
-                this.cursor.scroll_lock = !!n.scrollLock
-                if (n.scrollLock && this.cursor.locked) {
-                    this.cursor.locked = false
-                }
-                if (this._hook_data) this.ce('?chart-data', nw)
-                this.update_last_values()
-                this.rerender++
-            },
-            deep: true
+        // Optimized data watcher using hash key instead of deep watching
+        dataHashKey(newKey, oldKey) {
+            if (!newKey || newKey === oldKey) return
+            const n = this.$props.data
+            if (!this.sub.length) this.init_range()
+            const sub = this.subset()
+            if (this.sub.length || sub.length) {
+                Utils.overwrite(this.sub, sub)
+            }
+            let nw = this.data_changed()
+            this.update_layout(nw)
+            Utils.overwrite(this.range, this.range)
+            this.cursor.scroll_lock = !!n.scrollLock
+            if (n.scrollLock && this.cursor.locked) {
+                this.cursor.locked = false
+            }
+            if (this._hook_data) this.ce('?chart-data', nw)
+            this.update_last_values()
+            this.rerender++
         }
     }
 }

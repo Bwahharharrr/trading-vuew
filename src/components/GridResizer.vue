@@ -51,7 +51,7 @@ export default {
             this.startHeights = grids.map(g => g.height)
 
             document.addEventListener('mousemove', this.onMouseMove)
-            document.addEventListener('mouseup', this.onMouseUp)
+            document.addEventListener('mouseup', this.onMouseUp, { passive: true })
             document.body.style.cursor = 'row-resize'
             document.body.style.userSelect = 'none'
         },

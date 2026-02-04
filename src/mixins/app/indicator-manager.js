@@ -118,10 +118,10 @@ export default {
             this.persistentIndicatorVisibility[name] = !this.isPersistentIndicatorVisible(name)
             this.clipPersistentIndicators()
             this.applyCurrentColoring()
-            // Force chart reset to render offchart changes
+            // Performance: Use targeted refresh instead of full chart reset
             this.$nextTick(() => {
                 if (this.$refs.tradingVue) {
-                    this.$refs.tradingVue.resetChart(false)
+                    this.$refs.tradingVue.refreshOffchartOverlays()
                 }
             })
             this.saveStateToStorage()
@@ -136,10 +136,10 @@ export default {
             this.persistentIndicatorVisibility[indicatorName] = !this.isPersistentIndicatorVisible(indicatorName)
             this.clipPersistentIndicators()
             this.applyCurrentColoring()
-            // Force chart reset to render offchart changes
+            // Performance: Use targeted refresh instead of full chart reset
             this.$nextTick(() => {
                 if (this.$refs.tradingVue) {
-                    this.$refs.tradingVue.resetChart(false)
+                    this.$refs.tradingVue.refreshOffchartOverlays()
                 }
             })
             this.saveStateToStorage()
@@ -169,10 +169,10 @@ export default {
                 }
             }
 
-            // Force chart reset to properly recreate overlays and recalculate layout
+            // Performance: Use targeted refresh instead of full chart reset
             this.$nextTick(() => {
                 if (this.$refs.tradingVue) {
-                    this.$refs.tradingVue.resetChart(false)
+                    this.$refs.tradingVue.refreshOffchartOverlays()
                 }
             })
 
@@ -273,9 +273,10 @@ export default {
                 }
             }
 
+            // Performance: Use targeted refresh instead of full chart reset
             this.$nextTick(() => {
                 if (this.$refs.tradingVue) {
-                    this.$refs.tradingVue.resetChart(false)
+                    this.$refs.tradingVue.refreshOffchartOverlays()
                 }
             })
         }

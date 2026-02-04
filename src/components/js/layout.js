@@ -128,8 +128,17 @@ function Layout(params) {
     }
 
     function candles_n_vol() {
+        self.candles = []
+        self.volume = []
+
+        // Guard: need data and valid transform parameters (A, B, px_step are only set when sub.length >= 2)
+        if (!sub.length || self.A === undefined || self.B === undefined || self.px_step === undefined) {
+            return
+        }
+
         // Performance: Generate cache key based on inputs that affect output
-        const cacheKey = `${range[0]},${range[1]},${sub.length},${interval},${$p.height},${self.A},${self.B},${self.px_step}`
+        // Note: px_step is derived from range and width, so A and B already capture transform state
+        const cacheKey = `${range[0]},${range[1]},${sub.length},${interval},${$p.height},${self.A.toFixed(6)},${self.B.toFixed(0)}`
 
         // Check if we can reuse cached candles/volume
         if (layoutCache.key === cacheKey && layoutCache.candles && layoutCache.volume) {
@@ -138,17 +147,7 @@ function Layout(params) {
             return
         }
 
-        self.candles = []
-        self.volume = []
-
-        if (!sub.length) {
-            layoutCache.key = cacheKey
-            layoutCache.candles = self.candles
-            layoutCache.volume = self.volume
-            return
-        }
-
-        let maxv = Math.max(...sub.map(x => x[5]))
+        let maxv = Utils.maxAtIndex(sub, 5)
         let vs = $p.config.VOLSCALE * $p.height / maxv
         var x1, x2, mid, prev = undefined
 
@@ -215,8 +214,8 @@ function Layout(params) {
         gms.push(new GridMaker(i + 1, specs, gms[0].get_layout()))
     }
 
-    // Max sidebar among all grinds
-    let sb = Math.max(...gms.map(x => x.get_sidebar()))
+    // Max sidebar among all grids
+    let sb = Utils.maxInArray(gms.map(x => x.get_sidebar()))
 
     let grids = [], offset = 0
 

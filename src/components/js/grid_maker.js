@@ -106,7 +106,7 @@ function GridMaker(id, params, master_grid = null) {
         let lens = []
         lens.push(self.$_hi.toFixed(self.prec).length)
         lens.push(self.$_lo.toFixed(self.prec).length)
-        let str = '0'.repeat(Math.max(...lens)) + '    '
+        let str = '0'.repeat(Utils.maxInArray(lens)) + '    '
         self.sb = ctx.measureText(str).width
         self.sb = Math.max(Math.floor(self.sb), $p.config.SBMIN)
         self.sb = Math.min(self.sb, $p.config.SBMAX)

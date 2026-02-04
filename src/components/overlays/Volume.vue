@@ -4,6 +4,7 @@
 import Overlay from '../../mixins/overlay.js'
 import { layout_vol } from '../js/layout_cnv.js'
 import Volbar from '../primitives/volbar.js'
+import Utils from '../../stuff/utils.js'
 
 export default {
     name: 'Volume',
@@ -47,8 +48,8 @@ export default {
             if (this._i1 === 5) {
                 let sub = this.$props.sub
                 return [
-                    Math.max(...sub.map(x => x[this._i1])),
-                    Math.min(...sub.map(x => x[this._i1]))
+                    Utils.maxAtIndex(sub, this._i1),
+                    Utils.minAtIndex(sub, this._i1)
                 ]
             } else {
                 return [hi, lo]

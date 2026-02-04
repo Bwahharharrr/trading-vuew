@@ -28,7 +28,11 @@ export default class Sidebar {
     listeners() {
         // Add wheel zoom for Y-axis
         this.hm = Hamster(this.canvas)
-        this.hm.wheel((event, delta) => this.mousezoom(-delta * 50, event))
+        // Throttle wheel events to ~60fps
+        this._throttledWheel = Utils.rafThrottle((delta, event) => {
+            this.mousezoom(-delta * 50, event)
+        })
+        this.hm.wheel((event, delta) => this._throttledWheel(delta, event))
 
         let mc = this.mc = new Hammer.Manager(this.canvas)
         mc.add(new Hammer.Pan({
@@ -61,7 +65,8 @@ export default class Sidebar {
             }
         })
 
-        mc.on('panmove', event => {
+        // Throttle panmove for smoother drag performance
+        this._throttledPanmove = Utils.rafThrottle((event) => {
             if (this.drug) {
                 this.zoom = this.calc_zoom(event)
                 this.comp.$emit('sidebar-transform', {
@@ -74,6 +79,7 @@ export default class Sidebar {
                 this.update()
             }
         })
+        mc.on('panmove', event => this._throttledPanmove(event))
 
         mc.on('panend', () => {
             this.drug = null
@@ -341,6 +347,8 @@ export default class Sidebar {
     destroy() {
         if (this.mc) this.mc.destroy()
         if (this.hm) this.hm.unwheel()
+        if (this._throttledWheel) this._throttledWheel.cancel()
+        if (this._throttledPanmove) this._throttledPanmove.cancel()
     }
 
     mousemove() { }

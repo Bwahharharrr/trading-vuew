@@ -45,20 +45,34 @@ export default {
         return new Date(t).getUTCMonth()
     },
 
-    // Nearest in array
+    // Nearest in array - O(log n) binary search for sorted arrays
     nearest_a(x, array) {
-        let dist = Infinity
-        let val = null
-        let index = -1
-        for (var i = 0; i < array.length; i++) {
-            var xi = array[i]
-            if (Math.abs(xi - x) < dist) {
-                dist = Math.abs(xi - x)
-                val = xi
-                index = i
+        if (!array || !array.length) return [-1, null]
+        if (array.length === 1) return [0, array[0]]
+
+        // Binary search to find insertion point
+        let lo = 0
+        let hi = array.length - 1
+
+        // Handle edge cases: x outside array bounds
+        if (x <= array[lo]) return [lo, array[lo]]
+        if (x >= array[hi]) return [hi, array[hi]]
+
+        // Binary search for the closest value
+        while (lo < hi - 1) {
+            const mid = (lo + hi) >> 1
+            if (array[mid] === x) return [mid, array[mid]]
+            if (array[mid] < x) {
+                lo = mid
+            } else {
+                hi = mid
             }
         }
-        return [index, val]
+
+        // Compare neighbors to find nearest
+        const distLo = Math.abs(array[lo] - x)
+        const distHi = Math.abs(array[hi] - x)
+        return distLo <= distHi ? [lo, array[lo]] : [hi, array[hi]]
     },
 
     round(num, decimals = 8) {
@@ -332,6 +346,73 @@ export default {
         ('ontouchstart' in w ||
         (w.DocumentTouch &&
         document instanceof w.DocumentTouch))))
-        (typeof window !== 'undefined' ? window : {})
+        (typeof window !== 'undefined' ? window : {}),
+
+    // Performance: Loop-based min/max to avoid stack overflow on large arrays
+    // Replaces Math.max(...arr) which can crash with >100k elements
+    maxInArray(arr) {
+        if (!arr || !arr.length) return -Infinity
+        let max = arr[0]
+        for (let i = 1; i < arr.length; i++) {
+            if (arr[i] > max) max = arr[i]
+        }
+        return max
+    },
+
+    minInArray(arr) {
+        if (!arr || !arr.length) return Infinity
+        let min = arr[0]
+        for (let i = 1; i < arr.length; i++) {
+            if (arr[i] < min) min = arr[i]
+        }
+        return min
+    },
+
+    // Max value at specific index in array of arrays
+    // e.g. maxAtIndex([[1,2,3], [4,5,6]], 1) => 5
+    maxAtIndex(arr, idx) {
+        if (!arr || !arr.length) return -Infinity
+        let max = arr[0][idx]
+        for (let i = 1; i < arr.length; i++) {
+            const val = arr[i][idx]
+            if (val > max) max = val
+        }
+        return max
+    },
+
+    // Min value at specific index in array of arrays
+    minAtIndex(arr, idx) {
+        if (!arr || !arr.length) return Infinity
+        let min = arr[0][idx]
+        for (let i = 1; i < arr.length; i++) {
+            const val = arr[i][idx]
+            if (val < min) min = val
+        }
+        return min
+    },
+
+    // RAF-based throttle for high-frequency events (wheel, pan, etc.)
+    // Limits execution to once per animation frame (~60fps)
+    rafThrottle(fn) {
+        let rafId = null
+        let lastArgs = null
+        let context = null
+        const throttled = function(...args) {
+            lastArgs = args
+            context = this
+            if (rafId !== null) return
+            rafId = requestAnimationFrame(() => {
+                rafId = null
+                fn.apply(context, lastArgs)
+            })
+        }
+        throttled.cancel = () => {
+            if (rafId !== null) {
+                cancelAnimationFrame(rafId)
+                rafId = null
+            }
+        }
+        return throttled
+    }
 
 }
