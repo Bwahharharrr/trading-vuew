@@ -8,11 +8,75 @@ class CursorUpdater {
     constructor(comp) {
         this.comp = comp
         this.cursor = comp.cursor
+        // PERFORMANCE: Cache for mapped screen positions
+        this._screenCache = null
+        this._screenCacheKey = null
     }
 
     // Get fresh grid references from the current layout
     get grids() {
         return this.comp.chartLayout.grids
+    }
+
+    // PERFORMANCE: Binary search directly on data array timestamps
+    // Avoids creating intermediate array with .map()
+    _nearestTimestamp(t, data) {
+        if (!data || !data.length) return -1
+        if (data.length === 1) return 0
+
+        let lo = 0
+        let hi = data.length - 1
+
+        // Edge cases
+        if (t <= data[lo][0]) return lo
+        if (t >= data[hi][0]) return hi
+
+        // Binary search
+        while (lo < hi - 1) {
+            const mid = (lo + hi) >> 1
+            const midT = data[mid][0]
+            if (midT === t) return mid
+            if (midT < t) lo = mid
+            else hi = mid
+        }
+
+        // Return closer of lo or hi
+        return (t - data[lo][0]) <= (data[hi][0] - t) ? lo : hi
+    }
+
+    // PERFORMANCE: Find nearest screen X with caching
+    // Cache invalidates when range or data changes
+    _nearestScreenX(x, data, grid) {
+        const cacheKey = `${grid.t1},${grid.t2},${data.length}`
+
+        if (this._screenCacheKey !== cacheKey || !this._screenCache) {
+            // Rebuild cache - only happens when range/data changes
+            this._screenCache = new Float64Array(data.length)
+            for (let i = 0; i < data.length; i++) {
+                this._screenCache[i] = grid.t2screen(data[i][0]) + 0.5
+            }
+            this._screenCacheKey = cacheKey
+        }
+
+        // Binary search on cached screen positions
+        const xs = this._screenCache
+        if (!xs.length) return -1
+        if (xs.length === 1) return 0
+
+        let lo = 0
+        let hi = xs.length - 1
+
+        if (x <= xs[lo]) return lo
+        if (x >= xs[hi]) return hi
+
+        while (lo < hi - 1) {
+            const mid = (lo + hi) >> 1
+            if (xs[mid] === x) return mid
+            if (xs[mid] < x) lo = mid
+            else hi = mid
+        }
+
+        return (x - xs[lo]) <= (xs[hi] - x) ? lo : hi
     }
 
     sync(e) {
@@ -65,10 +129,8 @@ class CursorUpdater {
         const t = grid.screen2t(e.x)
         let ids = {}, res = {}
         for (var d of data) {
-            // PERFORMANCE: Direct timestamp access - still creates array but unavoidable
-            // for Utils.nearest_a which needs an array to search
-            let ts = d.data.map(x => x[0])
-            let i = Utils.nearest_a(t, ts)[0]
+            // PERFORMANCE: Binary search directly on data array - no intermediate array
+            let i = this._nearestTimestamp(t, d.data)
             d.type in ids ? (ids[d.type]++) : (ids[d.type] = 0)
             res[`${d.type}_${ids[d.type]}`] = d.data[i]
         }
@@ -80,12 +142,17 @@ class CursorUpdater {
     cursor_data(grid, e) {
 
         const data = this.comp.main_section.sub
+        if (!data || !data.length) return {}
 
-        let xs = data.map(x => grid.t2screen(x[0]) + 0.5)
-        let i = Utils.nearest_a(e.x, xs)[0]
-        if (!xs[i]) return {}
+        // PERFORMANCE: Use cached screen positions with binary search
+        let i = this._nearestScreenX(e.x, data, grid)
+        if (i < 0) return {}
+
+        // Get screen X from cache (already computed)
+        const screenX = this._screenCache ? this._screenCache[i] : grid.t2screen(data[i][0]) + 0.5
+
         return {
-            x: Math.floor(xs[i]) - 0.5,
+            x: Math.floor(screenX) - 0.5,
             y: Math.floor(e.y - 2) - 0.5 - grid.offset,
             y$: grid.screen2$(e.y - 2 - grid.offset),
             t: (data[i] || [])[0],

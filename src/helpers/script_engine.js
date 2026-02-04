@@ -28,6 +28,35 @@ const DISPLAY_ONLY_SETTINGS = new Set([
     'precision', 'prec', 'zIndex', 'z'
 ])
 
+// PERFORMANCE: Fast deep copy for script cache data
+// Much faster than JSON.parse(JSON.stringify()) for typical indicator data structures
+function fastDeepCopy(obj) {
+    if (obj === null || typeof obj !== 'object') return obj
+    if (Array.isArray(obj)) {
+        // For arrays, use slice for shallow arrays or map for nested
+        if (obj.length === 0) return []
+        // Check if first element is primitive (common case for indicator data)
+        const first = obj[0]
+        if (first === null || typeof first !== 'object') {
+            return obj.slice()  // Fast path for primitive arrays
+        }
+        // Nested array - recurse
+        const copy = new Array(obj.length)
+        for (let i = 0; i < obj.length; i++) {
+            copy[i] = fastDeepCopy(obj[i])
+        }
+        return copy
+    }
+    // Object - copy properties
+    const copy = {}
+    for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            copy[key] = fastDeepCopy(obj[key])
+        }
+    }
+    return copy
+}
+
 // Yield frequency for long-running script execution (in iterations)
 const YIELD_FREQUENCY = 2000  // Yield every 2000 candles for better responsiveness
 
@@ -116,10 +145,10 @@ class ScriptEngine {
         const script = this.map[scriptId]
         if (!script || !script.env) return false
 
-        // Restore cached data
+        // Restore cached data using fast deep copy
         script.env.data = cached.data.slice()  // Shallow copy is sufficient
-        script.env.onchart = JSON.parse(JSON.stringify(cached.onchart || {}))
-        script.env.offchart = JSON.parse(JSON.stringify(cached.offchart || {}))
+        script.env.onchart = fastDeepCopy(cached.onchart || {})
+        script.env.offchart = fastDeepCopy(cached.offchart || {})
 
         return true
     }
@@ -134,8 +163,8 @@ class ScriptEngine {
             hash,
             dataHash: this._dataHash,
             data: script.env.data.slice(),  // Shallow copy
-            onchart: JSON.parse(JSON.stringify(script.env.onchart || {})),
-            offchart: JSON.parse(JSON.stringify(script.env.offchart || {}))
+            onchart: fastDeepCopy(script.env.onchart || {}),
+            offchart: fastDeepCopy(script.env.offchart || {})
         })
     }
 
