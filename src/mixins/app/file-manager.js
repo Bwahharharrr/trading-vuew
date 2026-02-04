@@ -1,5 +1,7 @@
 // File management mixin - handles file I/O and localStorage persistence
 
+import Utils from '../../stuff/utils.js'
+
 export default {
     data() {
         return {
@@ -57,7 +59,8 @@ export default {
                     this.currentTimeframe = 'default'
                     firstTf = 'default'
                     firstTfData = data
-                    this.originalChartData = JSON.parse(JSON.stringify(data.chart.data))
+                    // PERFORMANCE: Use fastDeepCopy instead of JSON.parse(stringify)
+                    this.originalChartData = Utils.fastDeepCopy(data.chart.data)
                     this.extractCandleColoringOptions(data, 'default')
                     if (data.chart.data.length >= 2) {
                         newStart = data.chart.data[0][0]
@@ -71,7 +74,8 @@ export default {
                         firstTf = timeframes[0]
                         firstTfData = data[firstTf]
                         this.currentTimeframe = firstTf
-                        this.originalChartData = JSON.parse(JSON.stringify(firstTfData.chart.data))
+                        // PERFORMANCE: Use fastDeepCopy instead of JSON.parse(stringify)
+                        this.originalChartData = Utils.fastDeepCopy(firstTfData.chart.data)
                         this.extractCandleColoringOptions(firstTfData, firstTf)
                         if (firstTfData.chart.data.length >= 2) {
                             newStart = firstTfData.chart.data[0][0]

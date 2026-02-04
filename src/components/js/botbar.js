@@ -201,7 +201,8 @@ export default class Botbar {
         let k = ti < DAY ? 1 : 0
 
         //t += new Date(t).getTimezoneOffset() * MINUTE
-        let d = new Date(t + k * this.$p.timezone * HOUR)
+        // PERFORMANCE: Use cached Date object - only creates new Date when timestamp changes
+        let d = Utils.getCachedDate(t + k * this.$p.timezone * HOUR)
 
         if (ti === YEAR) {
             return d.getUTCFullYear()

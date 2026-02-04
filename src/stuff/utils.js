@@ -413,6 +413,47 @@ export default {
             }
         }
         return throttled
+    },
+
+    // PERFORMANCE: Fast deep copy - much faster than JSON.parse(JSON.stringify())
+    // Optimized for typical chart data structures (arrays of primitives, nested objects)
+    fastDeepCopy(obj) {
+        if (obj === null || typeof obj !== 'object') return obj
+        if (Array.isArray(obj)) {
+            if (obj.length === 0) return []
+            // Fast path for primitive arrays (common case for OHLCV data)
+            const first = obj[0]
+            if (first === null || typeof first !== 'object') {
+                return obj.slice()
+            }
+            // Nested array - recurse
+            const copy = new Array(obj.length)
+            for (let i = 0; i < obj.length; i++) {
+                copy[i] = this.fastDeepCopy(obj[i])
+            }
+            return copy
+        }
+        // Object - copy properties
+        const copy = {}
+        for (const key in obj) {
+            if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                copy[key] = this.fastDeepCopy(obj[key])
+            }
+        }
+        return copy
+    },
+
+    // PERFORMANCE: Cached Date creation - reuses Date object when timestamp unchanged
+    // Avoids creating new Date objects on every cursor move
+    _cachedDate: null,
+    _cachedDateTs: null,
+    getCachedDate(timestamp) {
+        // Only create new Date if timestamp changed by more than 1 second
+        if (this._cachedDateTs === null || Math.abs(timestamp - this._cachedDateTs) > 1000) {
+            this._cachedDate = new Date(timestamp)
+            this._cachedDateTs = timestamp
+        }
+        return this._cachedDate
     }
 
 }

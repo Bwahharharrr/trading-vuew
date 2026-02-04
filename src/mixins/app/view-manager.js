@@ -1,5 +1,7 @@
 // View management mixin - handles view selection and candle coloring
 
+import Utils from '../../stuff/utils.js'
+
 export default {
     data() {
         return {
@@ -28,7 +30,7 @@ export default {
         // Create a clean copy of chart data for DataCube
         // Always set chart.tf from timeframe key for multi-timeframe data
         prepareChartData(chartData, timeframe = null) {
-            const cleaned = JSON.parse(JSON.stringify(chartData))
+            const cleaned = Utils.fastDeepCopy(chartData)
             // Remove views from the cleaned data (it's metadata, not rendered directly)
             delete cleaned.views
             // Always set chart.tf from timeframe key (except for 'default' single-timeframe)
@@ -64,7 +66,7 @@ export default {
             }
 
             // Apply colors, below, and above markers to chart data
-            const newData = JSON.parse(JSON.stringify(this.originalChartData))
+            const newData = Utils.fastDeepCopy(this.originalChartData)
             if (viewData) {
                 const colors = viewData.colors || []
                 // Handle both simple array and extended object format for below/above
@@ -124,7 +126,7 @@ export default {
 
             // Handle base offchart when no view is selected
             if (!this.displayedView && tfData?.offchart) {
-                combinedOffchart = combinedOffchart.concat(JSON.parse(JSON.stringify(tfData.offchart)))
+                combinedOffchart = combinedOffchart.concat(Utils.fastDeepCopy(tfData.offchart))
             }
 
             // Get current indicator names
@@ -170,11 +172,11 @@ export default {
             const visiblePersistent = persistentIndicators.filter(
                 ind => ind.settings?.display !== false
             )
-            let combinedOffchart = JSON.parse(JSON.stringify(visiblePersistent))
+            let combinedOffchart = Utils.fastDeepCopy(visiblePersistent)
 
             // Add view-specific offchart if view is active
             if (this.displayedView && viewData?.offchart) {
-                combinedOffchart = combinedOffchart.concat(JSON.parse(JSON.stringify(viewData.offchart)))
+                combinedOffchart = combinedOffchart.concat(Utils.fastDeepCopy(viewData.offchart))
             }
 
             return combinedOffchart
