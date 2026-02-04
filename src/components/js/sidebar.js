@@ -248,7 +248,18 @@ export default class Sidebar {
             return
         }
 
-        let lbl = this.$p.cursor.y$.toFixed(this.layout.prec)
+        // PERFORMANCE: Cache formatted label - only recalculate when value or precision changes
+        const y$ = this.$p.cursor.y$
+        const prec = this.layout.prec
+        let lbl
+        if (this._lastY$ === y$ && this._lastPrec === prec && this._lastLbl) {
+            lbl = this._lastLbl
+        } else {
+            lbl = y$.toFixed(prec)
+            this._lastY$ = y$
+            this._lastPrec = prec
+            this._lastLbl = lbl
+        }
         this.ctx.fillStyle = this.$p.colors.panel
 
         let panwidth = this.layout.sb + 1

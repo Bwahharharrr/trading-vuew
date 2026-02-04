@@ -1,4 +1,6 @@
 
+// PERFORMANCE: Static dash pattern to avoid array allocation every frame
+const DASH_PATTERN = [5]
 
 export default class Crosshair {
 
@@ -27,7 +29,7 @@ export default class Crosshair {
         ctx.save()
         ctx.strokeStyle = this.$p.colors.cross
         ctx.beginPath()
-        ctx.setLineDash([5])
+        ctx.setLineDash(DASH_PATTERN)
 
         // H
         if (this.$p.cursor.grid_id === this.layout.id) {
