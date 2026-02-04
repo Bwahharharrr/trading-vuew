@@ -1,5 +1,7 @@
 // Chart state mixin - handles chart initialization, timeframe selection, and layout
 
+import Utils from '../../stuff/utils.js'
+
 export default {
     data() {
         return {
@@ -62,7 +64,7 @@ export default {
             this.selectedTimeframe = index
             const chartData = this.charts[tf]
             // Store original data for color scheme switching
-            this.originalChartData = JSON.parse(JSON.stringify(chartData.chart.data))
+            this.originalChartData = Utils.fastDeepCopy(chartData.chart.data)
             // Track current timeframe
             this.currentTimeframe = tf
             // Extract candle coloring options for this timeframe
@@ -102,7 +104,7 @@ export default {
                 this.charts = { 'default': data }
                 this.currentTimeframe = 'default'
                 this.selectedTimeframe = 0
-                this.originalChartData = JSON.parse(JSON.stringify(data.chart.data))
+                this.originalChartData = Utils.fastDeepCopy(data.chart.data)
                 this.extractCandleColoringOptions(data, 'default')
                 this.chart = new this.DataCubeClass(this.prepareChartData(data, 'default'))
             } else {
@@ -114,7 +116,7 @@ export default {
                     const firstTfData = data[firstTf]
                     this.currentTimeframe = firstTf
                     this.selectedTimeframe = 0
-                    this.originalChartData = JSON.parse(JSON.stringify(firstTfData.chart.data))
+                    this.originalChartData = Utils.fastDeepCopy(firstTfData.chart.data)
                     this.extractCandleColoringOptions(firstTfData, firstTf)
                     this.chart = new this.DataCubeClass(this.prepareChartData(firstTfData, firstTf))
                 }
