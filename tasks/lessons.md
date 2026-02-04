@@ -176,6 +176,77 @@ Live data polling used `setTimeout` instead of syncing with render loop.
 
 ---
 
+## Phase 2 Optimizations (2026-02-04)
+
+### Fix #11: Deep Watchers on Complex Objects (HIGH)
+**Files:** `src/mixins/xcontrol.js`, `src/components/Toolbar.vue`
+
+### Problem
+Deep watchers traverse entire nested objects on every change, causing O(n) work even for unrelated property changes.
+
+### Solution
+- Replaced deep watch on `xSettings` with computed hash key watcher
+- Replaced deep watch on `data` in Toolbar with computed `toolsLength`
+- Used `markRaw()` for controller instances to prevent Vue reactivity overhead
+
+### Impact
+- Settings changes now O(1) instead of O(n) for nested object traversal
+- Controller objects not tracked by Vue's reactivity system
+
+---
+
+### Fix #12: measureText Called on Every Cursor Move (MEDIUM)
+**File:** `src/components/js/botbar.js`
+
+### Problem
+Canvas `measureText()` is relatively expensive and was called on every cursor move.
+
+### Solution
+- Added `measureTextCache` Map with font+text key
+- Cache limited to 100 entries with FIFO eviction
+- Used cached values in `panel()` method
+
+### Impact
+- Text measurement now O(1) for repeated strings
+- Reduced canvas API calls during cursor movement
+
+---
+
+### Fix #13: Single-Pass Filter in Cursor Updater (MEDIUM)
+**File:** `src/components/js/updater.js`
+
+### Problem
+Two separate `filter()` calls on same array for sequential vs custom grids.
+
+### Solution
+- Combined into single-pass loop separating items by grid.id condition
+- Used `concat()` instead of spread operator for array joining
+
+### Impact
+- Reduced iterations from 2N to N for offchart overlay filtering
+
+---
+
+## Updated Summary Table
+
+| Fix | Severity | Files Changed | Key Change |
+|-----|----------|---------------|------------|
+| 1 | CRITICAL | script_engine.js | Output caching for display-only changes |
+| 2 | CRITICAL | Candles.vue, candle-draw.js | Static draw functions |
+| 3 | CRITICAL | ti_mapping.js | slice() instead of spread |
+| 4 | CRITICAL | grid-renderer.js | Cached sorted overlays |
+| 5 | HIGH | grid.js | Offset caching |
+| 6 | - | chart-range.js | Already optimized |
+| 7 | HIGH | GridResizer.vue | RAF throttling |
+| 8 | - | script_engine.js | Already bounded |
+| 9 | HIGH | Sidebar.vue/js | Panel-only updates |
+| 10 | HIGH | agg_tool.js | RAF-coordinated updates |
+| 11 | HIGH | xcontrol.js, Toolbar.vue | Hash key watchers, markRaw |
+| 12 | MEDIUM | botbar.js | measureText caching |
+| 13 | MEDIUM | updater.js | Single-pass filter |
+
+---
+
 ## Prevention Rules
 
 1. **Never create objects in render loops** - Use static functions or object pooling
@@ -185,3 +256,6 @@ Live data polling used `setTimeout` instead of syncing with render loop.
 5. **Use RAF for high-frequency events** - Throttle mousemove, resize, wheel
 6. **Separate computation from display** - Track what actually needs recalculation
 7. **Sync data updates with render loop** - Use RAF coordination
+8. **Replace deep watchers with hash keys** - Compute a simple string key from relevant properties
+9. **Use markRaw for complex non-reactive objects** - Prevents Vue from adding reactivity proxies
+10. **Cache expensive DOM/canvas API calls** - measureText, getBoundingClientRect, etc.
