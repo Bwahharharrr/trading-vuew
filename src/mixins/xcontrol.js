@@ -96,13 +96,28 @@ export default {
             return sel ? sel.colors : undefined
         },
         // PERFORMANCE: Hash key for xSettings changes - avoids deep watch
+        // Optimized to avoid Object.keys() array allocations
         xSettingsKey() {
-            const keys = Object.keys(this.xSettings || {}).sort()
-            // Track top-level structure changes
-            return keys.map(k => {
-                const v = this.xSettings[k]
-                return `${k}:${typeof v === 'object' ? Object.keys(v).length : v}`
-            }).join('|')
+            const settings = this.xSettings
+            if (!settings) return ''
+            // Build key without creating intermediate arrays
+            let parts = []
+            for (const k in settings) {
+                if (Object.prototype.hasOwnProperty.call(settings, k)) {
+                    const v = settings[k]
+                    // Count nested keys without Object.keys() allocation
+                    let count = 0
+                    if (v && typeof v === 'object') {
+                        for (const _ in v) {
+                            if (Object.prototype.hasOwnProperty.call(v, _)) count++
+                        }
+                        parts.push(`${k}:${count}`)
+                    } else {
+                        parts.push(`${k}:${v}`)
+                    }
+                }
+            }
+            return parts.sort().join('|')
         }
     },
     watch: {

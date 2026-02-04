@@ -183,7 +183,9 @@ export default {
                     uxs: this.uxs,
                     colors: this.$props.colors,
                     config: this.$props.config,
-                    updater: Math.random(),
+                    // PERFORMANCE: Use deterministic key instead of Math.random()
+                    // Math.random() caused unnecessary re-renders on every frame
+                    updater: this.renderKey,
                     'onCustomEvent': this.emit_ux_event
                 })
             ].concat(this.get_overlays())

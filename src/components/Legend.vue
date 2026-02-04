@@ -95,15 +95,21 @@ export default {
                 return (meta.legend() || []).map(x => x.value)
             }
 
-            return [
-                this.$props.values.ohlcv[1].toFixed(prec),
-                this.$props.values.ohlcv[2].toFixed(prec),
-                this.$props.values.ohlcv[3].toFixed(prec),
-                this.$props.values.ohlcv[4].toFixed(prec),
-                this.$props.values.ohlcv[5] ?
-                    this.$props.values.ohlcv[5].toFixed(2):
-                    'n/a'
+            // PERFORMANCE: Cache toFixed() results - only recalculate when values change
+            const ohlcv = this.$props.values.ohlcv
+            const cacheKey = `${ohlcv[1]},${ohlcv[2]},${ohlcv[3]},${ohlcv[4]},${ohlcv[5]},${prec}`
+            if (this._ohlcvCacheKey === cacheKey && this._ohlcvCache) {
+                return this._ohlcvCache
+            }
+            this._ohlcvCacheKey = cacheKey
+            this._ohlcvCache = [
+                ohlcv[1].toFixed(prec),
+                ohlcv[2].toFixed(prec),
+                ohlcv[3].toFixed(prec),
+                ohlcv[4].toFixed(prec),
+                ohlcv[5] ? ohlcv[5].toFixed(2) : 'n/a'
             ]
+            return this._ohlcvCache
         },
         // TODO: add support for { grid: { id : N }}
         indicators() {
@@ -175,17 +181,34 @@ export default {
             // Custom formatter
             if (meta.legend) return meta.legend(values[id])
 
-            return values[id].slice(1).map((x, i) => {
-                const cs = meta.data_colors ? meta.data_colors() : []
-                if (typeof x == 'number') {
+            // PERFORMANCE: Cache formatted values - avoid repeated toFixed() and array creation
+            const data = values[id]
+            const cacheKey = `${id}:${data.join(',')}`
+            if (!this._formatCache) this._formatCache = new Map()
+            if (this._formatCache.has(cacheKey)) {
+                return this._formatCache.get(cacheKey)
+            }
+            // Limit cache size to prevent memory growth
+            if (this._formatCache.size > 50) {
+                const firstKey = this._formatCache.keys().next().value
+                this._formatCache.delete(firstKey)
+            }
+
+            const cs = meta.data_colors ? meta.data_colors() : []
+            const result = new Array(data.length - 1)
+            for (let i = 1; i < data.length; i++) {
+                let x = data[i]
+                if (typeof x === 'number') {
                     // Show 8 digits for small values
                     x = x.toFixed(Math.abs(x) > 0.001 ? 4 : 8)
                 }
-                return {
+                result[i - 1] = {
                     value: x,
-                    color: cs ? cs[i % cs.length] : undefined
+                    color: cs.length ? cs[(i - 1) % cs.length] : undefined
                 }
-            })
+            }
+            this._formatCache.set(cacheKey, result)
+            return result
         },
         n_a(len) {
             return Array(len).fill({ value: 'n/a' })
