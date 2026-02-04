@@ -335,6 +335,11 @@ Dataset watcher used `includes()` + `filter()` pattern - multiple O(n) scans per
 | 16 | CRITICAL | dc_events.js | Set for O(1) UUID lookup |
 | 17 | CRITICAL | dataset.js | Map/Set for watcher lookups |
 | 18 | CRITICAL | dc_core.js | Cached UUID array, index Map |
+| 19 | CRITICAL | view-manager.js | fastDeepCopy replaces JSON |
+| 20 | HIGH | file-manager.js | fastDeepCopy replaces JSON |
+| 21 | HIGH | chart-state.js | fastDeepCopy replaces JSON |
+| 22 | HIGH | botbar.js | Cached Date object |
+| 23 | - | utils.js | Shared fastDeepCopy + getCachedDate |
 
 ---
 
@@ -356,3 +361,5 @@ Dataset watcher used `includes()` + `filter()` pattern - multiple O(n) scans per
 14. **Use Set/Map for O(1) lookups** - Never use Array.includes/indexOf in loops
 15. **Avoid allocations in Vue watcher getters** - Cache arrays, return stable references
 16. **Build index maps before mapping** - When you need indexOf inside map, pre-build a Map
+17. **Centralize utility functions** - Put shared optimizations like fastDeepCopy in utils.js
+18. **Cache Date objects** - Reuse Date when timestamp hasn't changed significantly
