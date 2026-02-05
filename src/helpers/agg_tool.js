@@ -57,11 +57,12 @@ export default class AggTool {
 
     update() {
         let out = {}
-        for (var sym in this.symbols) {
+        for (let sym in this.symbols) {
             let upd = this.symbols[sym].upd
+            let data
             switch (sym) {
                 case 'ohlcv':
-                    var data = this.dc.data.chart.data
+                    data = this.dc.data.chart.data
                     this.dc.fast_merge(data, upd)
                     out.ohlcv = data.slice(-2)
                     break
@@ -70,7 +71,7 @@ export default class AggTool {
                         this.update_ds(sym, out)
                         continue
                     }
-                    var data = this.dc.get_one(`${sym}`)
+                    data = this.dc.get_one(`${sym}`)
                     if (!data) continue
                     this.dc.fast_merge(data, upd, false)
                     break
@@ -112,11 +113,12 @@ export default class AggTool {
     }
 
     refine(sym, upd) {
+        let data
         if (sym === 'ohlcv') {
-            var data = this.dc.data.chart.data
+            data = this.dc.data.chart.data
             this.dc.fast_merge(data, upd)
         } else {
-            var data = this.dc.get_one(`${sym}`)
+            data = this.dc.get_one(`${sym}`)
             if (!data) return
             this.dc.fast_merge(data, upd, false)
         }

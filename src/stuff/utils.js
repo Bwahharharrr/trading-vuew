@@ -99,7 +99,7 @@ export default {
 
     // Copy layout in reactive way
     copy_layout(obj, new_obj) {
-        for (var k in obj) {
+        for (let k in obj) {
             if (Array.isArray(obj[k])) {
                 // (some offchart indicators are added/removed)
                 // we need to update layout in a reactive way
@@ -107,7 +107,7 @@ export default {
                     this.overwrite(obj[k], new_obj[k])
                     continue
                 }
-                for (var m in obj[k]) {
+                for (let m in obj[k]) {
                     Object.assign(obj[k][m], new_obj[k][m])
                 }
             } else {
@@ -223,14 +223,14 @@ export default {
         let first = data[0][0]
         let second
 
-        for (var i = 1; i < data.length; i++) {
+        for (let i = 1; i < data.length; i++) {
             if (data[i][0] !== first) {
                 second = data[i][0]
                 break
             }
         }
 
-        for (var j = 0; j < sub.length; j++) {
+        for (let j = 0; j < sub.length; j++) {
             if (sub[j][0] === second) {
                 return j - i
             }
@@ -266,7 +266,7 @@ export default {
     uuid(temp = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx') {
         return temp
             .replace(/[xy]/g, c => {
-            var r = Math.random() * 16 | 0, v = c == 'x' ?
+            let r = Math.random() * 16 | 0, v = c == 'x' ?
                 r :
                 (r & 0x3 | 0x8)
             return v.toString(16)
@@ -318,7 +318,7 @@ export default {
 
         let name = ov.name
 
-        for (var k in ov.settings || {}) {
+        for (let k in ov.settings || {}) {
             let val = ov.settings[k]
             let reg = new RegExp(`\\$${k}`, 'g')
             name = name.replace(reg, val)

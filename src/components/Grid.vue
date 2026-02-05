@@ -83,7 +83,7 @@ export default {
 
         // We need to know which components we will use.
         // Custom overlay components overwrite built-ins:
-        var tools = []
+        let tools = []
         this._list.forEach((x, i) => {
             if (!x || !x.methods || !x.methods.use_for) return
             let use_for = x.methods.use_for()
@@ -243,7 +243,7 @@ export default {
             // to this._registry; returns compo list
             let comp_list = [], count = {}
 
-            for (var d of this.$props.data) {
+            for (let d of this.$props.data) {
                 let comp = this._list[this._registry[d.type]]
                 if (comp) {
                     if(comp.methods.calc) {
@@ -442,9 +442,9 @@ export default {
             handler: function(ovs) {
                 // Note: $children removed in Vue 3, use renderer's overlays instead
                 if (!this.renderer || !this.renderer.overlays || !ovs) return
-                for (var ov of ovs) {
+                for (let ov of ovs) {
                     if (!ov || !ov.methods) continue
-                    for (var layer of this.renderer.overlays) {
+                    for (let layer of this.renderer.overlays) {
                         let comp = layer.renderer
                         if (!comp || typeof comp.id !== 'string') continue
                         let tuple = comp.id.split('_')

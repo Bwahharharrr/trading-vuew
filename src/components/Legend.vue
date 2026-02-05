@@ -120,7 +120,7 @@ export default {
         indicators() {
             const values = this.$props.values
             const f = this.format
-            var types = {}
+            let types = {}
 
             const indexMap = this._indexMap
 

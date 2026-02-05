@@ -158,6 +158,12 @@ class ScriptEngine {
         const script = this.map[scriptId]
         if (!script || !script.env) return
 
+        // Evict oldest entries if cache exceeds max size
+        if (this._outputCache.size > 50) {
+            const firstKey = this._outputCache.keys().next().value
+            this._outputCache.delete(firstKey)
+        }
+
         const hash = this._computationHash(script)
         this._outputCache.set(scriptId, {
             hash,

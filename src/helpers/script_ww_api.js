@@ -46,7 +46,7 @@ class WebWork {
         // URL.createObjectURL
         window.URL = window.URL || window.webkitURL
         let data = lz.decompressFromBase64(worker_data[0])
-        var blob
+        let blob
         try {
             blob = new Blob([data], {type: 'application/javascript'})
         } catch (e) {
@@ -68,6 +68,12 @@ class WebWork {
         this.socket.addEventListener('message', e => {
             this.onmessage({data: JSON.parse(e.data)})
         })
+        this.socket.addEventListener('error', e => {
+            console.warn('WebSocket error:', e)
+        })
+        this.socket.addEventListener('close', () => {
+            this.socket = null
+        })
         this.msg_queue = []
     }
 
@@ -76,7 +82,8 @@ class WebWork {
             return this.send_node(msg, tx_keys)
         }
         // Deep unwrap Vue 3 reactive proxies before postMessage
-        const rawMsg = deepToRaw(msg)
+        // PERFORMANCE: Only deep-copy when message contains reactive objects
+        const rawMsg = (isReactive(msg) || isRef(msg)) ? deepToRaw(msg) : msg
         if (tx_keys) {
             let tx_objs = tx_keys.map(k => rawMsg.data[k])
             this.worker.postMessage(rawMsg, tx_objs)
@@ -96,6 +103,7 @@ class WebWork {
             }
             this.socket.send(JSON.stringify(msg))
         } else {
+            if (this.msg_queue.length > 100) this.msg_queue.shift()
             this.msg_queue.push(msg)
         }
     }
@@ -114,7 +122,12 @@ class WebWork {
         return new Promise((rs, rj) => {
             let id = Utils.uuid()
             this.send({ type, id, data }, tx_keys)
+            let timeout = setTimeout(() => {
+                delete this.tasks[id]
+                rj(new Error('Worker task timeout'))
+            }, 30000)
             this.tasks[id] = res => {
+                clearTimeout(timeout)
                 rs(res)
             }
         })
@@ -133,7 +146,12 @@ class WebWork {
         return new Promise((rs, rj) => {
             this.send(event, event.tx_keys)
             if (!just) {
+                let timeout = setTimeout(() => {
+                    delete this.tasks[event.id]
+                    rj(new Error('Relay task timeout'))
+                }, 30000)
                 this.tasks[event.id] = res => {
+                    clearTimeout(timeout)
                     rs(res)
                 }
             }
@@ -142,6 +160,10 @@ class WebWork {
 
     destroy() {
         if (this.worker) this.worker.terminate()
+        if (this.socket) {
+            this.socket.close()
+            this.socket = null
+        }
     }
 }
 

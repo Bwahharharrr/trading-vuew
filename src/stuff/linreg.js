@@ -8,7 +8,7 @@ export default function regression(data, len, offset) {
 
     data = data.slice(0, len).reverse().map((x, i) => [i, x])
 
-    var sum_x = 0,
+    let sum_x = 0,
         sum_y = 0,
         sum_xy = 0,
         sum_xx = 0,
@@ -16,9 +16,9 @@ export default function regression(data, len, offset) {
         m, b
 
     // calculate sums
-    for (var i = 0, len = data.length; i < len; i++) {
+    for (let i = 0, len = data.length; i < len; i++) {
         if (!data[i]) return NaN
-        var point = data[i]
+        let point = data[i]
         sum_x += point[0]
         sum_y += point[1]
         sum_xx += point[0] * point[0]

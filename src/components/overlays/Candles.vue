@@ -22,8 +22,9 @@ export default {
             const isMainChart = this.$props.sub === this.$props.data
             // If data === main candlestick data
             // render as main chart:
+            let cnv
             if (isMainChart) {
-                var cnv = {
+                cnv = {
                     candles: this.$props.layout.candles,
                     volume: this.$props.layout.volume,
                 }
@@ -35,15 +36,15 @@ export default {
             // PERFORMANCE: Use static draw functions instead of creating new objects
             // This eliminates GC pressure from creating 1000+ objects per frame
             if (this.show_volume) {
-                var cv = cnv.volume
+                let cv = cnv.volume
                 const layoutHeight = this.$props.layout.height
-                for (var i = 0, n = cv.length; i < n; i++) {
+                for (let i = 0, n = cv.length; i < n; i++) {
                     drawVolbar(ctx, cv[i], this, layoutHeight)
                 }
             }
 
-            var cc = cnv.candles
-            for (var i = 0, n = cc.length; i < n; i++) {
+            let cc = cnv.candles
+            for (let i = 0, n = cc.length; i < n; i++) {
                 drawCandle(ctx, cc[i], this)
             }
 
@@ -53,8 +54,8 @@ export default {
 
         // In case it's added as offchart overlay
         y_range() {
-            var hi = -Infinity, lo = Infinity
-            for (var i = 0, n = this.$props.sub.length; i < n; i++) {
+            let hi = -Infinity, lo = Infinity
+            for (let i = 0, n = this.$props.sub.length; i < n; i++) {
                 let x = this.$props.sub[i]
                 if (x[2] > hi) hi = x[2]
                 if (x[3] < lo) lo = x[3]

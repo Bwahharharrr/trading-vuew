@@ -112,7 +112,7 @@ export default class Botbar {
         let dimmed = false
         this.ctx.textAlign = 'center'  // Set once outside loop
 
-        for (var p of this.layout.botbar.xs) {
+        for (let p of this.layout.botbar.xs) {
 
             let lbl = this.format_date(p)
 
@@ -144,7 +144,7 @@ export default class Botbar {
             layout: layout,
             cursor: this.$p.cursor
         }
-        for (var s of this.comp.bot_shaders) {
+        for (let s of this.comp.bot_shaders) {
             this.ctx.save()
             s.draw(this.ctx, props)
             this.ctx.restore()
@@ -213,10 +213,11 @@ export default class Botbar {
             return d.getUTCFullYear()
         }
 
+        let yr, mo, dd
         if (ti < YEAR) {
-            var yr = '`' + `${d.getUTCFullYear()}`.slice(-2)
-            var mo = MONTHMAP[d.getUTCMonth()]
-            var dd = '01'
+            yr = '`' + `${d.getUTCFullYear()}`.slice(-2)
+            mo = MONTHMAP[d.getUTCMonth()]
+            dd = '01'
         }
         if (ti <= WEEK) dd = d.getUTCDate()
         let date = `${dd} ${mo} ${yr}`

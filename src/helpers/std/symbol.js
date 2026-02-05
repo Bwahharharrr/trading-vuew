@@ -30,9 +30,10 @@ export default {
             return this.env.syms[id]
         }
 
+        let sym
         switch(typeof x) {
             case 'object':
-                var sym = new Sym(x, y)
+                sym = new Sym(x, y)
                 this.env.syms[id] = sym
                 if (x.__id__) {
                     sym.data_type = TSS

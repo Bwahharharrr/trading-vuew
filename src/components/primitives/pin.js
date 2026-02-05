@@ -65,10 +65,11 @@ export default class Pin {
     draw_circle(ctx) {
 
         this.layout = this.comp.layout
+        let r, lw
         if (this.comp.selected) {
-            var r = this.RADIUS, lw = 1.5
+            r = this.RADIUS; lw = 1.5
         } else {
-            var r = this.RADIUS * 0.95, lw = 1
+            r = this.RADIUS * 0.95; lw = 1
         }
 
         ctx.lineWidth = lw

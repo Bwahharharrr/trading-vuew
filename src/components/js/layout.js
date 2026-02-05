@@ -184,7 +184,7 @@ function Layout(params) {
 
         let maxv = Utils.maxAtIndex(sub, 5)
         let vs = $p.config.VOLSCALE * $p.height / maxv
-        var x1, x2, mid, prev = undefined
+        let x1, x2, mid, prev = undefined
 
         let splitter = self.px_step > 5 ? 1 : 0
         let hf_px_step = self.px_step * 0.5
@@ -194,7 +194,7 @@ function Layout(params) {
         const A = self.A
         const B = self.B
 
-        for (var i = 0; i < sub.length; i++) {
+        for (let i = 0; i < sub.length; i++) {
             let p = sub[i]
             mid = self.t2screen(p[0]) + 0.5
             self.candles.push(mgrid.logScale ?
@@ -241,7 +241,7 @@ function Layout(params) {
     let gms = [new GridMaker(0, specs)]
 
     // Sub grids
-    for (var [i, { data, grid }] of offsub.entries()) {
+    for (let [i, { data, grid }] of offsub.entries()) {
         specs.sub = data
         specs.height = hs[i + 1]
         specs.y_t = y_ts[i + 1]
@@ -254,7 +254,7 @@ function Layout(params) {
 
     let grids = [], offset = 0
 
-    for (i = 0; i < gms.length; i++) {
+    for (let i = 0; i < gms.length; i++) {
         gms[i].set_sidebar(sb)
         grids.push(gms[i].create())
         grids[i].id = i

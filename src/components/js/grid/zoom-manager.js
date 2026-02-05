@@ -61,7 +61,8 @@ export default class ZoomManager {
 
         if (tl) {
             let offset = event.originalEvent.offsetY
-            let diff1 = offset / (this.canvas.height - 1) * 2
+            let h = Math.max(this.canvas.height, 2)
+            let diff1 = offset / (h - 1) * 2
             let diff2 = 2 - diff1
             let z = diff / (this.range[1] - this.range[0])
             this.comp.$emit('rezoom-range', {

@@ -30,7 +30,7 @@ export default {
             }
 
             this.$nextTick(() => {
-                var rect = canvas.getBoundingClientRect()
+                let rect = canvas.getBoundingClientRect()
                 canvas.width = rect.width * dpr
                 canvas.height = rect.height * dpr
                 const ctx = canvas.getContext('2d')

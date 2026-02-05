@@ -2,12 +2,12 @@
 import Const from '../stuff/constants.js'
 
 const { BUF_INC, FDEFS, SBRACKETS, TFSTR } = Const
-var tf_cache = {}
+let tf_cache = {}
 
 export function f_args(src) {
     FDEFS.lastIndex = 0
 
-    var m = FDEFS.exec(src)
+    let m = FDEFS.exec(src)
     if (m) {
         let fkeyword = m[1].trim()
         let fname = m[2].trim()
@@ -28,9 +28,10 @@ export function wrap_idxs(src, pre = '') {
 
     SBRACKETS.lastIndex = 0
     let changed = false
+    let m
 
     do {
-        var m = SBRACKETS.exec(src)
+        m = SBRACKETS.exec(src)
 
         if (m) {
 
@@ -59,7 +60,7 @@ export function wrap_idxs(src, pre = '') {
 // Get all module helper classes
 export function make_module_lib(mod) {
     let lib = {}
-    for (var k in mod) {
+    for (let k in mod) {
         if (k === 'main' || k === 'id') continue
         let a = f_args(mod[k])
         lib[k] = new Function(a, f_body(mod[k]))
@@ -78,7 +79,7 @@ export function get_raw_src(f) {
 
 // Get tf in ms from pairs such (`15`, `m`)
 export function tf_from_pair(num, pf) {
-    var mult = 1
+    let mult = 1
     switch (pf) {
         case 's': mult = Const.SECOND; break
         case 'm': mult = Const.MINUTE; break
@@ -111,10 +112,10 @@ export function get_fn_id(pre, id) {
 
 // Apply filter for all new overlays
 export function ovf(obj, f) {
-    var nw = {}
-    for (var id in obj) {
+    let nw = {}
+    for (let id in obj) {
         nw[id] = {}
-        for (var k in obj[id]) {
+        for (let k in obj[id]) {
             if (k === 'data') continue
             nw[id][k] = obj[id][k]
         }
@@ -131,9 +132,10 @@ export function nextt(data, t, ti = 0) {
 
     let i0 = 0
     let iN = data.length - 1
+    let mid
 
     while (i0 <= iN) {
-        var mid = Math.floor((i0 + iN) / 2)
+        mid = Math.floor((i0 + iN) / 2)
         if (data[mid][ti] === t) {
             return mid
         } else if (data[mid][ti] < t) {
@@ -148,24 +150,37 @@ export function nextt(data, t, ti = 0) {
 }
 
 // Estimated size of datasets
+// PERFORMANCE: Cache computed sizes, recompute only when data lengths change
+let _dssSizeCache = { key: '', bytes: 0 }
 export function size_of_dss(data) {
+    // Build a cache key from dataset ids and lengths
+    let keyParts = []
+    for (let id in data) {
+        if (data[id].data) {
+            keyParts.push(id + ':' + data[id].data.length)
+        }
+    }
+    let key = keyParts.join(',')
+    if (key === _dssSizeCache.key) return _dssSizeCache.bytes
+
     let bytes = 0
-    for (var id in data) {
+    for (let id in data) {
         if (data[id].data && data[id].data[0]) {
             let s0 = size_of(data[id].data[0])
             bytes += s0 * data[id].data.length
         }
     }
+    _dssSizeCache = { key, bytes }
     return bytes
 }
 
 
 // Used to measure the size of dataset
 export function size_of(object) {
-    var list = [], stack = [object], bytes = 0
+    let list = [], stack = [object], bytes = 0
     while (stack.length) {
-        var value = stack.pop()
-        var type = typeof value
+        let value = stack.pop()
+        let type = typeof value
         if (type === 'boolean') {
             bytes += 4
         } else if (type === 'string') {
@@ -175,7 +190,7 @@ export function size_of(object) {
         } else if (type === 'object' &&
             list.indexOf(value) === -1) {
             list.push(value)
-            for(var i in value) {
+            for(let i in value) {
                 stack.push(value[i])
             }
         }

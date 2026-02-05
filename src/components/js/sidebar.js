@@ -3,7 +3,7 @@ import Hamster from 'hamsterjs'
 import Utils from '../../stuff/utils.js'
 import math from '../../stuff/math.js'
 
-var PANHEIGHT
+let PANHEIGHT
 
 export default class Sidebar {
 
@@ -109,9 +109,9 @@ export default class Sidebar {
         // Use layoutOverride if available (for resize operations)
         this.layout = this.comp.layoutOverride || this.$p.layout.grids[this.id]
 
-        var points = this.layout.ys
-        var x, y, w, h, side = this.side
-        var sb = this.layout.sb
+        let points = this.layout.ys
+        let x, y, w, h, side = this.side
+        let sb = this.layout.sb
 
         //this.ctx.fillStyle = this.$p.colors.back
         this.ctx.font = this.$p.font
@@ -231,7 +231,7 @@ export default class Sidebar {
             layout: layout,
             cursor: this.$p.cursor
         }
-        for (var s of this.$p.shaders) {
+        for (let s of this.$p.shaders) {
             this.ctx.save()
             s.draw(this.ctx, props)
             this.ctx.restore()

@@ -104,6 +104,7 @@ export default class DCCore extends DCEvents {
 
         if (!this.loader) return
         if (!this.loading) {
+            if (!this.data.chart.data.length) return
             let first = this.data.chart.data[0][0]
             if (range[0] < first) {
                 this.loading = true

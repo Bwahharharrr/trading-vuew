@@ -17,10 +17,10 @@ export function layout_cnv(self) {
     // the chart's height (VOLSCALE)
     let maxv = Utils.maxAtIndex(sub, 5)
     let vs = maxv > 0 ? $p.config.VOLSCALE * layout.height / maxv : 0
-    var x1, x2, w, avg_w, mid, prev = undefined
+    let x1, x2, w, avg_w, mid, prev = undefined
 
     // Subset interval against main interval
-    var [interval2, ratio] = new_interval(layout, $p, sub)
+    let [interval2, ratio] = new_interval(layout, $p, sub)
     let px_step2 = layout.px_step * ratio
 
     let splitter = px_step2 > 5 ? 1 : 0
@@ -84,10 +84,10 @@ export function layout_vol(self) {
     let maxv = Utils.maxAtIndex(sub, self._i1)
     let volscale = self.volscale || $p.config.VOLSCALE
     let vs = maxv > 0 ? volscale * layout.height / maxv : 0
-    var x1, x2, mid, prev = undefined
+    let x1, x2, mid, prev = undefined
 
     // Subset interval against main interval
-    var [interval2, ratio] = new_interval(layout, $p, sub)
+    let [interval2, ratio] = new_interval(layout, $p, sub)
     let px_step2 = layout.px_step * ratio
 
     let splitter = px_step2 > 5 ? 1 : 0
@@ -121,18 +121,19 @@ export function layout_vol(self) {
 function new_interval(layout, $p, sub) {
     // Subset interval against main interval
     // Prefer using main chart interval to avoid detection issues with data gaps
+    let interval2, ratio
     if (!layout.ti_map.ib) {
         // Use overlay's tf, or fall back to main chart interval, then detect
-        var interval2 = $p.tf || $p.interval || Utils.detect_interval(sub)
-        var ratio = interval2 / $p.interval
+        interval2 = $p.tf || $p.interval || Utils.detect_interval(sub)
+        ratio = interval2 / $p.interval
     } else {
         if ($p.tf) {
-            var ratio = $p.tf / layout.ti_map.tf
-            var interval2 = ratio
+            ratio = $p.tf / layout.ti_map.tf
+            interval2 = ratio
         } else {
             // Use main chart interval if available
-            var interval2 = $p.interval || Utils.detect_interval(sub)
-            var ratio = interval2 / $p.interval
+            interval2 = $p.interval || Utils.detect_interval(sub)
+            ratio = interval2 / $p.interval
         }
     }
     return [interval2, ratio]

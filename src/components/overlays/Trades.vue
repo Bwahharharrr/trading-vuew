@@ -14,7 +14,7 @@ export default {
             const data = this.$props.data
             ctx.lineWidth = 1.5
             ctx.strokeStyle = 'black'
-            for (var k = 0, n = data.length; k < n; k++) {
+            for (let k = 0, n = data.length; k < n; k++) {
                 let p = data[k]
                 ctx.fillStyle = p[1] ? this.buy_color : this.sell_color
                 ctx.beginPath()
@@ -41,9 +41,10 @@ export default {
 
         // Defines legend format (values & colors)
         legend(values) {
+            let pos
             switch (values[1]) {
                 case 0:
-                    var pos = 'Sell'
+                    pos = 'Sell'
                     break
                 case 1:
                     pos = 'Buy'

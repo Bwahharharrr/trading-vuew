@@ -149,11 +149,16 @@ export default class GridRenderer {
         this._sortedOverlays.forEach(l => {
             if (!l.display) return
             this.ctx.save()
-            let r = l.renderer
-            if (r.pre_draw) r.pre_draw(this.ctx)
-            r.draw(this.ctx)
-            if (r.post_draw) r.post_draw(this.ctx)
-            this.ctx.restore()
+            try {
+                let r = l.renderer
+                if (r.pre_draw) r.pre_draw(this.ctx)
+                r.draw(this.ctx)
+                if (r.post_draw) r.post_draw(this.ctx)
+            } catch(e) {
+                console.error('Overlay draw error:', e)
+            } finally {
+                this.ctx.restore()
+            }
         })
 
         // Draw crosshair on dynamic canvas if available, otherwise on static
@@ -198,7 +203,7 @@ export default class GridRenderer {
             config: this.$p.config,
             meta: this.$p.meta
         }
-        for (var s of this.$p.shaders) {
+        for (let s of this.$p.shaders) {
             this.ctx.save()
             s.draw(this.ctx, props)
             this.ctx.restore()
@@ -210,12 +215,12 @@ export default class GridRenderer {
         this.ctx.beginPath()
 
         const ymax = this.layout.height
-        for (var [x, p] of this.layout.xs) {
+        for (let [x, p] of this.layout.xs) {
             this.ctx.moveTo(x - 0.5, 0)
             this.ctx.lineTo(x - 0.5, ymax)
         }
 
-        for (var [y, y$] of this.layout.ys) {
+        for (let [y, y$] of this.layout.ys) {
             this.ctx.moveTo(0, y - 0.5)
             this.ctx.lineTo(this.layout.width, y - 0.5)
         }
@@ -235,7 +240,7 @@ export default class GridRenderer {
 
     // Propagate mouse event to overlays
     propagate(name, event) {
-        for (var layer of this.overlays) {
+        for (let layer of this.overlays) {
             if (layer.renderer[name]) {
                 layer.renderer[name](event)
             }

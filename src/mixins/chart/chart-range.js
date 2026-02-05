@@ -9,7 +9,7 @@ import Const from '../../stuff/constants.js'
 export default {
     methods: {
         range_changed(r) {
-            var sub = this.subset(r)
+            let sub = this.subset(r)
             Utils.overwrite(this.range, r)
             Utils.overwrite(this.sub, sub)
             this.update_layout()
@@ -51,10 +51,11 @@ export default {
             const l = this.ohlcv.length - 1
 
             if (this.ohlcv.length < 2) return
+            let s, d
             if (this.ohlcv.length <= dl) {
-                var s = 0, d = ml
+                s = 0; d = ml
             } else {
-                s = l - dl, d = 0.5
+                s = l - dl; d = 0.5
             }
             if (!this.$props.ib) {
                 Utils.overwrite(this.range, [
@@ -70,7 +71,7 @@ export default {
         },
 
         subset(range = this.range) {
-            var [res, index] = this.filter(
+            let [res, index] = this.filter(
                 this.ohlcv,
                 range[0] - this.interval,
                 range[1]

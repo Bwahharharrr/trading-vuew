@@ -44,7 +44,7 @@ export default {
                     let nt = this._data_t + 0.01 // fix for the filter lib
                     let res = Utils.fast_nearest(this.ohlcv, nt)
                     let cndl = this.ohlcv[res[0]]
-                    var off = (nt - cndl[0]) / this.interval_ms
+                    let off = (nt - cndl[0]) / this.interval_ms
                     this.goto(res[0] + off)
                 } catch(e) {
                     this.goto(this.ti_map.t2i(this._data_t))

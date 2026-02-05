@@ -61,9 +61,10 @@ export default {
             let lh = this.layout.height
             let pin = this.uxr.pin
 
+            let x
             switch (pin[0]) {
                 case 'cursor':
-                    var x = this.uxr.overlay.cursor.x
+                    x = this.uxr.overlay.cursor.x
                     break
                 case 'mouse':
                     x = this.mouse.x
@@ -75,9 +76,10 @@ export default {
                         x = this.layout.t2screen(pin[0])
                     }
             }
+            let y
             switch (pin[1]) {
                 case 'cursor':
-                    var y = this.uxr.overlay.cursor.y
+                    y = this.uxr.overlay.cursor.y
                     break
                 case 'mouse':
                     y = this.mouse.y

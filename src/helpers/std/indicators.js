@@ -17,7 +17,7 @@ export default {
         let s = len / sigma
         let norm = 0
         let sum = 0
-        for (var i = 0; i < len; i++) {
+        for (let i = 0; i < len; i++) {
             let w = Math.exp(-1 * Math.pow(i - m, 2) / (2 * Math.pow(s, 2)))
             norm = norm + w
             sum = sum + src[len - i - 1] * w
@@ -117,7 +117,7 @@ export default {
         let id = this._tsid(_id, `cmo(${len})`)
         let sum = this.sum(src, len, id)[0]
         let num = 0
-        for (var i = 0; i < len; i++) {
+        for (let i = 0; i < len; i++) {
             num += src[i] * (i + 1)
         }
         return this.ts(-num / sum, id, src.__tf__)
@@ -132,7 +132,7 @@ export default {
         let id = this._tsid(_id, `dev(${len})`)
         let mean = this.sma(src, len, id)[0]
         let sum = 0
-        for (var i = 0; i < len; i++) {
+        for (let i = 0; i < len; i++) {
             sum += Math.abs(src[i] - mean)
         }
         return this.ts(sum / len, id, src.__tf__)
@@ -332,18 +332,19 @@ export default {
      * @return {TS} - New time-series
      */
     rsi(x, y, _id) {
+        let id, rsi
         // Check if y is a timeseries
         if (!this.na(y) && y.__id__) {
-            var id = this._tsid(_id, `rsi(x,y)`)
-            var rsi = 100 - 100 / (1 + this.div(x, y, id)[0])
+            id = this._tsid(_id, `rsi(x,y)`)
+            rsi = 100 - 100 / (1 + this.div(x, y, id)[0])
         } else {
-            var id = this._tsid(_id, `rsi(${y})`)
+            id = this._tsid(_id, `rsi(${y})`)
             let ch = this.change(x, 1, _id)[0]
             let pc = this.ts(Math.max(ch, 0), id+'1', x.__tf__)
             let nc = this.ts(-Math.min(ch, 0), id+'2', x.__tf__)
             let up = this.rma(pc, y, id+'3')[0]
             let down = this.rma(nc, y, id+'4')[0]
-            var rsi = down === 0 ? 100 : (
+            rsi = down === 0 ? 100 : (
                 up === 0 ? 0 : (100 - (100 / (1 + up / down)))
             )
         }
@@ -441,7 +442,7 @@ export default {
     sma(src, len, _id) {
         let id = this._tsid(_id, `sma(${len})`)
         let sum = 0
-        for (var i = 0; i < len; i++) {
+        for (let i = 0; i < len; i++) {
             sum = sum + src[i]
         }
         return this.ts(sum / len, id, src.__tf__)
@@ -461,7 +462,7 @@ export default {
         let id = this._tsid(_id, `stdev(${len})`)
         let avg = this.sma(src, len, id)
         let sqd = 0
-        for (var i = 0; i < len; i++) {
+        for (let i = 0; i < len; i++) {
             let sum = sumf(src[i], -avg[0])
             sqd += sum * sum
         }
@@ -590,7 +591,7 @@ export default {
         let id = this._tsid(_id, `wma(${len})`)
         let norm = 0
         let sum = 0
-        for (var i = 0; i < len; i++) {
+        for (let i = 0; i < len; i++) {
             let w = (len - i) * len
             norm += w
             sum += src[i] * w

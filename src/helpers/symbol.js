@@ -34,7 +34,7 @@ export default class Sym {
         // Create a bunch of OHLCV samplers for
         // sparse data
         if (this.aggtype === 'ohlcv') {
-            for (var id of OHLCV) {
+            for (let id of OHLCV) {
                 this[id] = TS(`${this.id}_${id}`, [])
                 this[id].__fn__ = Sampler(id).bind(this[id])
                 this[id].__tf__ = this.tf
@@ -46,11 +46,11 @@ export default class Sym {
         // TODO: different TS configurations depending
         // on this.format
         if (this.aggtype === 'copy') {
-            for (var id of OHLCV) {
+            for (let id of OHLCV) {
                 this[id] = TS(`${this.id}_${id}`, [])
                 this[id].__tf__ = this.tf
             }
-            for (var i = 0; i < this.data.length; i++) {
+            for (let i = 0; i < this.data.length; i++) {
                 this.tmap[this.data[i][0]] = i
             }
         }
@@ -112,7 +112,7 @@ export default class Sym {
                 // but not before a new candle
                 if (t < this.vol.__t0__ + this.tf) this.vol[0] = 0
                 let noevent = true
-                for(var i = i0; i < this.data.length; i++) {
+                for(let i = i0; i < this.data.length; i++) {
                     noevent = false
                     let dp = this.data[i]
                     if (dp[idx.time] >= t1) break
@@ -152,7 +152,7 @@ export default class Sym {
 
         let ts0 = this.__t0__
         if (!ts0 || t >= ts0 + this.tf) {
-            for (var k = 0; k < 5; k++) {
+            for (let k = 0; k < 5; k++) {
                 let tsn = OHLCV[k]
                 this[tsn].unshift(undefined)
             }
@@ -165,12 +165,12 @@ export default class Sym {
         }
 
         if (s) {
-            for (var k = 0; k < 5; k++) {
+            for (let k = 0; k < 5; k++) {
                 let tsn = OHLCV[k]
                 this[tsn][0] = s[k + 1]
             }
         } else if (this.fillgaps) {
-            for (var k = 0; k < 5; k++) {
+            for (let k = 0; k < 5; k++) {
                 let tsn = OHLCV[k]
                 this[tsn][0] = this.close[1]
             }
@@ -192,14 +192,15 @@ export default class Sym {
                 let t1 = t + se.tf
 
                 let sub = []
-                for(var i = i0; i < this.data.length; i++) {
+                for(let i = i0; i < this.data.length; i++) {
                     let dp = this.data[i]
                     if (dp[idx.time] >= t1) break
                     sub.push(dp)
                 }
 
+                let val
                 if (sub.length || this.fillgaps === false) {
-                    var val = this.close.__fn__(sub) // TODO: prob a bug
+                    val = this.close.__fn__(sub) // TODO: prob a bug
                 } else if (this.fillgaps !== false) {
                     val = this.close[0]
                 }

@@ -6,7 +6,7 @@ import Utils from '../stuff/utils.js'
 import * as u from './script_utils.js'
 import { DatasetWW } from './dataset.js'
 
-var data_requested = false
+let data_requested = false
 
 // DC => WW
 
@@ -22,7 +22,7 @@ self.onmessage = async e => {
 
         case 'exec-script':
 
-            var req = se.data_required(e.data.data.s)
+            let req = se.data_required(e.data.data.s)
             if (req && !data_requested) {
                 data_requested = true
                 self.postMessage({
@@ -38,11 +38,11 @@ self.onmessage = async e => {
 
         case 'exec-all-scripts':
 
-            var req = se.data_required(e.data.data.s)
-            if (req && !data_requested) {
+            let req2 = se.data_required(e.data.data.s)
+            if (req2 && !data_requested) {
                 data_requested = true
                 self.postMessage({
-                    type: 'request-data', data: req
+                    type: 'request-data', data: req2
                 })
             }
 
@@ -57,7 +57,7 @@ self.onmessage = async e => {
 
             await Utils.pause(1)
 
-            for (var id in e.data.data) {
+            for (let id in e.data.data) {
                 let data = e.data.data[id]
                 se.data[id] = new DatasetWW(id, data)
             }

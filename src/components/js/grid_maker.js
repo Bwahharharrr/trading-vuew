@@ -24,10 +24,10 @@ function GridMaker(id, params, master_grid = null) {
         grid, timezone
     } = params
 
-    var self = { ti_map }
-    var lm = layers_meta[id]
-    var y_range_fn = null
-    var ls = grid.logScale
+    let self = { ti_map }
+    let lm = layers_meta[id]
+    let y_range_fn = null
+    let ls = grid.logScale
 
     if (lm && Object.keys(lm).length) {
         // Gets last y_range fn()
@@ -38,13 +38,14 @@ function GridMaker(id, params, master_grid = null) {
 
     // Calc vertical ($/₿) range
     function calc_$range() {
+        let hi, lo, exp
         if (!master_grid) {
             // $ candlestick range
             if (y_range_fn) {
-                var [hi, lo] = y_range_fn(hi, lo)
+                ;[hi, lo] = y_range_fn(hi, lo)
             } else {
                 hi = -Infinity, lo = Infinity
-                for (var i = 0, n = sub.length; i < n; i++) {
+                for (let i = 0, n = sub.length; i < n; i++) {
                     let x = sub[i]
                     if (x[2] > hi) hi = x[2]
                     if (x[3] < lo) lo = x[3]
@@ -53,14 +54,14 @@ function GridMaker(id, params, master_grid = null) {
         } else {
             // Offchart indicator range
             hi = -Infinity, lo = Infinity
-            for (var i = 0; i < sub.length; i++) {
-                for (var j = 1; j < sub[i].length; j++) {
+            for (let i = 0; i < sub.length; i++) {
+                for (let j = 1; j < sub[i].length; j++) {
                     let v = sub[i][j]
                     if (v > hi) hi = v
                     if (v < lo) lo = v
                 }
             }
-            if (y_range_fn) { var [hi, lo, exp] = y_range_fn(hi, lo) }
+            if (y_range_fn) { ;[hi, lo, exp] = y_range_fn(hi, lo) }
         }
 
         // Fixed y-range in non-auto mode
@@ -122,13 +123,13 @@ function GridMaker(id, params, master_grid = null) {
     // Calculate $ precision for the Y-axis
     function calc_precision(data) {
 
-        var max_r = 0, max_l = 0
+        let max_r = 0, max_l = 0
 
         let min = Infinity
         let max = -Infinity
 
         // Speed UP
-        for (var i = 0, n = data.length; i < n; i++) {
+        for (let i = 0, n = data.length; i < n; i++) {
             let x = data[i]
             if (x[1] > max) max = x[1]
             else if (x[1] < min) min = x[1]
@@ -136,16 +137,17 @@ function GridMaker(id, params, master_grid = null) {
         // Get max lengths of integer and fractional parts
         [min, max].forEach(x => {
             // Fix undefined bug
-            var str = x != null ? x.toString() : ''
+            let str = x != null ? x.toString() : ''
+            let l, r
             if (x < 0.000001) {
                 // Parsing the exponential form. Gosh this
                 // smells trickily
-                var [ls, rs] = str.split('e-')
-                var [l, r] = ls.split('.')
+                let [ls, rs] = str.split('e-')
+                ;[l, r] = ls.split('.')
                 if (!r) r = ''
                 r = { length: r.length + parseInt(rs) || 0 }
             } else {
-                var [l, r] = str.split('.')
+                ;[l, r] = str.split('.')
             }
             if (r && r.length > max_r) {
                 max_r = r.length
@@ -236,8 +238,9 @@ function GridMaker(id, params, master_grid = null) {
         if (h < $p.config.GRIDY) return 1
         let n = h / $p.config.GRIDY // target grid N
         let yrange = self.$_hi
+        let yratio
         if (self.$_lo > 0) {
-            var yratio = self.$_hi / self.$_lo
+            yratio = self.$_hi / self.$_lo
         } else {
             yratio = self.$_hi / 1 // TODO: small values
         }
@@ -253,8 +256,9 @@ function GridMaker(id, params, master_grid = null) {
         if (h < $p.config.GRIDY) return 1
         let n = h / $p.config.GRIDY // target grid N
         let yrange = Math.abs(self.$_lo)
+        let yratio
         if (self.$_hi < 0 && self.$_lo < 0) {
-            var yratio = Math.abs(self.$_lo / self.$_hi)
+            yratio = Math.abs(self.$_lo / self.$_hi)
         } else {
             yratio = Math.abs(self.$_lo) / 1
         }
@@ -282,7 +286,7 @@ function GridMaker(id, params, master_grid = null) {
 
             let m0 = Utils.get_month(t0)*/
 
-            for (var i = 0; i < sub.length; i++) {
+            for (let i = 0; i < sub.length; i++) {
                 let p = sub[i]
                 let prev = sub[i-1] || []
                 let prev_xs = self.xs[self.xs.length - 1] || [0,[]]
@@ -393,7 +397,7 @@ function GridMaker(id, params, master_grid = null) {
 
         let y1 = self.$_lo - self.$_lo % self.$_step
 
-        for (var y$ = y1; y$ <= self.$_hi; y$ += self.$_step) {
+        for (let y$ = y1; y$ <= self.$_hi; y$ += self.$_step) {
             let y = Math.floor(y$ * self.A + self.B)
             if (y > height) continue
             self.ys.push([y, Utils.strip(y$)])
@@ -419,7 +423,7 @@ function GridMaker(id, params, master_grid = null) {
         let q = 1 + (self.$_mult - 1) / 2
 
         // Over 0
-        for (var y$ = y1; y$ > 0; y$ /= self.$_mult) {
+        for (let y$ = y1; y$ > 0; y$ /= self.$_mult) {
             y$ = log_rounder(y$, q)
             let y = Math.floor(math.log(y$) * self.A + self.B)
             self.ys.push([y, Utils.strip(y$)])
@@ -431,7 +435,7 @@ function GridMaker(id, params, master_grid = null) {
 
         // Under 0
         yp = Infinity
-        for (var y$ = y2; y$ < 0; y$ /= self.$_mult) {
+        for (let y$ = y2; y$ < 0; y$ /= self.$_mult) {
             y$ = log_rounder(y$, q)
             let y = Math.floor(math.log(y$) * self.A + self.B)
             if (yp - y < $p.config.GRIDY * 0.7) break
@@ -449,7 +453,7 @@ function GridMaker(id, params, master_grid = null) {
     // the fixed value always included
     function search_start_pos(value) {
         let N = height / $p.config.GRIDY // target grid N
-        var y = Infinity, y$ = value, count = 0
+        let y = Infinity, y$ = value, count = 0
         while (y > 0) {
             y = Math.floor(math.log(y$) * self.A + self.B)
             y$ *= self.$_mult
@@ -460,7 +464,7 @@ function GridMaker(id, params, master_grid = null) {
 
     function search_start_neg(value) {
         let N = height / $p.config.GRIDY // target grid N
-        var y = -Infinity, y$ = value, count = 0
+        let y = -Infinity, y$ = value, count = 0
         while (y < height) {
             y = Math.floor(math.log(y$) * self.A + self.B)
             y$ *= self.$_mult
@@ -474,7 +478,8 @@ function GridMaker(id, params, master_grid = null) {
         let s = Math.sign(x)
         x = Math.abs(x)
         if (x > 10) {
-            for (var div = 10; div < MAX_INT; div *= 10) {
+            let div
+            for (div = 10; div < MAX_INT; div *= 10) {
                 let nice = Math.floor(x / div) * div
                 if (x / nice > quality) {  // More than 10% off
                     break
@@ -483,7 +488,8 @@ function GridMaker(id, params, master_grid = null) {
             div /= 10
             return s * Math.floor(x / div) * div
         } else if (x < 1) {
-            for (var ro = 10; ro >= 1; ro--) {
+            let ro
+            for (ro = 10; ro >= 1; ro--) {
                 let nice = Utils.round(x, ro)
                 if (x / nice > quality) {  // More than 10% off
                     break

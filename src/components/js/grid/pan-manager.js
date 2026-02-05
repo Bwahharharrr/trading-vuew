@@ -30,7 +30,7 @@ export default class PanManager {
 
         if (ls && drug.y_r) {
             let dy = drug.y - y
-            var range = drug.y_r.slice()
+            let range = drug.y_r.slice()
             range[0] = math.exp((0 - drug.B + dy) / this.layout.A)
             range[1] = math.exp((this.layout.height - drug.B + dy) / this.layout.A)
         }

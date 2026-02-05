@@ -21,9 +21,10 @@ export default {
         SYMTF.lastIndex = 0
         FNSTD.lastIndex = 0
         SYMSTD.lastIndex = 0
+        let m
 
         do {
-            var m = SYMTF.exec(all)
+            m = SYMTF.exec(all)
             if (m) {
                 if (m[0] in se.tss) continue
                 let ts = se.tss[m[0]] = TS(m[0], [])
@@ -33,7 +34,7 @@ export default {
         } while (m)
 
         do {
-            var m = SYMSTD.exec(all)
+            m = SYMSTD.exec(all)
             if (m) {
                 if (m[0] in se.tss) continue
                 this.parse_ts_sym(m[0])
@@ -41,7 +42,7 @@ export default {
         } while (m)
 
         do {
-            var m = FNSTD.exec(all)
+            m = FNSTD.exec(all)
             if (m) {
                 let fn = m[1] + m[2]
                 let tf = m[2]
@@ -135,7 +136,7 @@ export default {
         }
     },
     deps(types, tf) {
-        for (var type of types) {
+        for (let type of types) {
             let sym = type + tf
             if (sym in se.tss) continue
             let ts = se.tss[sym] = TS(sym, [])

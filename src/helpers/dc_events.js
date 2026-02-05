@@ -15,7 +15,7 @@ export default class DCEvents {
 
         // Listen to the web-worker events
         this.ww.onevent = e => {
-            for (var ctrl of this.tv.controllers) {
+            for (let ctrl of this.tv.controllers) {
                 if (ctrl.ww) ctrl.ww(e.data)
             }
             switch(e.data.type) {
@@ -47,7 +47,7 @@ export default class DCEvents {
                     this.tv.$emit('signal', e.data.data)
                     break
             }
-            for (var ctrl of this.tv.controllers) {
+            for (let ctrl of this.tv.controllers) {
                 if (ctrl.post_ww) ctrl.post_ww(e.data)
             }
         }
@@ -106,7 +106,7 @@ export default class DCEvents {
         let delta = {}
         let changed = false
 
-        for (var i = 0; i < values.length; i++) {
+        for (let i = 0; i < values.length; i++) {
             let n = values[i]
             let arr = prev.filter(x => x.v === n.v)
             if (!arr.length && n.p.settings.$props) {
@@ -146,7 +146,7 @@ export default class DCEvents {
     // Combine all tools and their mods
     register_tools(tools) {
         let preset = {}
-        for (var tool of this.data.tools || []) {
+        for (let tool of this.data.tools || []) {
              preset[tool.type] = tool
              delete tool.type
         }
@@ -154,16 +154,16 @@ export default class DCEvents {
         let list = [{
             type: 'Cursor', icon: Icons['cursor.png']
         }]
-        for (var tool of tools) {
-            var proto = Object.assign({}, tool.info)
+        for (let tool of tools) {
+            let proto = Object.assign({}, tool.info)
             let type = tool.info.type || 'Default'
             proto.type = `${tool.use_for}:${type}`
             this.merge_presets(proto, preset[tool.use_for])
             this.merge_presets(proto, preset[proto.type])
             delete proto.mods
             list.push(proto)
-            for (var mod in tool.info.mods) {
-                var mp = Object.assign({}, proto)
+            for (let mod in tool.info.mods) {
+                let mp = Object.assign({}, proto)
                 mp = Object.assign(mp, tool.info.mods[mod])
                 mp.type = `${tool.use_for}:${mod}`
                 this.merge_presets(mp, preset[tool.use_for])
@@ -189,7 +189,7 @@ export default class DCEvents {
             if (!s.$uuid) s.$uuid = `${obj.type}-${Utils.uuid2()}`
             args[0].uuid = s.$uuid
             args[0].sett = s
-            for (var k in props || {}) {
+            for (let k in props || {}) {
                 let proto = props[k]
                 if (s[k] !== undefined) {
                     proto.val = s[k] // use the existing val
@@ -206,7 +206,7 @@ export default class DCEvents {
             }
             // Remove old props (dropped by the current exec)
             if (s.$props) {
-                for (var k in s) {
+                for (let k in s) {
                     if (s.$props.includes(k) && !(k in props)) {
                         delete s[k]
                     }
@@ -263,7 +263,7 @@ export default class DCEvents {
     modify_overlay(upd) {
         let obj = this.get_overlay(upd)
         if (obj) {
-            for (var k in upd.fields || {}) {
+            for (let k in upd.fields || {}) {
                 if (typeof obj[k] === 'object') {
                     this.merge(`${upd.uuid}.${k}`, upd.fields[k])
                 } else {
@@ -287,7 +287,7 @@ export default class DCEvents {
 
     set_loading(flag) {
         let skrr = this.get('.').filter(x => x.settings.$props)
-        for (var s of skrr) {
+        for (let s of skrr) {
             this.merge(`${s.id}`, { loading: flag })
         }
     }
@@ -301,7 +301,7 @@ export default class DCEvents {
 
     merge_presets(proto, preset) {
         if (!preset) return
-        for (var k in preset) {
+        for (let k in preset) {
             if (k === 'settings') {
                 Object.assign(proto[k], preset[k])
             } else {
@@ -402,7 +402,7 @@ export default class DCEvents {
 
     // When new object is selected / unselected
     object_selected(args) {
-        var q = this.data.selected
+        let q = this.data.selected
         if (q) {
             // Check if current drawing is finished
             //let res = this.get_one(`${q}.settings`)
@@ -447,7 +447,7 @@ export default class DCEvents {
         this.get('.').forEach(x => {
             if (x.settings.$synth) this.del(`${x.id}`)
         })
-        for (var ov of data) {
+        for (let ov of data) {
             let obj = this.get_one(`${ov.id}`)
             if (obj) {
                 obj['loading'] = false
@@ -455,12 +455,12 @@ export default class DCEvents {
                 obj.data = ov.data
             }
             if (!ov.new_ovs) continue
-            for (var id in ov.new_ovs.onchart) {
+            for (let id in ov.new_ovs.onchart) {
                 if (!this.get_one(`onchart.${id}`)) {
                     this.add('onchart', ov.new_ovs.onchart[id])
                 }
             }
-            for (var id in ov.new_ovs.offchart) {
+            for (let id in ov.new_ovs.offchart) {
                 if (!this.get_one(`offchart.${id}`)) {
                     this.add('offchart', ov.new_ovs.offchart[id])
                 }
@@ -470,7 +470,7 @@ export default class DCEvents {
 
     // Push overlay updates from the web-worker
     on_overlay_update(data) {
-        for (var ov of data) {
+        for (let ov of data) {
             if (!ov.data) continue
             let obj = this.get_one(`${ov.id}`)
             if (obj) {
