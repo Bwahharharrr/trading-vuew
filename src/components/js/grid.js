@@ -250,16 +250,13 @@ export default class Grid {
         this.renderer.propagate('click', event)
     }
 
-    emit_cursor_coord(event, add = {}) {
-        // PERFORMANCE: Avoid Object.assign overhead when add is empty (common case)
+    emit_cursor_coord(event, add) {
         const base = {
             grid_id: this.id,
             x: event.center.x + this.offset_x,
             y: event.center.y + this.offset_y + this.layout.offset
         }
-        // Only merge if add has properties
-        const hasAdd = Object.keys(add).length > 0
-        this.comp.$emit('cursor-changed', hasAdd ? Object.assign(base, add) : base)
+        this.comp.$emit('cursor-changed', add ? Object.assign(base, add) : base)
     }
 
     // PERFORMANCE: Cache getBoundingClientRect to avoid layout thrashing
@@ -322,5 +319,12 @@ export default class Grid {
         if (this._cursorEventPool && this._pooledCursorEvent) {
             this._cursorEventPool.release(this._pooledCursorEvent)
         }
+        // Stop pan fade animation
+        if (this.panManager) this.panManager.destroy()
+        // Release canvas/context references for GC
+        this.ctx = null
+        this.ctxDynamic = null
+        this.canvas = null
+        this.canvasDynamic = null
     }
 }

@@ -253,6 +253,9 @@ export default {
     beforeUnmount() {
         this.custom_event({ event: 'before-destroy' })
         this.ctrl_destroy()
+        if (this.data && this.data.destroy) {
+            this.data.destroy()
+        }
     },
     methods: {
         // TODO: reset extensions?

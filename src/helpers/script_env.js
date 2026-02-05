@@ -48,7 +48,7 @@ export default class ScriptEnv {
     unshift() {
         this.output.unshift(undefined)
         // Update all temp symbols
-        for (var id in this.tss) {
+        for (let id in this.tss) {
             if (this.tss[id].__tf__) continue
             this.tss[id].unshift(undefined)
         }
@@ -58,9 +58,8 @@ export default class ScriptEnv {
     limit() {
         let out = this.output
         out.length = out.__len__ || DEF_LIMIT
-        for (var id in this.tss) {
+        for (let id in this.tss) {
             let ts = this.tss[id]
-            //console.log(ts.__id__, ts.__len__)
             ts.length = ts.__len__ || DEF_LIMIT
         }
     }
@@ -75,9 +74,10 @@ export default class ScriptEnv {
         let val = this.output[0]
         let t = se.t
         if (off) t += off * se.tf
+        let point
         if (val == null || !val.length) {
             // Number / object
-            var point = [t, val]
+            point = [t, val]
         } else {
             // Array
             point = [t, ...val]
@@ -95,15 +95,16 @@ export default class ScriptEnv {
 
         let proto = Object.getPrototypeOf(this.std)
         let std = ``
-        for (var k of Object.getOwnPropertyNames(proto)) {
+        for (let k of Object.getOwnPropertyNames(proto)) {
             if (k === 'constructor') continue
             std += `const std_${k} = self.std.${k}.bind(self.std)\n`
         }
 
         let props = ``
-        for (var k in src.props || {}) {
+        for (let k in src.props || {}) {
+            let val
             if (src.props[k].val !== undefined) {
-                var val = src.props[k].val
+                val = src.props[k].val
             } else if (this.src.sett[k] !== undefined) {
                 val = this.src.sett[k]
             } else {
@@ -114,7 +115,7 @@ export default class ScriptEnv {
         // TODO: add argument values to _id
 
         let tss = ``
-        for (var k in this.shared) {
+        for (let k in this.shared) {
             if (this.shared[k] && this.shared[k].__id__) {
                 tss += `const ${k} = shared.${k}\n`
             }
@@ -122,7 +123,7 @@ export default class ScriptEnv {
 
         // Datasets
         let dss = ``
-        for (var k in src.data || {}) {
+        for (let k in src.data || {}) {
             let id = se.match_ds(this.id, src.data[k].type)
             if (!this.shared.dss[id]) {
                 let T = src.data[k].type
@@ -185,7 +186,7 @@ export default class ScriptEnv {
     // Make definitions for modules
     make_modules() {
         let s = ``
-        for (var id in se.mods) {
+        for (let id in se.mods) {
             if (!se.mods[id].api) continue
             s += `const ${id} = se.mods['${id}'].api[self.id]`
             s += '\n'
@@ -206,9 +207,10 @@ export default class ScriptEnv {
 
         FDEFS2.lastIndex = 0
         let call_id = 0 // Function call id (to make each call unique)
+        let m
 
         do {
-            var m = FDEFS2.exec(src)
+            m = FDEFS2.exec(src)
             if (m) {
                 let fkeyword = m[1].trim()
                 let fname = m[2]
@@ -240,7 +242,7 @@ export default class ScriptEnv {
         let target = this.get_args(this.fdef(m[2])).length
         let m0 = this.parentheses(m[0]) // First closed pair
         let args = this.get_args_2(m0)
-        for (var i = args.length; i < target; i++) {
+        for (let i = args.length; i < target; i++) {
             args.push('void 0')
         }
 
@@ -252,8 +254,8 @@ export default class ScriptEnv {
     }
 
     parentheses(str) {
-        var count = 0, first = false
-        for (var i = 0; i < str.length; i++) {
+        let count = 0, first = false
+        for (let i = 0; i < str.length; i++) {
             if (str[i] === '(') {
                 count++
                 first = true
@@ -290,9 +292,9 @@ export default class ScriptEnv {
         let parts = []
         let c = 0
         let s = 0
-        var q1 = false, q2 = false, q3 = false
+        let q1 = false, q2 = false, q3 = false
         let part
-        for (var i = 0; i < str.length; i++) {
+        for (let i = 0; i < str.length; i++) {
             if (str[i] === '(') {
                 c++
                 if (!part) part = [i+1]

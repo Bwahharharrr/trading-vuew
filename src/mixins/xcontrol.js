@@ -14,7 +14,7 @@ export default {
             this.ctrl_destroy()
             this.controllers = []
 
-            for (var x of this.$props.extensions) {
+            for (let x of this.$props.extensions) {
                 let name = x.Main.__name__
                 if (!this.xSettings[name]) {
                     this.xSettings[name] = {}
@@ -33,21 +33,21 @@ export default {
         },
         // TODO: preventDefault
         pre_dc(e) {
-            for (var ctrl of this.controllers) {
+            for (let ctrl of this.controllers) {
                 if (ctrl.update) {
                     ctrl.update(e)
                 }
             }
         },
         post_dc(e) {
-            for (var ctrl of this.controllers) {
+            for (let ctrl of this.controllers) {
                 if (ctrl.post_update) {
                     ctrl.post_update(e)
                 }
             }
         },
         ctrl_destroy() {
-            for (var ctrl of this.controllers) {
+            for (let ctrl of this.controllers) {
                 if (ctrl.destroy) ctrl.destroy()
             }
         },
@@ -61,7 +61,7 @@ export default {
             if (this.skin_proto && this.skin_proto.styles) {
                 let sheet = document.createElement('style')
                 sheet.setAttribute("id", id)
-                sheet.innerHTML = this.skin_proto.styles
+                sheet.textContent = this.skin_proto.styles
                 this.$el.appendChild(sheet)
             }
         }
@@ -69,9 +69,9 @@ export default {
     computed: {
         ws() {
             let ws = {}
-            for (var ctrl of this.controllers) {
+            for (let ctrl of this.controllers) {
                 if (ctrl.widgets) {
-                    for (var id in ctrl.widgets) {
+                    for (let id in ctrl.widgets) {
                         ws[id] = ctrl.widgets[id]
                         ws[id].ctrl = ctrl
                     }
@@ -81,8 +81,8 @@ export default {
         },
         skins() {
             let sks = {}
-            for (var x of this.$props.extensions) {
-                for (var id in x.skins || {}) {
+            for (let x of this.$props.extensions) {
+                for (let id in x.skins || {}) {
                     sks[id] = x.skins[id]
                 }
             }
@@ -134,7 +134,7 @@ export default {
         // Deep watching xSettings traverses entire nested object on every change
         xSettingsKey(newKey, oldKey) {
             if (!newKey || newKey === oldKey) return
-            for (var ctrl of this.controllers) {
+            for (let ctrl of this.controllers) {
                 if (ctrl.onsettings) {
                     ctrl.onsettings(this.xSettings, null)
                 }

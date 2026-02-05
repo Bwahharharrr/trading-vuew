@@ -25,6 +25,11 @@ export default {
         },
 
         async onFileSelected(filename) {
+            // Validate filename to prevent path traversal
+            if (!filename || /[\/\\]|\.\./.test(filename)) {
+                console.error('Invalid filename:', filename)
+                return
+            }
             try {
                 // Save current view range and dataset bounds before loading new data
                 let savedRange = null
@@ -156,8 +161,13 @@ export default {
         },
 
         loadStateFromStorage() {
-            const saved = localStorage.getItem('trading-vue-state')
-            return saved ? JSON.parse(saved) : null
+            try {
+                const saved = localStorage.getItem('trading-vue-state')
+                return saved ? JSON.parse(saved) : null
+            } catch (e) {
+                console.error('Failed to parse saved state:', e)
+                return null
+            }
         }
     },
     watch: {
@@ -166,6 +176,10 @@ export default {
             if (this.pendingFileLoad && newFiles.includes(this.pendingFileLoad)) {
                 this.onFileSelected(this.pendingFileLoad).then(() => {
                     this.applyRestoredIndicatorSettings(this.pendingIndicatorSettings)
+                    this.pendingFileLoad = null
+                    this.pendingIndicatorSettings = null
+                }).catch(err => {
+                    console.error('Failed to restore file selection:', err)
                     this.pendingFileLoad = null
                     this.pendingIndicatorSettings = null
                 })

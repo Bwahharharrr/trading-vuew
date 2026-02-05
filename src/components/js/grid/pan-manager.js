@@ -78,4 +78,9 @@ export default class PanManager {
     stopFade() {
         if (this.fade) this.fade.stop()
     }
+
+    destroy() {
+        if (this.fade) this.fade.stop()
+        this.fade = null
+    }
 }

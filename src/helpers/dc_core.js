@@ -91,7 +91,7 @@ export default class DCCore extends DCEvents {
         }
 
         // Init dataset proxies
-        for (var ds of this.data.datasets) {
+        for (let ds of this.data.datasets) {
             if (!this.dss) this.dss = {}
             this.dss[ds.id] = new Dataset(this, ds)
         }
@@ -133,7 +133,7 @@ export default class DCCore extends DCEvents {
             this.merge('chart.data', data)
         } else {
             // Bunch of overlays, including chart.data
-            for (var k in data) {
+            for (let k in data) {
                 this.merge(k, data[k])
             }
         }
@@ -149,10 +149,10 @@ export default class DCCore extends DCEvents {
     // Update ids for all overlays
     update_ids() {
         this.data.chart.id = `chart.${this.data.chart.type}`
-        var count = {}
+        let count = {}
         // grid_id,layer_id => DC id mapping
         this.gldc = {}, this.dcgl = {}
-        for (var ov of this.data.onchart) {
+        for (let ov of this.data.onchart) {
             if (count[ov.type] === undefined) {
                 count[ov.type] = 0
             }
@@ -168,7 +168,7 @@ export default class DCCore extends DCEvents {
         count = {}
         let grids = [{}]
         let gid = 0
-        for (var ov of this.data.offchart) {
+        for (let ov of this.data.offchart) {
             if (count[ov.type] === undefined) {
                 count[ov.type] = 0
             }
@@ -195,6 +195,7 @@ export default class DCCore extends DCEvents {
     // TODO: chart refine (from the exchange chart)
     update_candle(data) {
         let ohlcv = this.data.chart.data
+        if (!ohlcv.length) return false
         let last = ohlcv[ohlcv.length - 1]
         let candle = data['candle']
         let tf = this.tv.$refs.chart.interval_ms
@@ -218,6 +219,7 @@ export default class DCCore extends DCEvents {
     update_tick(data) {
         let ohlcv = this.data.chart.data
         let last = ohlcv[ohlcv.length - 1]
+        if (!last && !ohlcv.length) return false
         let tick = data['price']
         let volume = data['volume'] || 0
         let tf = this.tv.$refs.chart.interval_ms
@@ -252,7 +254,7 @@ export default class DCCore extends DCEvents {
 
     // Updates all overlays with given values.
     update_overlays(data, t, tf) {
-        for (var k in data) {
+        for (let k in data) {
             if (k === 'price' || k === 'volume' ||
                 k === 'candle' || k === 't') {
                 continue
@@ -261,8 +263,9 @@ export default class DCCore extends DCEvents {
                 this.agg.push(k, data[k], tf)
                 continue
             }
+            let val
             if (!Array.isArray(data[k])) {
-                var val = [data[k]]
+                val = [data[k]]
             } else {
                 val = data[k]
             }
@@ -278,9 +281,10 @@ export default class DCCore extends DCEvents {
 
         let tuple = query.split('.')
 
+        let result
         switch (tuple[0]) {
             case 'chart':
-                var result = this.chart_as_piv(tuple)
+                result = this.chart_as_piv(tuple)
                 break
             case 'onchart':
             case 'offchart':
@@ -288,18 +292,13 @@ export default class DCCore extends DCEvents {
                 break
             case 'datasets':
                 result = this.query_search(query, tuple)
-                for (var r of result) {
+                for (let r of result) {
                     if (r.i === 'data') {
                         r.v = this.dss[r.p.id].data()
                     }
                 }
                 break
             default:
-                /* Should get('.') return also the chart? */
-                /*let ch = this.chart_as_query([
-                    'chart',
-                    tuple[1]
-                ])*/
                 let on = this.query_search(query, [
                     'onchart',
                     tuple[0],
@@ -310,7 +309,7 @@ export default class DCCore extends DCEvents {
                     tuple[0],
                     tuple[1]
                 ])
-                result = [/*ch[0],*/ ...on, ...off]
+                result = [...on, ...off]
                 break
         }
         return result.filter(

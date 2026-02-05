@@ -77,7 +77,7 @@ export default {
         },
         exp_click(e) {
             if (!this.data.group) return
-            e.cancelBubble = true
+            e.stopPropagation()
             this.show_exp_list = !this.show_exp_list
         },
         close_list() {
@@ -145,6 +145,9 @@ export default {
                 'background-color': c
             }
         }
+    },
+    beforeUnmount() {
+        clearTimeout(this.click_id)
     },
     data() {
         return {

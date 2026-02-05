@@ -1,4 +1,4 @@
-// Claculates postions and sizes for candlestick
+// Calculates positions and sizes for candlestick
 // and volume bars for the given subset of data
 
 import Utils from '../../stuff/utils.js'
@@ -16,7 +16,7 @@ export function layout_cnv(self) {
     // The volume bar height is determined as a percentage of
     // the chart's height (VOLSCALE)
     let maxv = Utils.maxAtIndex(sub, 5)
-    let vs =  $p.config.VOLSCALE * layout.height / maxv
+    let vs = maxv > 0 ? $p.config.VOLSCALE * layout.height / maxv : 0
     var x1, x2, w, avg_w, mid, prev = undefined
 
     // Subset interval against main interval
@@ -27,7 +27,7 @@ export function layout_cnv(self) {
 
     // A & B are current chart tranformations:
     // A === scale,  B === Y-axis shift
-    for (var i = 0; i < sub.length; i++) {
+    for (let i = 0; i < sub.length; i++) {
         let p = sub[i]
         mid = t2screen(p[0]) + 1
 
@@ -83,7 +83,7 @@ export function layout_vol(self) {
 
     let maxv = Utils.maxAtIndex(sub, self._i1)
     let volscale = self.volscale || $p.config.VOLSCALE
-    let vs = volscale * layout.height / maxv
+    let vs = maxv > 0 ? volscale * layout.height / maxv : 0
     var x1, x2, mid, prev = undefined
 
     // Subset interval against main interval
@@ -94,7 +94,7 @@ export function layout_vol(self) {
 
     // A & B are current chart tranformations:
     // A === scale,  B === Y-axis shift
-    for (var i = 0; i < sub.length; i++) {
+    for (let i = 0; i < sub.length; i++) {
         let p = sub[i]
         mid = t2screen(p[0]) + 1
 

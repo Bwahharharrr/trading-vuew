@@ -111,15 +111,18 @@ export default {
             ]
             return this._ohlcvCache
         },
+        // PERFORMANCE: Memoize index map — only rebuild when source data reference changes
+        _indexMap() {
+            const sourceData = this.off_data || this.json_data
+            return new Map(sourceData.map((item, idx) => [item, idx]))
+        },
         // TODO: add support for { grid: { id : N }}
         indicators() {
             const values = this.$props.values
             const f = this.format
             var types = {}
 
-            // Build index map first for O(n) lookup instead of O(n²)
-            const sourceData = this.off_data || this.json_data
-            const indexMap = new Map(sourceData.map((item, idx) => [item, idx]))
+            const indexMap = this._indexMap
 
             return this.json_data.filter(
                 x => x.settings.legend !== false && !x.main

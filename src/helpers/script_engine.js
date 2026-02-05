@@ -220,7 +220,7 @@ class ScriptEngine {
                 await this.run()
 
                 // === PERFORMANCE: Cache all script outputs ===
-                for (var id in this.map) {
+                for (let id in this.map) {
                     this._saveToCache(id)
                 }
 
@@ -245,7 +245,7 @@ class ScriptEngine {
         const needsReExec = []
         const displayOnlyChanges = []
 
-        for (var id of sel) {
+        for (let id of sel) {
             if (!this.map[id]) continue
 
             // Check if this is a display-only change
@@ -257,7 +257,7 @@ class ScriptEngine {
 
             // Apply the delta to props regardless
             let props = this.map[id].src.props || {}
-            for (var k in props) {
+            for (let k in props) {
                 if (k in delta[id]) {
                     props[k].val = delta[id][k]
                 }
@@ -267,7 +267,7 @@ class ScriptEngine {
         // === PERFORMANCE: Handle display-only changes without re-execution ===
         if (displayOnlyChanges.length > 0) {
             // Restore from cache and send updated data
-            for (var id of displayOnlyChanges) {
+            for (let id of displayOnlyChanges) {
                 this._restoreFromCache(id)
             }
 
@@ -285,7 +285,7 @@ class ScriptEngine {
             return
         }
 
-        for (var id of needsReExec) {
+        for (let id of needsReExec) {
             if (!this.map[id]) continue
             this.exec(this.map[id])
         }
@@ -293,7 +293,7 @@ class ScriptEngine {
         await this.run(needsReExec)
 
         // === PERFORMANCE: Cache the results for future use ===
-        for (var id of needsReExec) {
+        for (let id of needsReExec) {
             this._saveToCache(id)
         }
 
@@ -320,7 +320,7 @@ class ScriptEngine {
         // Parse non-default symbols
         symstd.parse(s)
 
-        for (var id in this.mods) {
+        for (let id in this.mods) {
             if (this.mods[id].pre_env) {
                 this.mods[id].pre_env(s.uuid, s)
             }
@@ -342,7 +342,7 @@ class ScriptEngine {
 
         this.map[s.uuid] = s
 
-        for (var id in this.mods) {
+        for (let id in this.mods) {
             if (this.mods[id].new_env) {
                 this.mods[id].new_env(s.uuid, s)
             }
@@ -368,15 +368,15 @@ class ScriptEngine {
         let mfs2 = this.make_mods_hooks('post_step')
 
         let step = (sel, unshift) => {
-            for (var m = 0; m < mfs1.length; m++) {
+            for (let m = 0; m < mfs1.length; m++) {
                 mfs1[m](sel) // pre_step
             }
 
-            for (var id of sel) {
+            for (let id of sel) {
                 this.map[id].env.step(unshift)
             }
 
-            for (var m = 0; m < mfs2.length; m++) {
+            for (let m = 0; m < mfs2.length; m++) {
                 mfs2[m](sel) // post_step
             }
         }
@@ -389,7 +389,7 @@ class ScriptEngine {
             let unshift = false
             this.shared.event = 'update'
 
-            for (var candle of candles) {
+            for (let candle of candles) {
                 if (candle[0] > last[0]) {
                     this.shared.onclose = true
                     step(sel, false) // On candle close
@@ -416,7 +416,7 @@ class ScriptEngine {
             this.send_state()
 
         } catch(e) {
-            console.log(e)
+            console.error('Script update error:', e)
         }
     }
 
@@ -478,7 +478,7 @@ class ScriptEngine {
     }
 
     re_init_map() {
-        for (var id in this.map) {
+        for (let id in this.map) {
             this.exec(this.map[id])
         }
     }
@@ -487,7 +487,7 @@ class ScriptEngine {
 
         this.send('engine-state', { running: true })
 
-        var t1 = Utils.now()
+        let t1 = Utils.now()
         sel = sel || Object.keys(this.map)
 
         this.pre_run_mods(sel)
@@ -496,7 +496,7 @@ class ScriptEngine {
 
         try {
 
-            for (var id of sel) {
+            for (let id of sel) {
                 this.map[id].env.init()
             }
 
@@ -508,7 +508,7 @@ class ScriptEngine {
             // === PERFORMANCE: Improved progress reporting and yielding ===
             let lastProgress = 0
 
-            for (var i = start; i < ohlcv.length; i++) {
+            for (let i = start; i < ohlcv.length; i++) {
 
                 // === PERFORMANCE: More frequent yielding for better responsiveness ===
                 // Yield every YIELD_FREQUENCY iterations instead of 5000
@@ -533,13 +533,13 @@ class ScriptEngine {
                 this.step(ohlcv[i])
                 this.shared.onclose = i !== ohlcv.length - 1
 
-                for (var m = 0; m < mfs1.length; m++) {
+                for (let m = 0; m < mfs1.length; m++) {
                     mfs1[m](sel) // pre_step
                 }
 
-                for (var id of sel) this.map[id].env.step()
+                for (let id of sel) this.map[id].env.step()
 
-                for (var m = 0; m < mfs2.length; m++) {
+                for (let m = 0; m < mfs2.length; m++) {
                     mfs2[m](sel) // post_step
                 }
 
@@ -547,12 +547,12 @@ class ScriptEngine {
                 this.limit()
             }
 
-            for (var id of sel) {
+            for (let id of sel) {
                 this.map[id].env.output.post()
             }
 
         } catch(e) {
-            console.log(e)
+            console.error('Script execution error:', e)
         }
 
         this.post_run_mods(sel)
@@ -570,7 +570,7 @@ class ScriptEngine {
             this.low.unshift(data[3])
             this.close.unshift(data[4])
             this.vol.unshift(data[5])
-            for (var id in this.tss) {
+            for (let id in this.tss) {
                 if (this.tss[id].__tf__) this.tss[id].__fn__()
                 else this.tss[id].unshift(this.tss[id].__fn__())
             }
@@ -580,7 +580,7 @@ class ScriptEngine {
             this.low[0] = data[3]
             this.close[0] = data[4]
             this.vol[0] = data[5]
-            for (var id in this.tss) {
+            for (let id in this.tss) {
                 if (this.tss[id].__tf__) this.tss[id].__fn__()
                 else this.tss[id][0] = this.tss[id].__fn__()
             }
@@ -625,7 +625,7 @@ class ScriptEngine {
     format_map(sel, range, output) {
         sel = sel || Object.keys(this.map)
         let res = []
-        for (var id of sel) {
+        for (let id of sel) {
             let x = this.map[id]
             let f = x => x
             if ((x.output === false || x.output === 'none') &&
@@ -634,7 +634,7 @@ class ScriptEngine {
                 continue
             }
             if (x.output === 'range' || range) {
-                var [t1, t2] = range || this.range
+                let [t1, t2] = range || this.range
                 f = x => x.filter(
                     y => y[0] >= t1 && y[0] <= t2
                 )
@@ -657,7 +657,7 @@ class ScriptEngine {
 
     format_update() {
         let res = []
-        for (var id in this.map) {
+        for (let id in this.map) {
             let x = this.map[id]
             if (x.output === false) {
                 res.push({id: id, data: null})
@@ -667,11 +667,11 @@ class ScriptEngine {
                 id: id,
                 data: x.env.data[x.env.data.length - 1]
             })
-            for (var side of ['onchart', 'offchart']) {
-                for (var id in x.env[side]) {
-                    let y = x.env[side][id]
+            for (let side of ['onchart', 'offchart']) {
+                for (let oid in x.env[side]) {
+                    let y = x.env[side][oid]
                     res.push({
-                        id: `${side}.${id}`,
+                        id: `${side}.${oid}`,
                         data: y.data[y.data.length - 1]
                     })
                 }
@@ -692,12 +692,15 @@ class ScriptEngine {
     }
 
     remove_scripts(ids) {
-        for (var id of ids) delete this.map[id]
+        for (let id of ids) {
+            delete this.map[id]
+            this._outputCache.delete(id)
+        }
         this.send_state()
     }
 
     pre_run_mods(sel) {
-        for (var id in this.mods) {
+        for (let id in this.mods) {
             if (this.mods[id].pre_run) {
                 this.mods[id].pre_run(sel)
             }
@@ -705,7 +708,7 @@ class ScriptEngine {
     }
 
     post_run_mods(sel) {
-        for (var id in this.mods) {
+        for (let id in this.mods) {
             if (this.mods[id].post_run) {
                 this.mods[id].post_run(sel)
             }
@@ -714,7 +717,7 @@ class ScriptEngine {
 
     make_mods_hooks(name) {
         let arr = []
-        for (var id in this.mods) {
+        for (let id in this.mods) {
             if (this.mods[id][name]) {
                 arr.push(this.mods[id][name]
                     .bind(this.mods[id]))
@@ -729,7 +732,7 @@ class ScriptEngine {
         if (s) all.push(s)
 
         let types = [{ type: 'OHLCV' }]
-        for (var s of all) {
+        for (let s of all) {
             if (s.src.data) {
                 let reqs = Object.values(s.src.data)
                 types.push(...reqs.map(x => ({
@@ -748,7 +751,7 @@ class ScriptEngine {
     // Match dataset id using script id & required type
     match_ds(id, type) {
         // TODO: develop further
-        for (var id in this.data) {
+        for (let id in this.data) {
             if (this.data[id].type === type) {
                 return id
             }
@@ -774,8 +777,10 @@ class ScriptEngine {
 
     // Calculate data size
     recalc_size() {
-        while(true) {
-            var sz = u.size_of_dss(this.data) / (1024 * 1024)
+        let sz = 0
+        let maxIter = 100
+        while(maxIter-- > 0) {
+            sz = u.size_of_dss(this.data) / (1024 * 1024)
             let lim = this.sett.ww_ram_limit
             if (lim && sz > lim) {
                 this.limit_size()
