@@ -17,73 +17,178 @@ npm i trading-vue-js
 | `npm run test` | Visual test server |
 | `npm run ww` | Compile web workers |
 
-## Environment Variables
+## Data Format
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MOB_DEBUG` | `false` | Route console output to `/debug` endpoint |
+All data files are JSON. Place in `/data/`.
 
-## Input Files
-
-All input files are JSON. Place in `/data/` directory.
-
-### OHLCV Data (Required)
+### Single-Timeframe
 
 ```json
 {
-  "chart": {
-    "type": "Candles",
-    "data": [[timestamp, open, high, low, close, volume], ...]
-  },
+  "chart": { "type": "Candles", "data": [...] },
   "onchart": [],
-  "offchart": []
+  "offchart": [],
+  "views": {}
 }
 ```
 
-### Multi-Timeframe Data
+### Multi-Timeframe
+
+Each top-level key is a timeframe. Every timeframe has the same structure:
 
 ```json
 {
-  "1h": { "chart": {...}, "onchart": [], "offchart": [] },
-  "4h": { "chart": {...}, "onchart": [], "offchart": [] }
+  "1h": {
+    "chart": { "type": "Candles", "data": [...] },
+    "onchart": [],
+    "offchart": [],
+    "views": { ... }
+  },
+  "2h": { ... },
+  "4h": { ... }
 }
 ```
 
-### Indicators
+### OHLCV Candles
+
+```
+[timestamp, open, high, low, close, volume]
+```
+
+Timestamps are Unix milliseconds, ascending, no duplicates. When a view is applied, the array extends to:
+
+```
+[timestamp, open, high, low, close, volume, color, below, above]
+```
+
+Indices 6/7/8 are set by the view system at runtime (not in the source JSON).
+
+### Onchart / Offchart Overlays
 
 ```json
 {
-  "2h": {
-    "indicators": [{
-      "name": "RSI",
-      "type": "Histogram",
-      "data": [[timestamp, value], ...]
-    }]
+  "name": "Volume",
+  "type": "Histogram",
+  "data": [[timestamp, value], ...],
+  "settings": { ... }
+}
+```
+
+`onchart` overlays render on the price chart. `offchart` overlays render in separate panes below.
+
+### Views
+
+The `views` object defines per-candle coloring and marker overlays. Each key is a view name:
+
+```json
+{
+  "views": {
+    "View Name": {
+      "colors": ["#9FB4B4", "#FF0000", ...],
+      "below": [...],
+      "above": [...],
+      "offchart": [...]
+    }
   }
 }
 ```
 
-## Data Formats
+| Field | Description |
+|-------|-------------|
+| `colors` | Array of hex color strings, one per candle. Applied to OHLCV index 6. |
+| `below` | Markers rendered below candles (index 7). See formats below. |
+| `above` | Markers rendered above candles (index 8). See formats below. |
+| `offchart` | Array of overlay objects shown only when this view is active. |
 
-| Type | Format |
-|------|--------|
-| OHLCV | `[timestamp, open, high, low, close, volume]` |
-| Indicator | `[timestamp, ...values]` |
-| Timestamp | Unix milliseconds, ascending, no duplicates |
+All fields are optional. A view can have any combination.
+
+**Below/above marker formats:**
+
+Simple array (default marker color):
+```json
+"below": ["", "", "o", "", "x", ...]
+```
+
+Extended object (custom color):
+```json
+"below": { "values": ["", "", "o", "", ...], "color": "#FF0000" }
+```
+
+Empty strings mean no marker. Non-empty strings are rendered as marker symbols.
+
+## Overlay Types
+
+| Type | Settings | Description |
+|------|----------|-------------|
+| Histogram | `colorUp`, `colorDown`, `baseline` | Colored bars above/below baseline |
+| Spline | `color`, `lineWidth` | Continuous line |
+| Bar | `colorUp`, `colorDown`, `baseline`, `barWidth` | Width-configurable bars |
+| Candles | *(default)* | OHLCV candlesticks (chart type) |
+
+### Settings Reference
+
+| Setting | Type | Example | Used by |
+|---------|------|---------|---------|
+| `colorUp` | hex string | `"#00E676"` | Histogram, Bar |
+| `colorDown` | hex string | `"#FF1744"` | Histogram, Bar |
+| `baseline` | number | `0` | Histogram, Bar |
+| `color` | hex string | `"#2196F3"` | Spline |
+| `lineWidth` | number | `1`, `2` | Spline |
+| `barWidth` | number | `0.6` | Bar |
+
+## Persistent Indicators
+
+`indicators.json` is loaded separately and auto-clipped to the chart's date range. It is excluded from the file selector.
+
+```json
+{
+  "1h": {
+    "indicators": [
+      {
+        "name": "RSI",
+        "group": "Swing RSI",
+        "type": "Histogram",
+        "data": [[timestamp, value], ...],
+        "settings": {
+          "colorUp": "#00E676",
+          "colorDown": "#FF1744",
+          "baseline": 50
+        }
+      }
+    ]
+  }
+}
+```
+
+Each timeframe key contains an `indicators` array. Indicators have `name`, `type`, `group`, `data`, and `settings`. The `group` field controls accordion grouping in the UI.
 
 ## Dev Server Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/data/{file}` | GET | Serve JSON file from `/data/` |
-| `/data-files` | GET | List available JSON files |
-| `/debug?argv=[]` | GET | Debug logging endpoint |
+| `/data-files` | GET | List available JSON files (excludes `indicators.json` and `bak*` files) |
+| `/debug?argv=[]` | GET | Debug logging (requires `MOB_DEBUG=true`) |
 
 ## localStorage
 
-Key: `trading-vue-state`
+Single key: `trading-vue-state`
 
-Persists: selected file, view settings, indicator visibility, log scale.
+| Field | Type | Description |
+|-------|------|-------------|
+| `selectedDataFile` | string | Last opened data file |
+| `selectedView` | string | Last selected view name |
+| `log_scale` | boolean | Logarithmic price scale |
+| `indicatorVisibility` | object | View indicator show/hide state |
+| `indicatorSettings` | object | Per-indicator type and visual settings (colors, baseline, etc.) |
+| `persistentIndicatorVisibility` | object | Show/hide state for persistent indicators |
+| `accordionExpandedViews` | object | Expanded/collapsed state of indicator groups |
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MOB_DEBUG` | `false` | Route console output to `/debug` endpoint |
 
 ## License
 
