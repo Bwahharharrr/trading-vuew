@@ -35,13 +35,13 @@ const MONTHMAP = [
     "Sep", "Oct","Nov", "Dec"
 ]
 
-// Grid time steps
+// Grid time steps (ascending order — required by nearest_a() binary search)
 const TIMESCALES = [
-    YEAR * 10, YEAR * 5, YEAR * 3, YEAR * 2, YEAR,
-    MONTH * 6, MONTH * 4, MONTH * 3, MONTH * 2, MONTH,
-    DAY * 15, DAY * 10, DAY * 7, DAY * 5, DAY * 3, DAY * 2, DAY,
-    HOUR * 12, HOUR * 6, HOUR * 3, HOUR * 1.5, HOUR,
-    MINUTE30, MINUTE15, MINUTE * 10, MINUTE5, MINUTE * 2, MINUTE
+    MINUTE, MINUTE * 2, MINUTE5, MINUTE * 10, MINUTE15, MINUTE30,
+    HOUR, HOUR * 1.5, HOUR * 3, HOUR * 6, HOUR * 12,
+    DAY, DAY * 2, DAY * 3, DAY * 5, DAY * 7, DAY * 10, DAY * 15,
+    MONTH, MONTH * 2, MONTH * 3, MONTH * 4, MONTH * 6,
+    YEAR, YEAR * 2, YEAR * 3, YEAR * 5, YEAR * 10
 ]
 
 // Grid $ steps

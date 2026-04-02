@@ -203,6 +203,9 @@ export default {
         forced_tf() {
             return this.chart.tf
         },
+        visibleOffchartCount() {
+            return this.offchart.length
+        },
         resizerIndices() {
             if (!this.chartLayout || !this.chartLayout.grids) {
                 return []
@@ -213,6 +216,12 @@ export default {
                 indices.push(i)
             }
             return indices
+        }
+    },
+    watch: {
+        visibleOffchartCount() {
+            this.update_layout()
+            this.update_last_values()
         }
     },
     data() {

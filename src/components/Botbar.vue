@@ -20,7 +20,8 @@ export default {
             // Canvas not created yet (render returned loading state)
             return
         }
-        this.renderer = new Botbar(el, this)
+        const dynEl = this.$refs['canvasDynamic']
+        this.renderer = new Botbar(el, this, dynEl)
         this.setup()
         this.redraw()
     },
@@ -84,7 +85,8 @@ export default {
                         if (this.renderer) return  // Already initialized
                         const el = this.$refs['canvas']
                         if (!el) return  // Canvas still not ready
-                        this.renderer = new Botbar(el, this)
+                        const dynEl = this.$refs['canvasDynamic']
+                        this.renderer = new Botbar(el, this, dynEl)
                         this.setup()
                         this.redraw()
                     })

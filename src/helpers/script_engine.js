@@ -80,6 +80,13 @@ class ScriptEngine {
         this._outputCache = new Map()  // scriptId -> { hash, data, onchart, offchart }
         this._dataHash = null          // Hash of current OHLCV data for cache invalidation
 
+        // PERF: Cache for make_mods_hooks() bound functions
+        this._hooksCache = {}          // hookName -> bound function array
+        this._hooksModsKey = null      // Serialized mods keys for invalidation
+
+        // PERF: Pre-built template for format_update() fast path
+        this._updateTemplate = null    // Flat array of { id, src } for fast tick updates
+
         // Set up function references in shared state (breaks circular deps)
         // Use arrow functions to defer method lookup until call time,
         // since this.send is defined externally after construction
@@ -103,14 +110,17 @@ class ScriptEngine {
         for (const key in props) {
             if (!DISPLAY_ONLY_SETTINGS.has(key)) {
                 const val = props[key].val !== undefined ? props[key].val : props[key].def
-                parts.push(`${key}:${JSON.stringify(val)}`)
+                // PERF: Avoid JSON.stringify for primitives
+                const sv = val !== null && typeof val === 'object' ? JSON.stringify(val) : String(val)
+                parts.push(`${key}:${sv}`)
             }
         }
 
         // Include computation-affecting settings
         for (const key in sett) {
             if (!DISPLAY_ONLY_SETTINGS.has(key)) {
-                parts.push(`s.${key}:${JSON.stringify(sett[key])}`)
+                const sv = sett[key] !== null && typeof sett[key] === 'object' ? JSON.stringify(sett[key]) : String(sett[key])
+                parts.push(`s.${key}:${sv}`)
             }
         }
 
@@ -347,6 +357,7 @@ class ScriptEngine {
         }, this.tss))
 
         this.map[s.uuid] = s
+        this._updateTemplate = null  // Invalidate update template
 
         for (let id in this.mods) {
             if (this.mods[id].new_env) {
@@ -373,17 +384,22 @@ class ScriptEngine {
         let mfs1 = this.make_mods_hooks('pre_step')
         let mfs2 = this.make_mods_hooks('post_step')
 
+        // PERF: Cache mod-hook presence checks
+        const hasMods1 = mfs1.length > 0
+        const hasMods2 = mfs2.length > 0
+
         let step = (sel, unshift) => {
-            for (let m = 0; m < mfs1.length; m++) {
-                mfs1[m](sel) // pre_step
+            if (hasMods1) {
+                for (let m = 0; m < mfs1.length; m++) mfs1[m](sel)
             }
 
-            for (let id of sel) {
-                this.map[id].env.step(unshift)
+            // PERF: Indexed loop avoids iterator protocol overhead
+            for (let j = 0; j < sel.length; j++) {
+                this.map[sel[j]].env.step(unshift)
             }
 
-            for (let m = 0; m < mfs2.length; m++) {
-                mfs2[m](sel) // post_step
+            if (hasMods2) {
+                for (let m = 0; m < mfs2.length; m++) mfs2[m](sel)
             }
         }
 
@@ -511,50 +527,63 @@ class ScriptEngine {
             let total = ohlcv.length - start
             this.shared.event = 'step'
 
-            // === PERFORMANCE: Improved progress reporting and yielding ===
+            // PERF: Set non-changing scriptState fields once before the loop
+            scriptState.tf = this.tf
+            scriptState.data = this.data
+            scriptState.shared = this.shared
+            scriptState.mods = this.mods
+
+            // PERF: Cache loop-invariant values outside hot loop
+            const ohlcvLen = ohlcv.length
+            const lastIdx = ohlcvLen - 1
+            const hasMods1 = mfs1.length > 0
+            const hasMods2 = mfs2.length > 0
+            const hasCustomMain = !!this.custom_main
+            const selLen = sel.length
             let lastProgress = 0
 
-            for (let i = start; i < ohlcv.length; i++) {
+            for (let i = start; i < ohlcvLen; i++) {
 
-                // === PERFORMANCE: More frequent yielding for better responsiveness ===
-                // Yield every YIELD_FREQUENCY iterations instead of 5000
                 if (i % YIELD_FREQUENCY === 0) {
                     await Utils.pause(0)
-
-                    // === PERFORMANCE: Emit progress percentage ===
                     let progress = Math.floor(((i - start) / total) * 100)
                     if (progress > lastProgress) {
                         lastProgress = progress
                         this.send('engine-state', {
                             running: true,
-                            progress: progress
+                            progress
                         })
                     }
                 }
                 if (this.restarted()) return
 
+                // PERF: Cache candle ref, avoid repeated ohlcv[i] indexing
+                const candle = ohlcv[i]
                 this.iter = i - start
-                this.t = ohlcv[i][0]
-                this.syncState()
-                this.step(ohlcv[i])
-                this.shared.onclose = i !== ohlcv.length - 1
+                this.t = candle[0]
+                scriptState.t = this.t
+                scriptState.iter = this.iter
+                this.step(candle)
+                this.shared.onclose = i !== lastIdx
 
-                for (let m = 0; m < mfs1.length; m++) {
-                    mfs1[m](sel) // pre_step
+                // PERF: Skip empty mod-hooks loops entirely
+                if (hasMods1) {
+                    for (let m = 0; m < mfs1.length; m++) mfs1[m](sel)
                 }
 
-                for (let id of sel) this.map[id].env.step()
+                // PERF: Indexed loop avoids iterator protocol overhead
+                for (let j = 0; j < selLen; j++) this.map[sel[j]].env.step()
 
-                for (let m = 0; m < mfs2.length; m++) {
-                    mfs2[m](sel) // post_step
+                if (hasMods2) {
+                    for (let m = 0; m < mfs2.length; m++) mfs2[m](sel)
                 }
 
-                if (this.custom_main) this.make_ohlcv()
+                if (hasCustomMain) this.make_ohlcv()
                 this.limit()
             }
 
-            for (let id of sel) {
-                this.map[id].env.output.post()
+            for (let j = 0; j < selLen; j++) {
+                this.map[sel[j]].env.output.post()
             }
 
         } catch(e) {
@@ -566,6 +595,9 @@ class ScriptEngine {
         this.perf = Utils.now() - t1
         this.running = false
 
+        // PERF: Pre-build flat template for fast per-tick format_update()
+        this._buildUpdateTemplate()
+
         this.send('overlay-data', this.format_map(sel))
     }
 
@@ -576,20 +608,18 @@ class ScriptEngine {
             this.low.unshift(data[3])
             this.close.unshift(data[4])
             this.vol.unshift(data[5])
-            for (let id in this.tss) {
-                if (this.tss[id].__tf__) this.tss[id].__fn__()
-                else this.tss[id].unshift(this.tss[id].__fn__())
-            }
         } else {
             this.open[0] = data[1]
             this.high[0] = data[2]
             this.low[0] = data[3]
             this.close[0] = data[4]
             this.vol[0] = data[5]
-            for (let id in this.tss) {
-                if (this.tss[id].__tf__) this.tss[id].__fn__()
-                else this.tss[id][0] = this.tss[id].__fn__()
-            }
+        }
+        for (let id in this.tss) {
+            let ts = this.tss[id]
+            if (ts.__tf__) ts.__fn__()
+            else if (unshift) ts.unshift(ts.__fn__())
+            else ts[0] = ts.__fn__()
         }
     }
 
@@ -628,6 +658,36 @@ class ScriptEngine {
         }
     }
 
+    // Binary search: first index where arr[i][0] >= t
+    _bsGTE(arr, t) {
+        let lo = 0, hi = arr.length
+        while (lo < hi) {
+            let mid = (lo + hi) >> 1
+            if (arr[mid][0] < t) lo = mid + 1
+            else hi = mid
+        }
+        return lo
+    }
+
+    // Binary search: last index where arr[i][0] <= t (exclusive upper bound)
+    _bsGT(arr, t) {
+        let lo = 0, hi = arr.length
+        while (lo < hi) {
+            let mid = (lo + hi) >> 1
+            if (arr[mid][0] <= t) lo = mid + 1
+            else hi = mid
+        }
+        return lo
+    }
+
+    // Binary range slice: returns arr.slice for elements where t1 <= arr[i][0] <= t2
+    _rangeSlice(arr, t1, t2) {
+        if (!arr.length) return arr
+        let lo = this._bsGTE(arr, t1)
+        let hi = this._bsGT(arr, t2)
+        return lo >= hi ? [] : arr.slice(lo, hi)
+    }
+
     format_map(sel, range, output) {
         sel = sel || Object.keys(this.map)
         let res = []
@@ -641,9 +701,7 @@ class ScriptEngine {
             }
             if (x.output === 'range' || range) {
                 let [t1, t2] = range || this.range
-                f = x => x.filter(
-                    y => y[0] >= t1 && y[0] <= t2
-                )
+                f = arr => this._rangeSlice(arr, t1, t2)
             }
             res.push({
                 id: id, data: f(x.env.data), new_ovs: {
@@ -661,26 +719,41 @@ class ScriptEngine {
         return res
     }
 
-    format_update() {
-        let res = []
+    // PERF: Build a flat template for fast per-tick updates
+    _buildUpdateTemplate() {
+        let tmpl = []
         for (let id in this.map) {
             let x = this.map[id]
             if (x.output === false) {
-                res.push({id: id, data: null})
+                tmpl.push({ id, src: null })
                 continue
             }
-            res.push({
-                id: id,
-                data: x.env.data[x.env.data.length - 1]
-            })
+            tmpl.push({ id, src: x.env.data })
             for (let side of ['onchart', 'offchart']) {
                 for (let oid in x.env[side]) {
-                    let y = x.env[side][oid]
-                    res.push({
+                    tmpl.push({
                         id: `${side}.${oid}`,
-                        data: y.data[y.data.length - 1]
+                        src: x.env[side][oid].data
                     })
                 }
+            }
+        }
+        this._updateTemplate = tmpl
+    }
+
+    format_update() {
+        let tmpl = this._updateTemplate
+        if (!tmpl) {
+            // Fallback: build on first call
+            this._buildUpdateTemplate()
+            tmpl = this._updateTemplate
+        }
+        let res = new Array(tmpl.length)
+        for (let i = 0; i < tmpl.length; i++) {
+            let entry = tmpl[i]
+            res[i] = {
+                id: entry.id,
+                data: entry.src ? entry.src[entry.src.length - 1] : null
             }
         }
         return res
@@ -702,6 +775,7 @@ class ScriptEngine {
             delete this.map[id]
             this._outputCache.delete(id)
         }
+        this._updateTemplate = null  // Invalidate update template
         this.send_state()
     }
 
@@ -722,6 +796,12 @@ class ScriptEngine {
     }
 
     make_mods_hooks(name) {
+        // PERF: Cache bound functions, only rebuild when mods keys change
+        let modsKey = Object.keys(this.mods).join(',')
+        if (modsKey === this._hooksModsKey && this._hooksCache[name]) {
+            return this._hooksCache[name]
+        }
+        this._hooksModsKey = modsKey
         let arr = []
         for (let id in this.mods) {
             if (this.mods[id][name]) {
@@ -729,6 +809,7 @@ class ScriptEngine {
                     .bind(this.mods[id]))
             }
         }
+        this._hooksCache[name] = arr
         return arr
     }
 
@@ -738,19 +819,20 @@ class ScriptEngine {
         if (s) all.push(s)
 
         let types = [{ type: 'OHLCV' }]
-        for (let s of all) {
-            if (s.src.data) {
-                let reqs = Object.values(s.src.data)
+        for (let sc of all) {
+            if (sc.src.data) {
+                let reqs = Object.values(sc.src.data)
                 types.push(...reqs.map(x => ({
-                    id: s.uuid,
+                    id: sc.uuid,
                     type: x.type
                 })))
             }
         }
-        let unf = types.filter(x =>
-            !Object.values(this.data)
-            .find(y => y.type === x.type)
+        // PERF: Set-based lookup O(n) instead of nested filter+find O(n²)
+        let existing = new Set(
+            Object.values(this.data).map(y => y.type)
         )
+        let unf = types.filter(x => !existing.has(x.type))
         return unf.length ? unf : null
     }
 

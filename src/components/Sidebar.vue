@@ -20,7 +20,8 @@ export default {
             // Canvas not created yet (render returned loading state)
             return
         }
-        this.renderer = new Sidebar(el, this)
+        const dynEl = this.$refs['canvasDynamic']
+        this.renderer = new Sidebar(el, this, 'right', dynEl)
         this.setup()
         this.redraw()
     },
@@ -96,6 +97,11 @@ export default {
             const grid = this.$props.layout?.grids?.[id]
             if (!grid) return ''
             return `${grid.sb},${grid.height},${grid.offset},${grid.width}`
+        },
+        yTransformKey() {
+            const yt = this.$props.y_transform
+            if (!yt) return ''
+            return `${yt.zoom},${yt.auto},${yt.range?.[0]},${yt.range?.[1]}`
         }
     },
     watch: {
@@ -110,7 +116,14 @@ export default {
                         if (this.renderer) return  // Already initialized
                         const el = this.$refs['canvas']
                         if (!el) return  // Canvas still not ready
-                        this.renderer = new Sidebar(el, this)
+                        const dynEl = this.$refs['canvasDynamic']
+                        this.renderer = new Sidebar(el, this, 'right', dynEl)
+                        this.setup()
+                        this.redraw()
+                    })
+                } else if (this.renderer && newKey !== oldKey) {
+                    // Layout dimensions changed - resize
+                    nextTick(() => {
                         this.setup()
                         this.redraw()
                     })
@@ -142,6 +155,11 @@ export default {
             nextTick(() => this.redraw())
         },
         renderKey() {
+            nextTick(() => this.redraw())
+        },
+        // Watch y-axis transform changes (sidebar zoom/drag)
+        yTransformKey(newKey, oldKey) {
+            if (!newKey || newKey === oldKey) return
             nextTick(() => this.redraw())
         }
     },

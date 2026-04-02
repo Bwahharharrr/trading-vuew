@@ -14,6 +14,11 @@ function deepToRaw(obj) {
         return obj
     }
 
+    // Keep structured-clone compatible built-ins untouched
+    if (obj instanceof Date || obj instanceof RegExp) {
+        return obj
+    }
+
     // Unwrap Vue reactive/ref proxies
     if (isReactive(obj) || isRef(obj)) {
         obj = toRaw(obj)
@@ -37,12 +42,34 @@ class WebWork {
     constructor(dc) {
         this.dc = dc
         this.tasks = {}
+        this.msg_queue = []
+        this._workerUrl = null
         this.onevent = () => {}
         this.start()
     }
 
     start() {
-        if (this.worker) this.worker.terminate()
+        const hasWorkerSupport =
+            typeof window !== 'undefined' &&
+            typeof Worker !== 'undefined' &&
+            typeof Blob !== 'undefined' &&
+            typeof URL !== 'undefined'
+
+        // Node/tests fallback: allow DataCube core logic without web workers
+        if (!hasWorkerSupport) {
+            this.worker = null
+            return
+        }
+
+        if (this.worker) {
+            this.worker.onmessage = null
+            this.worker.terminate()
+            this.worker = null
+        }
+        if (this._workerUrl) {
+            URL.revokeObjectURL(this._workerUrl)
+            this._workerUrl = null
+        }
         // URL.createObjectURL
         window.URL = window.URL || window.webkitURL
         let data = lz.decompressFromBase64(worker_data[0])
@@ -58,7 +85,8 @@ class WebWork {
             blob.append(data)
             blob = blob.getBlob()
         }
-        this.worker = new Worker(URL.createObjectURL(blob))
+        this._workerUrl = URL.createObjectURL(blob)
+        this.worker = new Worker(this._workerUrl)
         this.worker.onmessage = e => this.onmessage(e)
     }
 
@@ -74,13 +102,14 @@ class WebWork {
         this.socket.addEventListener('close', () => {
             this.socket = null
         })
-        this.msg_queue = []
+        if (!this.msg_queue) this.msg_queue = []
     }
 
     send(msg, tx_keys) {
         if (this.dc.sett.node_url) {
             return this.send_node(msg, tx_keys)
         }
+        if (!this.worker) return
         // Deep unwrap Vue 3 reactive proxies before postMessage
         // PERFORMANCE: Only deep-copy when message contains reactive objects
         const rawMsg = (isReactive(msg) || isRef(msg)) ? deepToRaw(msg) : msg
@@ -95,7 +124,7 @@ class WebWork {
     // Send to node.js via websocket
     send_node(msg, tx_keys) {
         if (!this.socket) this.start_socket()
-        if (this.socket && this.socket.readyState) {
+        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
             // Send the old messages first
             while(this.msg_queue.length) {
                 let m = this.msg_queue.shift()
@@ -119,6 +148,7 @@ class WebWork {
 
     // Execute a task
     async exec(type, data, tx_keys) {
+        if (!this.dc.sett.node_url && !this.worker) return null
         return new Promise((rs, rj) => {
             let id = Utils.uuid()
             this.send({ type, id, data }, tx_keys)
@@ -136,6 +166,7 @@ class WebWork {
     // Execute a task, but just fucking do it,
     // do not wait for the result
     just(type, data, tx_keys) {
+        if (!this.dc.sett.node_url && !this.worker) return
         let id = Utils.uuid()
         this.send({ type, id, data }, tx_keys)
     }
@@ -143,6 +174,7 @@ class WebWork {
     // Relay an event from iframe postMessage
     // (for the future)
     async relay(event, just = false) {
+        if (!this.dc.sett.node_url && !this.worker) return null
         return new Promise((rs, rj) => {
             this.send(event, event.tx_keys)
             if (!just) {
@@ -159,11 +191,20 @@ class WebWork {
     }
 
     destroy() {
-        if (this.worker) this.worker.terminate()
+        if (this.worker) {
+            this.worker.onmessage = null
+            this.worker.terminate()
+            this.worker = null
+        }
+        if (this._workerUrl) {
+            URL.revokeObjectURL(this._workerUrl)
+            this._workerUrl = null
+        }
         if (this.socket) {
             this.socket.close()
             this.socket = null
         }
+        this.tasks = {}
     }
 }
 

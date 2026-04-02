@@ -110,7 +110,8 @@ export default {
                 }
 
                 // Build combined offchart with persistent indicators BEFORE creating DataCube
-                const preparedData = this.prepareChartData(firstTfData, firstTf)
+                // Pass originalChartData to avoid re-copying chart.data (applyCurrentColoring overwrites it)
+                const preparedData = this.prepareChartData(firstTfData, firstTf, this.originalChartData)
                 preparedData.offchart = this.buildOffchartData(clippedIndicators, viewData)
 
                 // Create DataCube with complete offchart data

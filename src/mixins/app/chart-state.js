@@ -83,7 +83,8 @@ export default {
             }
 
             // Create DataCube with views filtered out
-            this.chart = new this.DataCubeClass(this.prepareChartData(chartData, tf))
+            // Pass originalChartData to skip redundant chart.data copy (applyCurrentColoring overwrites it)
+            this.chart = new this.DataCubeClass(this.prepareChartData(chartData, tf, this.originalChartData))
             // Apply displayed view and re-clip persistent indicators
             this.$nextTick(() => {
                 this.clipPersistentIndicators()
@@ -106,7 +107,7 @@ export default {
                 this.selectedTimeframe = 0
                 this.originalChartData = Utils.fastDeepCopy(data.chart.data)
                 this.extractCandleColoringOptions(data, 'default')
-                this.chart = new this.DataCubeClass(this.prepareChartData(data, 'default'))
+                this.chart = new this.DataCubeClass(this.prepareChartData(data, 'default', this.originalChartData))
             } else {
                 // Multi-timeframe format (data_tf.json style)
                 this.charts = data
@@ -118,7 +119,7 @@ export default {
                     this.selectedTimeframe = 0
                     this.originalChartData = Utils.fastDeepCopy(firstTfData.chart.data)
                     this.extractCandleColoringOptions(firstTfData, firstTf)
-                    this.chart = new this.DataCubeClass(this.prepareChartData(firstTfData, firstTf))
+                    this.chart = new this.DataCubeClass(this.prepareChartData(firstTfData, firstTf, this.originalChartData))
                 }
             }
 

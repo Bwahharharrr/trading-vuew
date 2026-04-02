@@ -7,10 +7,11 @@ import * as u from './script_utils.js'
 import { DatasetWW } from './dataset.js'
 
 let data_requested = false
+const wwGlobal = typeof self !== 'undefined' ? self : globalThis
 
 // DC => WW
 
-self.onmessage = async e => {
+wwGlobal.onmessage = async e => {
     //console.log('Worker got:', e.data.type)
     switch(e.data.type) {
 
@@ -25,7 +26,7 @@ self.onmessage = async e => {
             let req = se.data_required(e.data.data.s)
             if (req && !data_requested) {
                 data_requested = true
-                self.postMessage({
+                wwGlobal.postMessage({
                     type: 'request-data', data: req
                 })
             }
@@ -41,7 +42,7 @@ self.onmessage = async e => {
             let req2 = se.data_required(e.data.data.s)
             if (req2 && !data_requested) {
                 data_requested = true
-                self.postMessage({
+                wwGlobal.postMessage({
                     type: 'request-data', data: req2
                 })
             }
@@ -53,7 +54,7 @@ self.onmessage = async e => {
             break
 
         case 'upload-data':
-            self.postMessage({ type: 'data-uploaded' })
+            wwGlobal.postMessage({ type: 'data-uploaded' })
 
             await Utils.pause(1)
 
@@ -96,7 +97,7 @@ self.onmessage = async e => {
 
         case 'get-dataset':
 
-            self.postMessage({
+            wwGlobal.postMessage({
                 id: e.data.id,
                 data: se.data[e.data.data]
             })
@@ -152,7 +153,7 @@ se.send = (type, data) => {
         case 'module-data':
         case 'script-signal':
 
-            self.postMessage({type, data})
+            wwGlobal.postMessage({type, data})
 
             break
 

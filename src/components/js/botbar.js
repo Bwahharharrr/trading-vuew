@@ -11,9 +11,10 @@ const MAX_CACHE_SIZE = 100
 
 export default class Botbar {
 
-    constructor(canvas, comp) {
+    constructor(canvas, comp, canvasDynamic = null) {
 
         this.canvas = canvas
+        this.canvasDynamic = canvasDynamic
         this.ctx = canvas.getContext('2d')
         this.comp = comp
         this.$p = comp.$props
@@ -49,7 +50,7 @@ export default class Botbar {
     }
 
     listeners() {
-        this.hm = Hamster(this.canvas)
+        this.hm = Hamster(this.canvasDynamic || this.canvas)
         // Throttle wheel events to ~60fps
         this._throttledWheel = Utils.rafThrottle((delta, event) => {
             this.mousezoom(-delta * 50, event)
@@ -82,6 +83,7 @@ export default class Botbar {
     destroy() {
         if (this.hm) this.hm.unwheel()
         if (this._throttledWheel) this._throttledWheel.cancel()
+        this.canvasDynamic = null
     }
 
     update() {
@@ -139,7 +141,9 @@ export default class Botbar {
     }
 
     apply_shaders() {
-        let layout = this.layout.grids[0]
+        // PERF: Use already-resolved grid_0 instead of re-traversing layout
+        let layout = this.grid_0
+        if (!layout) return
         let props = {
             layout: layout,
             cursor: this.$p.cursor
@@ -172,14 +176,16 @@ export default class Botbar {
 
     format_date(p) {
         let t = p[1][0]
-        t = this.grid_0.ti_map.i2t(t)
-        let ti = this.$p.layout.grids[0].ti_map.tf
+        // PERF: Use cached ti_map reference (set in update())
+        const ti_map = this.grid_0.ti_map
+        t = ti_map.i2t(t)
+        let ti = ti_map.tf
         // Enable timezones only for tf < 1D
         let k = ti < DAY ? 1 : 0
         let tZ = t + k * this.$p.timezone * HOUR
 
-        //t += new Date(t).getTimezoneOffset() * MINUTE
-        let d = new Date(tZ)
+        // PERF: Use LRU-cached Date instead of new Date() per label
+        let d = Utils.getCachedDate(tZ)
 
         if (p[2] === YEAR || Utils.year_start(t) === t) {
             return d.getUTCFullYear()
@@ -199,9 +205,10 @@ export default class Botbar {
     format_cursor_x() {
 
         let t = this.$p.cursor.t
-        t = this.grid_0.ti_map.i2t(t)
-        //let ti = this.$p.interval
-        let ti = this.$p.layout.grids[0].ti_map.tf
+        // PERF: Use cached ti_map reference (set in update())
+        const ti_map = this.grid_0.ti_map
+        t = ti_map.i2t(t)
+        let ti = ti_map.tf
         // Enable timezones only for tf < 1D
         let k = ti < DAY ? 1 : 0
 

@@ -19,6 +19,7 @@ export default class GridRenderer {
 
         // Performance: track if we only need crosshair update
         this._lastDataLength = 0
+        this._lastLayoutRef = null
 
         // PERFORMANCE: Cache sorted overlays to avoid sorting every frame
         this._sortedOverlays = []
@@ -76,6 +77,15 @@ export default class GridRenderer {
 
     // Check if only crosshair needs update
     _detectCrosshairOnlyUpdate() {
+        // Check if layout object changed (y-axis zoom, resize, etc.)
+        const layoutRef = this.layout
+        if (this._lastLayoutRef !== layoutRef) {
+            this._lastLayoutRef = layoutRef
+            this._staticDirty = true
+            this._overlaysDirty = true
+            return false
+        }
+
         const range = this.range
         const cursor = this.cursor
         const data = this.data
@@ -189,7 +199,8 @@ export default class GridRenderer {
     }
 
     apply_shaders() {
-        let layout = this.$p.layout?.grids?.[this.id]
+        // PERF: Use already-resolved layout instead of re-traversing props
+        let layout = this.layout
         if (!layout) return
         let props = {
             layout: layout,

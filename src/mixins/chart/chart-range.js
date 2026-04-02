@@ -38,11 +38,12 @@ export default {
         },
 
         set_ytransform(s) {
-            let obj = this.y_transforms[s.grid_id] || {}
-            Object.assign(obj, s)
+            let existing = this.y_transforms[s.grid_id] || {}
+            // Create a NEW object so Vue 3 detects the reference change
+            let obj = Object.assign({}, existing, s)
+            if (obj.range) obj.range = [...obj.range]
             this.y_transforms[s.grid_id] = obj
             this.update_layout()
-            Utils.overwrite(this.range, this.range)
         },
 
         default_range() {
@@ -152,12 +153,12 @@ export default {
                     this.$refs.sec.forEach((section, i) => {
                         const grid = section && section.$refs.grid
                         const sidebar = section && section.$refs['sb-' + i]
-                        if (grid && grid.layoutOverride) {
-                            grid.layoutOverride = null
+                        if (grid) {
+                            if (grid.layoutOverride) grid.layoutOverride = null
                             if (grid.renderer) grid.renderer.layout = layout.grids[i]
                         }
-                        if (sidebar && sidebar.layoutOverride) {
-                            sidebar.layoutOverride = null
+                        if (sidebar) {
+                            if (sidebar.layoutOverride) sidebar.layoutOverride = null
                             if (sidebar.renderer) sidebar.renderer.layout = layout.grids[i]
                         }
                         if (section && section.clearLayoutOverride) {
@@ -256,10 +257,8 @@ export default {
             const firstTs = ohlcv[0]?.[0] ?? ''
             const lastTs = ohlcv[ohlcvLen - 1]?.[0] ?? ''
             const lastClose = ohlcv[ohlcvLen - 1]?.[4] ?? ''
-            // Track visible offchart indicators
-            const offchartVisible = (data.offchart || []).filter(x => x.settings?.display !== false).length
             const scrollLock = data.scrollLock ? '1' : '0'
-            return `${ohlcvLen},${firstTs},${lastTs},${lastClose},${offchartVisible},${scrollLock}`
+            return `${ohlcvLen},${firstTs},${lastTs},${lastClose},${scrollLock}`
         }
     },
 

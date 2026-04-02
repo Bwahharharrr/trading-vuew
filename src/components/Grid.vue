@@ -24,6 +24,7 @@ import RangeTool from "./overlays/RangeTool.vue"
 import StepLine from "./overlays/StepLine.vue"
 import Histogram from "./overlays/Histogram.vue"
 import Bar from "./overlays/Bar.vue"
+import Zones from "./overlays/Zones.vue"
 
 
 export default {
@@ -76,7 +77,7 @@ export default {
         this._list = [
             Spline, Splines, Range, Trades, Channel, Segment,
             Candles, Volume, Splitters, LineTool, RangeTool,
-            StepLine, Histogram, Bar
+            StepLine, Histogram, Bar, Zones
         ]
         .concat(this.$props.overlays || [])
         this._registry = {}
@@ -367,8 +368,15 @@ export default {
             const len = data.length
             if (len === 0) return '0'
             const first = data[0]?.data?.[0]?.[0] ?? ''
-            const last = data[len - 1]?.data?.slice(-1)[0]?.[0] ?? ''
+            // PERF: Direct index access instead of slice(-1)[0] which allocates a new array
+            const lastOvData = data[len - 1]?.data
+            const last = lastOvData?.[lastOvData.length - 1]?.[0] ?? ''
             return `${len},${first},${last}`
+        },
+        yTransformKey() {
+            const yt = this.$props.y_transform
+            if (!yt) return ''
+            return `${yt.zoom},${yt.auto},${yt.range?.[0]},${yt.range?.[1]}`
         }
     },
     watch: {
@@ -442,22 +450,33 @@ export default {
             handler: function(ovs) {
                 // Note: $children removed in Vue 3, use renderer's overlays instead
                 if (!this.renderer || !this.renderer.overlays || !ovs) return
+                // PERF: Build name → renderers lookup map O(M+N) instead of O(M×N)
+                let layerMap = new Map()
+                for (let layer of this.renderer.overlays) {
+                    let comp = layer.renderer
+                    if (!comp || typeof comp.id !== 'string') continue
+                    let tuple = comp.id.split('_')
+                    tuple.pop()
+                    let name = tuple.join('_')
+                    let arr = layerMap.get(name)
+                    if (!arr) {
+                        arr = []
+                        layerMap.set(name, arr)
+                    }
+                    arr.push(comp)
+                }
                 for (let ov of ovs) {
                     if (!ov || !ov.methods) continue
-                    for (let layer of this.renderer.overlays) {
-                        let comp = layer.renderer
-                        if (!comp || typeof comp.id !== 'string') continue
-                        let tuple = comp.id.split('_')
-                        tuple.pop()
-                        if (tuple.join('_') === ov.name) {
-                            comp.calc = ov.methods.calc
-                            if (!comp.calc) continue
-                            let calc = comp.calc.toString()
-                            if (calc !== ov.__prevscript__) {
-                                comp.exec_script()
-                            }
-                            ov.__prevscript__ = calc
+                    let comps = layerMap.get(ov.name)
+                    if (!comps) continue
+                    for (let comp of comps) {
+                        comp.calc = ov.methods.calc
+                        if (!comp.calc) continue
+                        let calc = comp.calc.toString()
+                        if (calc !== ov.__prevscript__) {
+                            comp.exec_script()
                         }
+                        ov.__prevscript__ = calc
                     }
                 }
             },
@@ -467,6 +486,12 @@ export default {
         shaders(n, p) { this.redraw() },
         // Watch data changes using computed hash key
         dataKey(newKey, oldKey) {
+            if (!newKey || newKey === oldKey) return
+            this.renderKey++
+            nextTick(() => this.redraw())
+        },
+        // Watch y-axis transform changes (sidebar zoom/drag)
+        yTransformKey(newKey, oldKey) {
             if (!newKey || newKey === oldKey) return
             this.renderKey++
             nextTick(() => this.redraw())

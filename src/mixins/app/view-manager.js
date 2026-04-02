@@ -28,11 +28,28 @@ export default {
         },
 
         // Create a clean copy of chart data for DataCube
-        // Always set chart.tf from timeframe key for multi-timeframe data
-        prepareChartData(chartData, timeframe = null) {
-            const cleaned = Utils.fastDeepCopy(chartData)
-            // Remove views from the cleaned data (it's metadata, not rendered directly)
-            delete cleaned.views
+        // Selectively copies only chart, onchart, offchart, datasets — skips views entirely
+        // If originalChartData is provided, uses it for chart.data to avoid redundant copy
+        // (applyCurrentColoring will overwrite chart.data anyway)
+        prepareChartData(chartData, timeframe = null, originalChartData = null) {
+            let chart
+            if (originalChartData) {
+                // Copy chart metadata without the heavy data array
+                const { data, ...chartMeta } = chartData.chart
+                chart = Utils.fastDeepCopy(chartMeta)
+                // Use reference — caller guarantees this will be overwritten by applyCurrentColoring
+                chart.data = originalChartData
+            } else {
+                chart = Utils.fastDeepCopy(chartData.chart)
+            }
+            const cleaned = {
+                chart,
+                onchart: Utils.fastDeepCopy(chartData.onchart || []),
+                offchart: Utils.fastDeepCopy(chartData.offchart || []),
+            }
+            if (chartData.datasets) {
+                cleaned.datasets = Utils.fastDeepCopy(chartData.datasets)
+            }
             // Always set chart.tf from timeframe key (except for 'default' single-timeframe)
             if (timeframe && timeframe !== 'default' && cleaned.chart) {
                 cleaned.chart.tf = timeframe

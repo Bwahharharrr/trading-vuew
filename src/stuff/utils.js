@@ -139,6 +139,10 @@ export default {
     // Fast filter. Really fast, like 10X
     fast_filter(arr, t1, t2) {
         if (!arr.length) return [arr, undefined]
+        // PERF: Quick bounds check — skip IndexedArray if entirely out of range
+        if (arr[arr.length - 1][0] < t1 || arr[0][0] > t2) {
+            return [[], undefined]
+        }
         try {
             let ia = new IndexedArray(arr, "0")
             let res = ia.getRange(t1, t2)
@@ -443,17 +447,20 @@ export default {
         return copy
     },
 
-    // PERFORMANCE: Cached Date creation - reuses Date object when timestamp unchanged
-    // Avoids creating new Date objects on every cursor move
-    _cachedDate: null,
-    _cachedDateTs: null,
+    // PERF: LRU date cache — avoids repeated new Date() for visible axis labels
+    // Cursor moves and botbar rendering hit multiple unique timestamps per frame
+    _dateCache: new Map(),
+    _dateCacheMax: 16,
     getCachedDate(timestamp) {
-        // Only create new Date if timestamp changed by more than 1 second
-        if (this._cachedDateTs === null || Math.abs(timestamp - this._cachedDateTs) > 1000) {
-            this._cachedDate = new Date(timestamp)
-            this._cachedDateTs = timestamp
+        let d = this._dateCache.get(timestamp)
+        if (d !== undefined) return d
+        d = new Date(timestamp)
+        if (this._dateCache.size >= this._dateCacheMax) {
+            // Evict oldest (first inserted)
+            this._dateCache.delete(this._dateCache.keys().next().value)
         }
-        return this._cachedDate
+        this._dateCache.set(timestamp, d)
+        return d
     }
 
 }

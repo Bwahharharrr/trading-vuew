@@ -81,7 +81,7 @@ export default {
 
         clipPersistentIndicators(timeframe = null, chartData = null) {
             // Clip persistent indicators to match chart's date range
-            // Use provided values or fall back to current chart
+            // Uses binary search + slice instead of .filter() for O(log n) vs O(n)
             const tf = timeframe || this.currentTimeframe
             const candles = chartData || this.chart?.data?.chart?.data
 
@@ -96,15 +96,31 @@ export default {
             // Get indicators for timeframe
             const tfIndicators = this.persistentIndicatorsRaw[tf]?.indicators || []
 
-            const clipped = tfIndicators.map(indicator => ({
-                ...indicator,
-                group: indicator.group || 'Ungrouped',
-                data: indicator.data.filter(pt => pt[0] >= firstTs && pt[0] <= lastTs),
-                settings: {
-                    ...indicator.settings,
-                    display: this.persistentIndicatorVisibility[indicator.name] !== false
+            const clipped = tfIndicators.map(indicator => {
+                const data = indicator.data
+                // Binary search: first index where data[mid][0] >= firstTs
+                let lo = 0, hi = data.length
+                while (lo < hi) {
+                    const mid = (lo + hi) >> 1
+                    if (data[mid][0] < firstTs) lo = mid + 1; else hi = mid
                 }
-            }))
+                const startIdx = lo
+                // Binary search: first index where data[mid][0] > lastTs
+                lo = startIdx; hi = data.length
+                while (lo < hi) {
+                    const mid = (lo + hi) >> 1
+                    if (data[mid][0] <= lastTs) lo = mid + 1; else hi = mid
+                }
+                return {
+                    ...indicator,
+                    group: indicator.group || 'Ungrouped',
+                    data: data.slice(startIdx, lo),
+                    settings: {
+                        ...indicator.settings,
+                        display: this.persistentIndicatorVisibility[indicator.name] !== false
+                    }
+                }
+            })
 
             this.persistentIndicatorsClipped = clipped
             return clipped  // Return for immediate use

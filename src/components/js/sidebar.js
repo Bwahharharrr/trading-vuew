@@ -7,11 +7,12 @@ let PANHEIGHT
 
 export default class Sidebar {
 
-    constructor(canvas, comp, side = 'right') {
+    constructor(canvas, comp, side = 'right', canvasDynamic = null) {
         const config = comp.$props.config || {}
         PANHEIGHT = config.PANHEIGHT || 22
 
         this.canvas = canvas
+        this.canvasDynamic = canvasDynamic
         this.ctx = canvas.getContext('2d')
         this.comp = comp
         this.$p = comp.$props
@@ -26,15 +27,16 @@ export default class Sidebar {
     }
 
     listeners() {
+        let eventTarget = this.canvasDynamic || this.canvas
         // Add wheel zoom for Y-axis
-        this.hm = Hamster(this.canvas)
+        this.hm = Hamster(eventTarget)
         // Throttle wheel events to ~60fps
         this._throttledWheel = Utils.rafThrottle((delta, event) => {
-            this.mousezoom(-delta * 50, event)
+            this.mousezoom(delta * 50, event)
         })
         this.hm.wheel((event, delta) => this._throttledWheel(delta, event))
 
-        let mc = this.mc = new Hammer.Manager(this.canvas)
+        let mc = this.mc = new Hammer.Manager(eventTarget)
         mc.add(new Hammer.Pan({
             direction: Hammer.DIRECTION_VERTICAL,
             threshold: 0
@@ -76,7 +78,6 @@ export default class Sidebar {
                     range: this.calc_range(),
                     drugging: true
                 })
-                this.update()
             }
         })
         mc.on('panmove', event => this._throttledPanmove(event))
@@ -96,7 +97,6 @@ export default class Sidebar {
                 auto: true
             })
             this.zoom = 1.0
-            this.update()
         })
 
         // TODO: Do later for mobile version
@@ -226,7 +226,9 @@ export default class Sidebar {
     }
 
     apply_shaders() {
-        let layout = this.$p.layout.grids[this.id]
+        // PERF: Use already-resolved layout instead of re-traversing props
+        let layout = this.layout
+        if (!layout) return
         let props = {
             layout: layout,
             cursor: this.$p.cursor
@@ -351,14 +353,9 @@ export default class Sidebar {
             zoom: this.zoom,
             auto: false,
             range: this.calc_range(),
-            drugging: true
-        })
-        this.drug = null
-        this.comp.$emit('sidebar-transform', {
-            grid_id: this.id,
             drugging: false
         })
-        this.update()
+        this.drug = null
     }
 
     rezoom_range(delta, diff1, diff2) {
@@ -405,6 +402,7 @@ export default class Sidebar {
         if (this.hm) this.hm.unwheel()
         if (this._throttledWheel) this._throttledWheel.cancel()
         if (this._throttledPanmove) this._throttledPanmove.cancel()
+        this.canvasDynamic = null
     }
 
     mousemove() { }

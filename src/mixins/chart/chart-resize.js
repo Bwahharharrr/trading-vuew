@@ -179,5 +179,12 @@ export default {
             savedGridHeights: {},
             isResizing: false
         }
+    },
+
+    beforeUnmount() {
+        if (this._resizeThrottleRAF) {
+            cancelAnimationFrame(this._resizeThrottleRAF)
+            this._resizeThrottleRAF = null
+        }
     }
 }

@@ -17,9 +17,23 @@ export default class DCCore extends DCEvents {
             this.update_ids()
 
             // Listen to all setting changes via event bus
-            // This decouples from Vue instance for better testability
+            // PERF: Cache settings result using fingerprint to avoid ~600 spurious
+            // watcher fires/sec (get_by_query returns new array each call)
+            this._cachedSettings = null
+            this._cachedSettingsKey = null
             this._settingsUnwatch = this.tv.$watch(
-                () => this.get_by_query('.settings'),
+                () => {
+                    const settings = this.get_by_query('.settings')
+                    // Build a fingerprint from settings content
+                    const key = settings.map(s =>
+                        JSON.stringify(s.v)
+                    ).join('|')
+                    if (key !== this._cachedSettingsKey) {
+                        this._cachedSettingsKey = key
+                        this._cachedSettings = settings
+                    }
+                    return this._cachedSettings
+                },
                 (n, p) => {
                     this.on_settings(n, p)
                     emitter.emit('settings-changed', { newVal: n, oldVal: p })
@@ -425,7 +439,8 @@ export default class DCCore extends DCEvents {
         const t1 = range[0]
         const t2 = range[1]
 
-        let ts = {} // timestamp map
+        // PERF: Map with numeric keys avoids string coercion from Object keys
+        let ts = new Map()
 
         // Use binary search to find indices directly instead of filter + indexOf
         // This avoids O(n) indexOf calls inside the O(n) loop = O(n²)
@@ -446,18 +461,18 @@ export default class DCCore extends DCEvents {
 
         // Build timestamp map from found segments
         for (let i = id11; i <= id12 && i < arr1.length; i++) {
-            ts[arr1[i][0]] = arr1[i]
+            ts.set(arr1[i][0], arr1[i])
         }
 
         for (let i = id21; i <= id22 && i < arr2.length; i++) {
-            ts[arr2[i][0]] = arr2[i]
+            ts.set(arr2[i][0], arr2[i])
         }
 
-        // Sort numerically (Object.keys returns strings)
-        let ts_sorted = Object.keys(ts).sort((a, b) => a - b)
+        // PERF: Sort numeric keys directly (no string→number coercion)
+        let keys = Array.from(ts.keys()).sort((a, b) => a - b)
 
         return {
-            od: ts_sorted.map(x => ts[x]),
+            od: keys.map(k => ts.get(k)),
             d1: [id11, Math.max(0, id12 - id11 + 1)],
             d2: [id21, Math.max(0, id22 - id21 + 1)]
         }

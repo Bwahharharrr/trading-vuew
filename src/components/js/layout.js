@@ -128,10 +128,8 @@ function Layout(params) {
             }
         }
 
-        // Ensure total matches available height (usedHeight was updated above)
-        let total = usedHeight + (nullCount > 0 ? Math.floor((height - usedHeight) / nullCount) * nullCount : 0)
-        // Recalculate actual total after modifications
-        total = 0
+        // Recalculate actual total after null slots were filled
+        let total = 0
         for (let i = 0; i < hs.length; i++) total += hs[i]
         if (total !== height && hs.length > 0) {
             hs[0] += (height - total)
