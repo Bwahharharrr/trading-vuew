@@ -100,46 +100,18 @@ export default {
 
         _wsHandleCandle(msg) {
             const candle = msg.data // [ts, o, h, l, c, v]
-            if (!candle || candle.length < 6) {
-                console.log('[WS] candle: bad data', candle)
-                return
-            }
-            if (!this.chart || !this.originalChartData) {
-                console.log('[WS] candle: chart not ready')
-                return
-            }
-            if (!this.originalChartData.length) {
-                console.log('[WS] candle: originalChartData empty')
-                return
-            }
+            if (!candle || candle.length < 6) return
+            if (!this.chart || !this.originalChartData) return
+            if (!this.originalChartData.length) return
 
             const ts = candle[0]
-            const lastOrig = this.originalChartData[this.originalChartData.length - 1]
+            const chartData = this.chart.data.chart.data
+            if (!chartData || !chartData.length) return
 
-            // Only process candles at or beyond the end of loaded data
-            if (lastOrig && ts < lastOrig[0]) {
-                console.log('[WS] candle: ts', ts, '< lastLoaded', lastOrig[0], '— skipped')
-                return
-            }
-            console.log('[WS] candle: processing ts=', ts, 'lastLoaded=', lastOrig?.[0], 'file=', this.currentDataFile)
+            const lastChartTs = chartData[chartData.length - 1][0]
 
-            if (lastOrig && lastOrig[0] === ts) {
-                // Update existing candle in-place
-                for (let i = 1; i < 6; i++) lastOrig[i] = candle[i]
-                // Update corresponding color arrays
-                const ci = this.liveScmrColors.length - 1
-                if (ci >= 0) {
-                    this.liveScmrColors[ci] = msg.scmr_color || ''
-                }
-            } else {
-                // Append new candle
-                if (this.liveDataStartIdx < 0) {
-                    this.liveDataStartIdx = this.originalChartData.length
-                }
-                this.originalChartData.push([...candle])
-                this.liveScmrColors.push(msg.scmr_color || '')
-                this.liveAlertColors.push(msg.alert_color || '')
-            }
+            // Reject candles older than loaded data
+            if (ts < lastChartTs) return
 
             // Determine which color to use based on active file
             let color = ''
@@ -150,12 +122,51 @@ export default {
                 color = msg.scmr_color || ''
             }
 
-            // Push to DataCube with color at index 6
+            // Build the 9-element candle with color
             const dcCandle = [...candle]
             while (dcCandle.length < 9) dcCandle.push('')
             dcCandle[6] = color
 
-            this.chart.update({ candle: dcCandle })
+            if (ts === lastChartTs) {
+                // Update last candle in-place (same timestamp — tick update)
+                chartData[chartData.length - 1] = dcCandle
+                // Also update originalChartData
+                const lastOrig = this.originalChartData[this.originalChartData.length - 1]
+                if (lastOrig) {
+                    for (let i = 1; i < 6; i++) lastOrig[i] = candle[i]
+                }
+                const ci = this.liveScmrColors.length - 1
+                if (ci >= 0) this.liveScmrColors[ci] = msg.scmr_color || ''
+            } else {
+                // New candle — append
+                if (this.liveDataStartIdx < 0) {
+                    this.liveDataStartIdx = this.originalChartData.length
+                }
+                this.originalChartData.push([...candle])
+                this.liveScmrColors.push(msg.scmr_color || '')
+                this.liveAlertColors.push(msg.alert_color || '')
+
+                // Directly push to chart data (bypasses dc.update/fast_merge/scroll_to)
+                chartData.push(dcCandle)
+
+                // Only auto-scroll if gap is small (< 200 candle intervals)
+                const gap = ts - lastChartTs
+                const tf = this.$refs.tradingVue?.$refs?.chart?.interval_ms || 3600000
+                if (gap <= tf * 200) {
+                    // Small gap — scroll to show the new candle
+                    if (this.chart.sett?.auto_scroll !== false) {
+                        const tv = this.$refs.tradingVue
+                        if (tv) {
+                            const range = tv.getRange()
+                            if (range && range[1]) {
+                                const d = range[1] - lastChartTs
+                                if (d > 0) tv.goto(ts + d)
+                            }
+                        }
+                    }
+                }
+                // else: large gap — leave view where it is, user can scroll manually
+            }
         },
 
         _wsHandleAlert(msg) {
