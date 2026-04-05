@@ -8,7 +8,8 @@ export default {
             wsConnected: false,
             wsReconnectTimer: null,
             wsReconnectDelay: 1000,
-            wsUrl: `ws://${window.location.hostname}:8765`,
+            // Proxy through webpack-dev-server so no extra port needs exposing
+            wsUrl: `ws://${window.location.host}/live-ws`,
 
             // Accumulated live data (survives view switches)
             liveScmrColors: [],

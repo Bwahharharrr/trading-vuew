@@ -55,6 +55,14 @@ module.exports = (env, options) => ({
         client: {
             webSocketURL: 'auto://0.0.0.0:0/ws',  // Use same host/port as page URL
         },
+        proxy: [
+            {
+                context: ['/live-ws'],
+                target: 'ws://127.0.0.1:8765',
+                ws: true,
+                pathRewrite: { '^/live-ws': '' },
+            },
+        ],
         static: {
             directory: require('path').join(__dirname, '../data'),
             publicPath: '/data'
