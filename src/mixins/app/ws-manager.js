@@ -101,19 +101,21 @@ export default {
             const candle = msg.data // [ts, o, h, l, c, v]
             if (!candle || candle.length < 6) return
             if (!this.chart || !this.originalChartData) return
+            if (!this.originalChartData.length) return
 
             const ts = candle[0]
-
-            // 1. Update originalChartData (pristine OHLCV — no colors)
             const lastOrig = this.originalChartData[this.originalChartData.length - 1]
+
+            // Only process candles at or beyond the end of loaded data
+            if (lastOrig && ts < lastOrig[0]) return
+
             if (lastOrig && lastOrig[0] === ts) {
                 // Update existing candle in-place
                 for (let i = 1; i < 6; i++) lastOrig[i] = candle[i]
-                // Update corresponding color arrays (same index)
+                // Update corresponding color arrays
                 const ci = this.liveScmrColors.length - 1
                 if (ci >= 0) {
                     this.liveScmrColors[ci] = msg.scmr_color || ''
-                    // Don't overwrite alert color here — alerts handle their own coloring
                 }
             } else {
                 // Append new candle
@@ -125,7 +127,7 @@ export default {
                 this.liveAlertColors.push(msg.alert_color || '')
             }
 
-            // 2. Determine which color to use based on active file
+            // Determine which color to use based on active file
             let color = ''
             const file = this.currentDataFile || ''
             if (file.includes('data_alerts')) {
@@ -134,7 +136,7 @@ export default {
                 color = msg.scmr_color || ''
             }
 
-            // 3. Push to DataCube with color at index 6
+            // Push to DataCube with color at index 6
             const dcCandle = [...candle]
             while (dcCandle.length < 9) dcCandle.push('')
             dcCandle[6] = color
@@ -214,60 +216,15 @@ export default {
             if (!msg.candles || !msg.candles.length) return
             console.log(`[WS] Snapshot: ${msg.candles.length} candles, ${msg.alerts.length} alerts, ${msg.zones.length} zones`)
 
-            // Store snapshot data for use when files are loaded
+            // Store snapshot data — these will be used by incremental handlers
             this.liveScmrColors = msg.scmr_colors || []
             this.liveAlertColors = msg.alert_colors || []
             this.liveAlerts = msg.alerts || []
             this.liveZones = msg.zones || []
 
-            if (!this.chart || !this.originalChartData) return
-
-            // Determine overlap: find where snapshot candles extend beyond loaded data
-            const lastLoadedTs = this.originalChartData.length > 0
-                ? this.originalChartData[this.originalChartData.length - 1][0]
-                : 0
-
-            let appendFrom = 0
-            for (let i = 0; i < msg.candles.length; i++) {
-                if (msg.candles[i][0] > lastLoadedTs) {
-                    appendFrom = i
-                    break
-                }
-                if (i === msg.candles.length - 1) {
-                    // All snapshot candles are within loaded range — update last candle
-                    appendFrom = msg.candles.length
-                }
-            }
-
-            if (appendFrom < msg.candles.length) {
-                this.liveDataStartIdx = this.originalChartData.length
-                const file = this.currentDataFile || ''
-                const useAlertColors = file.includes('data_alerts')
-
-                for (let i = appendFrom; i < msg.candles.length; i++) {
-                    const candle = msg.candles[i]
-                    this.originalChartData.push([...candle])
-
-                    // Push to DataCube with color
-                    const dcCandle = [...candle]
-                    while (dcCandle.length < 9) dcCandle.push('')
-                    if (useAlertColors && i < this.liveAlertColors.length) {
-                        dcCandle[6] = this.liveAlertColors[i] || ''
-                    } else if (i < this.liveScmrColors.length) {
-                        dcCandle[6] = this.liveScmrColors[i] || ''
-                    }
-                    this.chart.update({ candle: dcCandle })
-                }
-
-                // Merge zones
-                if (this.liveZones.length > 0) {
-                    const onchart = this.chart.data.onchart
-                    let zonesOv = onchart.find(o => o.type === 'Zones')
-                    if (zonesOv) {
-                        zonesOv.data.push(...this.liveZones)
-                    }
-                }
-            }
+            // Don't mutate chart data from snapshot — just store the state.
+            // Incremental candle/alert messages will append new data as it arrives.
+            // This avoids corrupting the loaded static file data.
         },
 
         // Called when view changes — extends applyCurrentColoring with live data
