@@ -195,11 +195,11 @@ import Balance from './components/overlays/Balance.js'
 import LineTracker from './components/overlays/LineTracker.js'
 
 // App mixins (decomposed concerns)
-import { ViewManager, IndicatorManager, FileManager, ChartState, DrawingTools } from './mixins/app/index.js'
+import { ViewManager, IndicatorManager, FileManager, ChartState, DrawingTools, WsManager } from './mixins/app/index.js'
 
 export default {
     name: 'app',
-    mixins: [ViewManager, IndicatorManager, FileManager, ChartState, DrawingTools],
+    mixins: [ViewManager, IndicatorManager, FileManager, ChartState, DrawingTools, WsManager],
     components: {
         TradingVue,
         IndicatorSettings
@@ -248,6 +248,8 @@ export default {
         this.$nextTick(() => {
             window.dc = this.chart
             window.tv = this.$refs.tradingVue
+            // Connect to live feed WebSocket
+            this.wsConnect()
         })
     },
     beforeUnmount() {

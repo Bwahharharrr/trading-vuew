@@ -116,6 +116,7 @@ export default {
 
                 // Create DataCube with complete offchart data
                 this.chart = new this.DataCubeClass(preparedData)
+                window.dc = this.chart  // Keep global reference in sync
 
                 // Check if datasets have same bounds
                 const sameBounds = savedRange && savedRange[0] && savedRange[1] &&
