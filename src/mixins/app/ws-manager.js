@@ -44,7 +44,7 @@ export default {
                     const msg = JSON.parse(event.data)
                     this._wsOnMessage(msg)
                 } catch (e) {
-                    console.warn('[WS] Bad message:', e)
+                    console.error('[WS] Message handler error:', e)
                 }
             }
 
@@ -84,6 +84,7 @@ export default {
         },
 
         _wsOnMessage(msg) {
+            console.log('[WS] msg:', msg.type, msg.type === 'candle' ? msg.data : '')
             switch (msg.type) {
                 case 'candle':
                     this._wsHandleCandle(msg)
@@ -99,15 +100,28 @@ export default {
 
         _wsHandleCandle(msg) {
             const candle = msg.data // [ts, o, h, l, c, v]
-            if (!candle || candle.length < 6) return
-            if (!this.chart || !this.originalChartData) return
-            if (!this.originalChartData.length) return
+            if (!candle || candle.length < 6) {
+                console.log('[WS] candle: bad data', candle)
+                return
+            }
+            if (!this.chart || !this.originalChartData) {
+                console.log('[WS] candle: chart not ready')
+                return
+            }
+            if (!this.originalChartData.length) {
+                console.log('[WS] candle: originalChartData empty')
+                return
+            }
 
             const ts = candle[0]
             const lastOrig = this.originalChartData[this.originalChartData.length - 1]
 
             // Only process candles at or beyond the end of loaded data
-            if (lastOrig && ts < lastOrig[0]) return
+            if (lastOrig && ts < lastOrig[0]) {
+                console.log('[WS] candle: ts', ts, '< lastLoaded', lastOrig[0], '— skipped')
+                return
+            }
+            console.log('[WS] candle: processing ts=', ts, 'lastLoaded=', lastOrig?.[0], 'file=', this.currentDataFile)
 
             if (lastOrig && lastOrig[0] === ts) {
                 // Update existing candle in-place
@@ -213,8 +227,10 @@ export default {
         },
 
         _wsHandleSnapshot(msg) {
-            if (!msg.candles || !msg.candles.length) return
-            console.log(`[WS] Snapshot: ${msg.candles.length} candles, ${msg.alerts.length} alerts, ${msg.zones.length} zones`)
+            const nc = msg.candles ? msg.candles.length : 0
+            const na = msg.alerts ? msg.alerts.length : 0
+            const nz = msg.zones ? msg.zones.length : 0
+            console.log(`[WS] Snapshot: ${nc} candles, ${na} alerts, ${nz} zones (stored, not applied)`)
 
             // Store snapshot data — these will be used by incremental handlers
             this.liveScmrColors = msg.scmr_colors || []
@@ -224,7 +240,6 @@ export default {
 
             // Don't mutate chart data from snapshot — just store the state.
             // Incremental candle/alert messages will append new data as it arrives.
-            // This avoids corrupting the loaded static file data.
         },
 
         // Called when view changes — extends applyCurrentColoring with live data
