@@ -52,6 +52,9 @@ module.exports = (env, options) => ({
     ],
     devServer: {
         host: '0.0.0.0',
+        client: {
+            webSocketURL: 'auto://0.0.0.0:0/ws',  // Use same host/port as page URL
+        },
         static: {
             directory: require('path').join(__dirname, '../data'),
             publicPath: '/data'
