@@ -249,7 +249,12 @@ export default {
             window.dc = this.chart
             window.tv = this.$refs.tradingVue
             // Connect to live feed WebSocket
-            this.wsConnect()
+            console.log('[App] mounted $nextTick — calling wsConnect()')
+            try {
+                this.wsConnect()
+            } catch (e) {
+                console.error('[App] wsConnect() threw:', e)
+            }
         })
     },
     beforeUnmount() {

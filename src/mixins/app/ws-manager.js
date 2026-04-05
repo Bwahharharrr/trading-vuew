@@ -25,10 +25,11 @@ export default {
             if (url) this.wsUrl = url
             if (this.ws) this.wsDisconnect()
 
+            console.log('[WS] Connecting to:', this.wsUrl)
             try {
                 this.ws = new WebSocket(this.wsUrl)
             } catch (e) {
-                console.warn('[WS] Failed to create WebSocket:', e)
+                console.error('[WS] Failed to create WebSocket:', e)
                 this._wsScheduleReconnect()
                 return
             }
