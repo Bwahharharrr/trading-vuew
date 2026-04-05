@@ -110,9 +110,10 @@ class WebWork {
             return this.send_node(msg, tx_keys)
         }
         if (!this.worker) return
-        // Deep unwrap Vue 3 reactive proxies before postMessage
-        // PERFORMANCE: Only deep-copy when message contains reactive objects
-        const rawMsg = (isReactive(msg) || isRef(msg)) ? deepToRaw(msg) : msg
+        // Deep unwrap Vue 3 reactive proxies before postMessage.
+        // Always deep-copy: nested reactive arrays (e.g. candle data pushed
+        // via dc.update()) are not detectable from the top-level object.
+        const rawMsg = deepToRaw(msg)
         if (tx_keys) {
             let tx_objs = tx_keys.map(k => rawMsg.data[k])
             this.worker.postMessage(rawMsg, tx_objs)
