@@ -127,46 +127,36 @@ export default {
             while (dcCandle.length < 9) dcCandle.push('')
             dcCandle[6] = color
 
-            if (ts === lastChartTs) {
-                // Update last candle in-place (same timestamp — tick update)
-                chartData[chartData.length - 1] = dcCandle
-                // Also update originalChartData
-                const lastOrig = this.originalChartData[this.originalChartData.length - 1]
-                if (lastOrig) {
-                    for (let i = 1; i < 6; i++) lastOrig[i] = candle[i]
-                }
+            // Check if this is a large time gap (loaded data too old for live)
+            const gap = ts - lastChartTs
+            const tf = this.$refs.tradingVue?.$refs?.chart?.interval_ms || 3600000
+            const isLargeGap = ts !== lastChartTs && gap > tf * 200
+
+            // Update originalChartData (pristine OHLCV)
+            const lastOrig = this.originalChartData[this.originalChartData.length - 1]
+            if (lastOrig && lastOrig[0] === ts) {
+                for (let i = 1; i < 6; i++) lastOrig[i] = candle[i]
                 const ci = this.liveScmrColors.length - 1
                 if (ci >= 0) this.liveScmrColors[ci] = msg.scmr_color || ''
-            } else {
-                // New candle — append
+            } else if (!isLargeGap) {
                 if (this.liveDataStartIdx < 0) {
                     this.liveDataStartIdx = this.originalChartData.length
                 }
                 this.originalChartData.push([...candle])
                 this.liveScmrColors.push(msg.scmr_color || '')
                 this.liveAlertColors.push(msg.alert_color || '')
-
-                // Directly push to chart data (bypasses dc.update/fast_merge/scroll_to)
-                chartData.push(dcCandle)
-
-                // Only auto-scroll if gap is small (< 200 candle intervals)
-                const gap = ts - lastChartTs
-                const tf = this.$refs.tradingVue?.$refs?.chart?.interval_ms || 3600000
-                if (gap <= tf * 200) {
-                    // Small gap — scroll to show the new candle
-                    if (this.chart.sett?.auto_scroll !== false) {
-                        const tv = this.$refs.tradingVue
-                        if (tv) {
-                            const range = tv.getRange()
-                            if (range && range[1]) {
-                                const d = range[1] - lastChartTs
-                                if (d > 0) tv.goto(ts + d)
-                            }
-                        }
-                    }
-                }
-                // else: large gap — leave view where it is, user can scroll manually
             }
+
+            if (isLargeGap) {
+                // Large gap — don't append, would cause blank chart.
+                // The user should reload the page after charts are regenerated.
+                return
+            }
+
+            // Use dc.update() for proper render cycle (AggTool batching + re-draw).
+            // For same-timestamp updates, fast_merge replaces in-place (no scroll).
+            // For new candles, fast_merge appends and auto-scrolls.
+            this.chart.update({ candle: dcCandle })
         },
 
         _wsHandleAlert(msg) {
