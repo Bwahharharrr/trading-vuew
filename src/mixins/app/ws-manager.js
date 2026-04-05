@@ -159,6 +159,11 @@ export default {
             // For same-timestamp updates, fast_merge replaces in-place (no scroll).
             // For new candles, fast_merge appends and auto-scrolls.
             this.chart.update({ candle: dcCandle })
+
+            // Trigger chart re-render — dc.update() mutates data in-place which
+            // doesn't always trigger Vue's watcher on the data prop.
+            const tv = this.$refs.tradingVue
+            if (tv) tv.updateLayout()
         },
 
         _wsHandleAlert(msg) {
