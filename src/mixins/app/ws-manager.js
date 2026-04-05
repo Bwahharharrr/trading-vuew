@@ -8,7 +8,7 @@ export default {
             wsConnected: false,
             wsReconnectTimer: null,
             wsReconnectDelay: 1000,
-            wsUrl: 'ws://localhost:8765',
+            wsUrl: `ws://${window.location.hostname}:8765`,
 
             // Accumulated live data (survives view switches)
             liveScmrColors: [],
