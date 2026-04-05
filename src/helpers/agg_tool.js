@@ -83,11 +83,18 @@ export default class AggTool {
             this.data_changed = false
         }
         // Notify the chart that data changed. Without scripts, the
-        // Worker feedback loop (data-len-changed) never fires, so
-        // the chart's data watcher doesn't trigger on in-place mutations.
-        // Bump a reactive flag to force re-render of the last candle.
+        // Worker feedback loop (data-len-changed) never fires, so the
+        // chart's dataHashKey computed doesn't retrigger on in-place
+        // mutations. Manually run the same update chain as the watcher:
+        // subset → layout → last_values → rerender.
         if (out.ohlcv && this.dc.tv && this.dc.tv.$refs.chart) {
-            this.dc.tv.$refs.chart.update_layout()
+            let chart = this.dc.tv.$refs.chart
+            let sub = chart.subset()
+            if (chart.sub.length || sub.length) {
+                Utils.overwrite(chart.sub, sub)
+            }
+            chart.update_layout()
+            chart.update_last_values()
         }
         // PERFORMANCE: Use RAF-coordinated scheduling
         // This ensures updates are synced with the render loop
