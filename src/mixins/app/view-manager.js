@@ -119,6 +119,7 @@ export default {
 
             // Update the chart candle data
             this.chart.data.chart.data = newData
+            this.chart.touchData()
 
             // Handle view-specific offchart indicators
             this.applyViewOffchart(viewData)

@@ -1,5 +1,5 @@
 /*!
- * TradingVue.JS - v1.0.2 - Wed Apr 01 2026
+ * TradingVue.JS - v1.0.2 - Sat May 16 2026
  *     https://github.com/tvjsx/trading-vue-js
  *     Copyright (c) 2019 C451 Code's All Right;
  *     Licensed under the MIT license
@@ -30872,7 +30872,7 @@ const Bar_exports_ = Barvue_type_script_lang_js;
   },
   computed: {
     default_color: function default_color() {
-      return this.sett.color || '#FF000044';
+      return this.sett.color || '#FF000020';
     }
   },
   data: function data() {
@@ -30922,7 +30922,7 @@ function Gridvue_type_script_lang_js_arrayLikeToArray(r, a) { (null == a || a > 
 
 /* harmony default export */ const Gridvue_type_script_lang_js = ({
   name: 'Grid',
-  props: ['sub', 'layout', 'range', 'interval', 'cursor', 'colors', 'overlays', 'width', 'height', 'data', 'grid_id', 'y_transform', 'font', 'tv_id', 'config', 'meta', 'shaders'],
+  props: ['sub', 'layout', 'range', 'interval', 'cursor', 'colors', 'overlays', 'width', 'height', 'data', 'grid_id', 'y_transform', 'font', 'tv_id', 'config', 'meta', 'shaders', 'dataVersion'],
   mixins: [canvas, uxlist],
   components: {
     Crosshair: components_Crosshair,
@@ -31280,17 +31280,22 @@ function Gridvue_type_script_lang_js_arrayLikeToArray(r, a) { (null == a || a > 
       return "".concat(grid.height, ",").concat(grid.offset, ",").concat(grid.width);
     },
     dataKey: function dataKey() {
-      var _data$0$data$0$, _data$, _data, _lastOvData$, _lastOvData;
+      var _this$$props$dataVers, _data$0$data$0$, _data$, _data, _lastOvData$, _lastOvData;
       var data = this.$props.data;
       if (!data) return '';
       // Use length and first/last timestamps for efficient change detection
       var len = data.length;
-      if (len === 0) return '0';
+      // Reactive invalidation counter from DataCube root — forwarded
+      // through Chart.common_props → Section → Grid props. Bumped by
+      // DataCube.touchData() for in-place mutations (tick close, color
+      // slot writes) that the timestamp/length hash alone cannot detect.
+      var dataVersion = (_this$$props$dataVers = this.$props.dataVersion) !== null && _this$$props$dataVers !== void 0 ? _this$$props$dataVers : 0;
+      if (len === 0) return "0,".concat(dataVersion);
       var first = (_data$0$data$0$ = (_data$ = data[0]) === null || _data$ === void 0 || (_data$ = _data$.data) === null || _data$ === void 0 || (_data$ = _data$[0]) === null || _data$ === void 0 ? void 0 : _data$[0]) !== null && _data$0$data$0$ !== void 0 ? _data$0$data$0$ : '';
       // PERF: Direct index access instead of slice(-1)[0] which allocates a new array
       var lastOvData = (_data = data[len - 1]) === null || _data === void 0 ? void 0 : _data.data;
       var last = (_lastOvData$ = lastOvData === null || lastOvData === void 0 || (_lastOvData = lastOvData[lastOvData.length - 1]) === null || _lastOvData === void 0 ? void 0 : _lastOvData[0]) !== null && _lastOvData$ !== void 0 ? _lastOvData$ : '';
-      return "".concat(len, ",").concat(first, ",").concat(last);
+      return "".concat(len, ",").concat(first, ",").concat(last, ",").concat(dataVersion);
     },
     yTransformKey: function yTransformKey() {
       var _yt$range, _yt$range2;
@@ -34069,6 +34074,7 @@ var TI = /*#__PURE__*/function () {
       if (this._hook_update) this.ce('?chart-update', this.chartLayout);
     },
     common_props: function common_props() {
+      var _this$$props$data$dat, _this$$props$data;
       return {
         title_txt: this.chart.name || this.$props.title_txt,
         layout: this.chartLayout,
@@ -34083,7 +34089,10 @@ var TI = /*#__PURE__*/function () {
         config: this.$props.config,
         buttons: this.$props.buttons,
         meta: this.meta,
-        skin: this.$props.skin
+        skin: this.$props.skin,
+        // Reactive render-invalidation counter from DataCube root,
+        // forwarded so Grid.dataKey can detect in-place mutations.
+        dataVersion: (_this$$props$data$dat = (_this$$props$data = this.$props.data) === null || _this$$props$data === void 0 ? void 0 : _this$$props$data.dataVersion) !== null && _this$$props$data$dat !== void 0 ? _this$$props$data$dat : 0
       };
     },
     overlay_subset: function overlay_subset(source, side) {
@@ -34142,7 +34151,7 @@ var TI = /*#__PURE__*/function () {
     // Optimized hash key for data changes - avoids deep watching
     // Captures meaningful changes without traversing entire data tree
     dataHashKey: function dataHashKey() {
-      var _data$chart, _ohlcv$0$, _ohlcv$, _ohlcv$2, _ohlcv, _ohlcv$3, _ohlcv2;
+      var _data$chart, _ohlcv$0$, _ohlcv$, _ohlcv$2, _ohlcv, _ohlcv$3, _ohlcv2, _data$dataVersion;
       var data = this.$props.data;
       if (!data) return '';
       var ohlcv = data.ohlcv || ((_data$chart = data.chart) === null || _data$chart === void 0 ? void 0 : _data$chart.data) || [];
@@ -34151,7 +34160,11 @@ var TI = /*#__PURE__*/function () {
       var lastTs = (_ohlcv$2 = (_ohlcv = ohlcv[ohlcvLen - 1]) === null || _ohlcv === void 0 ? void 0 : _ohlcv[0]) !== null && _ohlcv$2 !== void 0 ? _ohlcv$2 : '';
       var lastClose = (_ohlcv$3 = (_ohlcv2 = ohlcv[ohlcvLen - 1]) === null || _ohlcv2 === void 0 ? void 0 : _ohlcv2[4]) !== null && _ohlcv$3 !== void 0 ? _ohlcv$3 : '';
       var scrollLock = data.scrollLock ? '1' : '0';
-      return "".concat(ohlcvLen, ",").concat(firstTs, ",").concat(lastTs, ",").concat(lastClose, ",").concat(scrollLock);
+      // Bumped by DataCube.touchData() on any render-relevant in-place
+      // mutation (tick close, color slot writes, etc) that Vue's deep
+      // array reactivity does not reliably observe.
+      var dataVersion = (_data$dataVersion = data.dataVersion) !== null && _data$dataVersion !== void 0 ? _data$dataVersion : 0;
+      return "".concat(ohlcvLen, ",").concat(firstTs, ",").concat(lastTs, ",").concat(lastClose, ",").concat(scrollLock, ",").concat(dataVersion);
     }
   },
   watch: {
@@ -36045,9 +36058,10 @@ var WebWork = /*#__PURE__*/function () {
         return this.send_node(msg, tx_keys);
       }
       if (!this.worker) return;
-      // Deep unwrap Vue 3 reactive proxies before postMessage
-      // PERFORMANCE: Only deep-copy when message contains reactive objects
-      var rawMsg = isReactive(msg) || reactivity_esm_bundler_isRef(msg) ? deepToRaw(msg) : msg;
+      // Deep unwrap Vue 3 reactive proxies before postMessage.
+      // Always deep-copy: nested reactive arrays (e.g. candle data pushed
+      // via dc.update()) are not detectable from the top-level object.
+      var rawMsg = deepToRaw(msg);
       if (tx_keys) {
         var tx_objs = tx_keys.map(function (k) {
           return rawMsg.data[k];
@@ -37263,6 +37277,13 @@ var DCCore = /*#__PURE__*/function (_DCEvents) {
         this.data['datasets'] = [];
       }
 
+      // Reactive invalidation counter — bumped by touchData() whenever any
+      // render-relevant in-place mutation occurs (tick close updates,
+      // candle color writes, etc). Read by Chart.dataHashKey and the Grid
+      // dataKey prop chain so the static canvas repaints without relying
+      // on Vue's deep reactivity for nested OHLCV arrays.
+      this.data['dataVersion'] = 0;
+
       // Init dataset proxies
       var _iterator = dc_core_createForOfIteratorHelper(this.data.datasets),
         _step;
@@ -37277,6 +37298,15 @@ var DCCore = /*#__PURE__*/function (_DCEvents) {
       } finally {
         _iterator.f();
       }
+    }
+
+    // Bump the reactive render-invalidation counter. Call after any in-place
+    // mutation to OHLCV / overlay data / candle color slots so consumers
+    // (Chart.dataHashKey, Grid.dataKey) recompute and trigger redraw.
+  }, {
+    key: "touchData",
+    value: function touchData() {
+      this.data['dataVersion'] = (this.data.dataVersion || 0) + 1;
     }
 
     // Range change callback (called by TradingVue)
@@ -37479,6 +37509,7 @@ var DCCore = /*#__PURE__*/function (_DCEvents) {
         this.agg.push('ohlcv', nc, tf);
         ohlcv.push(nc);
         this.scroll_to(t);
+        this.touchData();
       } else if (tick !== undefined) {
         // Update an existing one
         // TODO: make a separate class Sampler
@@ -37487,6 +37518,7 @@ var DCCore = /*#__PURE__*/function (_DCEvents) {
         last[4] = tick;
         last[5] += volume;
         this.agg.push('ohlcv', last, tf);
+        this.touchData();
       }
       this.update_overlays(data, t, tf);
       return t >= t_next;
@@ -37808,8 +37840,10 @@ var DCCore = /*#__PURE__*/function (_DCEvents) {
         if (main && this.sett.auto_scroll) {
           this.scroll_to(upd_t);
         }
+        this.touchData();
       } else if (upd_t === last_t) {
         data[data.length - 1] = point;
+        this.touchData();
       }
     }
   }, {
@@ -37930,6 +37964,7 @@ var AggTool = /*#__PURE__*/function () {
         this.dc.ww.just('update-data', out);
         this.data_changed = false;
       }
+      // fast_merge() calls touchData(); Chart.dataHashKey handles layout/redraw.
       // PERFORMANCE: Use RAF-coordinated scheduling
       // This ensures updates are synced with the render loop
       this._scheduleNextUpdate();

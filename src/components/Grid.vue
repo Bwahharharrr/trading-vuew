@@ -32,7 +32,7 @@ export default {
     props: [
         'sub', 'layout', 'range', 'interval', 'cursor', 'colors', 'overlays',
         'width', 'height', 'data', 'grid_id', 'y_transform', 'font', 'tv_id',
-        'config', 'meta', 'shaders'
+        'config', 'meta', 'shaders', 'dataVersion'
     ],
     mixins: [Canvas, UxList],
     components: { Crosshair, KeyboardListener },
@@ -366,12 +366,17 @@ export default {
             if (!data) return ''
             // Use length and first/last timestamps for efficient change detection
             const len = data.length
-            if (len === 0) return '0'
+            // Reactive invalidation counter from DataCube root — forwarded
+            // through Chart.common_props → Section → Grid props. Bumped by
+            // DataCube.touchData() for in-place mutations (tick close, color
+            // slot writes) that the timestamp/length hash alone cannot detect.
+            const dataVersion = this.$props.dataVersion ?? 0
+            if (len === 0) return `0,${dataVersion}`
             const first = data[0]?.data?.[0]?.[0] ?? ''
             // PERF: Direct index access instead of slice(-1)[0] which allocates a new array
             const lastOvData = data[len - 1]?.data
             const last = lastOvData?.[lastOvData.length - 1]?.[0] ?? ''
-            return `${len},${first},${last}`
+            return `${len},${first},${last},${dataVersion}`
         },
         yTransformKey() {
             const yt = this.$props.y_transform

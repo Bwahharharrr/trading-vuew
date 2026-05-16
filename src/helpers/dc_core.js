@@ -104,12 +104,26 @@ export default class DCCore extends DCEvents {
             this.data['datasets'] = []
         }
 
+        // Reactive invalidation counter — bumped by touchData() whenever any
+        // render-relevant in-place mutation occurs (tick close updates,
+        // candle color writes, etc). Read by Chart.dataHashKey and the Grid
+        // dataKey prop chain so the static canvas repaints without relying
+        // on Vue's deep reactivity for nested OHLCV arrays.
+        this.data['dataVersion'] = 0
+
         // Init dataset proxies
         for (let ds of this.data.datasets) {
             if (!this.dss) this.dss = {}
             this.dss[ds.id] = new Dataset(this, ds)
         }
 
+    }
+
+    // Bump the reactive render-invalidation counter. Call after any in-place
+    // mutation to OHLCV / overlay data / candle color slots so consumers
+    // (Chart.dataHashKey, Grid.dataKey) recompute and trigger redraw.
+    touchData() {
+        this.data['dataVersion'] = (this.data.dataVersion || 0) + 1
     }
 
     // Range change callback (called by TradingVue)
@@ -253,6 +267,7 @@ export default class DCCore extends DCEvents {
             this.agg.push('ohlcv', nc, tf)
             ohlcv.push(nc)
             this.scroll_to(t)
+            this.touchData()
 
         } else if (tick !== undefined) {
             // Update an existing one
@@ -262,6 +277,7 @@ export default class DCCore extends DCEvents {
             last[4] = tick
             last[5] += volume
             this.agg.push('ohlcv', last, tf)
+            this.touchData()
         }
         this.update_overlays(data, t, tf)
         return t >= t_next
@@ -562,8 +578,10 @@ export default class DCCore extends DCEvents {
             if (main && this.sett.auto_scroll) {
                 this.scroll_to(upd_t)
             }
+            this.touchData()
         } else if (upd_t === last_t) {
             data[data.length - 1] = point
+            this.touchData()
         }
 
     }

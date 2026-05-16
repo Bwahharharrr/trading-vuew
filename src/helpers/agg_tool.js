@@ -82,20 +82,7 @@ export default class AggTool {
             this.dc.ww.just('update-data', out)
             this.data_changed = false
         }
-        // Notify the chart that data changed. Without scripts, the
-        // Worker feedback loop (data-len-changed) never fires, so the
-        // chart's dataHashKey computed doesn't retrigger on in-place
-        // mutations. Manually run the same update chain as the watcher:
-        // subset → layout → last_values → rerender.
-        if (out.ohlcv && this.dc.tv && this.dc.tv.$refs.chart) {
-            let chart = this.dc.tv.$refs.chart
-            let sub = chart.subset()
-            if (chart.sub.length || sub.length) {
-                Utils.overwrite(chart.sub, sub)
-            }
-            chart.update_layout()
-            chart.update_last_values()
-        }
+        // fast_merge() calls touchData(); Chart.dataHashKey handles layout/redraw.
         // PERFORMANCE: Use RAF-coordinated scheduling
         // This ensures updates are synced with the render loop
         this._scheduleNextUpdate()

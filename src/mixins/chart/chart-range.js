@@ -185,7 +185,10 @@ export default {
                 config: this.$props.config,
                 buttons: this.$props.buttons,
                 meta: this.meta,
-                skin: this.$props.skin
+                skin: this.$props.skin,
+                // Reactive render-invalidation counter from DataCube root,
+                // forwarded so Grid.dataKey can detect in-place mutations.
+                dataVersion: this.$props.data?.dataVersion ?? 0
             }
         },
 
@@ -258,7 +261,11 @@ export default {
             const lastTs = ohlcv[ohlcvLen - 1]?.[0] ?? ''
             const lastClose = ohlcv[ohlcvLen - 1]?.[4] ?? ''
             const scrollLock = data.scrollLock ? '1' : '0'
-            return `${ohlcvLen},${firstTs},${lastTs},${lastClose},${scrollLock}`
+            // Bumped by DataCube.touchData() on any render-relevant in-place
+            // mutation (tick close, color slot writes, etc) that Vue's deep
+            // array reactivity does not reliably observe.
+            const dataVersion = data.dataVersion ?? 0
+            return `${ohlcvLen},${firstTs},${lastTs},${lastClose},${scrollLock},${dataVersion}`
         }
     },
 

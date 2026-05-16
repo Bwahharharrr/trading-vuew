@@ -158,7 +158,8 @@ export default {
             // Use dc.update() for proper render cycle (AggTool batching + re-draw).
             // For same-timestamp updates, fast_merge replaces in-place (no scroll).
             // For new candles, fast_merge appends and auto-scrolls.
-            // Re-render is handled inside AggTool.update() after fast_merge.
+            // fast_merge() calls touchData() which propagates through
+            // Chart.dataHashKey / Grid.dataKey to trigger the redraw.
             this.chart.update({ candle: dcCandle })
         },
 
@@ -198,6 +199,7 @@ export default {
                         }
                     })
                 }
+                this.chart.touchData()
             }
 
             // Recolor the alert's candle if viewing data_alerts
@@ -223,6 +225,7 @@ export default {
                         if (chartData[i][0] === alertTs) {
                             while (chartData[i].length < 9) chartData[i].push('')
                             chartData[i][6] = msg.candle_alert_color
+                            this.chart.touchData()
                             break
                         }
                     }
@@ -255,13 +258,16 @@ export default {
             const chartData = this.chart.data.chart.data
             const colors = useAlertColors ? this.liveAlertColors : this.liveScmrColors
 
+            let touched = false
             for (let i = 0; i < colors.length; i++) {
                 const ci = this.liveDataStartIdx + i
                 if (ci >= 0 && ci < chartData.length) {
                     while (chartData[ci].length < 9) chartData[ci].push('')
                     chartData[ci][6] = colors[i] || ''
+                    touched = true
                 }
             }
+            if (touched) this.chart.touchData()
         },
     },
 
