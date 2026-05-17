@@ -57,6 +57,9 @@ export default {
                 console.log('[WS] Connected to', this.wsUrl)
                 this.wsConnected = true
                 this.wsReconnectDelay = 1000 // Reset backoff
+                // Signal the preboot WebSocket wrap to start filtering
+                // dev-server reload messages while the live feed is active.
+                window.__tvw_wsConnected = true
             }
 
             this.ws.onmessage = (event) => {
@@ -73,6 +76,7 @@ export default {
                 if (this._wsGen !== myGen) return  // stale (we already moved on)
                 console.log('[WS] Disconnected')
                 this.wsConnected = false
+                window.__tvw_wsConnected = false
                 this._wsScheduleReconnect(myGen)
             }
 
@@ -96,6 +100,7 @@ export default {
                 this.ws = null
             }
             this.wsConnected = false
+            window.__tvw_wsConnected = false
         },
 
         _wsScheduleReconnect(originatingGen) {

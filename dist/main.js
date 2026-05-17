@@ -1,17 +1,6 @@
 /******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
-/***/ "./data/data.json"
-/*!************************!*\
-  !*** ./data/data.json ***!
-  \************************/
-(module) {
-
-"use strict";
-module.exports = /*#__PURE__*/JSON.parse('{"1h":{"schema_version":1,"chart":{"type":"Candles","data":[[1778252400000,80132,80195,79600,80130,31.2035334],[1778256000000,80130,80171,79717,79773,29.43170073],[1778259600000,79773,80245,79690,80044,44.82906365],[1778263200000,80050,80292,80044,80061,36.83393518],[1778266800000,80047,80176,79924,80140,35.27684608],[1778270400000,80156,80275,80062,80120,36.66704002],[1778274000000,80121,80259,80086,80256,25.39351443],[1778277600000,80244,80399,80225,80261,32.3115569],[1778281200000,80252,80285,80092,80170,16.03005439],[1778284800000,80183,80226,80106,80216,6.83332137],[1778288400000,80211,80418,80198,80302,16.22354991],[1778292000000,80308,80470,80306,80406,27.0134948],[1778295600000,80410,80543,80286,80366,14.53169256],[1778299200000,80379,80653,80347,80361,29.7834871],[1778302800000,80371,80467,80329,80366,22.31143318],[1778306400000,80369,80423,80172,80238,22.22253962],[1778310000000,80246,80280,80102,80216,24.04370211],[1778313600000,80213,80427,80213,80386,32.50651388],[1778317200000,80382,80392,80213,80232,67.07760757],[1778320800000,80234,80337,80161,80253,92.8497838],[1778324400000,80245,80362,80233,80314,10.34218158],[1778328000000,80313,80389,80239,80369,14.4650244],[1778331600000,80370,80386,80275,80352,10.11491762],[1778335200000,80352,80390,80175,80284,22.82653443],[1778338800000,80280,80559,80185,80482,31.38873749],[1778342400000,80482,80786,80441,80599,31.60124974],[1778346000000,80600,80890,80588,80772,25.28484192],[1778349600000,80768,81050,80738,80869,40.12732106],[1778353200000,80863,80926,80728,80907,22.92922668],[1778356800000,80908,80909,80713,80781,9.21159534],[1778360400000,80775,80869,80710,80739,8.57005142],[1778364000000,80748,80794,80638,80732,9.20031672],[1778367600000,80725,80815,80584,80634,6.39530458],[1778371200000,80633,80733,80571,80630,13.68246028],[1778374800000,80628,80651,80531,80647,9.56107718],[1778378400000,80637,80749,80566,80742,7.98235423],[1778382000000,80732,80840,80650,80718,34.61444797],[1778385600000,80726,80788,80668,80695,7.5439031],[1778389200000,80695,80761,80615,80637,8.43342294],[1778392800000,80639,80703,80587,80683,12.66377059],[1778396400000,80685,80760,80664,80684,4.7494906],[1778400000000,80673,80865,80638,80796,11.84174465],[1778403600000,80797,80874,80700,80757,9.09831833],[1778407200000,80757,80830,80644,80814,16.42117572],[1778410800000,80823,80920,80710,80764,8.42856075],[1778414400000,80763,80908,80722,80880,13.49093288],[1778418000000,80870,80970,80810,80916,31.00886042],[1778421600000,80921,80969,80779,80953,49.02908502],[1778425200000,80955,81419,80885,81370,42.06246765],[1778428800000,81388,81461,81144,81328,38.50330836],[1778432400000,81327,81540,81174,81438,35.74482899],[1778436000000,81439,81459,81172,81220,19.04080161],[1778439600000,81219,81446,81086,81384,31.57069438],[1778443200000,81395,81418,80237,80686,69.03678994],[1778446800000,80672,80923,80524,80668,62.04749146],[1778450400000,80666,82109,80606,81975,222.71625178],[1778454000000,81990,82433,81982,82154,102.07737923],[1778457600000,82155,82328,81216,81401,44.28716212],[1778461200000,81404,81690,81229,81460,42.10686722],[1778464800000,81466,81522,81055,81117,26.38130803],[1778468400000,81115,81142,80470,80681,81.28430182],[1778472000000,80682,80829,80567,80761,20.01736261],[1778475600000,80766,80929,80707,80780,29.85806495],[1778479200000,80778,81020,80708,80776,21.40241789],[1778482800000,80783,80794,80600,80698,43.79460917],[1778486400000,80701,80820,80562,80716,24.8915267],[1778490000000,80704,80963,80699,80920,18.23296004],[1778493600000,80909,81159,80878,80899,24.30888644],[1778497200000,80900,81164,80854,81164,25.97864369],[1778500800000,81165,81322,80977,81015,32.41603317],[1778504400000,81014,81294,80702,81018,40.64717794],[1778508000000,81018,81210,80400,80899,46.24780191],[1778511600000,80906,81418,80776,81394,33.02910918],[1778515200000,81403,81887,81288,81536,70.70460284],[1778518800000,81544,82009,81325,81897,91.98161143],[1778522400000,81913,82100,81796,81829,55.35877431],[1778526000000,81837,82060,81697,81923,71.96559357],[1778529600000,81929,82041,81718,81780,56.87661876],[1778533200000,81777,81873,81556,81781,32.19914156],[1778536800000,81781,81920,81685,81777,22.65316932],[1778540400000,81774,81774,81549,81685,12.66697907],[1778544000000,81688,81731,81427,81499,41.41688953],[1778547600000,81489,81569,80681,81145,82.67505196],[1778551200000,81149,81302,81037,81229,35.47945161],[1778554800000,81228,81261,80986,81018,17.59325967],[1778558400000,81018,81268,80940,81186,35.001554],[1778562000000,81178,81279,81142,81194,15.94689089],[1778565600000,81193,81279,81000,81031,44.99937649],[1778569200000,81018,81134,80795,80843,122.00781026],[1778572800000,80863,80973,80586,80840,144.06416196],[1778576400000,80833,80980,80711,80833,118.87160641],[1778580000000,80831,80843,80567,80654,23.18660255],[1778583600000,80655,80765,80466,80758,31.82333892],[1778587200000,80748,80976,80581,80849,28.86737724],[1778590800000,80850,80900,80351,80430,36.42848201],[1778594400000,80439,80846,80343,80495,36.7132578],[1778598000000,80494,80622,80144,80296,42.69851253],[1778601600000,80299,80389,79813,79976,131.00909916],[1778605200000,79974,80576,79920,80484,38.37145972],[1778608800000,80482,80729,80380,80631,23.26088689],[1778612400000,80638,80839,80626,80809,35.71044198],[1778616000000,80809,80859,80602,80655,20.42968871],[1778619600000,80664,80704,80458,80545,16.52145011],[1778623200000,80558,80763,80551,80628,24.95620466],[1778626800000,80628,80681,80397,80457,22.39042939],[1778630400000,80460,80727,80371,80660,24.69415424],[1778634000000,80673,81146,80627,80947,72.00479765],[1778637600000,80962,81232,80875,81011,32.70398748],[1778641200000,81005,81257,80933,81196,26.76834179],[1778644800000,81210,81238,81064,81177,20.04010361],[1778648400000,81183,81202,80940,80966,13.17778877],[1778652000000,80970,81103,80917,80927,24.4742004],[1778655600000,80928,81008,80833,80981,18.14287001],[1778659200000,80980,81180,80893,81135,29.06949693],[1778662800000,81147,81285,81086,81240,20.86492278],[1778666400000,81238,81259,80764,80764,26.83633746],[1778670000000,80761,80809,80451,80451,26.22991305],[1778673600000,80462,80559,79785,80161,32.90307911],[1778677200000,80165,80312,79532,79606,39.45009361],[1778680800000,79606,79866,79428,79721,32.73719995],[1778684400000,79712,79824,78780,78797,147.0434575],[1778688000000,78802,79195,78708,79072,47.63879617],[1778691600000,79074,79540,79074,79490,31.6718284],[1778695200000,79504,79764,79485,79567,53.149832],[1778698800000,79562,79611,79348,79602,22.77730326],[1778702400000,79599,79730,79572,79672,24.18411439],[1778706000000,79660,79660,79295,79356,22.17333687],[1778709600000,79364,79442,79174,79396,19.29956219],[1778713200000,79397,79473,79194,79288,25.42447337],[1778716800000,79286,79654,79263,79537,32.85327327],[1778720400000,79537,79653,79369,79560,26.05713146],[1778724000000,79564,79650,79179,79326,57.81405571],[1778727600000,79324,79430,78867,79008,68.04986726],[1778731200000,79007,79434,78931,79419,20.33120529],[1778734800000,79400,79963,79335,79774,55.97472718],[1778738400000,79774,79911,79729,79788,30.05288632],[1778742000000,79767,79913,79666,79717,22.44188556],[1778745600000,79720,79908,79600,79793,28.71738524],[1778749200000,79795,79879,79532,79594,24.52462219],[1778752800000,79592,79729,79369,79542,28.51028784],[1778756400000,79542,79577,79177,79204,42.19432687],[1778760000000,79202,79756,79180,79744,35.73734002],[1778763600000,79728,80048,79642,79702,50.53422056],[1778767200000,79669,80980,79529,80943,43.56624934],[1778770800000,80943,81318,80783,81264,53.28684567],[1778774400000,81284,81865,81057,81865,115.47855263],[1778778000000,81836,82010,81248,81635,76.88956479],[1778781600000,81625,81932,81403,81557,89.25723536],[1778785200000,81558,81706,81290,81401,102.74171587],[1778788800000,81408,81569,81133,81379,48.47602657],[1778792400000,81395,81493,81232,81366,33.98929972],[1778796000000,81366,81525,81304,81425,18.41344092],[1778799600000,81415,81415,81000,81059,26.91275841],[1778803200000,81059,81619,81020,81472,52.52118315],[1778806800000,81456,81571,81060,81087,34.18189715],[1778810400000,81090,81311,80689,81247,68.84905715],[1778814000000,81238,81294,80870,81024,33.9882548],[1778817600000,81019,81060,80653,80688,23.36184837],[1778821200000,80688,80838,80255,80311,36.53608982],[1778824800000,80320,80604,80265,80545,28.44851596],[1778828400000,80545,80970,80527,80778,44.23750148],[1778832000000,80778,80786,80381,80611,24.84543103],[1778835600000,80612,80638,80326,80448,20.30557061],[1778839200000,80441,80754,80365,80668,27.88978948],[1778842800000,80686,80725,80544,80578,11.61519821],[1778846400000,80579,80603,80260,80362,41.92864211],[1778850000000,80347,80356,78621,78696,90.22325417],[1778853600000,78722,79304,78570,79117,32.0294122],[1778857200000,79127,79345,78981,79117,24.64160496],[1778860800000,79118,79348,79082,79269,28.65038685],[1778864400000,79247,79470,79185,79429,26.88684761],[1778868000000,79429,79523,79123,79225,33.82606549],[1778871600000,79239,79247,79015,79092,25.74367982],[1778875200000,79085,79175,78934,79078,16.32261865],[1778878800000,79080,79157,78841,78912,24.26113295],[1778882400000,78922,79111,78914,79053,13.40078722],[1778886000000,79050,79121,79021,79062,11.13201831],[1778889600000,79068,79183,79021,79069,9.18339768],[1778893200000,79071,79145,78959,79117,10.64584313],[1778896800000,79115,79165,79028,79097,12.29679446],[1778900400000,79095,79144,79001,79034,4.89489808],[1778904000000,79034,79089,78809,78984,7.96635942],[1778907600000,78994,78999,78891,78977,11.0729593],[1778911200000,78982,79012,78403,78596,42.76964689],[1778914800000,78584,78601,78001,78322,85.90177005],[1778918400000,78325,78493,78281,78370,126.15652502],[1778922000000,78371,78400,77832,78037,23.31931509],[1778925600000,78041,78064,77598,77922,23.79157189],[1778929200000,77926,78153,77926,78031,11.06113356],[1778932800000,78031,78100,77875,77990,20.03673985],[1778936400000,77991,78003,77796,77975,44.55205998],[1778940000000,77979,78301,77851,78089,13.88953147],[1778943600000,78078,78235,78020,78184,9.31481895],[1778947200000,78182,78324,78076,78154,12.22096838],[1778950800000,78162,78280,78151,78168,8.40075378],[1778954400000,78167,78299,78108,78184,13.01587699],[1778958000000,78193,78273,78165,78223,5.11657576],[1778961600000,78222,78279,78160,78209,6.03165113],[1778965200000,78196,78262,78169,78231,7.5042985],[1778968800000,78228,78245,78124,78144,7.79842698],[1778972400000,78132,78163,78113,78155,1.99133392]]},"onchart":[],"offchart":[],"views":{"SCMR":{"colors":["#9FB4B4","#9FB4B4","#9FB4B4","#9FB4B4","#9FB4B4","#9FB4B4","#FFFF00","#00FF00","#FF7F00","#9FB4B4","#FFFF00","#00FF00","#758A0A","#008000","#008000","#9FB4B4","#9FB4B4","#00FF00","#9FB4B4","#9FB4B4","#9FB4B4","#FFFF00","#9FB4B4","#9FB4B4","#00FF00","#00FF00","#00FF00","#00FF00","#00FF00","#00FF00","#00FF00","#008000","#9FB4B4","#9FB4B4","#9FB4B4","#FFFF00","#758A0A","#9FB4B4","#FF7F00","#9FB4B4","#9FB4B4","#FFFF00","#758A0A","#008000","#758A0A","#008000","#00FF00","#00FF00","#00FF00","#758A0A","#00FF00","#00FF00","#008000","#800080","#FF0000","#00FF00","#00FF00","#FF7F00","#9FB4B4","#9FB4B4","#800080","#FF00FF","#FF0000","#FF0000","#FF0000","#FF0000","#0066FF","#9FB4B4","#FFFF00","#758A0A","#9FB4B4","#9FB4B4","#FFFF00","#00FF00","#00FF00","#758A0A","#00FF00","#00FF00","#008000","#008000","#008000","#9FB4B4","#800080","#0066FF","#FF0000","#0066FF","#9FB4B4","#FF0000","#FF0000","#FF0000","#FF0000","#FF0000","#0066FF","#FF0000","#FF0000","#FF0000","#FF0000","#FF0000","#0066FF","#9FB4B4","#FFFF00","#758A0A","#FF7F00","#9FB4B4","#FF0000","#9FB4B4","#FFFF00","#00FF00","#00FF00","#00FF00","#FF7F00","#9FB4B4","#9FB4B4","#FFFF00","#00FF00","#800080","#FF0000","#FF0000","#FF0000","#FF0000","#FF0000","#FF0000","#FF0000","#0066FF","#FF0000","#FF0000","#800080","#FF0000","#FF0000","#0066FF","#9FB4B4","#FF0000","#800080","#0066FF","#FFFF00","#9FB4B4","#FF7F00","#9FB4B4","#9FB4B4","#9FB4B4","#800080","#0066FF","#9FB4B4","#FFFF00","#00FF00","#00FF00","#758A0A","#00FF00","#00FF00","#00FF00","#00FF00","#00FF00","#9FB4B4","#00FF00","#9FB4B4","#008000","#9FB4B4","#800080","#FF0000","#FF0000","#0066FF","#9FB4B4","#FF0000","#0066FF","#9FB4B4","#FF0000","#FF0000","#FF0000","#FF0000","#FF0000","#FF0000","#FF0000","#FF0000","#FF0000","#FF0000","#FF0000","#FF0000","#0066FF","#FF0000","#FF0000","#FF0000","#800080","#FF0000","#FF0000","#FF0000","#FF0000","#FF0000","#FF0000","#FF0000","#FF0000","#FF0000","#0066FF","#FF0000","#FF0000","#FF0000","#FF0000","#9FB4B4","#9FB4B4","#9FB4B4","#FF0000","#FF0000"]}}}}');
-
-/***/ },
-
 /***/ "./node_modules/@babel/runtime/helpers/OverloadYield.js"
 /*!**************************************************************!*\
   !*** ./node_modules/@babel/runtime/helpers/OverloadYield.js ***!
@@ -21691,13 +21680,11 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ });
 /* harmony import */ var _TradingVue_vue__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./TradingVue.vue */ "./src/TradingVue.vue");
 /* harmony import */ var _components_IndicatorSettings_vue__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./components/IndicatorSettings.vue */ "./src/components/IndicatorSettings.vue");
-/* harmony import */ var _data_data_json__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ../data/data.json */ "./data/data.json");
-/* harmony import */ var _src_helpers_datacube_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ../src/helpers/datacube.js */ "./src/helpers/datacube.js");
-/* harmony import */ var _components_overlays_BuysAndSells_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./components/overlays/BuysAndSells.js */ "./src/components/overlays/BuysAndSells.js");
-/* harmony import */ var _components_overlays_Balance_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./components/overlays/Balance.js */ "./src/components/overlays/Balance.js");
-/* harmony import */ var _components_overlays_LineTracker_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./components/overlays/LineTracker.js */ "./src/components/overlays/LineTracker.js");
-/* harmony import */ var _mixins_app_index_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! ./mixins/app/index.js */ "./src/mixins/app/index.js");
-
+/* harmony import */ var _src_helpers_datacube_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ../src/helpers/datacube.js */ "./src/helpers/datacube.js");
+/* harmony import */ var _components_overlays_BuysAndSells_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./components/overlays/BuysAndSells.js */ "./src/components/overlays/BuysAndSells.js");
+/* harmony import */ var _components_overlays_Balance_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./components/overlays/Balance.js */ "./src/components/overlays/Balance.js");
+/* harmony import */ var _components_overlays_LineTracker_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./components/overlays/LineTracker.js */ "./src/components/overlays/LineTracker.js");
+/* harmony import */ var _mixins_app_index_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./mixins/app/index.js */ "./src/mixins/app/index.js");
 
 
 
@@ -21709,62 +21696,57 @@ __webpack_require__.r(__webpack_exports__);
 
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
   name: 'app',
-  mixins: [_mixins_app_index_js__WEBPACK_IMPORTED_MODULE_7__.ViewManager, _mixins_app_index_js__WEBPACK_IMPORTED_MODULE_7__.IndicatorManager, _mixins_app_index_js__WEBPACK_IMPORTED_MODULE_7__.FileManager, _mixins_app_index_js__WEBPACK_IMPORTED_MODULE_7__.ChartState, _mixins_app_index_js__WEBPACK_IMPORTED_MODULE_7__.DrawingTools, _mixins_app_index_js__WEBPACK_IMPORTED_MODULE_7__.WsManager],
+  mixins: [_mixins_app_index_js__WEBPACK_IMPORTED_MODULE_6__.ViewManager, _mixins_app_index_js__WEBPACK_IMPORTED_MODULE_6__.IndicatorManager, _mixins_app_index_js__WEBPACK_IMPORTED_MODULE_6__.FileManager, _mixins_app_index_js__WEBPACK_IMPORTED_MODULE_6__.ChartState, _mixins_app_index_js__WEBPACK_IMPORTED_MODULE_6__.DrawingTools, _mixins_app_index_js__WEBPACK_IMPORTED_MODULE_6__.WsManager],
   components: {
     TradingVue: _TradingVue_vue__WEBPACK_IMPORTED_MODULE_0__["default"],
     IndicatorSettings: _components_IndicatorSettings_vue__WEBPACK_IMPORTED_MODULE_1__["default"]
   },
   data: function data() {
     return {
-      chart: new _src_helpers_datacube_js__WEBPACK_IMPORTED_MODULE_3__["default"](),
-      overlays: [_components_overlays_BuysAndSells_js__WEBPACK_IMPORTED_MODULE_4__["default"], _components_overlays_Balance_js__WEBPACK_IMPORTED_MODULE_5__["default"], _components_overlays_LineTracker_js__WEBPACK_IMPORTED_MODULE_6__["default"]],
+      chart: new _src_helpers_datacube_js__WEBPACK_IMPORTED_MODULE_2__["default"](),
+      overlays: [_components_overlays_BuysAndSells_js__WEBPACK_IMPORTED_MODULE_3__["default"], _components_overlays_Balance_js__WEBPACK_IMPORTED_MODULE_4__["default"], _components_overlays_LineTracker_js__WEBPACK_IMPORTED_MODULE_5__["default"]],
       // Store DataCube class for mixin use
-      DataCubeClass: _src_helpers_datacube_js__WEBPACK_IMPORTED_MODULE_3__["default"]
+      DataCubeClass: _src_helpers_datacube_js__WEBPACK_IMPORTED_MODULE_2__["default"]
     };
   },
   mounted: function mounted() {
     var _this = this;
     window.addEventListener('resize', this.onResize);
+    // loadDataFileList resolves the picker; the watcher on dataFiles
+    // (file-manager.js) consumes pendingFileLoad and drives the rest.
     this.loadDataFileList();
-    this.loadPersistentIndicators();
 
-    // Load saved state from localStorage
+    // Load saved state from sessionStorage (per-tab) + localStorage (global).
     var savedState = this.loadStateFromStorage();
     if (savedState) {
       var _savedState$log_scale;
-      // Restore preferences
       this.log_scale = (_savedState$log_scale = savedState.log_scale) !== null && _savedState$log_scale !== void 0 ? _savedState$log_scale : true;
       this.indicatorVisibility = savedState.indicatorVisibility || {};
       this.selectedView = savedState.selectedView || '';
       this.persistentIndicatorVisibility = savedState.persistentIndicatorVisibility || {};
       this.accordionExpandedViews = savedState.accordionExpandedViews || {};
-
-      // If saved file is not the default, defer loading until file list arrives
-      if (savedState.selectedDataFile && savedState.selectedDataFile !== 'data.json') {
-        this.pendingFileLoad = savedState.selectedDataFile;
-        this.pendingIndicatorSettings = savedState.indicatorSettings || {};
-        // Initialize with default data for now (will be replaced when file loads)
-        this.initializeChart(_data_data_json__WEBPACK_IMPORTED_MODULE_2__);
-      } else {
-        this.initializeChart(_data_data_json__WEBPACK_IMPORTED_MODULE_2__);
-        this.$nextTick(function () {
-          _this.applyRestoredIndicatorSettings(savedState.indicatorSettings || {});
-        });
-      }
-    } else {
-      // No saved state - initialize normally
-      this.initializeChart(_data_data_json__WEBPACK_IMPORTED_MODULE_2__);
     }
+
+    // Bootstrap order: ?file=<name> URL param wins (per-tab, no storage
+    // interaction); else per-tab sessionStorage; else first /data-files
+    // entry resolved by the dataFiles watcher in file-manager.js.
+    var params = new URLSearchParams(window.location.search);
+    var fileParam = params.get('file');
+    if (fileParam && !/[\/\\]|\.\./.test(fileParam)) {
+      this.pendingFileLoad = fileParam;
+      this.pendingIndicatorSettings = (savedState === null || savedState === void 0 ? void 0 : savedState.indicatorSettings) || {};
+    } else if (savedState !== null && savedState !== void 0 && savedState.selectedDataFile) {
+      this.pendingFileLoad = savedState.selectedDataFile;
+      this.pendingIndicatorSettings = savedState.indicatorSettings || {};
+    }
+    // If neither, file-manager's dataFiles watcher will pick the first
+    // data*.json once /data-files responds.
+
     this.$nextTick(function () {
       window.dc = _this.chart;
       window.tv = _this.$refs.tradingVue;
-      // Connect to live feed WebSocket
-      console.log('[App] mounted $nextTick — calling wsConnect()');
-      try {
-        _this.wsConnect();
-      } catch (e) {
-        console.error('[App] wsConnect() threw:', e);
-      }
+      // No unconditional wsConnect() here — the currentFileMeta watcher
+      // in ws-manager.js opens the WS once a file is loaded.
     });
   },
   beforeUnmount: function beforeUnmount() {
@@ -40263,10 +40245,19 @@ var DCCore = /*#__PURE__*/function (_DCEvents) {
     // Bump the reactive render-invalidation counter. Call after any in-place
     // mutation to OHLCV / overlay data / candle color slots so consumers
     // (Chart.dataHashKey, Grid.dataKey) recompute and trigger redraw.
+    //
+    // Vue 3 reactivity caveat: DataCube methods are often invoked with `this`
+    // bound to the RAW instance (e.g. from AggTool, which captured `this`
+    // in its own constructor before Vue wrapped the DataCube in reactive()).
+    // Direct writes like `this.data['x'] = ...` mutate the underlying object
+    // but bypass the Proxy traps, so Vue does not see them. Route through
+    // `this.tv.$props.data.data` when mounted — that is Vue's reactive view
+    // of the same object, and the write fires watchers correctly.
   }, {
     key: "touchData",
     value: function touchData() {
-      this.data['dataVersion'] = (this.data.dataVersion || 0) + 1;
+      var target = this.tv && this.tv.$props && this.tv.$props.data && this.tv.$props.data.data || this.data;
+      target.dataVersion = (target.dataVersion || 0) + 1;
     }
 
     // Range change callback (called by TradingVue)
@@ -41837,6 +41828,72 @@ module.exports = /*#__PURE__*/JSON.parse('["PQKj+ACAKaEpIF4B8kDelhQO4FMBGADgIYDG
 
 /***/ },
 
+/***/ "./src/helpers/ws-helpers.js"
+/*!***********************************!*\
+  !*** ./src/helpers/ws-helpers.js ***!
+  \***********************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   buildWsUrl: () => (/* binding */ buildWsUrl),
+/* harmony export */   msgMatchesMeta: () => (/* binding */ msgMatchesMeta)
+/* harmony export */ });
+// Pure helpers for the WebSocket live-feed manager.
+//
+// Extracted from ws-manager.js so they can be unit-tested without a Vue
+// instance. The mixin imports and calls these; tests import and call them
+// directly.
+
+/**
+ * Build the WS URL the FE should connect to, given a chart file's _meta.
+ *
+ * Returns null when:
+ *   - meta is missing entirely (legacy file, no live feed)
+ *   - meta.ws.port is 0 / falsy (websocket disabled at backend startup)
+ *
+ * Otherwise constructs:
+ *   <ws|wss>://<host>:<port><path>
+ * where:
+ *   - protocol is 'wss:' iff pageProtocol is 'https:'
+ *   - host is meta.ws.host if non-empty, else pageHostname
+ *   - path defaults to '/'
+ *
+ * pageProtocol / pageHostname are passed in (rather than read from
+ * window.location) so the helper is unit-testable in node.
+ */
+function buildWsUrl(meta, pageProtocol, pageHostname) {
+  if (!meta || !meta.ws || !meta.ws.port) return null;
+  var proto = pageProtocol === 'https:' ? 'wss:' : 'ws:';
+  var host = meta.ws.host || pageHostname;
+  var port = meta.ws.port;
+  var path = meta.ws.path || '/';
+  return "".concat(proto, "//").concat(host, ":").concat(port).concat(path);
+}
+
+/**
+ * Check whether an incoming WS message's identity tuple matches the
+ * currently-loaded file's _meta. Used to defend against any cross-talk
+ * (a misrouted proxy, a bug in backend dispatch, a future shared broker).
+ *
+ * Strict on all four identity fields. Empty/null fields normalize to ""
+ * so an absent instance_id on either side still matches an absent one on
+ * the other.
+ *
+ * Returns false when meta is missing entirely (no file loaded → drop).
+ */
+function msgMatchesMeta(msg, meta) {
+  if (!meta) return false;
+  if (!msg) return false;
+  var norm = function norm(v) {
+    return v == null ? '' : String(v);
+  };
+  return norm(msg.exchange) === norm(meta.exchange) && norm(msg.ticker) === norm(meta.ticker) && norm(msg.tf) === norm(meta.tf) && norm(msg.instance_id) === norm(meta.instance_id);
+}
+
+/***/ },
+
 /***/ "./src/mixins/app/chart-state.js"
 /*!***************************************!*\
   !*** ./src/mixins/app/chart-state.js ***!
@@ -42089,21 +42146,38 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
 /* harmony export */ });
-/* harmony import */ var _babel_runtime_helpers_asyncToGenerator__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! @babel/runtime/helpers/asyncToGenerator */ "./node_modules/@babel/runtime/helpers/esm/asyncToGenerator.js");
-/* harmony import */ var _babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! @babel/runtime/regenerator */ "./node_modules/@babel/runtime/regenerator/index.js");
-/* harmony import */ var _babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(_babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_1__);
-/* harmony import */ var _stuff_utils_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ../../stuff/utils.js */ "./src/stuff/utils.js");
+/* harmony import */ var _babel_runtime_helpers_defineProperty__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! @babel/runtime/helpers/defineProperty */ "./node_modules/@babel/runtime/helpers/esm/defineProperty.js");
+/* harmony import */ var _babel_runtime_helpers_asyncToGenerator__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! @babel/runtime/helpers/asyncToGenerator */ "./node_modules/@babel/runtime/helpers/esm/asyncToGenerator.js");
+/* harmony import */ var _babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! @babel/runtime/regenerator */ "./node_modules/@babel/runtime/regenerator/index.js");
+/* harmony import */ var _babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_2___default = /*#__PURE__*/__webpack_require__.n(_babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_2__);
+/* harmony import */ var _stuff_utils_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ../../stuff/utils.js */ "./src/stuff/utils.js");
 
 
-// File management mixin - handles file I/O and localStorage persistence
+function ownKeys(e, r) { var t = Object.keys(e); if (Object.getOwnPropertySymbols) { var o = Object.getOwnPropertySymbols(e); r && (o = o.filter(function (r) { return Object.getOwnPropertyDescriptor(e, r).enumerable; })), t.push.apply(t, o); } return t; }
+function _objectSpread(e) { for (var r = 1; r < arguments.length; r++) { var t = null != arguments[r] ? arguments[r] : {}; r % 2 ? ownKeys(Object(t), !0).forEach(function (r) { (0,_babel_runtime_helpers_defineProperty__WEBPACK_IMPORTED_MODULE_0__["default"])(e, r, t[r]); }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(e, Object.getOwnPropertyDescriptors(t)) : ownKeys(Object(t)).forEach(function (r) { Object.defineProperty(e, r, Object.getOwnPropertyDescriptor(t, r)); }); } return e; }
 
+// File management mixin - handles file I/O, file metadata extraction,
+// and split storage (per-tab vs global).
+
+
+
+// Storage key constants
+var SESSION_STATE_KEY = 'trading-vue-state-tab'; // per-tab: file + indicator settings
+var LOCAL_STATE_KEY = 'trading-vue-state'; // global: prefs (kept for back-compat)
 
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
   data: function data() {
     return {
       dataFiles: [],
-      currentDataFile: 'data.json',
-      selectedDataFile: 'data.json',
+      currentDataFile: '',
+      selectedDataFile: '',
+      // Identity + ws + indicators_url for the currently-loaded chart file.
+      // Set in onFileSelected from data[firstTf]._meta. ws-manager watches
+      // this and connects/reconnects accordingly; indicator-manager
+      // watches it and re-fetches the matching indicators file.
+      // null when the loaded file has no _meta (legacy / build_model
+      // without _meta would also be null — they get no live feed).
+      currentFileMeta: null,
       pendingFileLoad: null,
       // File to load after file list arrives
       pendingIndicatorSettings: null // Settings to apply after file loads
@@ -42112,9 +42186,9 @@ __webpack_require__.r(__webpack_exports__);
   methods: {
     loadDataFileList: function loadDataFileList() {
       var _this = this;
-      return (0,_babel_runtime_helpers_asyncToGenerator__WEBPACK_IMPORTED_MODULE_0__["default"])(/*#__PURE__*/_babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_1___default().mark(function _callee() {
+      return (0,_babel_runtime_helpers_asyncToGenerator__WEBPACK_IMPORTED_MODULE_1__["default"])(/*#__PURE__*/_babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_2___default().mark(function _callee() {
         var response, _t;
-        return _babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_1___default().wrap(function (_context) {
+        return _babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_2___default().wrap(function (_context) {
           while (1) switch (_context.prev = _context.next) {
             case 0:
               _context.prev = 0;
@@ -42146,9 +42220,9 @@ __webpack_require__.r(__webpack_exports__);
     },
     onFileSelected: function onFileSelected(filename) {
       var _this2 = this;
-      return (0,_babel_runtime_helpers_asyncToGenerator__WEBPACK_IMPORTED_MODULE_0__["default"])(/*#__PURE__*/_babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_1___default().mark(function _callee2() {
+      return (0,_babel_runtime_helpers_asyncToGenerator__WEBPACK_IMPORTED_MODULE_1__["default"])(/*#__PURE__*/_babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_2___default().mark(function _callee2() {
         var _firstTfData, savedRange, prevStart, prevEnd, ohlcv, response, data, newStart, newEnd, firstTf, firstTfData, timeframes, availableViews, clippedIndicators, viewData, selectedOption, preparedData, sameBounds, _t2;
-        return _babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_1___default().wrap(function (_context2) {
+        return _babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_2___default().wrap(function (_context2) {
           while (1) switch (_context2.prev = _context2.next) {
             case 0:
               if (!(!filename || /[\/\\]|\.\./.test(filename))) {
@@ -42193,7 +42267,7 @@ __webpack_require__.r(__webpack_exports__);
               newStart = null;
               newEnd = null;
               if (data.chart && Array.isArray(data.chart.data)) {
-                // Single-timeframe format (data.json style)
+                // Single-timeframe format (legacy data.json style)
                 _this2.charts = {
                   'default': data
                 };
@@ -42201,14 +42275,14 @@ __webpack_require__.r(__webpack_exports__);
                 firstTf = 'default';
                 firstTfData = data;
                 // PERFORMANCE: Use fastDeepCopy instead of JSON.parse(stringify)
-                _this2.originalChartData = _stuff_utils_js__WEBPACK_IMPORTED_MODULE_2__["default"].fastDeepCopy(data.chart.data);
+                _this2.originalChartData = _stuff_utils_js__WEBPACK_IMPORTED_MODULE_3__["default"].fastDeepCopy(data.chart.data);
                 _this2.extractCandleColoringOptions(data, 'default');
                 if (data.chart.data.length >= 2) {
                   newStart = data.chart.data[0][0];
                   newEnd = data.chart.data[data.chart.data.length - 1][0];
                 }
               } else {
-                // Multi-timeframe format (data_tf.json style)
+                // Multi-timeframe format (data_<...>.json style)
                 _this2.charts = data;
                 timeframes = Object.keys(data);
                 if (timeframes.length > 0) {
@@ -42216,7 +42290,7 @@ __webpack_require__.r(__webpack_exports__);
                   firstTfData = data[firstTf];
                   _this2.currentTimeframe = firstTf;
                   // PERFORMANCE: Use fastDeepCopy instead of JSON.parse(stringify)
-                  _this2.originalChartData = _stuff_utils_js__WEBPACK_IMPORTED_MODULE_2__["default"].fastDeepCopy(firstTfData.chart.data);
+                  _this2.originalChartData = _stuff_utils_js__WEBPACK_IMPORTED_MODULE_3__["default"].fastDeepCopy(firstTfData.chart.data);
                   _this2.extractCandleColoringOptions(firstTfData, firstTf);
                   if (firstTfData.chart.data.length >= 2) {
                     newStart = firstTfData.chart.data[0][0];
@@ -42224,6 +42298,12 @@ __webpack_require__.r(__webpack_exports__);
                   }
                 }
               }
+
+              // Extract _meta (if present). Files written by qb-new live or
+              // build_model carry a per-tf-payload _meta block; legacy files
+              // (committed bootstrap data.json, hand-edited files) won't.
+              // Null _meta → no live WS, no per-file indicators fetch.
+              _this2.currentFileMeta = firstTfData && firstTfData._meta ? firstTfData._meta : null;
 
               // Determine displayedView based on selectedView availability
               availableViews = _this2.candleColoringOptions.map(function (opt) {
@@ -42289,33 +42369,59 @@ __webpack_require__.r(__webpack_exports__);
         }, _callee2, null, [[1, 5]]);
       }))();
     },
-    // localStorage persistence methods
+    // ── Persistence: split per-tab state (sessionStorage) from global
+    //    preferences (localStorage). Per-tab keys live in sessionStorage so
+    //    multiple tabs can view different files without trampling each
+    //    other's selection on reload.
     saveStateToStorage: function saveStateToStorage() {
-      var state = {
+      var tabState = {
         selectedDataFile: this.selectedDataFile,
+        indicatorSettings: this.getIndicatorSettings()
+      };
+      var globalState = {
         selectedView: this.selectedView,
         log_scale: this.log_scale,
         indicatorVisibility: this.indicatorVisibility,
-        indicatorSettings: this.getIndicatorSettings(),
         persistentIndicatorVisibility: this.persistentIndicatorVisibility,
         accordionExpandedViews: this.accordionExpandedViews
       };
-      localStorage.setItem('trading-vue-state', JSON.stringify(state));
+      try {
+        sessionStorage.setItem(SESSION_STATE_KEY, JSON.stringify(tabState));
+      } catch (e) {
+        console.error('Failed to write sessionStorage:', e);
+      }
+      try {
+        localStorage.setItem(LOCAL_STATE_KEY, JSON.stringify(globalState));
+      } catch (e) {
+        console.error('Failed to write localStorage:', e);
+      }
     },
     loadStateFromStorage: function loadStateFromStorage() {
+      var tab = {},
+        global = {};
       try {
-        var saved = localStorage.getItem('trading-vue-state');
-        return saved ? JSON.parse(saved) : null;
+        var t = sessionStorage.getItem(SESSION_STATE_KEY);
+        if (t) tab = JSON.parse(t);
       } catch (e) {
-        console.error('Failed to parse saved state:', e);
-        return null;
+        console.error('Failed to parse sessionStorage state:', e);
       }
+      try {
+        var g = localStorage.getItem(LOCAL_STATE_KEY);
+        if (g) global = JSON.parse(g);
+      } catch (e) {
+        console.error('Failed to parse localStorage state:', e);
+      }
+      // Merge for back-compat with the previous single-store shape.
+      // Tab state wins for per-tab keys; global wins for the rest.
+      var merged = _objectSpread(_objectSpread({}, global), tab);
+      return Object.keys(merged).length ? merged : null;
     }
   },
   watch: {
     dataFiles: function dataFiles(newFiles) {
       var _this3 = this;
-      // Load pending file when file list arrives
+      // 1) Honour an explicit pending request (from ?file= URL param or
+      //    sessionStorage restore) if the file still exists.
       if (this.pendingFileLoad && newFiles.includes(this.pendingFileLoad)) {
         this.onFileSelected(this.pendingFileLoad).then(function () {
           _this3.applyRestoredIndicatorSettings(_this3.pendingIndicatorSettings);
@@ -42326,10 +42432,23 @@ __webpack_require__.r(__webpack_exports__);
           _this3.pendingFileLoad = null;
           _this3.pendingIndicatorSettings = null;
         });
-      } else if (this.pendingFileLoad && newFiles.length > 0) {
-        // Saved file no longer exists - clear pending
+        return;
+      }
+      // 2) Pending file no longer exists — drop it, fall through to
+      //    auto-select.
+      if (this.pendingFileLoad) {
         this.pendingFileLoad = null;
         this.pendingIndicatorSettings = null;
+      }
+      // 3) Auto-select: pick the first chart-loadable file
+      //    (data_*.json). Skips data_alerts_/data_scorers_/target_
+      //    by prefix so the default is the "main" chart, not an
+      //    overlay-only variant.
+      if (!this.currentDataFile && newFiles.length > 0) {
+        var first = newFiles.find(function (f) {
+          return f.startsWith('data_') && !f.startsWith('data_alerts_') && !f.startsWith('data_scorers_') && !f.startsWith('data_tf');
+        });
+        if (first) this.onFileSelected(first);
       }
     }
   }
@@ -42484,44 +42603,69 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     loadPersistentIndicators: function loadPersistentIndicators() {
       var _this2 = this;
       return (0,_babel_runtime_helpers_asyncToGenerator__WEBPACK_IMPORTED_MODULE_1__["default"])(/*#__PURE__*/_babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_3___default().mark(function _callee() {
-        var response, _t;
+        var _this2$currentFileMet;
+        var url, response, _t;
         return _babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_3___default().wrap(function (_context) {
           while (1) switch (_context.prev = _context.next) {
             case 0:
-              _context.prev = 0;
-              _context.next = 1;
-              return fetch('/data/indicators.json');
-            case 1:
-              response = _context.sent;
-              if (!response.ok) {
-                _context.next = 3;
+              // The indicators file is now per-instance (indicators_<exch>_<ticker>_<tf>[_<id>].json)
+              // and its filename is declared by the currently-loaded data file's
+              // _meta.indicators_url. With no current file (initial bootstrap),
+              // there are no indicators to load.
+              url = (_this2$currentFileMet = _this2.currentFileMeta) === null || _this2$currentFileMet === void 0 ? void 0 : _this2$currentFileMet.indicators_url;
+              if (url) {
+                _context.next = 1;
                 break;
               }
-              _context.next = 2;
-              return response.json();
-            case 2:
-              _this2.persistentIndicatorsRaw = _context.sent;
-              _this2.clipPersistentIndicators();
-              _context.next = 4;
-              break;
-            case 3:
-              // indicators.json doesn't exist - that's fine
               _this2.persistentIndicatorsRaw = {};
               _this2.persistentIndicatorsClipped = [];
+              return _context.abrupt("return");
+            case 1:
+              if (!/[\/\\]|\.\./.test(url)) {
+                _context.next = 2;
+                break;
+              }
+              console.error('[indicators] Refusing suspicious URL:', url);
+              _this2.persistentIndicatorsRaw = {};
+              _this2.persistentIndicatorsClipped = [];
+              return _context.abrupt("return");
+            case 2:
+              _context.prev = 2;
+              _context.next = 3;
+              return fetch("/data/".concat(url));
+            case 3:
+              response = _context.sent;
+              if (!response.ok) {
+                _context.next = 5;
+                break;
+              }
+              _context.next = 4;
+              return response.json();
             case 4:
+              _this2.persistentIndicatorsRaw = _context.sent;
+              _this2.clipPersistentIndicators();
               _context.next = 6;
               break;
             case 5:
-              _context.prev = 5;
-              _t = _context["catch"](0);
-              // Network error or parse error
+              // indicators file doesn't exist - that's fine (build_model
+              // without persistent_indicators configured, or any case
+              // where _meta.indicators_url points at a non-existent file)
               _this2.persistentIndicatorsRaw = {};
               _this2.persistentIndicatorsClipped = [];
             case 6:
+              _context.next = 8;
+              break;
+            case 7:
+              _context.prev = 7;
+              _t = _context["catch"](2);
+              // Network error or parse error
+              _this2.persistentIndicatorsRaw = {};
+              _this2.persistentIndicatorsClipped = [];
+            case 8:
             case "end":
               return _context.stop();
           }
-        }, _callee, null, [[0, 5]]);
+        }, _callee, null, [[2, 7]]);
       }))();
     },
     clipPersistentIndicators: function clipPersistentIndicators(timeframe, chartData) {
@@ -42751,6 +42895,15 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
           _this7.$refs.tradingVue.refreshOffchartOverlays();
         }
       });
+    }
+  },
+  watch: {
+    // Re-fetch the per-file indicators when the loaded file changes.
+    // Compares by indicators_url so a no-op file change (same _meta)
+    // doesn't refetch.
+    'currentFileMeta.indicators_url': function currentFileMetaIndicators_url(newUrl, oldUrl) {
+      if (newUrl === oldUrl) return;
+      this.loadPersistentIndicators();
     }
   }
 });
@@ -43017,12 +43170,18 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
 /* harmony export */ });
 /* harmony import */ var _babel_runtime_helpers_toConsumableArray__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! @babel/runtime/helpers/toConsumableArray */ "./node_modules/@babel/runtime/helpers/esm/toConsumableArray.js");
+/* harmony import */ var _helpers_ws_helpers_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../../helpers/ws-helpers.js */ "./src/helpers/ws-helpers.js");
 
 function _createForOfIteratorHelper(r, e) { var t = "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (!t) { if (Array.isArray(r) || (t = _unsupportedIterableToArray(r)) || e && r && "number" == typeof r.length) { t && (r = t); var _n = 0, F = function F() {}; return { s: F, n: function n() { return _n >= r.length ? { done: !0 } : { done: !1, value: r[_n++] }; }, e: function e(r) { throw r; }, f: F }; } throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); } var o, a = !0, u = !1; return { s: function s() { t = t.call(r); }, n: function n() { var r = t.next(); return a = r.done, r; }, e: function e(r) { u = !0, o = r; }, f: function f() { try { a || null == t["return"] || t["return"](); } finally { if (u) throw o; } } }; }
 function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
 function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
-// WebSocket live feed manager — connects to quant-buffers LiveFeedServer
-// and pipes real-time candle/alert updates into the Trading-Vue DataCube.
+// WebSocket live feed manager — connects to whichever quant-buffers
+// LiveFeedServer corresponds to the currently-loaded chart file (driven
+// by file-manager's currentFileMeta). Filters every incoming message by
+// identity to defend against any cross-talk. A connection-generation
+// counter prevents stale callbacks (from a closed socket) from mutating
+// state belonging to the new connection.
+
 
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
   data: function data() {
@@ -43031,8 +43190,13 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
       wsConnected: false,
       wsReconnectTimer: null,
       wsReconnectDelay: 1000,
-      // Proxy through webpack-dev-server so no extra port needs exposing
-      wsUrl: "ws://".concat(window.location.host, "/live-ws"),
+      // URL is derived from currentFileMeta; no static default.
+      wsUrl: null,
+      // Monotonic counter incremented on every wsConnect call. All
+      // callbacks attached to a socket capture the value at attach
+      // time and bail if it no longer matches — prevents a stale
+      // close/reconnect from interfering after a file switch.
+      _wsGen: 0,
       // Accumulated live data (survives view switches)
       liveScmrColors: [],
       liveAlertColors: [],
@@ -43045,22 +43209,33 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
   methods: {
     wsConnect: function wsConnect(url) {
       var _this = this;
-      if (url) this.wsUrl = url;
       if (this.ws) this.wsDisconnect();
-      console.log('[WS] Connecting to:', this.wsUrl);
+      if (url) this.wsUrl = url;
+      if (!this.wsUrl) {
+        console.log('[WS] No URL — not connecting');
+        return;
+      }
+      // Bump generation BEFORE attaching handlers; capture below.
+      var myGen = ++this._wsGen;
+      console.log('[WS] Connecting to:', this.wsUrl, 'gen:', myGen);
       try {
         this.ws = new WebSocket(this.wsUrl);
       } catch (e) {
         console.error('[WS] Failed to create WebSocket:', e);
-        this._wsScheduleReconnect();
+        this._wsScheduleReconnect(myGen);
         return;
       }
       this.ws.onopen = function () {
+        if (_this._wsGen !== myGen) return; // stale
         console.log('[WS] Connected to', _this.wsUrl);
         _this.wsConnected = true;
         _this.wsReconnectDelay = 1000; // Reset backoff
+        // Signal the preboot WebSocket wrap to start filtering
+        // dev-server reload messages while the live feed is active.
+        window.__tvw_wsConnected = true;
       };
       this.ws.onmessage = function (event) {
+        if (_this._wsGen !== myGen) return; // stale
         try {
           var msg = JSON.parse(event.data);
           _this._wsOnMessage(msg);
@@ -43069,36 +43244,56 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
         }
       };
       this.ws.onclose = function () {
+        if (_this._wsGen !== myGen) return; // stale (we already moved on)
         console.log('[WS] Disconnected');
         _this.wsConnected = false;
-        _this._wsScheduleReconnect();
+        window.__tvw_wsConnected = false;
+        _this._wsScheduleReconnect(myGen);
       };
       this.ws.onerror = function (err) {
+        if (_this._wsGen !== myGen) return; // stale
         console.warn('[WS] Error:', err);
       };
     },
     wsDisconnect: function wsDisconnect() {
+      // Bump generation so any in-flight callbacks from the prior socket
+      // bail. Also clears any scheduled reconnect tied to that gen.
+      this._wsGen++;
       if (this.wsReconnectTimer) {
         clearTimeout(this.wsReconnectTimer);
         this.wsReconnectTimer = null;
       }
       if (this.ws) {
-        this.ws.onclose = null; // Prevent reconnect on intentional close
+        this.ws.onclose = null; // Belt-and-braces (also guarded by gen check)
         this.ws.close();
         this.ws = null;
       }
       this.wsConnected = false;
+      window.__tvw_wsConnected = false;
     },
-    _wsScheduleReconnect: function _wsScheduleReconnect() {
+    _wsScheduleReconnect: function _wsScheduleReconnect(originatingGen) {
       var _this2 = this;
       if (this.wsReconnectTimer) return;
+      // Bail if we've moved on (file switch invalidated this conn).
+      if (originatingGen !== undefined && originatingGen !== this._wsGen) return;
       var delay = Math.min(this.wsReconnectDelay, 30000);
       console.log("[WS] Reconnecting in ".concat(delay, "ms..."));
       this.wsReconnectTimer = setTimeout(function () {
         _this2.wsReconnectTimer = null;
         _this2.wsReconnectDelay = Math.min(_this2.wsReconnectDelay * 2, 30000);
+        // Last-check: if generation changed during the wait, don't reconnect.
+        if (originatingGen !== undefined && originatingGen !== _this2._wsGen) return;
         _this2.wsConnect();
       }, delay);
+    },
+    // Thin wrappers over the pure helpers in ../../helpers/ws-helpers.js
+    // (kept as instance methods so the existing call sites read
+    //  cleanly; the helpers are independently unit-tested).
+    _wsMsgMatchesCurrentFile: function _wsMsgMatchesCurrentFile(msg) {
+      return (0,_helpers_ws_helpers_js__WEBPACK_IMPORTED_MODULE_1__.msgMatchesMeta)(msg, this.currentFileMeta);
+    },
+    _wsBuildUrl: function _wsBuildUrl(meta) {
+      return (0,_helpers_ws_helpers_js__WEBPACK_IMPORTED_MODULE_1__.buildWsUrl)(meta, window.location.protocol, window.location.hostname);
     },
     _wsOnMessage: function _wsOnMessage(msg) {
       console.log('[WS] msg:', msg.type, msg.type === 'candle' ? msg.data : '');
@@ -43116,6 +43311,8 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     },
     _wsHandleCandle: function _wsHandleCandle(msg) {
       var _this$$refs$tradingVu;
+      // Identity filter — drop cross-talk before touching any state
+      if (!this._wsMsgMatchesCurrentFile(msg)) return;
       var candle = msg.data; // [ts, o, h, l, c, v]
       if (!candle || candle.length < 6) return;
       if (!this.chart || !this.originalChartData) return;
@@ -43177,6 +43374,8 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
       });
     },
     _wsHandleAlert: function _wsHandleAlert(msg) {
+      // Identity filter — drop cross-talk before touching any state
+      if (!this._wsMsgMatchesCurrentFile(msg)) return;
       if (!this.chart) return;
 
       // Store alert
@@ -43261,6 +43460,10 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
       }
     },
     _wsHandleSnapshot: function _wsHandleSnapshot(msg) {
+      // Identity filter — must happen BEFORE mutating any state.
+      // A stale snapshot mid-switch would otherwise corrupt the new
+      // file's live arrays.
+      if (!this._wsMsgMatchesCurrentFile(msg)) return;
       var nc = msg.candles ? msg.candles.length : 0;
       var na = msg.alerts ? msg.alerts.length : 0;
       var nz = msg.zones ? msg.zones.length : 0;
@@ -43310,6 +43513,18 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
       this.liveAlertColors = [];
       this.liveZones = [];
       this.liveAlerts = [];
+    },
+    // The loaded file's _meta is the source of truth for WS connection.
+    // Null → disconnect (legacy or static file with no live feed).
+    // Non-null with valid ws.port → reconnect to the new URL.
+    currentFileMeta: function currentFileMeta(newMeta) {
+      var url = this._wsBuildUrl(newMeta);
+      if (!url) {
+        if (this.ws || this.wsReconnectTimer) this.wsDisconnect();
+        return;
+      }
+      // wsConnect handles the disconnect-of-prior-socket internally.
+      this.wsConnect(url);
     }
   },
   beforeUnmount: function beforeUnmount() {

@@ -122,8 +122,18 @@ export default class DCCore extends DCEvents {
     // Bump the reactive render-invalidation counter. Call after any in-place
     // mutation to OHLCV / overlay data / candle color slots so consumers
     // (Chart.dataHashKey, Grid.dataKey) recompute and trigger redraw.
+    //
+    // Vue 3 reactivity caveat: DataCube methods are often invoked with `this`
+    // bound to the RAW instance (e.g. from AggTool, which captured `this`
+    // in its own constructor before Vue wrapped the DataCube in reactive()).
+    // Direct writes like `this.data['x'] = ...` mutate the underlying object
+    // but bypass the Proxy traps, so Vue does not see them. Route through
+    // `this.tv.$props.data.data` when mounted — that is Vue's reactive view
+    // of the same object, and the write fires watchers correctly.
     touchData() {
-        this.data['dataVersion'] = (this.data.dataVersion || 0) + 1
+        const target = (this.tv && this.tv.$props && this.tv.$props.data &&
+                        this.tv.$props.data.data) || this.data
+        target.dataVersion = (target.dataVersion || 0) + 1
     }
 
     // Range change callback (called by TradingVue)

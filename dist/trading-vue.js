@@ -1,5 +1,5 @@
 /*!
- * TradingVue.JS - v1.0.2 - Sat May 16 2026
+ * TradingVue.JS - v1.0.2 - Sun May 17 2026
  *     https://github.com/tvjsx/trading-vue-js
  *     Copyright (c) 2019 C451 Code's All Right;
  *     Licensed under the MIT license
@@ -37303,10 +37303,19 @@ var DCCore = /*#__PURE__*/function (_DCEvents) {
     // Bump the reactive render-invalidation counter. Call after any in-place
     // mutation to OHLCV / overlay data / candle color slots so consumers
     // (Chart.dataHashKey, Grid.dataKey) recompute and trigger redraw.
+    //
+    // Vue 3 reactivity caveat: DataCube methods are often invoked with `this`
+    // bound to the RAW instance (e.g. from AggTool, which captured `this`
+    // in its own constructor before Vue wrapped the DataCube in reactive()).
+    // Direct writes like `this.data['x'] = ...` mutate the underlying object
+    // but bypass the Proxy traps, so Vue does not see them. Route through
+    // `this.tv.$props.data.data` when mounted — that is Vue's reactive view
+    // of the same object, and the write fires watchers correctly.
   }, {
     key: "touchData",
     value: function touchData() {
-      this.data['dataVersion'] = (this.data.dataVersion || 0) + 1;
+      var target = this.tv && this.tv.$props && this.tv.$props.data && this.tv.$props.data.data || this.data;
+      target.dataVersion = (target.dataVersion || 0) + 1;
     }
 
     // Range change callback (called by TradingVue)
