@@ -1,13 +1,25 @@
-// File management mixin - handles file I/O and localStorage persistence
+// File management mixin - handles file I/O, file metadata extraction,
+// and split storage (per-tab vs global).
 
 import Utils from '../../stuff/utils.js'
+
+// Storage key constants
+const SESSION_STATE_KEY = 'trading-vue-state-tab'   // per-tab: file + indicator settings
+const LOCAL_STATE_KEY   = 'trading-vue-state'        // global: prefs (kept for back-compat)
 
 export default {
     data() {
         return {
             dataFiles: [],
-            currentDataFile: 'data.json',
-            selectedDataFile: 'data.json',
+            currentDataFile: '',
+            selectedDataFile: '',
+            // Identity + ws + indicators_url for the currently-loaded chart file.
+            // Set in onFileSelected from data[firstTf]._meta. ws-manager watches
+            // this and connects/reconnects accordingly; indicator-manager
+            // watches it and re-fetches the matching indicators file.
+            // null when the loaded file has no _meta (legacy / build_model
+            // without _meta would also be null — they get no live feed).
+            currentFileMeta: null,
             pendingFileLoad: null,           // File to load after file list arrives
             pendingIndicatorSettings: null   // Settings to apply after file loads
         }
@@ -59,7 +71,7 @@ export default {
                 let newEnd = null
                 let firstTf, firstTfData
                 if (data.chart && Array.isArray(data.chart.data)) {
-                    // Single-timeframe format (data.json style)
+                    // Single-timeframe format (legacy data.json style)
                     this.charts = { 'default': data }
                     this.currentTimeframe = 'default'
                     firstTf = 'default'
@@ -72,7 +84,7 @@ export default {
                         newEnd = data.chart.data[data.chart.data.length - 1][0]
                     }
                 } else {
-                    // Multi-timeframe format (data_tf.json style)
+                    // Multi-timeframe format (data_<...>.json style)
                     this.charts = data
                     const timeframes = Object.keys(data)
                     if (timeframes.length > 0) {
@@ -88,6 +100,12 @@ export default {
                         }
                     }
                 }
+
+                // Extract _meta (if present). Files written by qb-new live or
+                // build_model carry a per-tf-payload _meta block; legacy files
+                // (committed bootstrap data.json, hand-edited files) won't.
+                // Null _meta → no live WS, no per-file indicators fetch.
+                this.currentFileMeta = (firstTfData && firstTfData._meta) ? firstTfData._meta : null
 
                 // Determine displayedView based on selectedView availability
                 const availableViews = this.candleColoringOptions.map(opt => opt.title)
@@ -148,33 +166,58 @@ export default {
             }
         },
 
-        // localStorage persistence methods
+        // ── Persistence: split per-tab state (sessionStorage) from global
+        //    preferences (localStorage). Per-tab keys live in sessionStorage so
+        //    multiple tabs can view different files without trampling each
+        //    other's selection on reload.
         saveStateToStorage() {
-            const state = {
+            const tabState = {
                 selectedDataFile: this.selectedDataFile,
+                indicatorSettings: this.getIndicatorSettings(),
+            }
+            const globalState = {
                 selectedView: this.selectedView,
                 log_scale: this.log_scale,
                 indicatorVisibility: this.indicatorVisibility,
-                indicatorSettings: this.getIndicatorSettings(),
                 persistentIndicatorVisibility: this.persistentIndicatorVisibility,
-                accordionExpandedViews: this.accordionExpandedViews
+                accordionExpandedViews: this.accordionExpandedViews,
             }
-            localStorage.setItem('trading-vue-state', JSON.stringify(state))
+            try {
+                sessionStorage.setItem(SESSION_STATE_KEY, JSON.stringify(tabState))
+            } catch (e) {
+                console.error('Failed to write sessionStorage:', e)
+            }
+            try {
+                localStorage.setItem(LOCAL_STATE_KEY, JSON.stringify(globalState))
+            } catch (e) {
+                console.error('Failed to write localStorage:', e)
+            }
         },
 
         loadStateFromStorage() {
+            let tab = {}, global = {}
             try {
-                const saved = localStorage.getItem('trading-vue-state')
-                return saved ? JSON.parse(saved) : null
+                const t = sessionStorage.getItem(SESSION_STATE_KEY)
+                if (t) tab = JSON.parse(t)
             } catch (e) {
-                console.error('Failed to parse saved state:', e)
-                return null
+                console.error('Failed to parse sessionStorage state:', e)
             }
+            try {
+                const g = localStorage.getItem(LOCAL_STATE_KEY)
+                if (g) global = JSON.parse(g)
+            } catch (e) {
+                console.error('Failed to parse localStorage state:', e)
+            }
+            // Merge for back-compat with the previous single-store shape.
+            // Tab state wins for per-tab keys; global wins for the rest.
+            const merged = { ...global, ...tab }
+            return Object.keys(merged).length ? merged : null
         }
     },
     watch: {
         dataFiles(newFiles) {
-            // Load pending file when file list arrives
+            // 1) Honour an explicit pending request (from ?file= URL param or
+            //    sessionStorage restore) if the file still exists.
             if (this.pendingFileLoad && newFiles.includes(this.pendingFileLoad)) {
                 this.onFileSelected(this.pendingFileLoad).then(() => {
                     this.applyRestoredIndicatorSettings(this.pendingIndicatorSettings)
@@ -185,10 +228,26 @@ export default {
                     this.pendingFileLoad = null
                     this.pendingIndicatorSettings = null
                 })
-            } else if (this.pendingFileLoad && newFiles.length > 0) {
-                // Saved file no longer exists - clear pending
+                return
+            }
+            // 2) Pending file no longer exists — drop it, fall through to
+            //    auto-select.
+            if (this.pendingFileLoad) {
                 this.pendingFileLoad = null
                 this.pendingIndicatorSettings = null
+            }
+            // 3) Auto-select: pick the first chart-loadable file
+            //    (data_*.json). Skips data_alerts_/data_scorers_/target_
+            //    by prefix so the default is the "main" chart, not an
+            //    overlay-only variant.
+            if (!this.currentDataFile && newFiles.length > 0) {
+                const first = newFiles.find(
+                    f => f.startsWith('data_') &&
+                         !f.startsWith('data_alerts_') &&
+                         !f.startsWith('data_scorers_') &&
+                         !f.startsWith('data_tf')
+                )
+                if (first) this.onFileSelected(first)
             }
         }
     }

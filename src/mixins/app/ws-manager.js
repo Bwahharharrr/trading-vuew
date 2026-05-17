@@ -1,5 +1,11 @@
-// WebSocket live feed manager — connects to quant-buffers LiveFeedServer
-// and pipes real-time candle/alert updates into the Trading-Vue DataCube.
+// WebSocket live feed manager — connects to whichever quant-buffers
+// LiveFeedServer corresponds to the currently-loaded chart file (driven
+// by file-manager's currentFileMeta). Filters every incoming message by
+// identity to defend against any cross-talk. A connection-generation
+// counter prevents stale callbacks (from a closed socket) from mutating
+// state belonging to the new connection.
+
+import { buildWsUrl, msgMatchesMeta } from '../../helpers/ws-helpers.js'
 
 export default {
     data() {
@@ -8,8 +14,13 @@ export default {
             wsConnected: false,
             wsReconnectTimer: null,
             wsReconnectDelay: 1000,
-            // Proxy through webpack-dev-server so no extra port needs exposing
-            wsUrl: `ws://${window.location.host}/live-ws`,
+            // URL is derived from currentFileMeta; no static default.
+            wsUrl: null,
+            // Monotonic counter incremented on every wsConnect call. All
+            // callbacks attached to a socket capture the value at attach
+            // time and bail if it no longer matches — prevents a stale
+            // close/reconnect from interfering after a file switch.
+            _wsGen: 0,
 
             // Accumulated live data (survives view switches)
             liveScmrColors: [],
@@ -23,25 +34,33 @@ export default {
     },
     methods: {
         wsConnect(url) {
-            if (url) this.wsUrl = url
             if (this.ws) this.wsDisconnect()
+            if (url) this.wsUrl = url
+            if (!this.wsUrl) {
+                console.log('[WS] No URL — not connecting')
+                return
+            }
+            // Bump generation BEFORE attaching handlers; capture below.
+            const myGen = ++this._wsGen
 
-            console.log('[WS] Connecting to:', this.wsUrl)
+            console.log('[WS] Connecting to:', this.wsUrl, 'gen:', myGen)
             try {
                 this.ws = new WebSocket(this.wsUrl)
             } catch (e) {
                 console.error('[WS] Failed to create WebSocket:', e)
-                this._wsScheduleReconnect()
+                this._wsScheduleReconnect(myGen)
                 return
             }
 
             this.ws.onopen = () => {
+                if (this._wsGen !== myGen) return  // stale
                 console.log('[WS] Connected to', this.wsUrl)
                 this.wsConnected = true
                 this.wsReconnectDelay = 1000 // Reset backoff
             }
 
             this.ws.onmessage = (event) => {
+                if (this._wsGen !== myGen) return  // stale
                 try {
                     const msg = JSON.parse(event.data)
                     this._wsOnMessage(msg)
@@ -51,38 +70,57 @@ export default {
             }
 
             this.ws.onclose = () => {
+                if (this._wsGen !== myGen) return  // stale (we already moved on)
                 console.log('[WS] Disconnected')
                 this.wsConnected = false
-                this._wsScheduleReconnect()
+                this._wsScheduleReconnect(myGen)
             }
 
             this.ws.onerror = (err) => {
+                if (this._wsGen !== myGen) return  // stale
                 console.warn('[WS] Error:', err)
             }
         },
 
         wsDisconnect() {
+            // Bump generation so any in-flight callbacks from the prior socket
+            // bail. Also clears any scheduled reconnect tied to that gen.
+            this._wsGen++
             if (this.wsReconnectTimer) {
                 clearTimeout(this.wsReconnectTimer)
                 this.wsReconnectTimer = null
             }
             if (this.ws) {
-                this.ws.onclose = null // Prevent reconnect on intentional close
+                this.ws.onclose = null // Belt-and-braces (also guarded by gen check)
                 this.ws.close()
                 this.ws = null
             }
             this.wsConnected = false
         },
 
-        _wsScheduleReconnect() {
+        _wsScheduleReconnect(originatingGen) {
             if (this.wsReconnectTimer) return
+            // Bail if we've moved on (file switch invalidated this conn).
+            if (originatingGen !== undefined && originatingGen !== this._wsGen) return
             const delay = Math.min(this.wsReconnectDelay, 30000)
             console.log(`[WS] Reconnecting in ${delay}ms...`)
             this.wsReconnectTimer = setTimeout(() => {
                 this.wsReconnectTimer = null
                 this.wsReconnectDelay = Math.min(this.wsReconnectDelay * 2, 30000)
+                // Last-check: if generation changed during the wait, don't reconnect.
+                if (originatingGen !== undefined && originatingGen !== this._wsGen) return
                 this.wsConnect()
             }, delay)
+        },
+
+        // Thin wrappers over the pure helpers in ../../helpers/ws-helpers.js
+        // (kept as instance methods so the existing call sites read
+        //  cleanly; the helpers are independently unit-tested).
+        _wsMsgMatchesCurrentFile(msg) {
+            return msgMatchesMeta(msg, this.currentFileMeta)
+        },
+        _wsBuildUrl(meta) {
+            return buildWsUrl(meta, window.location.protocol, window.location.hostname)
         },
 
         _wsOnMessage(msg) {
@@ -101,6 +139,9 @@ export default {
         },
 
         _wsHandleCandle(msg) {
+            // Identity filter — drop cross-talk before touching any state
+            if (!this._wsMsgMatchesCurrentFile(msg)) return
+
             const candle = msg.data // [ts, o, h, l, c, v]
             if (!candle || candle.length < 6) return
             if (!this.chart || !this.originalChartData) return
@@ -164,6 +205,9 @@ export default {
         },
 
         _wsHandleAlert(msg) {
+            // Identity filter — drop cross-talk before touching any state
+            if (!this._wsMsgMatchesCurrentFile(msg)) return
+
             if (!this.chart) return
 
             // Store alert
@@ -234,6 +278,11 @@ export default {
         },
 
         _wsHandleSnapshot(msg) {
+            // Identity filter — must happen BEFORE mutating any state.
+            // A stale snapshot mid-switch would otherwise corrupt the new
+            // file's live arrays.
+            if (!this._wsMsgMatchesCurrentFile(msg)) return
+
             const nc = msg.candles ? msg.candles.length : 0
             const na = msg.alerts ? msg.alerts.length : 0
             const nz = msg.zones ? msg.zones.length : 0
@@ -284,6 +333,18 @@ export default {
             this.liveAlertColors = []
             this.liveZones = []
             this.liveAlerts = []
+        },
+        // The loaded file's _meta is the source of truth for WS connection.
+        // Null → disconnect (legacy or static file with no live feed).
+        // Non-null with valid ws.port → reconnect to the new URL.
+        currentFileMeta(newMeta) {
+            const url = this._wsBuildUrl(newMeta)
+            if (!url) {
+                if (this.ws || this.wsReconnectTimer) this.wsDisconnect()
+                return
+            }
+            // wsConnect handles the disconnect-of-prior-socket internally.
+            this.wsConnect(url)
         },
     },
 

@@ -62,13 +62,33 @@ export default {
     },
     methods: {
         async loadPersistentIndicators() {
+            // The indicators file is now per-instance (indicators_<exch>_<ticker>_<tf>[_<id>].json)
+            // and its filename is declared by the currently-loaded data file's
+            // _meta.indicators_url. With no current file (initial bootstrap),
+            // there are no indicators to load.
+            const url = this.currentFileMeta?.indicators_url
+            if (!url) {
+                this.persistentIndicatorsRaw = {}
+                this.persistentIndicatorsClipped = []
+                return
+            }
+            // Validate filename to prevent path traversal (defense in depth —
+            // the backend sanitizes too)
+            if (/[\/\\]|\.\./.test(url)) {
+                console.error('[indicators] Refusing suspicious URL:', url)
+                this.persistentIndicatorsRaw = {}
+                this.persistentIndicatorsClipped = []
+                return
+            }
             try {
-                const response = await fetch('/data/indicators.json')
+                const response = await fetch(`/data/${url}`)
                 if (response.ok) {
                     this.persistentIndicatorsRaw = await response.json()
                     this.clipPersistentIndicators()
                 } else {
-                    // indicators.json doesn't exist - that's fine
+                    // indicators file doesn't exist - that's fine (build_model
+                    // without persistent_indicators configured, or any case
+                    // where _meta.indicators_url points at a non-existent file)
                     this.persistentIndicatorsRaw = {}
                     this.persistentIndicatorsClipped = []
                 }
@@ -295,6 +315,15 @@ export default {
                     this.$refs.tradingVue.refreshOffchartOverlays()
                 }
             })
+        }
+    },
+    watch: {
+        // Re-fetch the per-file indicators when the loaded file changes.
+        // Compares by indicators_url so a no-op file change (same _meta)
+        // doesn't refetch.
+        'currentFileMeta.indicators_url'(newUrl, oldUrl) {
+            if (newUrl === oldUrl) return
+            this.loadPersistentIndicators()
         }
     }
 }

@@ -188,7 +188,6 @@
 <script>
 import TradingVue from './TradingVue.vue'
 import IndicatorSettings from './components/IndicatorSettings.vue'
-import Data from '../data/data.json'
 import DataCube from '../src/helpers/datacube.js'
 import BuysAndSells from './components/overlays/BuysAndSells.js'
 import Balance from './components/overlays/Balance.js'
@@ -214,47 +213,41 @@ export default {
     },
     mounted() {
         window.addEventListener('resize', this.onResize)
+        // loadDataFileList resolves the picker; the watcher on dataFiles
+        // (file-manager.js) consumes pendingFileLoad and drives the rest.
         this.loadDataFileList()
-        this.loadPersistentIndicators()
 
-        // Load saved state from localStorage
+        // Load saved state from sessionStorage (per-tab) + localStorage (global).
         const savedState = this.loadStateFromStorage()
 
         if (savedState) {
-            // Restore preferences
             this.log_scale = savedState.log_scale ?? true
             this.indicatorVisibility = savedState.indicatorVisibility || {}
             this.selectedView = savedState.selectedView || ''
             this.persistentIndicatorVisibility = savedState.persistentIndicatorVisibility || {}
             this.accordionExpandedViews = savedState.accordionExpandedViews || {}
-
-            // If saved file is not the default, defer loading until file list arrives
-            if (savedState.selectedDataFile && savedState.selectedDataFile !== 'data.json') {
-                this.pendingFileLoad = savedState.selectedDataFile
-                this.pendingIndicatorSettings = savedState.indicatorSettings || {}
-                // Initialize with default data for now (will be replaced when file loads)
-                this.initializeChart(Data)
-            } else {
-                this.initializeChart(Data)
-                this.$nextTick(() => {
-                    this.applyRestoredIndicatorSettings(savedState.indicatorSettings || {})
-                })
-            }
-        } else {
-            // No saved state - initialize normally
-            this.initializeChart(Data)
         }
+
+        // Bootstrap order: ?file=<name> URL param wins (per-tab, no storage
+        // interaction); else per-tab sessionStorage; else first /data-files
+        // entry resolved by the dataFiles watcher in file-manager.js.
+        const params = new URLSearchParams(window.location.search)
+        const fileParam = params.get('file')
+        if (fileParam && !/[\/\\]|\.\./.test(fileParam)) {
+            this.pendingFileLoad = fileParam
+            this.pendingIndicatorSettings = savedState?.indicatorSettings || {}
+        } else if (savedState?.selectedDataFile) {
+            this.pendingFileLoad = savedState.selectedDataFile
+            this.pendingIndicatorSettings = savedState.indicatorSettings || {}
+        }
+        // If neither, file-manager's dataFiles watcher will pick the first
+        // data*.json once /data-files responds.
 
         this.$nextTick(() => {
             window.dc = this.chart
             window.tv = this.$refs.tradingVue
-            // Connect to live feed WebSocket
-            console.log('[App] mounted $nextTick — calling wsConnect()')
-            try {
-                this.wsConnect()
-            } catch (e) {
-                console.error('[App] wsConnect() threw:', e)
-            }
+            // No unconditional wsConnect() here — the currentFileMeta watcher
+            // in ws-manager.js opens the WS once a file is loaded.
         })
     },
     beforeUnmount() {

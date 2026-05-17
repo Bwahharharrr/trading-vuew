@@ -55,14 +55,11 @@ module.exports = (env, options) => ({
         client: {
             webSocketURL: 'auto://0.0.0.0:0/ws',  // Use same host/port as page URL
         },
-        proxy: [
-            {
-                context: ['/live-ws'],
-                target: 'ws://127.0.0.1:8765',
-                ws: true,
-                pathRewrite: { '^/live-ws': '' },
-            },
-        ],
+        // No /live-ws proxy: each loaded chart file declares its own WS
+        // endpoint via _meta.ws (port/host/path) and the FE connects
+        // directly. This is necessary for multi-instance — one proxy
+        // entry could only target one backend port.
+        proxy: [],
         static: {
             directory: require('path').join(__dirname, '../data'),
             publicPath: '/data'
@@ -85,7 +82,15 @@ module.exports = (env, options) => ({
                 const dataDir = path.join(__dirname, '../data')
                 try {
                     const files = fs.readdirSync(dataDir)
-                        .filter(f => f.endsWith('.json') && !f.startsWith('bak') && f !== 'indicators.json')
+                        .filter(f =>
+                            f.endsWith('.json') &&
+                            !f.startsWith('bak') &&
+                            // Exclude indicators files — they are companion
+                            // assets fetched via _meta.indicators_url, not
+                            // picker-loadable chart files.
+                            !f.startsWith('indicators_') &&
+                            f !== 'indicators.json'
+                        )
                         .sort()
                     res.json(files)
                 } catch(e) {
