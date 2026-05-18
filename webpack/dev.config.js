@@ -62,7 +62,21 @@ module.exports = (env, options) => ({
         proxy: [],
         static: {
             directory: require('path').join(__dirname, '../data'),
-            publicPath: '/data'
+            publicPath: '/data',
+            // CRITICAL: do NOT live-reload the page when data/*.json changes.
+            // The backend rewrites these files on every closed candle (~once
+            // per minute on a 1m feed); without watch:false, webpack-dev-server
+            // detects each write and triggers a full page reload, which:
+            //   1. Tears down the trading-vue chart and re-mounts it from
+            //      scratch (visible flicker, lost view range, lost overlays).
+            //   2. Re-fetches the file from disk, discarding any in-flight
+            //      WebSocket-driven updates accumulated since the last write.
+            //   3. Defeats the entire incremental-update model — the WS feed
+            //      exists precisely so the FE never has to reload.
+            // Source files (.vue/.js) are watched independently by the
+            // compilation pipeline; this flag only affects the data
+            // directory.
+            watch: false,
         },
         onListening: function(devServer) {
             const port = devServer.server.address().port
