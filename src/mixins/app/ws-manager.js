@@ -5,7 +5,7 @@
 // counter prevents stale callbacks (from a closed socket) from mutating
 // state belonging to the new connection.
 
-import { buildWsUrl, msgMatchesMeta } from '../../helpers/ws-helpers.js'
+import { buildWsUrl, classifyDataFile, msgMatchesMeta } from '../../helpers/ws-helpers.js'
 
 export default {
     data() {
@@ -166,12 +166,18 @@ export default {
             // Reject candles older than loaded data
             if (ts < lastChartTs) return
 
-            // Determine which color to use based on active file
+            // Determine which color to use based on active file. The string
+            // patterns we used to match here ('data_alerts', 'data.json',
+            // 'data_scorers') predate the per-identity rename — a file like
+            // 'data_bitfinex_tBTCUSD_1m.json' matches NONE of them, so the
+            // live candle inherited the trading-vue OHLC default (green/red)
+            // instead of the SCMR colour. classifyDataFile handles both
+            // legacy and per-identity names.
             let color = ''
-            const file = this.currentDataFile || ''
-            if (file.includes('data_alerts')) {
+            const kind = classifyDataFile(this.currentDataFile)
+            if (kind === 'alert') {
                 color = msg.alert_color || ''
-            } else if (file.includes('data.json') || file.includes('data_scorers')) {
+            } else if (kind === 'scmr') {
                 color = msg.scmr_color || ''
             }
 
@@ -220,16 +226,24 @@ export default {
 
             if (!this.chart) return
 
-            // Store alert
+            // Always accumulate alert + zones into the in-memory state, even
+            // if the SCMR file is currently loaded. The accumulators don't
+            // touch the visible chart — they only mutate liveAlerts/liveZones
+            // for potential future use. The chart itself is only mutated
+            // when the loaded file is an alerts file (below).
             if (msg.alert) {
                 this.liveAlerts.push(msg.alert)
             }
-
-            // Merge zones into onchart Zones overlay
             if (msg.zones && msg.zones.length > 0) {
                 this.liveZones.push(...msg.zones)
+            }
 
-                // Find existing Zones overlay or create one
+            const onAlertsFile = classifyDataFile(this.currentDataFile) === 'alert'
+
+            // Render zones into the chart's onchart overlay ONLY when the
+            // loaded file is an alerts file. Previously this happened
+            // unconditionally, so zone blocks bled onto the SCMR view.
+            if (onAlertsFile && msg.zones && msg.zones.length > 0) {
                 const onchart = this.chart.data.onchart
                 let zonesOv = onchart.find(o => o.type === 'Zones')
                 if (zonesOv) {
@@ -256,11 +270,11 @@ export default {
                 this.chart.touchData()
             }
 
-            // Recolor the alert's candle if viewing data_alerts
+            // Always update the liveAlertColors accumulator so a future
+            // switch to the alerts file gets the correct historical colour.
             if (msg.candle_alert_color && msg.alert && msg.alert.timestamp) {
                 const alertTs = msg.alert.timestamp
 
-                // Update accumulated alert color
                 for (let i = 0; i < this.liveAlertColors.length; i++) {
                     const ci = this.liveDataStartIdx + i
                     if (ci >= 0 && ci < this.originalChartData.length) {
@@ -271,9 +285,9 @@ export default {
                     }
                 }
 
-                // If viewing alerts file, recolor the candle in the DataCube
-                const file = this.currentDataFile || ''
-                if (file.includes('data_alerts')) {
+                // Recolour the alert's candle in the DataCube ONLY when the
+                // alerts file is loaded.
+                if (onAlertsFile) {
                     const chartData = this.chart.data.chart.data
                     for (let i = chartData.length - 1; i >= 0; i--) {
                         if (chartData[i][0] === alertTs) {
@@ -312,8 +326,9 @@ export default {
         _wsApplyLiveColors() {
             if (this.liveDataStartIdx < 0 || !this.chart) return
 
-            const file = this.currentDataFile || ''
-            const useAlertColors = file.includes('data_alerts')
+            // classifyDataFile handles both legacy and per-identity names —
+            // see _wsHandleCandle for context.
+            const useAlertColors = classifyDataFile(this.currentDataFile) === 'alert'
             const chartData = this.chart.data.chart.data
             const colors = useAlertColors ? this.liveAlertColors : this.liveScmrColors
 

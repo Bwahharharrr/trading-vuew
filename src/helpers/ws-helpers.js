@@ -49,6 +49,30 @@ export function buildWsUrl(meta, pageProtocol, pageHostname, pagePort) {
 }
 
 /**
+ * Classify a loaded chart filename so the WS handler knows which color
+ * field to use from each incoming candle envelope.
+ *
+ *   'alert'  → data_alerts.json (legacy) or data_alerts_<exch>_<ticker>[_<tf>][_<id>].json
+ *               → colour live candles by msg.alert_color, render zone blocks
+ *   'scmr'   → data.json (legacy bootstrap), data_scorers_*.json,
+ *               or data_<exch>_<ticker>[_<tf>][_<id>].json (new SCMR live file)
+ *               → colour live candles by msg.scmr_color
+ *   'none'   → anything else (target_*.json, data_tf.json, unknown) — let
+ *               trading-vue draw its default OHLC red/green colouring
+ *
+ * The order of checks matters: data_alerts_* also starts with `data_`,
+ * so the alert branch must be tested first.
+ */
+export function classifyDataFile(filename) {
+    const f = filename || ''
+    if (f === 'data_alerts.json' || f.startsWith('data_alerts_')) return 'alert'
+    if (f === 'data.json') return 'scmr'  // legacy committed bootstrap
+    if (f.startsWith('data_') && f.endsWith('.json')) return 'scmr'
+    return 'none'
+}
+
+
+/**
  * Check whether an incoming WS message's identity tuple matches the
  * currently-loaded file's _meta. Used to defend against any cross-talk
  * (a misrouted proxy, a bug in backend dispatch, a future shared broker).

@@ -2,7 +2,7 @@
 
 import test from 'ava'
 
-import { buildWsUrl, msgMatchesMeta } from '../../src/helpers/ws-helpers.js'
+import { buildWsUrl, classifyDataFile, msgMatchesMeta } from '../../src/helpers/ws-helpers.js'
 
 // ── buildWsUrl ──────────────────────────────────────────────────────────────
 //
@@ -151,4 +151,67 @@ test('msgMatchesMeta: with instance_id on both sides', t => {
     const wrong = { exchange: 'BITFINEX', ticker: 'tBTCUSD', tf: '1m', instance_id: 'runB' }
     t.true(msgMatchesMeta(ok, meta))
     t.false(msgMatchesMeta(wrong, meta))
+})
+
+
+// ── classifyDataFile ────────────────────────────────────────────────────────
+
+test('classifyDataFile: per-identity SCMR file → scmr', t => {
+    t.is(classifyDataFile('data_bitfinex_tBTCUSD_1m.json'), 'scmr')
+    t.is(classifyDataFile('data_BITFINEX_tBTCUSD_1h.json'), 'scmr')
+    t.is(classifyDataFile('data_bitfinex_tBTCUSD_1h_runA.json'), 'scmr')
+})
+
+test('classifyDataFile: per-identity alerts file → alert', t => {
+    t.is(classifyDataFile('data_alerts_bitfinex_tBTCUSD_1m.json'), 'alert')
+    t.is(classifyDataFile('data_alerts_BITFINEX_tBTCUSD_1h.json'), 'alert')
+    t.is(classifyDataFile('data_alerts_bitfinex_tBTCUSD_1h_runA.json'), 'alert')
+})
+
+test('classifyDataFile: data_alerts_ must NOT match the scmr branch', t => {
+    // Both start with 'data_' — order-sensitivity check
+    t.not(classifyDataFile('data_alerts_bitfinex_tBTCUSD_1m.json'), 'scmr')
+})
+
+test('classifyDataFile: per-identity scorers file → scmr', t => {
+    // Scorers and SCMR share the candle colour source (scmr_color from
+    // the live WS broadcast), so they both classify as 'scmr'.
+    t.is(classifyDataFile('data_scorers_bitfinex_tBTCUSD.json'), 'scmr')
+})
+
+test('classifyDataFile: legacy data.json → scmr', t => {
+    t.is(classifyDataFile('data.json'), 'scmr')
+})
+
+test('classifyDataFile: legacy data_alerts.json → alert', t => {
+    t.is(classifyDataFile('data_alerts.json'), 'alert')
+})
+
+test('classifyDataFile: legacy data_scorers.json → scmr', t => {
+    t.is(classifyDataFile('data_scorers.json'), 'scmr')
+})
+
+test('classifyDataFile: target files → none (own view system)', t => {
+    t.is(classifyDataFile('target_barrier_w40_a1.5_bitfinex_tBTCUSD.json'), 'none')
+})
+
+test('classifyDataFile: data_tf.json (legacy multi-tf example) → scmr', t => {
+    // data_tf.json starts with 'data_' and ends with '.json' so it
+    // falls into the scmr branch. That's the intended behaviour — a
+    // legacy multi-tf file can still benefit from scmr live colouring
+    // if a backend happens to broadcast scmr_color for it.
+    t.is(classifyDataFile('data_tf.json'), 'scmr')
+})
+
+test('classifyDataFile: empty/null/undefined → none', t => {
+    t.is(classifyDataFile(''), 'none')
+    t.is(classifyDataFile(null), 'none')
+    t.is(classifyDataFile(undefined), 'none')
+})
+
+test('classifyDataFile: indicators files are not chart-loadable but accept gracefully', t => {
+    // The file picker excludes indicators_*.json so this shouldn't appear
+    // in currentDataFile in practice — but classifier should still return
+    // a defined value rather than crashing.
+    t.is(classifyDataFile('indicators_bitfinex_tBTCUSD_1m.json'), 'none')
 })
