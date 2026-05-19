@@ -125,7 +125,12 @@ export default {
             return msgMatchesMeta(msg, this.currentFileMeta)
         },
         _wsBuildUrl(meta) {
-            return buildWsUrl(meta, window.location.protocol, window.location.hostname)
+            return buildWsUrl(
+                meta,
+                window.location.protocol,
+                window.location.hostname,
+                window.location.port,
+            )
         },
 
         _wsOnMessage(msg) {
@@ -342,7 +347,30 @@ export default {
         // The loaded file's _meta is the source of truth for WS connection.
         // Null → disconnect (legacy or static file with no live feed).
         // Non-null with valid ws.port → reconnect to the new URL.
-        currentFileMeta(newMeta) {
+        //
+        // CRITICAL: dedup by identity tuple, not reference equality.
+        // onFileSelected reassigns currentFileMeta to a fresh object on every
+        // fetch (JSON.parse always returns new objects), so a same-file
+        // refresh would otherwise tear down a working WS and reconnect —
+        // observed as "WebSocket is closed before the connection is
+        // established" on the FE side and "EOFError: stream ends after 0
+        // bytes" handshake-failed tracebacks on the backend side.
+        currentFileMeta(newMeta, oldMeta) {
+            const sameIdentity = (
+                !!newMeta && !!oldMeta &&
+                newMeta.exchange === oldMeta.exchange &&
+                newMeta.ticker === oldMeta.ticker &&
+                newMeta.tf === oldMeta.tf &&
+                (newMeta.instance_id || '') === (oldMeta.instance_id || '') &&
+                newMeta.ws && oldMeta.ws &&
+                newMeta.ws.port === oldMeta.ws.port &&
+                (newMeta.ws.host || '') === (oldMeta.ws.host || '') &&
+                (newMeta.ws.path || '/') === (oldMeta.ws.path || '/')
+            )
+            if (sameIdentity && this.wsConnected) {
+                // Identical identity, WS already open — nothing to do.
+                return
+            }
             const url = this._wsBuildUrl(newMeta)
             if (!url) {
                 if (this.ws || this.wsReconnectTimer) this.wsDisconnect()

@@ -55,11 +55,39 @@ module.exports = (env, options) => ({
         client: {
             webSocketURL: 'auto://0.0.0.0:0/ws',  // Use same host/port as page URL
         },
-        // No /live-ws proxy: each loaded chart file declares its own WS
-        // endpoint via _meta.ws (port/host/path) and the FE connects
-        // directly. This is necessary for multi-instance — one proxy
-        // entry could only target one backend port.
-        proxy: [],
+        // Wildcard live-feed proxy: routes /live-ws/<port> → ws://127.0.0.1:<port>.
+        //
+        // Each qb-new backend declares its actual bound port in the chart
+        // file's _meta.ws.port. The FE (ws-helpers.buildWsUrl) builds a
+        // URL of the form ws://<page-host>:<page-port>/live-ws/<backend-port>
+        // and the dev-server forwards each connection to the matching local
+        // backend. This solves three problems:
+        //   1. Multi-instance: any number of backends on distinct ephemeral
+        //      ports all reachable through the one dev-server port.
+        //   2. Container / port-forward setups (the common dev case): the
+        //      page is reached through ONE exposed port; backend WS ports
+        //      need no separate forwarding.
+        //   3. Future TLS termination: dev-server can handle wss→ws bridging
+        //      so the FE doesn't need to know about cert details.
+        //
+        // Direct-host mode is still available — if a chart file's
+        // _meta.ws.host is non-empty, buildWsUrl uses that host:port
+        // verbatim and bypasses this proxy (advanced deployments where the
+        // backend is on a different machine that's directly reachable).
+        proxy: [
+            {
+                context: (pathname) => /^\/live-ws\/\d+$/.test(pathname),
+                target: 'ws://127.0.0.1:0',  // overridden per-request by router
+                ws: true,
+                changeOrigin: true,
+                router: (req) => {
+                    const m = req.url.match(/^\/live-ws\/(\d+)/);
+                    const port = m ? m[1] : '8765';
+                    return `ws://127.0.0.1:${port}`;
+                },
+                pathRewrite: { '^/live-ws/\\d+': '' },
+            },
+        ],
         static: {
             directory: require('path').join(__dirname, '../data'),
             publicPath: '/data',

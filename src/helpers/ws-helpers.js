@@ -11,23 +11,41 @@
  *   - meta is missing entirely (legacy file, no live feed)
  *   - meta.ws.port is 0 / falsy (websocket disabled at backend startup)
  *
- * Otherwise constructs:
- *   <ws|wss>://<host>:<port><path>
- * where:
- *   - protocol is 'wss:' iff pageProtocol is 'https:'
- *   - host is meta.ws.host if non-empty, else pageHostname
- *   - path defaults to '/'
+ * Two modes:
  *
- * pageProtocol / pageHostname are passed in (rather than read from
- * window.location) so the helper is unit-testable in node.
+ *   1. Proxy-via-page (default — meta.ws.host empty):
+ *      <ws|wss>://<pageHostname>:<pagePort>/live-ws/<meta.ws.port>
+ *      The dev-server's wildcard /live-ws/<port> proxy forwards the WS
+ *      upgrade to ws://127.0.0.1:<port>. This is the only mode that
+ *      works when the browser reaches the dev box through a single
+ *      forwarded port (containers, port-mapped VMs, SSH tunnels).
+ *      pagePort '' (default 80/443) is preserved as 'host' alone.
+ *
+ *   2. Direct (meta.ws.host non-empty):
+ *      <ws|wss>://<meta.ws.host>:<meta.ws.port><meta.ws.path>
+ *      For deployments where the backend is on a different machine that
+ *      is directly reachable, or the operator has explicitly mapped the
+ *      backend's port into the same address space as the page.
+ *      Set [websocket] public_host in qb-new config to enable this mode.
+ *
+ * pageProtocol / pageHostname / pagePort are passed in (rather than read
+ * from window.location) so the helper is unit-testable in node.
  */
-export function buildWsUrl(meta, pageProtocol, pageHostname) {
+export function buildWsUrl(meta, pageProtocol, pageHostname, pagePort) {
     if (!meta || !meta.ws || !meta.ws.port) return null
     const proto = (pageProtocol === 'https:') ? 'wss:' : 'ws:'
-    const host = meta.ws.host || pageHostname
-    const port = meta.ws.port
-    const path = meta.ws.path || '/'
-    return `${proto}//${host}:${port}${path}`
+
+    // Mode 2 — explicit host (operator opt-in for direct WS):
+    if (meta.ws.host) {
+        const path = meta.ws.path || '/'
+        return `${proto}//${meta.ws.host}:${meta.ws.port}${path}`
+    }
+
+    // Mode 1 — proxy through the dev-server's port:
+    const hostPart = pagePort
+        ? `${pageHostname}:${pagePort}`
+        : `${pageHostname}`
+    return `${proto}//${hostPart}/live-ws/${meta.ws.port}`
 }
 
 /**
