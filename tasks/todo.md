@@ -411,6 +411,22 @@ block referenced every export.
       side effects (intersects lazy-gesture-loading, the same root as the
       SSR-import limitation). The gate documents + guards the current state.
 
-### ⏭ 4.x remaining — `<TradingChart>` thin shell; full tree-shaking (above).
+### ✅ 4.6 — Lazy gesture loading (SSR import FIXED; tree-shaking partially unblocked)
+- [x] `src/stuff/gestures.js` — lazy loader: hammerjs/hamsterjs are now loaded
+      via `import()` only when a chart wires up interaction (browser, mount-time),
+      not at module eval. grid.js/sidebar.js/botbar.js `listeners()` made async
+      (+ `_destroyed` guard for unmount-during-load).
+- [x] vite `inlineDynamicImports` keeps the dist self-contained (no chunk-split
+      regression) while the gesture libs stay DYNAMIC (lazy eval).
+- [x] **SSR import RESOLVED**: the built ESM now imports cleanly in bare Node
+      (`import('dist/trading-vue.es.js')` → 20 exports, no `window is not defined`).
+      Previously crashed on hammerjs's eval-time window access. SSR test added.
+- 🟡 Tree-shaking floor: lazy-gestures removed ONE blocker but the floor is still
+      ~85 kB — other top-level DOM side effects in the Vue component graph remain.
+      Full per-export tree-shaking needs those eliminated too (separate follow-up).
+- 222 tests; all gates green; dist self-contained; UMD CDN contract intact.
+
+### ⏭ 4.x remaining — `<TradingChart>` thin shell; full tree-shaking
+      (de-side-effect the component graph; the gesture root is now fixed).
 
 ## ⏳ Phases 5–7 — RenderGraph → engine/perf rewrite → deprecation removal.

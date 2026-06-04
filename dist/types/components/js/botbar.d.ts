@@ -10,8 +10,9 @@ export default class Botbar {
     layout: any;
     MIN_ZOOM: any;
     MAX_ZOOM: any;
+    _destroyed: boolean;
     measureTextCached(text: any): any;
-    listeners(): void;
+    listeners(): Promise<void>;
     hm: any;
     _throttledWheel: {
         (...args: any[]): void;

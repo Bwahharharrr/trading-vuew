@@ -1,7 +1,6 @@
-import * as Hammer from 'hammerjs'
-import Hamster from 'hamsterjs'
 import Utils from '../../stuff/utils.js'
 import math from '../../stuff/math.js'
+import { loadGestures } from '../../stuff/gestures.js'
 
 let PANHEIGHT
 
@@ -22,11 +21,14 @@ export default class Sidebar {
         this.layout = this.$p.layout?.grids?.[this.id]
 
         this.side = side
+        this._destroyed = false
         this.listeners()
 
     }
 
-    listeners() {
+    async listeners() {
+        const { Hammer, Hamster } = await loadGestures()
+        if (this._destroyed) return // unmounted while gestures were loading
         let eventTarget = this.canvasDynamic || this.canvas
         // Add wheel zoom for Y-axis
         this.hm = Hamster(eventTarget)
@@ -398,6 +400,7 @@ export default class Sidebar {
     }
 
     destroy() {
+        this._destroyed = true // stop a still-loading listeners() from wiring up
         if (this.mc) this.mc.destroy()
         if (this.hm) this.hm.unwheel()
         if (this._throttledWheel) this._throttledWheel.cancel()

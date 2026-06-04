@@ -43,6 +43,15 @@ describe('SSR-safe import of the logic core', () => {
       .toBe('ws://localhost:10850/live-ws/8765')
   })
 
+  test('the gesture loader imports without evaluating hammerjs/hamsterjs (SSR-safe)', async () => {
+    // hammerjs/hamsterjs touch `window` at module-eval; the lazy loader must
+    // NOT pull them in just by being imported (only on loadGestures()). This is
+    // what unblocked bare-import of the full library in Node/SSR.
+    const g = await import('../../src/stuff/gestures.js')
+    expect(typeof g.loadGestures).toBe('function')
+    expect(g.loadedGestures()).toBe(null) // nothing loaded just from importing
+  })
+
   test('ScriptEngine core imports and computes headless (no worker/DOM)', async () => {
     // Drives the engine directly, proving indicator computation needs no DOM.
     const { runScript, script } = await import('../golden/_engine-harness.js')

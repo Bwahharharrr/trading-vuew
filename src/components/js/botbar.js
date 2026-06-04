@@ -1,7 +1,7 @@
 
 import Const from '../../stuff/constants.js'
 import Utils from '../../stuff/utils.js'
-import Hamster from 'hamsterjs'
+import { loadGestures } from '../../stuff/gestures.js'
 
 const { MINUTE15, MINUTE, HOUR, DAY, WEEK, MONTH, YEAR, MONTHMAP } = Const
 
@@ -25,6 +25,7 @@ export default class Botbar {
         const config = comp.$props.config || {}
         this.MIN_ZOOM = config.MIN_ZOOM || 25
         this.MAX_ZOOM = config.MAX_ZOOM || 100000
+        this._destroyed = false
         this.listeners()
 
     }
@@ -49,7 +50,9 @@ export default class Botbar {
         return result.width
     }
 
-    listeners() {
+    async listeners() {
+        const { Hamster } = await loadGestures()
+        if (this._destroyed) return // unmounted while gestures were loading
         this.hm = Hamster(this.canvasDynamic || this.canvas)
         // Throttle wheel events to ~60fps
         this._throttledWheel = Utils.rafThrottle((delta, event) => {
@@ -81,6 +84,7 @@ export default class Botbar {
     }
 
     destroy() {
+        this._destroyed = true // stop a still-loading listeners() from wiring up
         if (this.hm) this.hm.unwheel()
         if (this._throttledWheel) this._throttledWheel.cancel()
         this.canvasDynamic = null

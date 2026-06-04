@@ -25,10 +25,11 @@ export default class Grid {
     renderer: GridRenderer;
     _cursorEventPool: import("../../stuff/pool.js").ObjectPool;
     _pooledCursorEvent: any;
+    _destroyed: boolean;
     get range(): any;
     set overlays(v: any[]);
     get overlays(): any[];
-    listeners(): void;
+    listeners(): Promise<void>;
     hm: any;
     _throttledWheel: {
         (...args: any[]): void;

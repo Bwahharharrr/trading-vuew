@@ -94,6 +94,11 @@ export default defineConfig(({ command }) => {
           exports: 'named',
           globals: { vue: 'Vue' },
           banner: isMin ? undefined : `/*!\n${BANNER}\n*/`,
+          // Inline the lazy gesture chunks back into the single artifact so the
+          // dist stays self-contained (UMD/CDN single-file + single ESM file).
+          // The imports remain DYNAMIC, so the gesture libs still evaluate lazily
+          // (on first interaction) — keeping bare-import / SSR safe.
+          inlineDynamicImports: true,
         },
       },
       terserOptions: isMin

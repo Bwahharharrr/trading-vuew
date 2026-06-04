@@ -881,6 +881,677 @@ var CursorUpdater = class {
 	}
 };
 //#endregion
+//#region src/stuff/pool.js
+/**
+* Simple object pool for reusing event data objects
+* Reduces garbage collection during high-frequency operations
+*/
+var ObjectPool = class {
+	constructor(factory, reset, initialSize = 4) {
+		this.factory = factory;
+		this.reset = reset;
+		this.pool = [];
+		for (let i = 0; i < initialSize; i++) this.pool.push(this.factory());
+	}
+	/**
+	* Acquire an object from the pool (or create new if empty)
+	*/
+	acquire() {
+		if (this.pool.length > 0) return this.pool.pop();
+		return this.factory();
+	}
+	/**
+	* Release an object back to the pool
+	*/
+	release(obj) {
+		if (this.reset) this.reset(obj);
+		this.pool.push(obj);
+	}
+	/**
+	* Clear the pool
+	*/
+	clear() {
+		this.pool.length = 0;
+	}
+};
+/**
+* Pre-configured pool for cursor-changed event objects
+*/
+function createCursorEventPool() {
+	return new ObjectPool(() => ({
+		grid_id: void 0,
+		x: void 0,
+		y: void 0,
+		mode: void 0
+	}), (obj) => {
+		obj.grid_id = void 0;
+		obj.x = void 0;
+		obj.y = void 0;
+		obj.mode = void 0;
+	}, 2);
+}
+//#endregion
+//#region src/components/js/grid/zoom-manager.js
+init_utils();
+var ZoomManager = class {
+	constructor(grid) {
+		this.grid = grid;
+	}
+	get range() {
+		return this.grid.range;
+	}
+	get data() {
+		return this.grid.data;
+	}
+	get layout() {
+		return this.grid.layout;
+	}
+	get interval() {
+		return this.grid.interval;
+	}
+	get canvas() {
+		return this.grid.canvas;
+	}
+	get comp() {
+		return this.grid.comp;
+	}
+	get $p() {
+		return this.grid.$p;
+	}
+	get id() {
+		return this.grid.id;
+	}
+	mousezoom(delta, event) {
+		const wmode = this.grid.wmode;
+		if (wmode !== "pass") {
+			if (wmode === "click" && !this.$p.meta.activated) return;
+			event.originalEvent.preventDefault();
+			event.preventDefault();
+		}
+		event.deltaX = event.deltaX || utils_default.get_deltaX(event);
+		event.deltaY = event.deltaY || utils_default.get_deltaY(event);
+		if (Math.abs(event.deltaX) > 0) {
+			this.grid.trackpad = true;
+			if (Math.abs(event.deltaX) >= Math.abs(event.deltaY)) delta *= .1;
+			this.trackpad_scroll(event);
+		}
+		if (this.grid.trackpad) delta *= .032;
+		delta = utils_default.smart_wheel(delta);
+		if (delta < 0 && this.data.length <= this.grid.MIN_ZOOM) return;
+		if (delta > 0 && this.data.length > this.grid.MAX_ZOOM) return;
+		let k = this.interval / 1e3;
+		let diff = delta * k * this.data.length;
+		let tl = this.$p.config?.ZOOM_MODE === "tl";
+		if (event.originalEvent.ctrlKey || tl) {
+			let diff1 = event.originalEvent.offsetX / (this.canvas.width - 1) * diff;
+			let diff2 = diff - diff1;
+			this.range[0] -= diff1;
+			this.range[1] += diff2;
+		} else this.range[0] -= diff;
+		if (tl) {
+			let diff1 = event.originalEvent.offsetY / (Math.max(this.canvas.height, 2) - 1) * 2;
+			let diff2 = 2 - diff1;
+			let z = diff / (this.range[1] - this.range[0]);
+			this.comp.$emit("rezoom-range", {
+				grid_id: this.id,
+				z,
+				diff1,
+				diff2
+			});
+		}
+		this.grid.change_range();
+	}
+	pinchzoom(scale) {
+		const pinch = this.grid.pinch;
+		if (!pinch) return;
+		if (scale > 1 && this.data.length <= this.grid.MIN_ZOOM) return;
+		if (scale < 1 && this.data.length > this.grid.MAX_ZOOM) return;
+		let t = pinch.t;
+		let nt = t * 1 / scale;
+		this.range[0] = pinch.r[0] - (nt - t) * .5;
+		this.range[1] = pinch.r[1] + (nt - t) * .5;
+		this.grid.change_range();
+	}
+	trackpad_scroll(event) {
+		let dt = this.range[1] - this.range[0];
+		this.range[0] += event.deltaX * dt * .011;
+		this.range[1] += event.deltaX * dt * .011;
+		this.grid.change_range();
+	}
+};
+//#endregion
+//#region src/stuff/frame.js
+init_utils();
+var FrameAnimation = class {
+	constructor(cb) {
+		this.t0 = this.t = utils_default.now();
+		this.cb = cb;
+		this.running = true;
+		this.rafId = null;
+		this._loop();
+	}
+	_loop() {
+		if (!this.running) return;
+		this.rafId = requestAnimationFrame(() => {
+			if (!this.running) return;
+			const now = utils_default.now();
+			if (now - this.t > 100) {
+				this.t = now;
+				this._loop();
+				return;
+			}
+			if (now - this.t0 > 1200) {
+				this.stop();
+				return;
+			}
+			this.cb(this);
+			this.t = now;
+			this._loop();
+		});
+	}
+	stop() {
+		this.running = false;
+		if (this.rafId !== null) {
+			cancelAnimationFrame(this.rafId);
+			this.rafId = null;
+		}
+	}
+};
+//#endregion
+//#region src/stuff/math.js
+var math_default;
+var init_math = __esmMin((() => {
+	math_default = {
+		point2line(p1, p2, p3) {
+			let { area, base } = this.tri(p1, p2, p3);
+			return Math.abs(this.tri_h(area, base));
+		},
+		point2seg(p1, p2, p3) {
+			let { area, base } = this.tri(p1, p2, p3);
+			let proj = this.dot_prod(p1, p2, p3) / base;
+			let l1 = Math.max(-proj, 0);
+			let l2 = Math.max(proj - base, 0);
+			let h = Math.abs(this.tri_h(area, base));
+			return Math.max(h, l1, l2);
+		},
+		point2ray(p1, p2, p3) {
+			let { area, base } = this.tri(p1, p2, p3);
+			let proj = this.dot_prod(p1, p2, p3) / base;
+			let l1 = Math.max(-proj, 0);
+			let h = Math.abs(this.tri_h(area, base));
+			return Math.max(h, l1);
+		},
+		tri(p1, p2, p3) {
+			let area = this.area(p1, p2, p3);
+			let dx = p3[0] - p2[0];
+			let dy = p3[1] - p2[1];
+			return {
+				area,
+				base: Math.sqrt(dx * dx + dy * dy)
+			};
+		},
+		area(p1, p2, p3) {
+			return p1[0] * (p2[1] - p3[1]) + p2[0] * (p3[1] - p1[1]) + p3[0] * (p1[1] - p2[1]);
+		},
+		tri_h(area, base) {
+			return area / base;
+		},
+		dot_prod(p1, p2, p3) {
+			let v1 = [p3[0] - p2[0], p3[1] - p2[1]];
+			let v2 = [p1[0] - p2[0], p1[1] - p2[1]];
+			return v1[0] * v2[0] + v1[1] * v2[1];
+		},
+		log(x) {
+			return Math.sign(x) * Math.log(Math.abs(x) + 1);
+		},
+		exp(x) {
+			return Math.sign(x) * (Math.exp(Math.abs(x)) - 1);
+		},
+		log_mid(r, h) {
+			let log_hi = this.log(r[0]);
+			let log_lo = this.log(r[1]);
+			let gx = log_hi - h / 2 * (log_hi - log_lo) / h;
+			return this.exp(gx);
+		},
+		re_range(r1, hi2, mid) {
+			let log_hi1 = this.log(r1[0]);
+			let log_lo1 = this.log(r1[1]);
+			let log_hi2 = this.log(hi2);
+			let log_$ = this.log(mid);
+			let W = (log_hi2 - log_$) * (log_hi1 - log_lo1) / (log_hi1 - log_$);
+			return this.exp(log_hi2 - W);
+		}
+	};
+}));
+//#endregion
+//#region src/components/js/grid/pan-manager.js
+init_utils();
+init_math();
+var PanManager = class {
+	constructor(grid) {
+		this.grid = grid;
+		this.fade = null;
+	}
+	get range() {
+		return this.grid.range;
+	}
+	get layout() {
+		return this.grid.layout;
+	}
+	get comp() {
+		return this.grid.comp;
+	}
+	get $p() {
+		return this.grid.$p;
+	}
+	get id() {
+		return this.grid.id;
+	}
+	mousedrag(x, y) {
+		const drug = this.grid.drug;
+		if (!drug) return;
+		let dt = drug.t * (drug.x - x) / this.layout.width;
+		let d$ = this.layout.$_hi - this.layout.$_lo;
+		d$ *= (drug.y - y) / this.layout.height;
+		let offset = drug.o + d$;
+		let ls = this.layout.grid.logScale;
+		let range;
+		if (ls && drug.y_r) {
+			let dy = drug.y - y;
+			range = drug.y_r.slice();
+			range[0] = math_default.exp((0 - drug.B + dy) / this.layout.A);
+			range[1] = math_default.exp((this.layout.height - drug.B + dy) / this.layout.A);
+		}
+		if (drug.y_r && this.$p.y_transform && !this.$p.y_transform.auto) this.comp.$emit("sidebar-transform", {
+			grid_id: this.id,
+			range: ls ? range || drug.y_r : [drug.y_r[0] - offset, drug.y_r[1] - offset]
+		});
+		this.range[0] = drug.r[0] + dt;
+		this.range[1] = drug.r[1] + dt;
+		this.grid.change_range();
+	}
+	pan_fade(event) {
+		const drug = this.grid.drug;
+		if (!drug) return;
+		let dt = utils_default.now() - drug.t0;
+		let v = 42 * (this.range[1] - drug.r[1]) / dt;
+		let v0 = Math.abs(v * .01);
+		if (dt > 500) return;
+		if (this.fade) this.fade.stop();
+		this.fade = new FrameAnimation((self) => {
+			v *= .85;
+			if (Math.abs(v) < v0) self.stop();
+			this.range[0] += v;
+			this.range[1] += v;
+			this.grid.change_range();
+		});
+	}
+	stopFade() {
+		if (this.fade) this.fade.stop();
+	}
+	destroy() {
+		if (this.fade) this.fade.stop();
+		this.fade = null;
+	}
+};
+//#endregion
+//#region src/helpers/schema/diagnostics.js
+/**
+* @typedef {Object} Diagnostic
+* @property {'error'|'warn'} level
+* @property {string} code   - stable machine code, e.g. 'ohlcv.row.shape'
+* @property {string} message- human-readable explanation
+* @property {string} [path] - location, e.g. 'chart.data[42]'
+*/
+/** Make a diagnostic. */
+function diag(level, code, message, path) {
+	return path !== void 0 ? {
+		level,
+		code,
+		message,
+		path
+	} : {
+		level,
+		code,
+		message
+	};
+}
+var error = (code, message, path) => diag("error", code, message, path);
+var warn = (code, message, path) => diag("warn", code, message, path);
+/** True if any diagnostic is error-level. */
+function hasErrors(diagnostics) {
+	for (const d of diagnostics) if (d.level === "error") return true;
+	return false;
+}
+/** One-line human summary of a diagnostic list (capped). */
+function formatDiagnostics(diagnostics, cap = 8) {
+	const shown = diagnostics.slice(0, cap).map((d) => `  [${d.level}] ${d.code}${d.path ? ` @ ${d.path}` : ""}: ${d.message}`);
+	const extra = diagnostics.length > cap ? `\n  …and ${diagnostics.length - cap} more` : "";
+	return shown.join("\n") + extra;
+}
+/**
+* Report diagnostics according to `mode`:
+*   'off'    - do nothing
+*   'warn'   - console.warn errors+warnings (default; non-breaking)
+*   'strict' - throw on any error-level diagnostic (after logging)
+*
+* Returns the (possibly filtered) diagnostics so callers can also surface them
+* on an event bus. Never throws in 'warn'/'off'.
+*
+* @param {Diagnostic[]} diagnostics
+* @param {'off'|'warn'|'strict'} mode
+* @param {string} context - label for the log line, e.g. 'OHLCV data'
+*/
+function report(diagnostics, mode = "warn", context = "data") {
+	if (!diagnostics || !diagnostics.length || mode === "off") return diagnostics;
+	const header = `[trading-vue] ${context}: ${diagnostics.length} validation issue(s)`;
+	const body = formatDiagnostics(diagnostics);
+	if (mode === "strict" && hasErrors(diagnostics)) {
+		if (typeof console !== "undefined") console.error(header + "\n" + body);
+		const err = /* @__PURE__ */ new Error(`${header} (strict mode)\n${body}`);
+		err.diagnostics = diagnostics;
+		throw err;
+	}
+	if (typeof console !== "undefined") (hasErrors(diagnostics) ? console.error : console.warn)(header + "\n" + body);
+	return diagnostics;
+}
+//#endregion
+//#region src/render/canvas-context.js
+var CanvasContext = class {
+	/**
+	* @param {CanvasRenderingContext2D} ctx
+	* @param {object} [opts]
+	* @param {(d:object, e:Error)=>void} [opts.onError] - diagnostic sink
+	* @param {{drawCall:(n?:number)=>void}} [opts.metrics] - RenderMetrics shim
+	*/
+	constructor(ctx, opts = {}) {
+		this.ctx = ctx;
+		this.onError = opts.onError || null;
+		this.metrics = opts.metrics || null;
+		this._errs = /* @__PURE__ */ new Map();
+	}
+	/** Point the wrapper at the current canvas context (it can change on resize). */
+	use(ctx) {
+		this.ctx = ctx;
+		return this;
+	}
+	/**
+	* Draw one overlay layer inside an isolated boundary.
+	* @returns {boolean} true if it drew without throwing
+	*/
+	drawOverlay(layer) {
+		if (!layer || !layer.display) return false;
+		const ctx = this.ctx;
+		let ok = true;
+		ctx.save();
+		try {
+			const r = layer.renderer;
+			if (r.pre_draw) r.pre_draw(ctx);
+			r.draw(ctx);
+			if (r.post_draw) r.post_draw(ctx);
+			if (this._errs.has(layer.id)) this._errs.delete(layer.id);
+		} catch (e) {
+			ok = false;
+			this._report(layer, e);
+		} finally {
+			ctx.restore();
+			if (!ok) ctx.beginPath();
+			if (this.metrics) this.metrics.drawCall();
+		}
+		return ok;
+	}
+	/** Draw a list of (already z-sorted) layers. Returns count drawn ok. */
+	drawOverlays(layers) {
+		let ok = 0;
+		for (let i = 0; i < layers.length; i++) if (this.drawOverlay(layers[i])) ok++;
+		return ok;
+	}
+	_report(layer, e) {
+		const id = layer.id;
+		const msg = e && e.message || String(e);
+		if (this._errs.get(id) === msg) return;
+		this._errs.set(id, msg);
+		const diag = error("overlay.draw.throw", `overlay "${layer.name || id}" draw() threw: ${msg}`, String(id));
+		if (this.onError) this.onError(diag, e);
+		else if (typeof console !== "undefined") console.error(`[trading-vue] ${diag.message}`, e);
+	}
+};
+//#endregion
+//#region src/render/render-engine.js
+var RenderEngine = class {
+	/**
+	* @param {object} [opts] forwarded to the CanvasContext (onError, metrics).
+	*/
+	constructor(opts = {}) {
+		this.cc = new CanvasContext(null, opts);
+	}
+	/**
+	* Render the full static canvas.
+	* @param {CanvasRenderingContext2D} ctx
+	* @param {object} frame
+	* @param {{width:number,height:number}} frame.canvas
+	* @param {object} frame.layout - resolved grid layout (xs/ys/width/height/ti_map)
+	* @param {object} frame.colors - theme colours ({grid, scale, ...})
+	* @param {Array}  frame.overlays - PRE-SORTED layer list
+	* @param {Array}  [frame.shaders] - shader list
+	* @param {object} [frame.shaderProps] - props passed to each shader.draw
+	* @param {object} [frame.crosshair] - crosshair layer
+	* @param {boolean} [frame.drawCrosshairHere] - draw crosshair on this (static) ctx
+	* @param {boolean} [frame.upperBorder] - draw the top scale border
+	*/
+	renderStatic(ctx, frame) {
+		const { canvas, layout } = frame;
+		if (!layout) return;
+		ctx.clearRect(0, 0, canvas.width, canvas.height);
+		if (frame.shaders && frame.shaders.length) this.drawShaders(ctx, frame.shaders, frame.shaderProps);
+		this.drawGrid(ctx, layout, frame.colors, frame.upperBorder);
+		this.cc.use(ctx).drawOverlays(frame.overlays || []);
+		if (frame.drawCrosshairHere && frame.crosshair) frame.crosshair.renderer.draw(ctx);
+	}
+	/** Render only the dynamic canvas (crosshair). */
+	renderDynamic(ctx, canvas, crosshair) {
+		if (!crosshair) return;
+		ctx.clearRect(0, 0, canvas.width, canvas.height);
+		crosshair.renderer.draw(ctx);
+	}
+	/** Grid lines (+ optional top scale border). */
+	drawGrid(ctx, layout, colors, upperBorder) {
+		ctx.strokeStyle = colors.grid;
+		ctx.beginPath();
+		const ymax = layout.height;
+		for (let [x] of layout.xs) {
+			ctx.moveTo(x - .5, 0);
+			ctx.lineTo(x - .5, ymax);
+		}
+		for (let [y] of layout.ys) {
+			ctx.moveTo(0, y - .5);
+			ctx.lineTo(layout.width, y - .5);
+		}
+		ctx.stroke();
+		if (upperBorder) {
+			ctx.strokeStyle = colors.scale;
+			ctx.beginPath();
+			ctx.moveTo(0, .5);
+			ctx.lineTo(layout.width, .5);
+			ctx.stroke();
+		}
+	}
+	/** Run grid shaders, each in its own save/restore scope. */
+	drawShaders(ctx, shaders, props) {
+		for (let s of shaders) {
+			ctx.save();
+			s.draw(ctx, props);
+			ctx.restore();
+		}
+	}
+};
+//#endregion
+//#region src/components/js/grid/grid-renderer.js
+var GridRenderer = class {
+	constructor(grid) {
+		this.grid = grid;
+		this.overlays = [];
+		this.crosshair = null;
+		this.engine = new RenderEngine();
+		this._lastRange = null;
+		this._lastCursorX = null;
+		this._lastCursorY = null;
+		this._staticDirty = true;
+		this._overlaysDirty = true;
+		this._crosshairOnly = false;
+		this._lastDataLength = 0;
+		this._lastLayoutRef = null;
+		this._sortedOverlays = [];
+		this._overlaysSortDirty = true;
+	}
+	get ctx() {
+		return this.grid.ctx;
+	}
+	get ctxDynamic() {
+		return this.grid.ctxDynamic || this.grid.ctx;
+	}
+	get hasDualCanvas() {
+		return !!this.grid.ctxDynamic;
+	}
+	get layout() {
+		return this.grid.layout;
+	}
+	get $p() {
+		return this.grid.$p;
+	}
+	get data() {
+		return this.grid.data;
+	}
+	get range() {
+		return this.grid.range;
+	}
+	get interval() {
+		return this.grid.interval;
+	}
+	get cursor() {
+		return this.grid.cursor;
+	}
+	get id() {
+		return this.grid.id;
+	}
+	new_layer(layer) {
+		if (layer.name === "crosshair") this.crosshair = layer;
+		else {
+			this.overlays.push(layer);
+			this._overlaysSortDirty = true;
+		}
+		this._overlaysDirty = true;
+		this.update();
+	}
+	del_layer(id) {
+		this.overlays = this.overlays.filter((x) => x.id !== id);
+		this._overlaysSortDirty = true;
+		this._overlaysDirty = true;
+		this.update();
+	}
+	show_hide_layer(event) {
+		let l = this.overlays.filter((x) => x.id === event.id);
+		if (l.length) l[0].display = event.display;
+		this._overlaysDirty = true;
+	}
+	markStaticDirty() {
+		this._staticDirty = true;
+		this._overlaysDirty = true;
+	}
+	_detectCrosshairOnlyUpdate() {
+		const layoutRef = this.layout;
+		if (this._lastLayoutRef !== layoutRef) {
+			this._lastLayoutRef = layoutRef;
+			this._staticDirty = true;
+			this._overlaysDirty = true;
+			return false;
+		}
+		const range = this.range;
+		const cursor = this.cursor;
+		const data = this.data;
+		const rangeKey = range ? `${range[0]},${range[1]}` : "";
+		if (this._lastRange !== rangeKey) {
+			this._lastRange = rangeKey;
+			this._staticDirty = true;
+			this._overlaysDirty = true;
+			return false;
+		}
+		const dataLen = data?.length || 0;
+		if (this._lastDataLength !== dataLen) {
+			this._lastDataLength = dataLen;
+			this._staticDirty = true;
+			this._overlaysDirty = true;
+			return false;
+		}
+		const cursorX = cursor?.x;
+		const cursorY = cursor?.y;
+		if (this._lastCursorX !== cursorX || this._lastCursorY !== cursorY) {
+			this._lastCursorX = cursorX;
+			this._lastCursorY = cursorY;
+			return true;
+		}
+		return false;
+	}
+	update() {
+		const layout = this.grid.comp.layoutOverride || this.$p.layout?.grids?.[this.id];
+		this.grid.layout = layout;
+		this.grid.interval = this.$p.interval;
+		if (!layout) return;
+		this._crosshairOnly = this._detectCrosshairOnlyUpdate();
+		if (this.hasDualCanvas && this._crosshairOnly && !this._staticDirty && !this._overlaysDirty) {
+			this.updateDynamic();
+			return;
+		}
+		if (this._overlaysSortDirty || this._sortedOverlays.length !== this.overlays.length) {
+			this._sortedOverlays = this.overlays.slice();
+			this._sortedOverlays.sort((l1, l2) => l1.z - l2.z);
+			this._overlaysSortDirty = false;
+		}
+		this.engine.renderStatic(this.ctx, {
+			canvas: this.grid.canvas,
+			layout: this.layout,
+			colors: this.$p.colors,
+			overlays: this._sortedOverlays,
+			shaders: this.$p.shaders,
+			shaderProps: this.$p.shaders.length ? this._shaderProps() : null,
+			crosshair: this.crosshair,
+			drawCrosshairHere: !this.hasDualCanvas,
+			upperBorder: !!this.$p.grid_id
+		});
+		if (this.hasDualCanvas) this.updateDynamic();
+		this._staticDirty = false;
+		this._overlaysDirty = false;
+	}
+	updateDynamic() {
+		const canvas = this.grid.canvasDynamic || this.grid.canvas;
+		this.engine.renderDynamic(this.ctxDynamic, canvas, this.crosshair);
+	}
+	_shaderProps() {
+		const layout = this.layout;
+		return {
+			layout,
+			range: this.range,
+			interval: this.interval,
+			tf: layout.ti_map.tf,
+			cursor: this.cursor,
+			colors: this.$p.colors,
+			sub: this.data,
+			font: this.$p.font,
+			config: this.$p.config,
+			meta: this.$p.meta
+		};
+	}
+	propagate(name, event) {
+		for (let layer of this.overlays) {
+			if (layer.renderer[name]) layer.renderer[name](event);
+			const mouse = layer.renderer.mouse;
+			const keys = layer.renderer.keys;
+			if (mouse.listeners) mouse.emit(name, event);
+			if (keys && keys.listeners) keys.emit(name, event);
+		}
+	}
+};
+//#endregion
 //#region node_modules/hammerjs/hammer.js
 var require_hammer = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	/*! Hammer.JS - v2.0.7 - 2016-04-22
@@ -3025,678 +3696,22 @@ var require_hamster = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	})(window, window.document);
 }));
 //#endregion
-//#region src/stuff/pool.js
-var import_hammer = /* @__PURE__ */ __toESM(require_hammer(), 1);
-var import_hamster = /* @__PURE__ */ __toESM(require_hamster(), 1);
-/**
-* Simple object pool for reusing event data objects
-* Reduces garbage collection during high-frequency operations
-*/
-var ObjectPool = class {
-	constructor(factory, reset, initialSize = 4) {
-		this.factory = factory;
-		this.reset = reset;
-		this.pool = [];
-		for (let i = 0; i < initialSize; i++) this.pool.push(this.factory());
-	}
-	/**
-	* Acquire an object from the pool (or create new if empty)
-	*/
-	acquire() {
-		if (this.pool.length > 0) return this.pool.pop();
-		return this.factory();
-	}
-	/**
-	* Release an object back to the pool
-	*/
-	release(obj) {
-		if (this.reset) this.reset(obj);
-		this.pool.push(obj);
-	}
-	/**
-	* Clear the pool
-	*/
-	clear() {
-		this.pool.length = 0;
-	}
-};
-/**
-* Pre-configured pool for cursor-changed event objects
-*/
-function createCursorEventPool() {
-	return new ObjectPool(() => ({
-		grid_id: void 0,
-		x: void 0,
-		y: void 0,
-		mode: void 0
-	}), (obj) => {
-		obj.grid_id = void 0;
-		obj.x = void 0;
-		obj.y = void 0;
-		obj.mode = void 0;
-	}, 2);
-}
-//#endregion
-//#region src/components/js/grid/zoom-manager.js
-init_utils();
-var ZoomManager = class {
-	constructor(grid) {
-		this.grid = grid;
-	}
-	get range() {
-		return this.grid.range;
-	}
-	get data() {
-		return this.grid.data;
-	}
-	get layout() {
-		return this.grid.layout;
-	}
-	get interval() {
-		return this.grid.interval;
-	}
-	get canvas() {
-		return this.grid.canvas;
-	}
-	get comp() {
-		return this.grid.comp;
-	}
-	get $p() {
-		return this.grid.$p;
-	}
-	get id() {
-		return this.grid.id;
-	}
-	mousezoom(delta, event) {
-		const wmode = this.grid.wmode;
-		if (wmode !== "pass") {
-			if (wmode === "click" && !this.$p.meta.activated) return;
-			event.originalEvent.preventDefault();
-			event.preventDefault();
-		}
-		event.deltaX = event.deltaX || utils_default.get_deltaX(event);
-		event.deltaY = event.deltaY || utils_default.get_deltaY(event);
-		if (Math.abs(event.deltaX) > 0) {
-			this.grid.trackpad = true;
-			if (Math.abs(event.deltaX) >= Math.abs(event.deltaY)) delta *= .1;
-			this.trackpad_scroll(event);
-		}
-		if (this.grid.trackpad) delta *= .032;
-		delta = utils_default.smart_wheel(delta);
-		if (delta < 0 && this.data.length <= this.grid.MIN_ZOOM) return;
-		if (delta > 0 && this.data.length > this.grid.MAX_ZOOM) return;
-		let k = this.interval / 1e3;
-		let diff = delta * k * this.data.length;
-		let tl = this.$p.config?.ZOOM_MODE === "tl";
-		if (event.originalEvent.ctrlKey || tl) {
-			let diff1 = event.originalEvent.offsetX / (this.canvas.width - 1) * diff;
-			let diff2 = diff - diff1;
-			this.range[0] -= diff1;
-			this.range[1] += diff2;
-		} else this.range[0] -= diff;
-		if (tl) {
-			let diff1 = event.originalEvent.offsetY / (Math.max(this.canvas.height, 2) - 1) * 2;
-			let diff2 = 2 - diff1;
-			let z = diff / (this.range[1] - this.range[0]);
-			this.comp.$emit("rezoom-range", {
-				grid_id: this.id,
-				z,
-				diff1,
-				diff2
-			});
-		}
-		this.grid.change_range();
-	}
-	pinchzoom(scale) {
-		const pinch = this.grid.pinch;
-		if (!pinch) return;
-		if (scale > 1 && this.data.length <= this.grid.MIN_ZOOM) return;
-		if (scale < 1 && this.data.length > this.grid.MAX_ZOOM) return;
-		let t = pinch.t;
-		let nt = t * 1 / scale;
-		this.range[0] = pinch.r[0] - (nt - t) * .5;
-		this.range[1] = pinch.r[1] + (nt - t) * .5;
-		this.grid.change_range();
-	}
-	trackpad_scroll(event) {
-		let dt = this.range[1] - this.range[0];
-		this.range[0] += event.deltaX * dt * .011;
-		this.range[1] += event.deltaX * dt * .011;
-		this.grid.change_range();
-	}
-};
-//#endregion
-//#region src/stuff/frame.js
-init_utils();
-var FrameAnimation = class {
-	constructor(cb) {
-		this.t0 = this.t = utils_default.now();
-		this.cb = cb;
-		this.running = true;
-		this.rafId = null;
-		this._loop();
-	}
-	_loop() {
-		if (!this.running) return;
-		this.rafId = requestAnimationFrame(() => {
-			if (!this.running) return;
-			const now = utils_default.now();
-			if (now - this.t > 100) {
-				this.t = now;
-				this._loop();
-				return;
-			}
-			if (now - this.t0 > 1200) {
-				this.stop();
-				return;
-			}
-			this.cb(this);
-			this.t = now;
-			this._loop();
-		});
-	}
-	stop() {
-		this.running = false;
-		if (this.rafId !== null) {
-			cancelAnimationFrame(this.rafId);
-			this.rafId = null;
-		}
-	}
-};
-//#endregion
-//#region src/stuff/math.js
-var math_default;
-var init_math = __esmMin((() => {
-	math_default = {
-		point2line(p1, p2, p3) {
-			let { area, base } = this.tri(p1, p2, p3);
-			return Math.abs(this.tri_h(area, base));
-		},
-		point2seg(p1, p2, p3) {
-			let { area, base } = this.tri(p1, p2, p3);
-			let proj = this.dot_prod(p1, p2, p3) / base;
-			let l1 = Math.max(-proj, 0);
-			let l2 = Math.max(proj - base, 0);
-			let h = Math.abs(this.tri_h(area, base));
-			return Math.max(h, l1, l2);
-		},
-		point2ray(p1, p2, p3) {
-			let { area, base } = this.tri(p1, p2, p3);
-			let proj = this.dot_prod(p1, p2, p3) / base;
-			let l1 = Math.max(-proj, 0);
-			let h = Math.abs(this.tri_h(area, base));
-			return Math.max(h, l1);
-		},
-		tri(p1, p2, p3) {
-			let area = this.area(p1, p2, p3);
-			let dx = p3[0] - p2[0];
-			let dy = p3[1] - p2[1];
-			return {
-				area,
-				base: Math.sqrt(dx * dx + dy * dy)
-			};
-		},
-		area(p1, p2, p3) {
-			return p1[0] * (p2[1] - p3[1]) + p2[0] * (p3[1] - p1[1]) + p3[0] * (p1[1] - p2[1]);
-		},
-		tri_h(area, base) {
-			return area / base;
-		},
-		dot_prod(p1, p2, p3) {
-			let v1 = [p3[0] - p2[0], p3[1] - p2[1]];
-			let v2 = [p1[0] - p2[0], p1[1] - p2[1]];
-			return v1[0] * v2[0] + v1[1] * v2[1];
-		},
-		log(x) {
-			return Math.sign(x) * Math.log(Math.abs(x) + 1);
-		},
-		exp(x) {
-			return Math.sign(x) * (Math.exp(Math.abs(x)) - 1);
-		},
-		log_mid(r, h) {
-			let log_hi = this.log(r[0]);
-			let log_lo = this.log(r[1]);
-			let gx = log_hi - h / 2 * (log_hi - log_lo) / h;
-			return this.exp(gx);
-		},
-		re_range(r1, hi2, mid) {
-			let log_hi1 = this.log(r1[0]);
-			let log_lo1 = this.log(r1[1]);
-			let log_hi2 = this.log(hi2);
-			let log_$ = this.log(mid);
-			let W = (log_hi2 - log_$) * (log_hi1 - log_lo1) / (log_hi1 - log_$);
-			return this.exp(log_hi2 - W);
-		}
-	};
-}));
-//#endregion
-//#region src/components/js/grid/pan-manager.js
-init_utils();
-init_math();
-var PanManager = class {
-	constructor(grid) {
-		this.grid = grid;
-		this.fade = null;
-	}
-	get range() {
-		return this.grid.range;
-	}
-	get layout() {
-		return this.grid.layout;
-	}
-	get comp() {
-		return this.grid.comp;
-	}
-	get $p() {
-		return this.grid.$p;
-	}
-	get id() {
-		return this.grid.id;
-	}
-	mousedrag(x, y) {
-		const drug = this.grid.drug;
-		if (!drug) return;
-		let dt = drug.t * (drug.x - x) / this.layout.width;
-		let d$ = this.layout.$_hi - this.layout.$_lo;
-		d$ *= (drug.y - y) / this.layout.height;
-		let offset = drug.o + d$;
-		let ls = this.layout.grid.logScale;
-		let range;
-		if (ls && drug.y_r) {
-			let dy = drug.y - y;
-			range = drug.y_r.slice();
-			range[0] = math_default.exp((0 - drug.B + dy) / this.layout.A);
-			range[1] = math_default.exp((this.layout.height - drug.B + dy) / this.layout.A);
-		}
-		if (drug.y_r && this.$p.y_transform && !this.$p.y_transform.auto) this.comp.$emit("sidebar-transform", {
-			grid_id: this.id,
-			range: ls ? range || drug.y_r : [drug.y_r[0] - offset, drug.y_r[1] - offset]
-		});
-		this.range[0] = drug.r[0] + dt;
-		this.range[1] = drug.r[1] + dt;
-		this.grid.change_range();
-	}
-	pan_fade(event) {
-		const drug = this.grid.drug;
-		if (!drug) return;
-		let dt = utils_default.now() - drug.t0;
-		let v = 42 * (this.range[1] - drug.r[1]) / dt;
-		let v0 = Math.abs(v * .01);
-		if (dt > 500) return;
-		if (this.fade) this.fade.stop();
-		this.fade = new FrameAnimation((self) => {
-			v *= .85;
-			if (Math.abs(v) < v0) self.stop();
-			this.range[0] += v;
-			this.range[1] += v;
-			this.grid.change_range();
-		});
-	}
-	stopFade() {
-		if (this.fade) this.fade.stop();
-	}
-	destroy() {
-		if (this.fade) this.fade.stop();
-		this.fade = null;
-	}
-};
-//#endregion
-//#region src/helpers/schema/diagnostics.js
-/**
-* @typedef {Object} Diagnostic
-* @property {'error'|'warn'} level
-* @property {string} code   - stable machine code, e.g. 'ohlcv.row.shape'
-* @property {string} message- human-readable explanation
-* @property {string} [path] - location, e.g. 'chart.data[42]'
-*/
-/** Make a diagnostic. */
-function diag(level, code, message, path) {
-	return path !== void 0 ? {
-		level,
-		code,
-		message,
-		path
-	} : {
-		level,
-		code,
-		message
-	};
-}
-var error = (code, message, path) => diag("error", code, message, path);
-var warn = (code, message, path) => diag("warn", code, message, path);
-/** True if any diagnostic is error-level. */
-function hasErrors(diagnostics) {
-	for (const d of diagnostics) if (d.level === "error") return true;
-	return false;
-}
-/** One-line human summary of a diagnostic list (capped). */
-function formatDiagnostics(diagnostics, cap = 8) {
-	const shown = diagnostics.slice(0, cap).map((d) => `  [${d.level}] ${d.code}${d.path ? ` @ ${d.path}` : ""}: ${d.message}`);
-	const extra = diagnostics.length > cap ? `\n  …and ${diagnostics.length - cap} more` : "";
-	return shown.join("\n") + extra;
-}
-/**
-* Report diagnostics according to `mode`:
-*   'off'    - do nothing
-*   'warn'   - console.warn errors+warnings (default; non-breaking)
-*   'strict' - throw on any error-level diagnostic (after logging)
-*
-* Returns the (possibly filtered) diagnostics so callers can also surface them
-* on an event bus. Never throws in 'warn'/'off'.
-*
-* @param {Diagnostic[]} diagnostics
-* @param {'off'|'warn'|'strict'} mode
-* @param {string} context - label for the log line, e.g. 'OHLCV data'
-*/
-function report(diagnostics, mode = "warn", context = "data") {
-	if (!diagnostics || !diagnostics.length || mode === "off") return diagnostics;
-	const header = `[trading-vue] ${context}: ${diagnostics.length} validation issue(s)`;
-	const body = formatDiagnostics(diagnostics);
-	if (mode === "strict" && hasErrors(diagnostics)) {
-		if (typeof console !== "undefined") console.error(header + "\n" + body);
-		const err = /* @__PURE__ */ new Error(`${header} (strict mode)\n${body}`);
-		err.diagnostics = diagnostics;
-		throw err;
-	}
-	if (typeof console !== "undefined") (hasErrors(diagnostics) ? console.error : console.warn)(header + "\n" + body);
-	return diagnostics;
-}
-//#endregion
-//#region src/render/canvas-context.js
-var CanvasContext = class {
-	/**
-	* @param {CanvasRenderingContext2D} ctx
-	* @param {object} [opts]
-	* @param {(d:object, e:Error)=>void} [opts.onError] - diagnostic sink
-	* @param {{drawCall:(n?:number)=>void}} [opts.metrics] - RenderMetrics shim
-	*/
-	constructor(ctx, opts = {}) {
-		this.ctx = ctx;
-		this.onError = opts.onError || null;
-		this.metrics = opts.metrics || null;
-		this._errs = /* @__PURE__ */ new Map();
-	}
-	/** Point the wrapper at the current canvas context (it can change on resize). */
-	use(ctx) {
-		this.ctx = ctx;
-		return this;
-	}
-	/**
-	* Draw one overlay layer inside an isolated boundary.
-	* @returns {boolean} true if it drew without throwing
-	*/
-	drawOverlay(layer) {
-		if (!layer || !layer.display) return false;
-		const ctx = this.ctx;
-		let ok = true;
-		ctx.save();
-		try {
-			const r = layer.renderer;
-			if (r.pre_draw) r.pre_draw(ctx);
-			r.draw(ctx);
-			if (r.post_draw) r.post_draw(ctx);
-			if (this._errs.has(layer.id)) this._errs.delete(layer.id);
-		} catch (e) {
-			ok = false;
-			this._report(layer, e);
-		} finally {
-			ctx.restore();
-			if (!ok) ctx.beginPath();
-			if (this.metrics) this.metrics.drawCall();
-		}
-		return ok;
-	}
-	/** Draw a list of (already z-sorted) layers. Returns count drawn ok. */
-	drawOverlays(layers) {
-		let ok = 0;
-		for (let i = 0; i < layers.length; i++) if (this.drawOverlay(layers[i])) ok++;
-		return ok;
-	}
-	_report(layer, e) {
-		const id = layer.id;
-		const msg = e && e.message || String(e);
-		if (this._errs.get(id) === msg) return;
-		this._errs.set(id, msg);
-		const diag = error("overlay.draw.throw", `overlay "${layer.name || id}" draw() threw: ${msg}`, String(id));
-		if (this.onError) this.onError(diag, e);
-		else if (typeof console !== "undefined") console.error(`[trading-vue] ${diag.message}`, e);
-	}
-};
-//#endregion
-//#region src/render/render-engine.js
-var RenderEngine = class {
-	/**
-	* @param {object} [opts] forwarded to the CanvasContext (onError, metrics).
-	*/
-	constructor(opts = {}) {
-		this.cc = new CanvasContext(null, opts);
-	}
-	/**
-	* Render the full static canvas.
-	* @param {CanvasRenderingContext2D} ctx
-	* @param {object} frame
-	* @param {{width:number,height:number}} frame.canvas
-	* @param {object} frame.layout - resolved grid layout (xs/ys/width/height/ti_map)
-	* @param {object} frame.colors - theme colours ({grid, scale, ...})
-	* @param {Array}  frame.overlays - PRE-SORTED layer list
-	* @param {Array}  [frame.shaders] - shader list
-	* @param {object} [frame.shaderProps] - props passed to each shader.draw
-	* @param {object} [frame.crosshair] - crosshair layer
-	* @param {boolean} [frame.drawCrosshairHere] - draw crosshair on this (static) ctx
-	* @param {boolean} [frame.upperBorder] - draw the top scale border
-	*/
-	renderStatic(ctx, frame) {
-		const { canvas, layout } = frame;
-		if (!layout) return;
-		ctx.clearRect(0, 0, canvas.width, canvas.height);
-		if (frame.shaders && frame.shaders.length) this.drawShaders(ctx, frame.shaders, frame.shaderProps);
-		this.drawGrid(ctx, layout, frame.colors, frame.upperBorder);
-		this.cc.use(ctx).drawOverlays(frame.overlays || []);
-		if (frame.drawCrosshairHere && frame.crosshair) frame.crosshair.renderer.draw(ctx);
-	}
-	/** Render only the dynamic canvas (crosshair). */
-	renderDynamic(ctx, canvas, crosshair) {
-		if (!crosshair) return;
-		ctx.clearRect(0, 0, canvas.width, canvas.height);
-		crosshair.renderer.draw(ctx);
-	}
-	/** Grid lines (+ optional top scale border). */
-	drawGrid(ctx, layout, colors, upperBorder) {
-		ctx.strokeStyle = colors.grid;
-		ctx.beginPath();
-		const ymax = layout.height;
-		for (let [x] of layout.xs) {
-			ctx.moveTo(x - .5, 0);
-			ctx.lineTo(x - .5, ymax);
-		}
-		for (let [y] of layout.ys) {
-			ctx.moveTo(0, y - .5);
-			ctx.lineTo(layout.width, y - .5);
-		}
-		ctx.stroke();
-		if (upperBorder) {
-			ctx.strokeStyle = colors.scale;
-			ctx.beginPath();
-			ctx.moveTo(0, .5);
-			ctx.lineTo(layout.width, .5);
-			ctx.stroke();
-		}
-	}
-	/** Run grid shaders, each in its own save/restore scope. */
-	drawShaders(ctx, shaders, props) {
-		for (let s of shaders) {
-			ctx.save();
-			s.draw(ctx, props);
-			ctx.restore();
-		}
-	}
-};
-//#endregion
-//#region src/components/js/grid/grid-renderer.js
-var GridRenderer = class {
-	constructor(grid) {
-		this.grid = grid;
-		this.overlays = [];
-		this.crosshair = null;
-		this.engine = new RenderEngine();
-		this._lastRange = null;
-		this._lastCursorX = null;
-		this._lastCursorY = null;
-		this._staticDirty = true;
-		this._overlaysDirty = true;
-		this._crosshairOnly = false;
-		this._lastDataLength = 0;
-		this._lastLayoutRef = null;
-		this._sortedOverlays = [];
-		this._overlaysSortDirty = true;
-	}
-	get ctx() {
-		return this.grid.ctx;
-	}
-	get ctxDynamic() {
-		return this.grid.ctxDynamic || this.grid.ctx;
-	}
-	get hasDualCanvas() {
-		return !!this.grid.ctxDynamic;
-	}
-	get layout() {
-		return this.grid.layout;
-	}
-	get $p() {
-		return this.grid.$p;
-	}
-	get data() {
-		return this.grid.data;
-	}
-	get range() {
-		return this.grid.range;
-	}
-	get interval() {
-		return this.grid.interval;
-	}
-	get cursor() {
-		return this.grid.cursor;
-	}
-	get id() {
-		return this.grid.id;
-	}
-	new_layer(layer) {
-		if (layer.name === "crosshair") this.crosshair = layer;
-		else {
-			this.overlays.push(layer);
-			this._overlaysSortDirty = true;
-		}
-		this._overlaysDirty = true;
-		this.update();
-	}
-	del_layer(id) {
-		this.overlays = this.overlays.filter((x) => x.id !== id);
-		this._overlaysSortDirty = true;
-		this._overlaysDirty = true;
-		this.update();
-	}
-	show_hide_layer(event) {
-		let l = this.overlays.filter((x) => x.id === event.id);
-		if (l.length) l[0].display = event.display;
-		this._overlaysDirty = true;
-	}
-	markStaticDirty() {
-		this._staticDirty = true;
-		this._overlaysDirty = true;
-	}
-	_detectCrosshairOnlyUpdate() {
-		const layoutRef = this.layout;
-		if (this._lastLayoutRef !== layoutRef) {
-			this._lastLayoutRef = layoutRef;
-			this._staticDirty = true;
-			this._overlaysDirty = true;
-			return false;
-		}
-		const range = this.range;
-		const cursor = this.cursor;
-		const data = this.data;
-		const rangeKey = range ? `${range[0]},${range[1]}` : "";
-		if (this._lastRange !== rangeKey) {
-			this._lastRange = rangeKey;
-			this._staticDirty = true;
-			this._overlaysDirty = true;
-			return false;
-		}
-		const dataLen = data?.length || 0;
-		if (this._lastDataLength !== dataLen) {
-			this._lastDataLength = dataLen;
-			this._staticDirty = true;
-			this._overlaysDirty = true;
-			return false;
-		}
-		const cursorX = cursor?.x;
-		const cursorY = cursor?.y;
-		if (this._lastCursorX !== cursorX || this._lastCursorY !== cursorY) {
-			this._lastCursorX = cursorX;
-			this._lastCursorY = cursorY;
-			return true;
-		}
-		return false;
-	}
-	update() {
-		const layout = this.grid.comp.layoutOverride || this.$p.layout?.grids?.[this.id];
-		this.grid.layout = layout;
-		this.grid.interval = this.$p.interval;
-		if (!layout) return;
-		this._crosshairOnly = this._detectCrosshairOnlyUpdate();
-		if (this.hasDualCanvas && this._crosshairOnly && !this._staticDirty && !this._overlaysDirty) {
-			this.updateDynamic();
-			return;
-		}
-		if (this._overlaysSortDirty || this._sortedOverlays.length !== this.overlays.length) {
-			this._sortedOverlays = this.overlays.slice();
-			this._sortedOverlays.sort((l1, l2) => l1.z - l2.z);
-			this._overlaysSortDirty = false;
-		}
-		this.engine.renderStatic(this.ctx, {
-			canvas: this.grid.canvas,
-			layout: this.layout,
-			colors: this.$p.colors,
-			overlays: this._sortedOverlays,
-			shaders: this.$p.shaders,
-			shaderProps: this.$p.shaders.length ? this._shaderProps() : null,
-			crosshair: this.crosshair,
-			drawCrosshairHere: !this.hasDualCanvas,
-			upperBorder: !!this.$p.grid_id
-		});
-		if (this.hasDualCanvas) this.updateDynamic();
-		this._staticDirty = false;
-		this._overlaysDirty = false;
-	}
-	updateDynamic() {
-		const canvas = this.grid.canvasDynamic || this.grid.canvas;
-		this.engine.renderDynamic(this.ctxDynamic, canvas, this.crosshair);
-	}
-	_shaderProps() {
-		const layout = this.layout;
-		return {
-			layout,
-			range: this.range,
-			interval: this.interval,
-			tf: layout.ti_map.tf,
-			cursor: this.cursor,
-			colors: this.$p.colors,
-			sub: this.data,
-			font: this.$p.font,
-			config: this.$p.config,
-			meta: this.$p.meta
+//#region src/stuff/gestures.js
+var cache = null;
+var inFlight = null;
+function loadGestures() {
+	if (cache) return Promise.resolve(cache);
+	if (inFlight) return inFlight;
+	inFlight = Promise.all([Promise.resolve().then(() => /* @__PURE__ */ __toESM(require_hammer(), 1)), Promise.resolve().then(() => /* @__PURE__ */ __toESM(require_hamster(), 1))]).then(([H, Ha]) => {
+		cache = {
+			Hammer: H && H.Manager ? H : H.default || H,
+			Hamster: Ha && Ha.default ? Ha.default : Ha
 		};
-	}
-	propagate(name, event) {
-		for (let layer of this.overlays) {
-			if (layer.renderer[name]) layer.renderer[name](event);
-			const mouse = layer.renderer.mouse;
-			const keys = layer.renderer.keys;
-			if (mouse.listeners) mouse.emit(name, event);
-			if (keys && keys.listeners) keys.emit(name, event);
-		}
-	}
-};
+		inFlight = null;
+		return cache;
+	});
+	return inFlight;
+}
 //#endregion
 //#region src/components/js/grid.js
 init_utils();
@@ -3729,6 +3744,7 @@ var Grid = class {
 		this.renderer = new GridRenderer(this);
 		this._cursorEventPool = createCursorEventPool();
 		this._pooledCursorEvent = this._cursorEventPool.acquire();
+		this._destroyed = false;
 		this.listeners();
 	}
 	get range() {
@@ -3740,19 +3756,21 @@ var Grid = class {
 	set overlays(v) {
 		this.renderer.overlays = v;
 	}
-	listeners() {
-		this.hm = (0, import_hamster.default)(this.canvasDynamic || this.canvas);
+	async listeners() {
+		const { Hammer, Hamster } = await loadGestures();
+		if (this._destroyed) return;
+		this.hm = Hamster(this.canvasDynamic || this.canvas);
 		this._throttledWheel = utils_default.rafThrottle((delta, event) => {
 			this.zoomManager.mousezoom(-delta * 50, event);
 		});
 		this.hm.wheel((event, delta) => this._throttledWheel(delta, event));
-		let mc = this.mc = new import_hammer.Manager(this.canvasDynamic || this.canvas);
+		let mc = this.mc = new Hammer.Manager(this.canvasDynamic || this.canvas);
 		let T = utils_default.is_mobile ? 10 : 0;
-		mc.add(new import_hammer.Pan({ threshold: T }));
-		mc.add(new import_hammer.Tap());
-		mc.add(new import_hammer.Pinch({ threshold: 0 }));
+		mc.add(new Hammer.Pan({ threshold: T }));
+		mc.add(new Hammer.Tap());
+		mc.add(new Hammer.Pinch({ threshold: 0 }));
 		mc.get("pinch").set({ enable: true });
-		if (utils_default.is_mobile) mc.add(new import_hammer.Press());
+		if (utils_default.is_mobile) mc.add(new Hammer.Press());
 		mc.on("panstart", (event) => {
 			if (!this.range || this.range[0] === void 0 || this.range[1] === void 0) return;
 			if (this.cursor.scroll_lock) return;
@@ -3945,6 +3963,7 @@ var Grid = class {
 		this.comp.$emit("range-changed", range);
 	}
 	destroy() {
+		this._destroyed = true;
 		let rm = removeEventListener;
 		rm("gesturestart", this.gesturestart);
 		rm("gesturechange", this.gesturechange);
@@ -6953,21 +6972,24 @@ var Sidebar = class {
 		this.id = this.$p.grid_id;
 		this.layout = this.$p.layout?.grids?.[this.id];
 		this.side = side;
+		this._destroyed = false;
 		this.listeners();
 	}
-	listeners() {
+	async listeners() {
+		const { Hammer, Hamster } = await loadGestures();
+		if (this._destroyed) return;
 		let eventTarget = this.canvasDynamic || this.canvas;
-		this.hm = (0, import_hamster.default)(eventTarget);
+		this.hm = Hamster(eventTarget);
 		this._throttledWheel = utils_default.rafThrottle((delta, event) => {
 			this.mousezoom(delta * 50, event);
 		});
 		this.hm.wheel((event, delta) => this._throttledWheel(delta, event));
-		let mc = this.mc = new import_hammer.Manager(eventTarget);
-		mc.add(new import_hammer.Pan({
-			direction: import_hammer.DIRECTION_VERTICAL,
+		let mc = this.mc = new Hammer.Manager(eventTarget);
+		mc.add(new Hammer.Pan({
+			direction: Hammer.DIRECTION_VERTICAL,
 			threshold: 0
 		}));
-		mc.add(new import_hammer.Tap({
+		mc.add(new Hammer.Tap({
 			event: "doubletap",
 			taps: 2,
 			posThreshold: 50
@@ -7212,6 +7234,7 @@ var Sidebar = class {
 		});
 	}
 	destroy() {
+		this._destroyed = true;
 		if (this.mc) this.mc.destroy();
 		if (this.hm) this.hm.unwheel();
 		if (this._throttledWheel) this._throttledWheel.cancel();
@@ -8042,6 +8065,7 @@ var Botbar = class {
 		const config = comp.$props.config || {};
 		this.MIN_ZOOM = config.MIN_ZOOM || 25;
 		this.MAX_ZOOM = config.MAX_ZOOM || 1e5;
+		this._destroyed = false;
 		this.listeners();
 	}
 	measureTextCached(text) {
@@ -8055,8 +8079,10 @@ var Botbar = class {
 		measureTextCache.set(key, result.width);
 		return result.width;
 	}
-	listeners() {
-		this.hm = (0, import_hamster.default)(this.canvasDynamic || this.canvas);
+	async listeners() {
+		const { Hamster } = await loadGestures();
+		if (this._destroyed) return;
+		this.hm = Hamster(this.canvasDynamic || this.canvas);
 		this._throttledWheel = utils_default.rafThrottle((delta, event) => {
 			this.mousezoom(-delta * 50, event);
 		});
@@ -8076,6 +8102,7 @@ var Botbar = class {
 		this.comp.$emit("botbar-zoom", this.range);
 	}
 	destroy() {
+		this._destroyed = true;
 		if (this.hm) this.hm.unwheel();
 		if (this._throttledWheel) this._throttledWheel.cancel();
 		this.canvasDynamic = null;

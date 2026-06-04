@@ -10,7 +10,8 @@ export default class Sidebar {
     id: any;
     layout: any;
     side: string;
-    listeners(): void;
+    _destroyed: boolean;
+    listeners(): Promise<void>;
     hm: any;
     _throttledWheel: {
         (...args: any[]): void;

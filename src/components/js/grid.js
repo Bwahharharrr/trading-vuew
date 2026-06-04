@@ -1,11 +1,10 @@
 // Grid.js - I/O system for Grid.vue
 // Orchestrates zoom, pan, and rendering modules
 
-import * as Hammer from 'hammerjs'
-import Hamster from 'hamsterjs'
 import Utils from '../../stuff/utils.js'
 import { createCursorEventPool } from '../../stuff/pool.js'
 import { ZoomManager, PanManager, GridRenderer } from './grid/index.js'
+import { loadGestures } from '../../stuff/gestures.js'
 
 export default class Grid {
 
@@ -51,6 +50,8 @@ export default class Grid {
         this._cursorEventPool = createCursorEventPool()
         this._pooledCursorEvent = this._cursorEventPool.acquire()
 
+        this._destroyed = false
+        // Gestures load lazily (browser-only libs); listeners() resolves async.
         this.listeners()
     }
 
@@ -61,7 +62,9 @@ export default class Grid {
     get overlays() { return this.renderer.overlays }
     set overlays(v) { this.renderer.overlays = v }
 
-    listeners() {
+    async listeners() {
+        const { Hammer, Hamster } = await loadGestures()
+        if (this._destroyed) return // unmounted while gestures were loading
         this.hm = Hamster(this.canvasDynamic || this.canvas)
         // Throttle wheel events to ~60fps for smooth zoom
         this._throttledWheel = Utils.rafThrottle((delta, event) => {
@@ -306,6 +309,7 @@ export default class Grid {
     }
 
     destroy() {
+        this._destroyed = true // stop a still-loading listeners() from wiring up
         let rm = removeEventListener
         rm("gesturestart", this.gesturestart)
         rm("gesturechange", this.gesturechange)
