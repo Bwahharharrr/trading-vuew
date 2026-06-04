@@ -13673,7 +13673,6 @@ ${codeFrame}` : message);
 	}));
 	//#endregion
 	//#region src/components/js/updater.js
-	init_utils();
 	var CursorUpdater = class {
 		constructor(comp) {
 			this.comp = comp;
@@ -17050,7 +17049,6 @@ pointers: 1 },
 	};
 	//#endregion
 	//#region src/components/Crosshair.vue
-	init_utils();
 	var _sfc_main$35 = {
 		name: "Crosshair",
 		props: [
@@ -22012,7 +22010,6 @@ pointers: 1 },
 	}));
 	//#endregion
 	//#region src/components/js/ti_mapping.js
-	init_layout();
 	init_utils();
 	var MAX_ARR = Math.pow(2, 32);
 	var TI = class {
@@ -22147,6 +22144,7 @@ pointers: 1 },
 	//#endregion
 	//#region src/mixins/chart/chart-range.js
 	init_utils();
+	init_layout();
 	init_constants();
 	var chart_range_default = {
 		methods: {
@@ -24075,7 +24073,6 @@ pointers: 1 },
 	};
 	//#endregion
 	//#region src/helpers/dataset.js
-	init_utils();
 	var Dataset = class Dataset {
 		constructor(dc, desc) {
 			this.type = desc.type;
@@ -25366,7 +25363,6 @@ pointers: 1 },
 	}
 	//#endregion
 	//#region src/helpers/datacube.js
-	init_utils();
 	var DataCube = class extends DCCore {
 		constructor(data = {}, sett = {}) {
 			sett = Object.assign({
@@ -25799,11 +25795,14 @@ pointers: 1 },
 	TV.install = function(Vue) {
 		Vue.component(TV.name, TradingVue_default);
 	};
+	var src_default = TradingVue_default;
+	//#endregion
+	//#region src/index.umd.ts
 	var w = typeof window !== "undefined" ? window : void 0;
 	if (w && w.Vue) {
-		w.Vue.use(TradingVue_default);
+		w.Vue.use(src_default);
 		w.TradingVueLib = {
-			TradingVue: TradingVue_default,
+			TradingVue: src_default,
 			Overlay: overlay_default,
 			Utils: utils_default,
 			Constants: constants_default,
@@ -25817,7 +25816,6 @@ pointers: 1 },
 			primitives
 		};
 	}
-	var src_default = TradingVue_default;
 	//#endregion
 	exports.Candle = CandleExt;
 	exports.Constants = constants_default;

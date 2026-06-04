@@ -25,22 +25,13 @@ const primitives = {
 }
 
 // `TradingVue` is an untyped .vue default export; cast through `any` to attach
-// the Vue plugin `install` hook and to reach the optional `window.Vue` global
-// without leaking `any` into the public surface.
+// the Vue plugin `install` hook. (The optional `window.Vue` auto-install side
+// effect lives in src/index.umd.ts — keeping THIS module side-effect-free so
+// consumers' bundlers can tree-shake individual exports.)
 const TV = TradingVue as any
 
 TV.install = function (Vue: any) {
     Vue.component(TV.name, TradingVue)
-}
-
-const w = (typeof window !== 'undefined' ? window : undefined) as any
-if (w && w.Vue) {
-    w.Vue.use(TradingVue)
-    w.TradingVueLib = {
-        TradingVue, Overlay, Utils, Constants,
-        Candle, Volbar, layout_cnv, layout_vol,
-        DataCube, Tool, Interface, primitives
-    }
 }
 
 export default TradingVue

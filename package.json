@@ -3,6 +3,11 @@
   "version": "1.0.2",
   "description": "Hackable charting lib for traders",
   "type": "module",
+  "sideEffects": [
+    "**/*.css",
+    "./src/index.umd.ts",
+    "./src/helpers/script_ww.js"
+  ],
   "main": "./dist/trading-vue.js",
   "module": "./dist/trading-vue.es.js",
   "types": "./dist/types/index.d.ts",
@@ -42,6 +47,24 @@
       "name": "UMD min (vue bundled, gzip)",
       "path": "dist/trading-vue.min.js",
       "limit": "190 kB"
+    },
+    {
+      "name": "tree-shake guard: import { defaultTheme } (full tree-shaking tracked)",
+      "path": "dist/trading-vue.es.js",
+      "import": "{ defaultTheme }",
+      "limit": "90 kB"
+    },
+    {
+      "name": "tree-shake guard: import { Utils }",
+      "path": "dist/trading-vue.es.js",
+      "import": "{ Utils }",
+      "limit": "90 kB"
+    },
+    {
+      "name": "tree-shake guard: import { defineOverlay }",
+      "path": "dist/trading-vue.es.js",
+      "import": "{ defineOverlay }",
+      "limit": "90 kB"
     }
   ],
   "author": "C451",
@@ -64,6 +87,7 @@
   "homepage": "https://github.com/C451/trading-vue-js#readme",
   "repository": "github:C451/trading-vue-js",
   "devDependencies": {
+    "@size-limit/esbuild": "^11.2.0",
     "@size-limit/file": "^11.2.0",
     "@types/node": "^25.9.1",
     "@vitejs/plugin-vue": "^6.0.7",

@@ -767,7 +767,6 @@ var init_utils = __esmMin((() => {
 }));
 //#endregion
 //#region src/components/js/updater.js
-init_utils();
 var CursorUpdater = class {
 	constructor(comp) {
 		this.comp = comp;
@@ -4144,7 +4143,6 @@ var Crosshair = class {
 };
 //#endregion
 //#region src/components/Crosshair.vue
-init_utils();
 var _sfc_main$35 = {
 	name: "Crosshair",
 	props: [
@@ -9106,7 +9104,6 @@ var init_layout = __esmMin((() => {
 }));
 //#endregion
 //#region src/components/js/ti_mapping.js
-init_layout();
 init_utils();
 var MAX_ARR = Math.pow(2, 32);
 var TI = class {
@@ -9241,6 +9238,7 @@ var TI = class {
 //#endregion
 //#region src/mixins/chart/chart-range.js
 init_utils();
+init_layout();
 init_constants();
 var chart_range_default = {
 	methods: {
@@ -11169,7 +11167,6 @@ var WebWork = class {
 };
 //#endregion
 //#region src/helpers/dataset.js
-init_utils();
 var Dataset = class Dataset {
 	constructor(dc, desc) {
 		this.type = desc.type;
@@ -12460,7 +12457,6 @@ function validateData(data) {
 }
 //#endregion
 //#region src/helpers/datacube.js
-init_utils();
 var DataCube = class extends DCCore {
 	constructor(data = {}, sett = {}) {
 		sett = Object.assign({
@@ -12893,24 +12889,6 @@ var TV = TradingVue_default;
 TV.install = function(Vue) {
 	Vue.component(TV.name, TradingVue_default);
 };
-var w = typeof window !== "undefined" ? window : void 0;
-if (w && w.Vue) {
-	w.Vue.use(TradingVue_default);
-	w.TradingVueLib = {
-		TradingVue: TradingVue_default,
-		Overlay: overlay_default,
-		Utils: utils_default,
-		Constants: constants_default,
-		Candle: CandleExt,
-		Volbar: VolbarExt,
-		layout_cnv,
-		layout_vol,
-		DataCube,
-		Tool: tool_default,
-		Interface: interface_default,
-		primitives
-	};
-}
 var src_default = TradingVue_default;
 //#endregion
 export { CandleExt as Candle, constants_default as Constants, DataCube, interface_default as Interface, overlay_default as Overlay, tool_default as Tool, TradingVue_default as TradingVue, utils_default as Utils, VolbarExt as Volbar, src_default as default, defaultTheme, defineOverlay, defineTool, layout_cnv, layout_vol, primitives, useChart, useCursor, useData, useRange };

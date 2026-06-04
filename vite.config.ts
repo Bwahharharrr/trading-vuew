@@ -55,7 +55,7 @@ export default defineConfig(({ command }) => {
   const isEs = BUILD_TARGET === 'es'
   const isMin = BUILD_TARGET === 'umd-min'
 
-  return {
+    return {
     define: vueFlags,
     // cssInjectedByJs replicates the old vue-style-loader behaviour: component
     // <style> blocks are injected into <head> at runtime, so the bundle stays
@@ -72,7 +72,9 @@ export default defineConfig(({ command }) => {
       sourcemap: true,
       minify: isMin ? 'terser' : false,
       lib: {
-        entry: resolve(__dirname, 'src/index.ts'),
+        // UMD/min ship the window.Vue auto-install side effect; the ESM build
+        // uses the side-effect-free entry so consumers can tree-shake.
+        entry: resolve(__dirname, isEs ? 'src/index.ts' : 'src/index.umd.ts'),
         name: 'TradingVueJs',
         formats: isEs ? ['es'] : ['umd'],
         fileName: () =>

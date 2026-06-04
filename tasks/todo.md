@@ -393,6 +393,24 @@ byte-identical/green; build/size/dev all clean.
 - Note: prefers-reduced-motion exposed as a helper (no animation to disable yet;
   the Phase 5 scheduler will honour it).
 
-### ⏭ 4.x remaining — `<TradingChart>` thin shell, tree-shaking gate.
+### 🟡 4.5 — Tree-shaking gate (PARTIAL — gate added, full tree-shaking tracked)
+The gate (size-limit + @size-limit/esbuild, `import { X }` probes vs the ESM
+build) REVEALED tree-shaking was broken: importing any single export pulled
+~92 kB (the whole lib + Vue), because the ESM entry's `window.Vue` auto-install
+block referenced every export.
+- [x] FIX (clean win): split the entry — `src/index.ts` is now side-effect-free
+      (pure re-exports); the `window.Vue` auto-install moved to `src/index.umd.ts`
+      (UMD/CDN only). `package.json` "sideEffects" added. Verified: UMD keeps the
+      auto-install (TradingVueLib present), ESM drops it (absent). Floor: 92→85 kB.
+- [x] Gate added: 3 `import { X }` regression guards at 90 kB (prevents regression).
+- ⚠ NOT achieved: full per-export tree-shaking. Importing one export still pulls
+      ~85 kB because hammerjs/hamsterjs + Vue-component-graph + the inline worker
+      have TOP-LEVEL DOM side effects esbuild can't drop. Externalizing the
+      gesture libs / splitting CSS didn't move the floor (size-limit re-bundles
+      deps). Full tree-shakeability = a larger follow-up that eliminates those
+      side effects (intersects lazy-gesture-loading, the same root as the
+      SSR-import limitation). The gate documents + guards the current state.
+
+### ⏭ 4.x remaining — `<TradingChart>` thin shell; full tree-shaking (above).
 
 ## ⏳ Phases 5–7 — RenderGraph → engine/perf rewrite → deprecation removal.
