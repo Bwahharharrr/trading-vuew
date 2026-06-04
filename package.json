@@ -97,6 +97,7 @@
     "eslint-plugin-vue": "^9.0.0",
     "httpxy": "^0.5.3",
     "jsdom": "^29.1.1",
+    "playwright": "^1.60.0",
     "size-limit": "^11.2.0",
     "skia-canvas": "^2.0.2",
     "terser": "^5.48.0",

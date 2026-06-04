@@ -33,6 +33,16 @@ export function validateOverlayComponent(comp) {
         return { ok: false, diagnostics: out }
     }
 
+    // A method may be provided by a MIXIN (e.g. Histogram/Bar get draw() from
+    // BarChartBase), so resolve against the component's methods + every mixin's.
+    const hasMethod = (name) => {
+        if (isFn(m[name])) return true
+        for (const mx of (comp.mixins || [])) {
+            if (mx && mx.methods && isFn(mx.methods[name])) return true
+        }
+        return false
+    }
+
     // use_for — required, must return a non-empty array of non-empty strings.
     if (!isFn(m.use_for)) {
         out.push(error('overlay.use_for',
@@ -54,10 +64,10 @@ export function validateOverlayComponent(comp) {
         return { ok: false, diagnostics: out }
     }
 
-    // draw — required to render. Missing => the old "reload the browser" stub
-    // would fire at mount; surface it here instead (warn, still register so the
-    // mixin fallback keeps dev HMR limping).
-    if (!isFn(m.draw)) {
+    // draw — required to render (own method OR mixin-provided). Missing => the
+    // old "reload the browser" stub would fire at mount; surface it here instead
+    // (warn, still register so the mixin fallback keeps dev HMR limping).
+    if (!hasMethod('draw')) {
         out.push(warn('overlay.draw',
             `overlay "${label}" has no draw(ctx) method — it will not render`, label))
     }

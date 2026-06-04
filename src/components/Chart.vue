@@ -45,6 +45,7 @@ import Keyboard from './Keyboard.vue'
 import GridResizer from './GridResizer.vue'
 import Shaders from '../mixins/shaders.js'
 import DataTrack from '../mixins/datatrack.js'
+import Layout from './js/layout.js'
 
 // Decomposed chart mixins
 import { ChartRange, ChartResize, ChartCursor, ChartEvents } from '../mixins/chart/index.js'
@@ -72,8 +73,8 @@ export default {
         this.sub = this.subset()
         Utils.overwrite(this.range, this.range)
 
-        // Import Layout here to avoid circular dependency in mixin
-        const Layout = require('./js/layout.js').default
+        // Layout is imported statically at the top (ESM live bindings resolve
+        // any cycle by created()-time; webpack's require() polyfill is gone).
         // CRITICAL: Create plain object with unwrapped values for Layout
         // Vue 3 reactive proxies don't spread correctly - use direct index access
         const rangeArr = [this.range[0], this.range[1]]  // Direct access, not spread
