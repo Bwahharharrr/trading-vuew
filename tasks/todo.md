@@ -382,6 +382,17 @@ byte-identical/green; build/size/dev all clean.
       exported + shipped in d.ts. 6 component tests; 212 total; all gates green.
 - Note: App.vue (demo) not migrated to theme — it's the dev harness, not shipped.
 
-### ⏭ 4.x remaining — `<TradingChart>` thin shell, a11y, tree-shaking gate.
+### ✅ 4.4 — Accessibility (COMPLETE)
+- [x] `src/stuff/a11y.js` — chartAriaLabel / chartDataSummary / prefersReducedMotion / NAV_KEYS (pure, SSR-safe).
+- [x] TradingVue `a11y` prop (default true): container role="application" +
+      aria-roledescription/label/describedby + tabindex; a visually-hidden
+      `.tvjs-sr-only` data summary (screen-reader fallback for the canvas);
+      keyboard pan (←/→ pan 10%, Home/End jump to edges) via the nav methods.
+      :a11y="false" opts out entirely.
+- [x] 9 tests (helpers + ARIA attrs + keyboard nav + opt-out). 221 total; all gates green.
+- Note: prefers-reduced-motion exposed as a helper (no animation to disable yet;
+  the Phase 5 scheduler will honour it).
+
+### ⏭ 4.x remaining — `<TradingChart>` thin shell, tree-shaking gate.
 
 ## ⏳ Phases 5–7 — RenderGraph → engine/perf rewrite → deprecation removal.

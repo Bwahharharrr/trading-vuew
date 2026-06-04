@@ -332,6 +332,10 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             type: NumberConstructor;
             default: number;
         };
+        a11y: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
     }>, {}, {
         reset: number;
         tip: null;
@@ -350,6 +354,9 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             skin: any;
             timezone: number;
         };
+        a11y_id(): string;
+        a11y_label(): string;
+        a11y_summary(): string;
         chart_config(): {
             SBMIN: number;
             SBMAX: number;
@@ -405,6 +412,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         range_changed(r: any): void;
         set_loader(dc: any): void;
         parse_colors(colors: any): void;
+        a11y_keydown(e: any): void;
         mousedown(): void;
         mouseleave(): void;
     }, {
@@ -565,6 +573,10 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             type: NumberConstructor;
             default: number;
         };
+        a11y: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
     }>> & Readonly<{}>, {
         width: number;
         height: number;
@@ -596,6 +608,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         indexBased: boolean;
         extensions: unknown[];
         xSettings: Record<string, any>;
+        a11y: boolean;
     }, {}, {
         Chart: import("vue").DefineComponent<{
             title_txt?: any;

@@ -3,11 +3,19 @@
     <!-- Main component  -->
     <div class="trading-vue" v-bind:id="id"
         @mousedown="mousedown" @mouseleave="mouseleave"
+        :role="a11y ? 'application' : null"
+        :aria-roledescription="a11y ? 'interactive financial chart' : null"
+        :aria-label="a11y ? a11y_label : null"
+        :aria-describedby="a11y ? a11y_id : null"
+        :tabindex="a11y ? 0 : null"
+        @keydown="a11y_keydown"
          :style="{
             color: this.chart_props.colors.text,
             font: this.font_comp,
             width: this.width+'px',
             height: this.height+'px'}">
+        <!-- Screen-reader data fallback for the canvas chart. -->
+        <div v-if="a11y" :id="a11y_id" class="tvjs-sr-only" aria-live="polite">{{ a11y_summary }}</div>
         <toolbar v-if="toolbar"
             ref="toolbar"
             v-on:custom-event="custom_event"
@@ -46,6 +54,7 @@ import TheTip from './components/TheTip.vue'
 import XControl from './mixins/xcontrol.js'
 import { clampGoto, clampRange, dataBounds } from './helpers/nav.js'
 import { report } from './helpers/schema/diagnostics.js'
+import { chartAriaLabel, chartDataSummary, NAV_KEYS } from './stuff/a11y.js'
 
 export default {
     name: 'TradingVue',
@@ -193,6 +202,13 @@ export default {
         timezone: {
             type: Number,
             default: 0
+        },
+        // Accessibility (Phase 4.x): container role/label, a screen-reader data
+        // summary, and keyboard pan (←/→ pan, Home/End jump). On by default;
+        // set :a11y="false" to opt out entirely.
+        a11y: {
+            type: Boolean,
+            default: true
         }
     },
     computed: {
@@ -222,6 +238,14 @@ export default {
                 Object.assign(chart_props.colors, this.$props.theme)
             }
             return chart_props
+        },
+        // ── Accessibility (a11y) ──
+        a11y_id() { return `${this.$props.id}-a11y-desc` },
+        a11y_label() {
+            return chartAriaLabel(this.$props.data, this.$props.titleTxt)
+        },
+        a11y_summary() {
+            return chartDataSummary(this.$props.data, this.$props.titleTxt)
         },
         chart_config() {
             return Object.assign({},
@@ -424,6 +448,24 @@ export default {
                     ':theme="{ back: \'#000\', candleUp: \'#0f0\' }".')
             }
         },
+        // Keyboard navigation (a11y): ←/→ pan the visible range by 10%,
+        // Home/End jump to the first/last candle. Only acts on the nav keys so
+        // it doesn't interfere with anything else.
+        a11y_keydown(e) {
+            if (!this.a11y || !NAV_KEYS.has(e.key)) return
+            const chart = this.$refs.chart
+            if (!chart) return
+            const r = this.getRange()
+            const b = dataBounds(this.$props.data)
+            if (e.key === 'Home') { if (b) this.goto(b[0]) }
+            else if (e.key === 'End') { if (b) this.goto(b[1]) }
+            else if (Array.isArray(r)) {
+                const step = (r[1] - r[0]) * 0.1
+                const d = e.key === 'ArrowLeft' ? -step : step
+                this.setRange(r[0] + d, r[1] + d)
+            }
+            e.preventDefault()
+        },
         mousedown() {
             this.$refs.chart.activated = true
         },
@@ -434,6 +476,18 @@ export default {
 }
 </script>
 <style>
+/* Visually-hidden screen-reader content (a11y data fallback). */
+.tvjs-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
 /* Anit-boostrap tactix */
 .trading-vue *, ::after, ::before {
     box-sizing: content-box;

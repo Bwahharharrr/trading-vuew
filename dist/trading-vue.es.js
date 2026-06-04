@@ -1,4 +1,4 @@
-(function() {	try {		if (typeof document != "undefined") {			var elementStyle = document.createElement("style");			elementStyle.appendChild(document.createTextNode(".trading-vue-ux-wrapper {\n        position: absolute;\n        display: flex;\n}\n.tvjs-ux-wrapper-pin {\n        position: absolute;\n        width: 9px;\n        height: 9px;\n        z-index: 100;\n        background-color: #23a776;\n        border-radius: 10px;\n        margin-left: -6px;\n        margin-top: -6px;\n        pointer-events: none;\n}\n.tvjs-ux-wrapper-head {\n        position: absolute;\n        height: 23px;\n        width: 100%;\n}\n.tvjs-ux-wrapper-close {\n        position: absolute;\n        width: 11px;\n        height: 11px;\n        font-size: 1.5em;\n        line-height: 0.5em;\n        padding: 1px 1px 1px 1px;\n        border-radius: 10px;\n        right: 5px;\n        top: 5px;\n        user-select: none;\n        text-align: center;\n        z-index: 100;\n}\n.tvjs-ux-wrapper-close-hb {\n}\n.tvjs-ux-wrapper-close:hover {\n        background-color: #FF605C !important;\n        color: #692324 !important;\n}\n.tvjs-ux-wrapper-full {\n}\n\n.t-vue-lbtn {\n    z-index: 100;\n    pointer-events: all;\n    cursor: pointer;\n}\n\n.t-vue-lbtn-grp {\n    margin-left: 0.5em;\n}\n\n.tvjs-spinner {\n    display: inline-block;\n    position: relative;\n    width: 20px;\n    height: 16px;\n    margin: -4px 0px -1px 0px;\n    opacity: 0.7;\n}\n.tvjs-spinner div {\n    position: absolute;\n    top: 8px;\n    width: 4px;\n    height: 4px;\n    border-radius: 50%;\n    animation-timing-function: cubic-bezier(1, 1, 1, 1);\n}\n.tvjs-spinner div:nth-child(1) {\n    left: 2px;\n    animation: tvjs-spinner1 0.6s infinite;\n    opacity: 0.9;\n}\n.tvjs-spinner div:nth-child(2) {\n    left: 2px;\n    animation: tvjs-spinner2 0.6s infinite;\n}\n.tvjs-spinner div:nth-child(3) {\n    left: 9px;\n    animation: tvjs-spinner2 0.6s infinite;\n}\n.tvjs-spinner div:nth-child(4) {\n    left: 16px;\n    animation: tvjs-spinner3 0.6s infinite;\n    opacity: 0.9;\n}\n@keyframes tvjs-spinner1 {\n0% {\n        transform: scale(0);\n}\n100% {\n        transform: scale(1);\n}\n}\n@keyframes tvjs-spinner3 {\n0% {\n        transform: scale(1);\n}\n100% {\n        transform: scale(0);\n}\n}\n@keyframes tvjs-spinner2 {\n0% {\n        transform: translate(0, 0);\n}\n100% {\n        transform: translate(7px, 0);\n}\n}\n\n.trading-vue-legend {\n    position: relative;\n    z-index: 100;\n    font-size: 1.25em;\n    margin-left: 10px;\n    pointer-events: auto;\n    text-align: left;\n    user-select: none;\n    font-weight: 300;\n    cursor: default;\n}\n@media (min-resolution: 2x) {\n.trading-vue-legend {\n        font-weight: 400;\n}\n}\n.trading-vue-ohlcv {\n    pointer-events: auto;\n    margin-bottom: 0.5em;\n}\n.t-vue-lspan {\n    font-variant-numeric: tabular-nums;\n    font-size: 0.95em;\n    color: #999999; /* TODO: move => params */\n    margin-left: 0.1em;\n    margin-right: 0.2em;\n}\n.t-vue-title {\n    margin-right: 0.25em;\n    font-size: 1.45em;\n}\n.t-vue-ind {\n    margin-left: 0.2em;\n    margin-bottom: 0.5em;\n    font-size: 1.0em;\n    margin-top: 0.3em;\n    display: flex;\n    align-items: center;\n    flex-wrap: wrap;\n    pointer-events: auto;\n}\n.t-vue-settings-btn {\n    background: none;\n    border: none;\n    color: #808a9d;\n    cursor: pointer;\n    padding: 2px 4px;\n    margin-left: 4px;\n    border-radius: 3px;\n    display: inline-flex;\n    align-items: center;\n    justify-content: center;\n    transition: all 0.15s ease;\n    position: relative;\n    z-index: 10;\n}\n.t-vue-settings-btn:hover {\n    color: #35a776;\n    background: rgba(53, 167, 118, 0.1);\n}\n.t-vue-settings-btn svg {\n    display: block;\n}\n.t-vue-close-btn {\n    background: none;\n    border: none;\n    color: #808a9d;\n    cursor: pointer;\n    padding: 2px 4px;\n    margin-left: 2px;\n    border-radius: 3px;\n    display: inline-flex;\n    align-items: center;\n    justify-content: center;\n    transition: all 0.15s ease;\n    position: relative;\n    z-index: 10;\n}\n.t-vue-close-btn:hover {\n    color: #e54077;\n    background: rgba(229, 64, 119, 0.1);\n}\n.t-vue-close-btn svg {\n    display: block;\n}\n.t-vue-ivalue {\n    margin-left: 0.5em;\n}\n.t-vue-unknown {\n    color: #999999; /* TODO: move => params */\n}\n.tvjs-appear-enter-active,\n.tvjs-appear-leave-active\n{\n    transition: all .25s ease;\n}\n.tvjs-appear-enter, .tvjs-appear-leave-to\n{\n    opacity: 0;\n}\n\n.trading-vue-section {\n    height: 0;\n    position: absolute;\n}\n\n.trading-vue-botbar {\n    position: relative !important;\n}\n\n.grid-resizer {\n    position: absolute;\n    height: 12px;\n    z-index: 1000;\n    cursor: row-resize;\n    pointer-events: all;\n}\n.resizer-line {\n    position: absolute;\n    top: 5px;\n    left: 0;\n    right: 0;\n    height: 3px;\n    background: #888;\n    pointer-events: none;\n    transition: background 0.15s ease, height 0.15s ease, top 0.15s ease;\n}\n.resizer-hitbox {\n    position: absolute;\n    top: 0;\n    left: 0;\n    right: 0;\n    bottom: 0;\n    pointer-events: all;\n}\n.grid-resizer:hover .resizer-line {\n    background: #7777ff !important;\n    height: 3px;\n    top: 4.5px;\n}\n.grid-resizer.dragging .resizer-line {\n    background: #9999ff !important;\n    height: 4px;\n    top: 4px;\n}\n\n.tvjs-item-list {\n    position: absolute;\n    user-select: none;\n    margin-top: -5px;\n}\n.tvjs-item-list-item {\n    display: flex;\n    align-items: center;\n    padding-right: 20px;\n    font-size: 1.15em;\n    letter-spacing: 0.05em;\n}\n.tvjs-item-list-item:hover {\n    background-color: #76878319;\n}\n.tvjs-item-list-item * {\n    position: relative !important;\n}\n\n.trading-vue-tbitem {\n}\n.trading-vue-tbitem:hover {\n    background-color: #76878319;\n}\n.trading-vue-tbitem-exp {\n    position: absolute;\n    right: -3px;\n    padding: 18.5px 5px;\n    font-stretch: extra-condensed;\n    transform: scaleX(0.6);\n    font-size: 0.6em;\n    opacity: 0.0;\n    user-select: none;\n    line-height: 0;\n}\n.trading-vue-tbitem:hover\n.trading-vue-tbitem-exp {\n    opacity: 0.5;\n}\n.trading-vue-tbitem-exp:hover {\n    background-color: #76878330;\n    opacity: 0.9 !important;\n}\n.trading-vue-tbicon {\n    position: absolute;\n}\n.trading-vue-tbitem.selected-item > .trading-vue-tbicon,\n.tvjs-item-list-item.selected-item > .trading-vue-tbicon {\n     filter: brightness(1.45) sepia(1) hue-rotate(90deg) saturate(4.5) !important;\n}\n.tvjs-pixelated {\n    -ms-interpolation-mode: nearest-neighbor;\n    image-rendering: -webkit-optimize-contrast;\n    image-rendering: -webkit-crisp-edges;\n    image-rendering: -moz-crisp-edges;\n    image-rendering: -o-crisp-edges;\n    image-rendering: pixelated;\n}\n\n\n.trading-vue-toolbar {\n    position: absolute;\n    border-right: 1px solid black;\n    z-index: 101;\n    padding-top: 3px;\n    user-select: none;\n}\n\n.tvjs-widgets {\n    position: absolute;\n    z-index: 1000;\n    pointer-events: none;\n}\n\n.tvjs-drift-enter-active {\n    transition: all .3s ease;\n}\n.tvjs-drift-leave-active {\n    transition: all .8s cubic-bezier(1.0, 0.5, 0.8, 1.0);\n}\n.tvjs-drift-enter, .tvjs-drift-leave-to\n{\n    transform: translateX(10px);\n    opacity: 0;\n}\n.tvjs-the-tip {\n    position: absolute;\n    width: 200px;\n    text-align: center;\n    z-index: 10001;\n    color: #ffffff;\n    font-size: 1.5em;\n    line-height: 1.15em;\n    padding: 10px;\n    border-radius: 3px;\n    right: 70px;\n    top: 10px;\n    text-shadow: 1px 1px black;\n}\n\n/* Anit-boostrap tactix */\n.trading-vue *, ::after, ::before {\n    box-sizing: content-box;\n}\n.trading-vue img {\n    vertical-align: initial;\n}\n/*$vite$:1*/"));			document.head.appendChild(elementStyle);		}	} catch (e) {		console.error("vite-plugin-css-injected-by-js", e);	}})();
+(function() {	try {		if (typeof document != "undefined") {			var elementStyle = document.createElement("style");			elementStyle.appendChild(document.createTextNode(".trading-vue-ux-wrapper {\n        position: absolute;\n        display: flex;\n}\n.tvjs-ux-wrapper-pin {\n        position: absolute;\n        width: 9px;\n        height: 9px;\n        z-index: 100;\n        background-color: #23a776;\n        border-radius: 10px;\n        margin-left: -6px;\n        margin-top: -6px;\n        pointer-events: none;\n}\n.tvjs-ux-wrapper-head {\n        position: absolute;\n        height: 23px;\n        width: 100%;\n}\n.tvjs-ux-wrapper-close {\n        position: absolute;\n        width: 11px;\n        height: 11px;\n        font-size: 1.5em;\n        line-height: 0.5em;\n        padding: 1px 1px 1px 1px;\n        border-radius: 10px;\n        right: 5px;\n        top: 5px;\n        user-select: none;\n        text-align: center;\n        z-index: 100;\n}\n.tvjs-ux-wrapper-close-hb {\n}\n.tvjs-ux-wrapper-close:hover {\n        background-color: #FF605C !important;\n        color: #692324 !important;\n}\n.tvjs-ux-wrapper-full {\n}\n\n.t-vue-lbtn {\n    z-index: 100;\n    pointer-events: all;\n    cursor: pointer;\n}\n\n.t-vue-lbtn-grp {\n    margin-left: 0.5em;\n}\n\n.tvjs-spinner {\n    display: inline-block;\n    position: relative;\n    width: 20px;\n    height: 16px;\n    margin: -4px 0px -1px 0px;\n    opacity: 0.7;\n}\n.tvjs-spinner div {\n    position: absolute;\n    top: 8px;\n    width: 4px;\n    height: 4px;\n    border-radius: 50%;\n    animation-timing-function: cubic-bezier(1, 1, 1, 1);\n}\n.tvjs-spinner div:nth-child(1) {\n    left: 2px;\n    animation: tvjs-spinner1 0.6s infinite;\n    opacity: 0.9;\n}\n.tvjs-spinner div:nth-child(2) {\n    left: 2px;\n    animation: tvjs-spinner2 0.6s infinite;\n}\n.tvjs-spinner div:nth-child(3) {\n    left: 9px;\n    animation: tvjs-spinner2 0.6s infinite;\n}\n.tvjs-spinner div:nth-child(4) {\n    left: 16px;\n    animation: tvjs-spinner3 0.6s infinite;\n    opacity: 0.9;\n}\n@keyframes tvjs-spinner1 {\n0% {\n        transform: scale(0);\n}\n100% {\n        transform: scale(1);\n}\n}\n@keyframes tvjs-spinner3 {\n0% {\n        transform: scale(1);\n}\n100% {\n        transform: scale(0);\n}\n}\n@keyframes tvjs-spinner2 {\n0% {\n        transform: translate(0, 0);\n}\n100% {\n        transform: translate(7px, 0);\n}\n}\n\n.trading-vue-legend {\n    position: relative;\n    z-index: 100;\n    font-size: 1.25em;\n    margin-left: 10px;\n    pointer-events: auto;\n    text-align: left;\n    user-select: none;\n    font-weight: 300;\n    cursor: default;\n}\n@media (min-resolution: 2x) {\n.trading-vue-legend {\n        font-weight: 400;\n}\n}\n.trading-vue-ohlcv {\n    pointer-events: auto;\n    margin-bottom: 0.5em;\n}\n.t-vue-lspan {\n    font-variant-numeric: tabular-nums;\n    font-size: 0.95em;\n    color: #999999; /* TODO: move => params */\n    margin-left: 0.1em;\n    margin-right: 0.2em;\n}\n.t-vue-title {\n    margin-right: 0.25em;\n    font-size: 1.45em;\n}\n.t-vue-ind {\n    margin-left: 0.2em;\n    margin-bottom: 0.5em;\n    font-size: 1.0em;\n    margin-top: 0.3em;\n    display: flex;\n    align-items: center;\n    flex-wrap: wrap;\n    pointer-events: auto;\n}\n.t-vue-settings-btn {\n    background: none;\n    border: none;\n    color: #808a9d;\n    cursor: pointer;\n    padding: 2px 4px;\n    margin-left: 4px;\n    border-radius: 3px;\n    display: inline-flex;\n    align-items: center;\n    justify-content: center;\n    transition: all 0.15s ease;\n    position: relative;\n    z-index: 10;\n}\n.t-vue-settings-btn:hover {\n    color: #35a776;\n    background: rgba(53, 167, 118, 0.1);\n}\n.t-vue-settings-btn svg {\n    display: block;\n}\n.t-vue-close-btn {\n    background: none;\n    border: none;\n    color: #808a9d;\n    cursor: pointer;\n    padding: 2px 4px;\n    margin-left: 2px;\n    border-radius: 3px;\n    display: inline-flex;\n    align-items: center;\n    justify-content: center;\n    transition: all 0.15s ease;\n    position: relative;\n    z-index: 10;\n}\n.t-vue-close-btn:hover {\n    color: #e54077;\n    background: rgba(229, 64, 119, 0.1);\n}\n.t-vue-close-btn svg {\n    display: block;\n}\n.t-vue-ivalue {\n    margin-left: 0.5em;\n}\n.t-vue-unknown {\n    color: #999999; /* TODO: move => params */\n}\n.tvjs-appear-enter-active,\n.tvjs-appear-leave-active\n{\n    transition: all .25s ease;\n}\n.tvjs-appear-enter, .tvjs-appear-leave-to\n{\n    opacity: 0;\n}\n\n.trading-vue-section {\n    height: 0;\n    position: absolute;\n}\n\n.trading-vue-botbar {\n    position: relative !important;\n}\n\n.grid-resizer {\n    position: absolute;\n    height: 12px;\n    z-index: 1000;\n    cursor: row-resize;\n    pointer-events: all;\n}\n.resizer-line {\n    position: absolute;\n    top: 5px;\n    left: 0;\n    right: 0;\n    height: 3px;\n    background: #888;\n    pointer-events: none;\n    transition: background 0.15s ease, height 0.15s ease, top 0.15s ease;\n}\n.resizer-hitbox {\n    position: absolute;\n    top: 0;\n    left: 0;\n    right: 0;\n    bottom: 0;\n    pointer-events: all;\n}\n.grid-resizer:hover .resizer-line {\n    background: #7777ff !important;\n    height: 3px;\n    top: 4.5px;\n}\n.grid-resizer.dragging .resizer-line {\n    background: #9999ff !important;\n    height: 4px;\n    top: 4px;\n}\n\n.tvjs-item-list {\n    position: absolute;\n    user-select: none;\n    margin-top: -5px;\n}\n.tvjs-item-list-item {\n    display: flex;\n    align-items: center;\n    padding-right: 20px;\n    font-size: 1.15em;\n    letter-spacing: 0.05em;\n}\n.tvjs-item-list-item:hover {\n    background-color: #76878319;\n}\n.tvjs-item-list-item * {\n    position: relative !important;\n}\n\n.trading-vue-tbitem {\n}\n.trading-vue-tbitem:hover {\n    background-color: #76878319;\n}\n.trading-vue-tbitem-exp {\n    position: absolute;\n    right: -3px;\n    padding: 18.5px 5px;\n    font-stretch: extra-condensed;\n    transform: scaleX(0.6);\n    font-size: 0.6em;\n    opacity: 0.0;\n    user-select: none;\n    line-height: 0;\n}\n.trading-vue-tbitem:hover\n.trading-vue-tbitem-exp {\n    opacity: 0.5;\n}\n.trading-vue-tbitem-exp:hover {\n    background-color: #76878330;\n    opacity: 0.9 !important;\n}\n.trading-vue-tbicon {\n    position: absolute;\n}\n.trading-vue-tbitem.selected-item > .trading-vue-tbicon,\n.tvjs-item-list-item.selected-item > .trading-vue-tbicon {\n     filter: brightness(1.45) sepia(1) hue-rotate(90deg) saturate(4.5) !important;\n}\n.tvjs-pixelated {\n    -ms-interpolation-mode: nearest-neighbor;\n    image-rendering: -webkit-optimize-contrast;\n    image-rendering: -webkit-crisp-edges;\n    image-rendering: -moz-crisp-edges;\n    image-rendering: -o-crisp-edges;\n    image-rendering: pixelated;\n}\n\n\n.trading-vue-toolbar {\n    position: absolute;\n    border-right: 1px solid black;\n    z-index: 101;\n    padding-top: 3px;\n    user-select: none;\n}\n\n.tvjs-widgets {\n    position: absolute;\n    z-index: 1000;\n    pointer-events: none;\n}\n\n.tvjs-drift-enter-active {\n    transition: all .3s ease;\n}\n.tvjs-drift-leave-active {\n    transition: all .8s cubic-bezier(1.0, 0.5, 0.8, 1.0);\n}\n.tvjs-drift-enter, .tvjs-drift-leave-to\n{\n    transform: translateX(10px);\n    opacity: 0;\n}\n.tvjs-the-tip {\n    position: absolute;\n    width: 200px;\n    text-align: center;\n    z-index: 10001;\n    color: #ffffff;\n    font-size: 1.5em;\n    line-height: 1.15em;\n    padding: 10px;\n    border-radius: 3px;\n    right: 70px;\n    top: 10px;\n    text-shadow: 1px 1px black;\n}\n\n/* Visually-hidden screen-reader content (a11y data fallback). */\n.tvjs-sr-only {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    padding: 0;\n    margin: -1px;\n    overflow: hidden;\n    clip: rect(0, 0, 0, 0);\n    white-space: nowrap;\n    border: 0;\n}\n/* Anit-boostrap tactix */\n.trading-vue *, ::after, ::before {\n    box-sizing: content-box;\n}\n.trading-vue img {\n    vertical-align: initial;\n}\n/*$vite$:1*/"));			document.head.appendChild(elementStyle);		}	} catch (e) {		console.error("vite-plugin-css-injected-by-js", e);	}})();
 /*!
 TradingVue.JS - v1.0.2
 https://github.com/tvjsx/trading-vue-js
@@ -4407,7 +4407,7 @@ var _sfc_main$33 = {
 	}
 };
 var _hoisted_1$7 = ["id"];
-var _hoisted_2$1 = {
+var _hoisted_2$2 = {
 	key: 1,
 	class: "tvjs-ux-wrapper-head"
 };
@@ -4436,7 +4436,7 @@ function _sfc_render$14(_ctx, _cache, $props, $setup, $data, $options) {
 			style: normalizeStyle($options.pin_style),
 			class: "tvjs-ux-wrapper-pin"
 		}, null, 4)) : createCommentVNode("", true),
-		$props.ux.win_header !== false ? (openBlock(), createElementBlock("div", _hoisted_2$1, [createElementVNode("div", {
+		$props.ux.win_header !== false ? (openBlock(), createElementBlock("div", _hoisted_2$2, [createElementVNode("div", {
 			class: "tvjs-ux-wrapper-close",
 			onClick: _cache[0] || (_cache[0] = (...args) => $options.close && $options.close(...args)),
 			style: normalizeStyle($options.btn_style)
@@ -7634,7 +7634,7 @@ var _sfc_main$11 = {
 	}
 };
 var _hoisted_1$3 = { key: 0 };
-var _hoisted_2 = { class: "t-vue-lspan" };
+var _hoisted_2$1 = { class: "t-vue-lspan" };
 var _hoisted_3 = { class: "t-vue-lspan" };
 var _hoisted_4 = { class: "t-vue-lspan" };
 var _hoisted_5 = { class: "t-vue-lspan" };
@@ -7669,7 +7669,7 @@ function _sfc_render$9(_ctx, _cache, $props, $setup, $data, $options) {
 		}, toDisplayString($props.common.title_txt), 5),
 		$options.show_values ? (openBlock(), createElementBlock("span", _hoisted_1$3, [
 			_cache[1] || (_cache[1] = createTextVNode(" O", -1)),
-			createElementVNode("span", _hoisted_2, toDisplayString($options.ohlcv[0]), 1),
+			createElementVNode("span", _hoisted_2$1, toDisplayString($options.ohlcv[0]), 1),
 			_cache[2] || (_cache[2] = createTextVNode(" H", -1)),
 			createElementVNode("span", _hoisted_3, toDisplayString($options.ohlcv[1]), 1),
 			_cache[3] || (_cache[3] = createTextVNode(" L", -1)),
@@ -10495,6 +10495,55 @@ function dataBounds(dataCube) {
 	return [d[0][0], d[d.length - 1][0]];
 }
 //#endregion
+//#region src/stuff/a11y.js
+function ohlcvOf(dataCube) {
+	const d = dataCube && dataCube.data && dataCube.data.chart && dataCube.data.chart.data;
+	return Array.isArray(d) ? d : null;
+}
+function fmtTs(t) {
+	try {
+		return new Date(t).toISOString().slice(0, 16).replace("T", " ");
+	} catch {
+		return String(t);
+	}
+}
+/** Short aria-label for the chart container. */
+function chartAriaLabel(dataCube, title = "TradingVue") {
+	const o = ohlcvOf(dataCube);
+	if (!o || !o.length) return `${title} financial chart (no data)`;
+	const last = o[o.length - 1];
+	return `${title} financial chart, ${o.length} candles, latest close ${last[4]}`;
+}
+/** A longer text summary used as the screen-reader data fallback. */
+function chartDataSummary(dataCube, title = "TradingVue") {
+	const o = ohlcvOf(dataCube);
+	if (!o || !o.length) return `${title}: no chart data loaded.`;
+	let hi = -Infinity, lo = Infinity;
+	for (const c of o) {
+		if (c[2] > hi) hi = c[2];
+		if (c[3] < lo) lo = c[3];
+	}
+	const first = o[0], last = o[o.length - 1];
+	const parts = [
+		`${title} financial chart.`,
+		`${o.length} candles from ${fmtTs(first[0])} to ${fmtTs(last[0])}.`,
+		`Latest open ${last[1]}, high ${last[2]}, low ${last[3]}, close ${last[4]}.`,
+		`Overall high ${hi}, low ${lo}.`
+	];
+	const d = dataCube.data;
+	const names = (side) => (Array.isArray(d[side]) ? d[side] : []).map((x) => x && x.name).filter(Boolean);
+	const on = names("onchart"), off = names("offchart");
+	if (on.length) parts.push(`On-chart overlays: ${on.join(", ")}.`);
+	if (off.length) parts.push(`Off-chart indicators: ${off.join(", ")}.`);
+	return parts.join(" ");
+}
+var NAV_KEYS = new Set([
+	"ArrowLeft",
+	"ArrowRight",
+	"Home",
+	"End"
+]);
+//#endregion
 //#region src/TradingVue.vue
 init_constants();
 var _sfc_main = {
@@ -10643,6 +10692,10 @@ var _sfc_main = {
 		timezone: {
 			type: Number,
 			default: 0
+		},
+		a11y: {
+			type: Boolean,
+			default: true
 		}
 	},
 	computed: {
@@ -10665,6 +10718,15 @@ var _sfc_main = {
 			this.parse_colors(chart_props.colors);
 			if (this.$props.theme) Object.assign(chart_props.colors, this.$props.theme);
 			return chart_props;
+		},
+		a11y_id() {
+			return `${this.$props.id}-a11y-desc`;
+		},
+		a11y_label() {
+			return chartAriaLabel(this.$props.data, this.$props.titleTxt);
+		},
+		a11y_summary() {
+			return chartDataSummary(this.$props.data, this.$props.titleTxt);
 		},
 		chart_config() {
 			return Object.assign({}, constants_default.ChartConfig, this.$props.chartConfig);
@@ -10839,6 +10901,22 @@ var _sfc_main = {
 				console.warn("[trading-vue] Flat `colorXxx` props are deprecated; pass a single `theme` object instead, e.g. :theme=\"{ back: '#000', candleUp: '#0f0' }\".");
 			}
 		},
+		a11y_keydown(e) {
+			if (!this.a11y || !NAV_KEYS.has(e.key)) return;
+			if (!this.$refs.chart) return;
+			const r = this.getRange();
+			const b = dataBounds(this.$props.data);
+			if (e.key === "Home") {
+				if (b) this.goto(b[0]);
+			} else if (e.key === "End") {
+				if (b) this.goto(b[1]);
+			} else if (Array.isArray(r)) {
+				const step = (r[1] - r[0]) * .1;
+				const d = e.key === "ArrowLeft" ? -step : step;
+				this.setRange(r[0] + d, r[1] + d);
+			}
+			e.preventDefault();
+		},
 		mousedown() {
 			this.$refs.chart.activated = true;
 		},
@@ -10847,7 +10925,15 @@ var _sfc_main = {
 		}
 	}
 };
-var _hoisted_1 = ["id"];
+var _hoisted_1 = [
+	"id",
+	"role",
+	"aria-roledescription",
+	"aria-label",
+	"aria-describedby",
+	"tabindex"
+];
+var _hoisted_2 = ["id"];
 function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
 	const _component_toolbar = resolveComponent("toolbar");
 	const _component_widgets = resolveComponent("widgets");
@@ -10858,6 +10944,12 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
 		id: $props.id,
 		onMousedown: _cache[1] || (_cache[1] = (...args) => $options.mousedown && $options.mousedown(...args)),
 		onMouseleave: _cache[2] || (_cache[2] = (...args) => $options.mouseleave && $options.mouseleave(...args)),
+		role: $props.a11y ? "application" : null,
+		"aria-roledescription": $props.a11y ? "interactive financial chart" : null,
+		"aria-label": $props.a11y ? $options.a11y_label : null,
+		"aria-describedby": $props.a11y ? $options.a11y_id : null,
+		tabindex: $props.a11y ? 0 : null,
+		onKeydown: _cache[3] || (_cache[3] = (...args) => $options.a11y_keydown && $options.a11y_keydown(...args)),
 		style: normalizeStyle({
 			color: this.chart_props.colors.text,
 			font: this.font_comp,
@@ -10865,13 +10957,19 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
 			height: this.height + "px"
 		})
 	}, [
-		$props.toolbar ? (openBlock(), createBlock(_component_toolbar, mergeProps({
+		$props.a11y ? (openBlock(), createElementBlock("div", {
 			key: 0,
+			id: $options.a11y_id,
+			class: "tvjs-sr-only",
+			"aria-live": "polite"
+		}, toDisplayString($options.a11y_summary), 9, _hoisted_2)) : createCommentVNode("", true),
+		$props.toolbar ? (openBlock(), createBlock(_component_toolbar, mergeProps({
+			key: 1,
 			ref: "toolbar",
 			onCustomEvent: $options.custom_event
 		}, $options.chart_props, { config: $options.chart_config }), null, 16, ["onCustomEvent", "config"])) : createCommentVNode("", true),
 		_ctx.controllers.length ? (openBlock(), createBlock(_component_widgets, {
-			key: 1,
+			key: 2,
 			ref: "widgets",
 			map: _ctx.ws,
 			width: $props.width,
