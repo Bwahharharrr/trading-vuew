@@ -364,8 +364,16 @@ byte-identical/green; build/size/dev all clean.
       harness); config-validation errors; tool descriptor. 185 tests; additive/
       non-breaking (legacy mixin authoring untouched); goldens/visual/stress green.
 
-### ⏭ 4.x remaining — use*() composables (useChart/useRange/useCursor/useData,
-      resolve the goto/setRange out-of-range TODO), single `theme` object +
-      flat-prop deprecation shims, `<TradingChart>` thin shell, a11y, tree-shaking gate.
+### ✅ 4.2 — use*() composables + goto/setRange bounds validation (COMPLETE)
+- [x] `src/helpers/nav.js` — pure clampGoto/clampRange/dataBounds; resolves the
+      TradingVue.vue:297 "out of data" TODO: goto clamps out-of-range + warns;
+      setRange swaps reversed + warns on entirely-off-data (over-scroll allowed).
+      goto/setRange now return {ok, diagnostics} (additive).
+- [x] `src/composables/useChart.js` — useChart (typed actions off $refs.chart),
+      useRange/useCursor (reactive refs), useData (DataCube API). Exported +
+      shipped in d.ts. 19 tests; 206 total; all gates green.
+
+### ⏭ 4.x remaining — single `theme` object + flat-prop deprecation shims,
+      `<TradingChart>` thin shell, a11y, tree-shaking gate.
 
 ## ⏳ Phases 5–7 — RenderGraph → engine/perf rewrite → deprecation removal.

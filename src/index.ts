@@ -17,6 +17,7 @@ import { layout_cnv, layout_vol } from
     './components/js/layout_cnv.js'
 import { defineOverlay } from './api/defineOverlay.js'
 import { defineTool } from './api/defineTool.js'
+import { useChart, useRange, useCursor, useData } from './composables/useChart.js'
 
 const primitives = {
     Candle, Volbar, Line, Pin, Price, Ray, Seg
@@ -47,7 +48,8 @@ export {
     TradingVue, Overlay, Utils, Constants,
     Candle, Volbar, layout_cnv, layout_vol,
     DataCube, Tool, Interface, primitives,
-    defineOverlay, defineTool
+    defineOverlay, defineTool,
+    useChart, useRange, useCursor, useData
 }
 
 // Public type surface (Phase 2 — typed boundaries). Type-only re-exports, no

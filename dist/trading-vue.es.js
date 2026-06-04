@@ -10446,6 +10446,55 @@ var xcontrol_default = {
 	}
 };
 //#endregion
+//#region src/helpers/nav.js
+/**
+* @param {number} t - target timestamp (or index in IB mode)
+* @param {[number,number]|null} bounds - [firstTs, lastTs] of the data
+* @returns {{ value:number, diagnostics:object[] }}
+*/
+function clampGoto(t, bounds) {
+	const out = [];
+	if (bounds && Number.isFinite(t) && (t < bounds[0] || t > bounds[1])) {
+		const c = Math.max(bounds[0], Math.min(bounds[1], t));
+		out.push(warn("nav.goto.out_of_range", `goto(${t}) is outside the data range [${bounds[0]}, ${bounds[1]}]; clamped to ${c}`));
+		t = c;
+	}
+	return {
+		value: t,
+		diagnostics: out
+	};
+}
+/**
+* @param {number} t1 @param {number} t2
+* @param {[number,number]|null} bounds
+* @returns {{ t1:number, t2:number, diagnostics:object[] }}
+*/
+function clampRange(t1, t2, bounds) {
+	const out = [];
+	if (Number.isFinite(t1) && Number.isFinite(t2) && t1 > t2) {
+		out.push(warn("nav.range.reversed", `setRange(${t1}, ${t2}) is reversed; swapping`));
+		const tmp = t1;
+		t1 = t2;
+		t2 = tmp;
+	}
+	if (bounds && Number.isFinite(t1) && Number.isFinite(t2)) {
+		const offLeft = t1 < bounds[0] && t2 < bounds[0];
+		const offRight = t1 > bounds[1] && t2 > bounds[1];
+		if (offLeft || offRight) out.push(warn("nav.range.off_data", `setRange [${t1}, ${t2}] is entirely outside the data range [${bounds[0]}, ${bounds[1]}]`));
+	}
+	return {
+		t1,
+		t2,
+		diagnostics: out
+	};
+}
+/** Extract [firstTs, lastTs] from a DataCube (or null if no data). */
+function dataBounds(dataCube) {
+	const d = dataCube && dataCube.data && dataCube.data.chart && dataCube.data.chart.data;
+	if (!Array.isArray(d) || !d.length) return null;
+	return [d[0][0], d[d.length - 1][0]];
+}
+//#endregion
 //#region src/TradingVue.vue
 init_constants();
 var _sfc_main = {
@@ -10672,17 +10721,42 @@ var _sfc_main = {
 			this.$refs.chart?.refreshOffchartOverlays();
 		},
 		goto(t) {
-			if (this.chart_props.ib) t = this.$refs.chart.ti_map.gt2i(t, this.$refs.chart.ohlcv);
-			this.$refs.chart.goto(t);
+			const { value, diagnostics } = clampGoto(t, dataBounds(this.$props.data));
+			if (diagnostics.length) report(diagnostics, "warn", "goto");
+			t = value;
+			const chart = this.$refs.chart;
+			if (!chart) return {
+				ok: false,
+				diagnostics
+			};
+			if (this.chart_props.ib) t = chart.ti_map.gt2i(t, chart.ohlcv);
+			chart.goto(t);
+			return {
+				ok: diagnostics.length === 0,
+				diagnostics
+			};
 		},
 		setRange(t1, t2) {
+			const r = clampRange(t1, t2, dataBounds(this.$props.data));
+			if (r.diagnostics.length) report(r.diagnostics, "warn", "setRange");
+			t1 = r.t1;
+			t2 = r.t2;
+			const chart = this.$refs.chart;
+			if (!chart) return {
+				ok: false,
+				diagnostics: r.diagnostics
+			};
 			if (this.chart_props.ib) {
-				const ti_map = this.$refs.chart.ti_map;
-				const ohlcv = this.$refs.chart.ohlcv;
+				const ti_map = chart.ti_map;
+				const ohlcv = chart.ohlcv;
 				t1 = ti_map.gt2i(t1, ohlcv);
 				t2 = ti_map.gt2i(t2, ohlcv);
 			}
-			this.$refs.chart.setRange(t1, t2);
+			chart.setRange(t1, t2);
+			return {
+				ok: r.diagnostics.length === 0,
+				diagnostics: r.diagnostics
+			};
 		},
 		getRange() {
 			if (this.chart_props.ib) {
@@ -12584,6 +12658,95 @@ function defineTool(def) {
 	});
 }
 //#endregion
+//#region src/composables/useChart.js
+function resolve(tvRef) {
+	if (!tvRef) return null;
+	return typeof tvRef === "object" && "value" in tvRef ? tvRef.value : tvRef;
+}
+/**
+* Imperative chart actions over a TradingVue ref. All are null-safe (no-op /
+* null until the chart is mounted).
+* @param {import('vue').Ref|object} tvRef
+*/
+function useChart(tvRef) {
+	const tv = () => resolve(tvRef);
+	return {
+		/** Navigate to a timestamp (out-of-range is clamped). Returns {ok,diagnostics}. */
+		goto: (t) => tv()?.goto(t),
+		/** Set the visible [t1,t2] range. Returns {ok,diagnostics}. */
+		setRange: (t1, t2) => tv()?.setRange(t1, t2),
+		/** Current visible range [t1,t2] (or null). */
+		getRange: () => {
+			const i = tv();
+			return i ? i.getRange() : null;
+		},
+		/** Current cursor (or null). */
+		getCursor: () => {
+			const i = tv();
+			return i ? i.getCursor() : null;
+		},
+		/** Toggle an overlay's visibility without a full reset. */
+		toggleOverlayVisibility: (gridId, overlayId, display) => tv()?.toggleOverlayVisibility(gridId, overlayId, display),
+		/** Recompute layout. */
+		updateLayout: (force = false) => tv()?.updateLayout(force),
+		/** Refresh offchart overlays (after add/remove). */
+		refreshOffchartOverlays: () => tv()?.refreshOffchartOverlays(),
+		/** The underlying TradingVue instance (escape hatch). */
+		instance: tv
+	};
+}
+/**
+* Reactive visible range. Wire `onRangeChanged` to `@range-changed`.
+* @returns {{ range: import('vue').Ref, setRange:Function, getRange:Function, onRangeChanged:Function }}
+*/
+function useRange(tvRef) {
+	const { setRange, getRange } = useChart(tvRef);
+	const range = ref(null);
+	return {
+		range,
+		setRange,
+		getRange,
+		onRangeChanged: (r) => {
+			range.value = r;
+		}
+	};
+}
+/**
+* Reactive cursor. Wire `onCursorChanged` to the chart's cursor event.
+* @returns {{ cursor: import('vue').Ref, getCursor:Function, onCursorChanged:Function }}
+*/
+function useCursor(tvRef) {
+	const { getCursor } = useChart(tvRef);
+	const cursor = ref(null);
+	return {
+		cursor,
+		getCursor,
+		onCursorChanged: (c) => {
+			cursor.value = c;
+		}
+	};
+}
+/**
+* Typed access to a DataCube's data API (read/mutate), without reaching into
+* DataCube internals. Pass the DataCube instance.
+* @param {object} dataCube
+*/
+function useData(dataCube) {
+	const dc = () => dataCube;
+	return {
+		get: (q) => dc()?.get(q),
+		getOne: (q) => dc()?.get_one(q),
+		set: (q, d) => dc()?.set(q, d),
+		merge: (q, d) => dc()?.merge(q, d),
+		del: (q) => dc()?.del(q),
+		add: (side, ov) => dc()?.add(side, ov),
+		update: (d) => dc()?.update(d),
+		show: (q) => dc()?.show(q),
+		hide: (q) => dc()?.hide(q),
+		dc
+	};
+}
+//#endregion
 //#region src/index.ts
 init_utils();
 init_constants();
@@ -12620,6 +12783,6 @@ if (w && w.Vue) {
 }
 var src_default = TradingVue_default;
 //#endregion
-export { CandleExt as Candle, constants_default as Constants, DataCube, interface_default as Interface, overlay_default as Overlay, tool_default as Tool, TradingVue_default as TradingVue, utils_default as Utils, VolbarExt as Volbar, src_default as default, defineOverlay, defineTool, layout_cnv, layout_vol, primitives };
+export { CandleExt as Candle, constants_default as Constants, DataCube, interface_default as Interface, overlay_default as Overlay, tool_default as Tool, TradingVue_default as TradingVue, utils_default as Utils, VolbarExt as Volbar, src_default as default, defineOverlay, defineTool, layout_cnv, layout_vol, primitives, useChart, useCursor, useData, useRange };
 
 //# sourceMappingURL=trading-vue.es.js.map

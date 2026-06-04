@@ -186,8 +186,14 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     toggleOverlayVisibility(gridId: any, overlayId: any, display: any): void;
     updateLayout(forceResize?: boolean): void;
     refreshOffchartOverlays(): void;
-    goto(t: any): void;
-    setRange(t1: any, t2: any): void;
+    goto(t: any): {
+        ok: boolean;
+        diagnostics: object[];
+    };
+    setRange(t1: any, t2: any): {
+        ok: boolean;
+        diagnostics: object[];
+    };
     getRange(): any;
     getCursor(): any;
     showTheTip(text: any, color?: string): void;

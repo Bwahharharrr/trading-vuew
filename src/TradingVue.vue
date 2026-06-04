@@ -44,6 +44,8 @@ import Toolbar from './components/Toolbar.vue'
 import Widgets from './components/Widgets.vue'
 import TheTip from './components/TheTip.vue'
 import XControl from './mixins/xcontrol.js'
+import { clampGoto, clampRange, dataBounds } from './helpers/nav.js'
+import { report } from './helpers/schema/diagnostics.js'
 
 export default {
     name: 'TradingVue',
@@ -293,22 +295,35 @@ export default {
         refreshOffchartOverlays() {
             this.$refs.chart?.refreshOffchartOverlays()
         },
+        // Navigate to a timestamp. Out-of-range targets are clamped into the
+        // data with a warn diagnostic (resolves the old out-of-data TODO).
+        // Returns { ok, diagnostics } (additive — existing callers can ignore).
         goto(t) {
-            // TODO: limit goto & setRange (out of data error)
-            if (this.chart_props.ib) {
-                const ti_map = this.$refs.chart.ti_map
-                t = ti_map.gt2i(t, this.$refs.chart.ohlcv)
-            }
-            this.$refs.chart.goto(t)
+            const { value, diagnostics } = clampGoto(t, dataBounds(this.$props.data))
+            if (diagnostics.length) report(diagnostics, 'warn', 'goto')
+            t = value
+            const chart = this.$refs.chart
+            if (!chart) return { ok: false, diagnostics }
+            if (this.chart_props.ib) t = chart.ti_map.gt2i(t, chart.ohlcv)
+            chart.goto(t)
+            return { ok: diagnostics.length === 0, diagnostics }
         },
+        // Set the visible range. Reversed ranges are swapped and entirely
+        // off-data ranges warn (over-scroll past one edge is allowed).
         setRange(t1, t2) {
+            const r = clampRange(t1, t2, dataBounds(this.$props.data))
+            if (r.diagnostics.length) report(r.diagnostics, 'warn', 'setRange')
+            t1 = r.t1; t2 = r.t2
+            const chart = this.$refs.chart
+            if (!chart) return { ok: false, diagnostics: r.diagnostics }
             if (this.chart_props.ib) {
-                const ti_map = this.$refs.chart.ti_map
-                const ohlcv = this.$refs.chart.ohlcv
+                const ti_map = chart.ti_map
+                const ohlcv = chart.ohlcv
                 t1 = ti_map.gt2i(t1, ohlcv)
                 t2 = ti_map.gt2i(t2, ohlcv)
             }
-            this.$refs.chart.setRange(t1, t2)
+            chart.setRange(t1, t2)
+            return { ok: r.diagnostics.length === 0, diagnostics: r.diagnostics }
         },
         getRange() {
             if (this.chart_props.ib) {
