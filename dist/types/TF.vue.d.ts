@@ -157,6 +157,10 @@ declare const __VLS_export: import("vue").DefineComponent<{
         colors: {
             type: ObjectConstructor;
         };
+        theme: {
+            type: ObjectConstructor;
+            default: null;
+        };
         font: {
             type: StringConstructor;
             default: any;
@@ -386,6 +390,10 @@ declare const __VLS_export: import("vue").DefineComponent<{
         colors: {
             type: ObjectConstructor;
         };
+        theme: {
+            type: ObjectConstructor;
+            default: null;
+        };
         font: {
             type: StringConstructor;
             default: any;
@@ -454,6 +462,7 @@ declare const __VLS_export: import("vue").DefineComponent<{
         colorVolDw: string;
         colorPanel: string;
         colorTbBorder: string;
+        theme: Record<string, any>;
         chartConfig: Record<string, any>;
         legendButtons: unknown[];
         indexBased: boolean;

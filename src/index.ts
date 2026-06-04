@@ -18,6 +18,7 @@ import { layout_cnv, layout_vol } from
 import { defineOverlay } from './api/defineOverlay.js'
 import { defineTool } from './api/defineTool.js'
 import { useChart, useRange, useCursor, useData } from './composables/useChart.js'
+import { defaultTheme } from './stuff/theme.js'
 
 const primitives = {
     Candle, Volbar, Line, Pin, Price, Ray, Seg
@@ -49,7 +50,8 @@ export {
     Candle, Volbar, layout_cnv, layout_vol,
     DataCube, Tool, Interface, primitives,
     defineOverlay, defineTool,
-    useChart, useRange, useCursor, useData
+    useChart, useRange, useCursor, useData,
+    defaultTheme
 }
 
 // Public type surface (Phase 2 — typed boundaries). Type-only re-exports, no
@@ -66,4 +68,5 @@ export type {
     DefineOverlayConfig, DefineToolConfig, RenderContext,
 } from './types/define-overlay'
 export type { Diagnostic } from './types/diagnostics'
+export type { TradingVueTheme } from './types/theme'
 export type { WorkerMessage, WorkerEvent } from './types/worker-messages'

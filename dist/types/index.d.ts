@@ -16,6 +16,7 @@ import { layout_cnv, layout_vol } from './components/js/layout_cnv.js';
 import { defineOverlay } from './api/defineOverlay.js';
 import { defineTool } from './api/defineTool.js';
 import { useChart, useRange, useCursor, useData } from './composables/useChart.js';
+import { defaultTheme } from './stuff/theme.js';
 declare const primitives: {
     Candle: typeof Candle;
     Volbar: typeof Volbar;
@@ -26,9 +27,10 @@ declare const primitives: {
     Seg: typeof Seg;
 };
 export default TradingVue;
-export { TradingVue, Overlay, Utils, Constants, Candle, Volbar, layout_cnv, layout_vol, DataCube, Tool, Interface, primitives, defineOverlay, defineTool, useChart, useRange, useCursor, useData };
+export { TradingVue, Overlay, Utils, Constants, Candle, Volbar, layout_cnv, layout_vol, DataCube, Tool, Interface, primitives, defineOverlay, defineTool, useChart, useRange, useCursor, useData, defaultTheme };
 export type { TradingVueEventMap, TradingVueEventName, CustomEventName, CustomEventArgs, IndicatorInfo, IndicatorError, OverlayRef, Range, } from './types/events';
 export type { OverlayDefinition, OverlayMeta, OverlayDrawContext, } from './types/overlay';
 export type { DefineOverlayConfig, DefineToolConfig, RenderContext, } from './types/define-overlay';
 export type { Diagnostic } from './types/diagnostics';
+export type { TradingVueTheme } from './types/theme';
 export type { WorkerMessage, WorkerEvent } from './types/worker-messages';

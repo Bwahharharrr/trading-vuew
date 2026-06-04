@@ -140,6 +140,14 @@ export default {
         colors: {
             type: Object
         },
+        // Single theme object (Phase 4.x) — the preferred way to set colours:
+        //   :theme="{ back:'#000', grid:'#222', candleUp:'#0f0', candleDw:'#f00', ... }"
+        // Wins over the legacy `colors` object and the deprecated flat colorXxx
+        // props. Keys are the token names (back/grid/text/candleUp/…).
+        theme: {
+            type: Object,
+            default: null
+        },
         font: {
             type: String,
             default: Const.ChartConfig.FONT
@@ -209,6 +217,10 @@ export default {
             }
 
             this.parse_colors(chart_props.colors)
+            // `theme` wins over the legacy colors object + deprecated flat props.
+            if (this.$props.theme) {
+                Object.assign(chart_props.colors, this.$props.theme)
+            }
             return chart_props
         },
         chart_config() {
@@ -392,13 +404,24 @@ export default {
             }
         },
         parse_colors(colors) {
+            const defs = this.$options.props
+            let usedFlat = false
             for (var k in this.$props) {
                 if (k.indexOf('color') === 0 && k !== 'colors') {
                     let k2 = k.replace('color', '')
                     k2 = k2[0].toLowerCase() + k2.slice(1)
+                    // A flat prop differing from its default = an explicit
+                    // (deprecated) override the consumer set.
+                    if (defs[k] && this.$props[k] !== defs[k].default) usedFlat = true
                     if (colors[k2]) continue
                     colors[k2] = this.$props[k]
                 }
+            }
+            if (usedFlat && !this._flatColorsWarned && typeof console !== 'undefined') {
+                this._flatColorsWarned = true
+                console.warn('[trading-vue] Flat `colorXxx` props are deprecated; ' +
+                    'pass a single `theme` object instead, e.g. ' +
+                    ':theme="{ back: \'#000\', candleUp: \'#0f0\' }".')
             }
         },
         mousedown() {

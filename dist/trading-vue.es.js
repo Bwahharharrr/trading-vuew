@@ -10589,6 +10589,10 @@ var _sfc_main = {
 			default: "#8282827d"
 		},
 		colors: { type: Object },
+		theme: {
+			type: Object,
+			default: null
+		},
 		font: {
 			type: String,
 			default: constants_default.ChartConfig.FONT
@@ -10659,6 +10663,7 @@ var _sfc_main = {
 				timezone: this.$props.timezone
 			};
 			this.parse_colors(chart_props.colors);
+			if (this.$props.theme) Object.assign(chart_props.colors, this.$props.theme);
 			return chart_props;
 		},
 		chart_config() {
@@ -10820,11 +10825,18 @@ var _sfc_main = {
 			};
 		},
 		parse_colors(colors) {
+			const defs = this.$options.props;
+			let usedFlat = false;
 			for (var k in this.$props) if (k.indexOf("color") === 0 && k !== "colors") {
 				let k2 = k.replace("color", "");
 				k2 = k2[0].toLowerCase() + k2.slice(1);
+				if (defs[k] && this.$props[k] !== defs[k].default) usedFlat = true;
 				if (colors[k2]) continue;
 				colors[k2] = this.$props[k];
+			}
+			if (usedFlat && !this._flatColorsWarned && typeof console !== "undefined") {
+				this._flatColorsWarned = true;
+				console.warn("[trading-vue] Flat `colorXxx` props are deprecated; pass a single `theme` object instead, e.g. :theme=\"{ back: '#000', candleUp: '#0f0' }\".");
 			}
 		},
 		mousedown() {
@@ -12747,6 +12759,26 @@ function useData(dataCube) {
 	};
 }
 //#endregion
+//#region src/stuff/theme.js
+var defaultTheme = {
+	title: "#42b883",
+	back: "#121826",
+	grid: "#2f3240",
+	text: "#dedddd",
+	textHL: "#fff",
+	scale: "#838383",
+	cross: "#8091a0",
+	candleUp: "#23a776",
+	candleDw: "#e54150",
+	wickUp: "#23a77688",
+	wickDw: "#e5415088",
+	wickSm: "transparent",
+	volUp: "#23a77642",
+	volDw: "#e5415042",
+	panel: "#565c68",
+	tbBorder: "#8282827d"
+};
+//#endregion
 //#region src/index.ts
 init_utils();
 init_constants();
@@ -12783,6 +12815,6 @@ if (w && w.Vue) {
 }
 var src_default = TradingVue_default;
 //#endregion
-export { CandleExt as Candle, constants_default as Constants, DataCube, interface_default as Interface, overlay_default as Overlay, tool_default as Tool, TradingVue_default as TradingVue, utils_default as Utils, VolbarExt as Volbar, src_default as default, defineOverlay, defineTool, layout_cnv, layout_vol, primitives, useChart, useCursor, useData, useRange };
+export { CandleExt as Candle, constants_default as Constants, DataCube, interface_default as Interface, overlay_default as Overlay, tool_default as Tool, TradingVue_default as TradingVue, utils_default as Utils, VolbarExt as Volbar, src_default as default, defaultTheme, defineOverlay, defineTool, layout_cnv, layout_vol, primitives, useChart, useCursor, useData, useRange };
 
 //# sourceMappingURL=trading-vue.es.js.map

@@ -23495,6 +23495,10 @@ pointers: 1 },
 				default: "#8282827d"
 			},
 			colors: { type: Object },
+			theme: {
+				type: Object,
+				default: null
+			},
 			font: {
 				type: String,
 				default: constants_default.ChartConfig.FONT
@@ -23565,6 +23569,7 @@ pointers: 1 },
 					timezone: this.$props.timezone
 				};
 				this.parse_colors(chart_props.colors);
+				if (this.$props.theme) Object.assign(chart_props.colors, this.$props.theme);
 				return chart_props;
 			},
 			chart_config() {
@@ -23726,11 +23731,18 @@ pointers: 1 },
 				};
 			},
 			parse_colors(colors) {
+				const defs = this.$options.props;
+				let usedFlat = false;
 				for (var k in this.$props) if (k.indexOf("color") === 0 && k !== "colors") {
 					let k2 = k.replace("color", "");
 					k2 = k2[0].toLowerCase() + k2.slice(1);
+					if (defs[k] && this.$props[k] !== defs[k].default) usedFlat = true;
 					if (colors[k2]) continue;
 					colors[k2] = this.$props[k];
+				}
+				if (usedFlat && !this._flatColorsWarned && typeof console !== "undefined") {
+					this._flatColorsWarned = true;
+					console.warn("[trading-vue] Flat `colorXxx` props are deprecated; pass a single `theme` object instead, e.g. :theme=\"{ back: '#000', candleUp: '#0f0' }\".");
 				}
 			},
 			mousedown() {
@@ -25653,6 +25665,26 @@ pointers: 1 },
 		};
 	}
 	//#endregion
+	//#region src/stuff/theme.js
+	var defaultTheme = {
+		title: "#42b883",
+		back: "#121826",
+		grid: "#2f3240",
+		text: "#dedddd",
+		textHL: "#fff",
+		scale: "#838383",
+		cross: "#8091a0",
+		candleUp: "#23a776",
+		candleDw: "#e54150",
+		wickUp: "#23a77688",
+		wickDw: "#e5415088",
+		wickSm: "transparent",
+		volUp: "#23a77642",
+		volDw: "#e5415042",
+		panel: "#565c68",
+		tbBorder: "#8282827d"
+	};
+	//#endregion
 	//#region src/index.ts
 	init_utils();
 	init_constants();
@@ -25699,6 +25731,7 @@ pointers: 1 },
 	exports.Utils = utils_default;
 	exports.Volbar = VolbarExt;
 	exports.default = src_default;
+	exports.defaultTheme = defaultTheme;
 	exports.defineOverlay = defineOverlay;
 	exports.defineTool = defineTool;
 	exports.layout_cnv = layout_cnv;

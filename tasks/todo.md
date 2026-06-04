@@ -373,7 +373,15 @@ byte-identical/green; build/size/dev all clean.
       useRange/useCursor (reactive refs), useData (DataCube API). Exported +
       shipped in d.ts. 19 tests; 206 total; all gates green.
 
-### ⏭ 4.x remaining — single `theme` object + flat-prop deprecation shims,
-      `<TradingChart>` thin shell, a11y, tree-shaking gate.
+### ✅ 4.3 — theme object + flat-prop deprecation shims (COMPLETE)
+- [x] `theme` prop on TradingVue — single object, wins over the legacy `colors`
+      object + the deprecated flat colorXxx props (applied last in chart_props).
+- [x] Flat colorXxx props kept as pass-throughs; a one-time dev console.warn
+      fires only when one is explicitly set (differs from its default).
+- [x] `src/stuff/theme.js` `defaultTheme` + `src/types/theme.ts` `TradingVueTheme`,
+      exported + shipped in d.ts. 6 component tests; 212 total; all gates green.
+- Note: App.vue (demo) not migrated to theme — it's the dev harness, not shipped.
+
+### ⏭ 4.x remaining — `<TradingChart>` thin shell, a11y, tree-shaking gate.
 
 ## ⏳ Phases 5–7 — RenderGraph → engine/perf rewrite → deprecation removal.
