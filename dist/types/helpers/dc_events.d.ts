@@ -1,0 +1,30 @@
+export default class DCEvents {
+    ww: WebWork;
+    se_state: any;
+    on_custom_event(event: any, args: any): void;
+    on_settings(values: any, prev: any): void;
+    on_ids_changed(values: any, prev: any): void;
+    register_tools(tools: any): void;
+    exec_script(args: any): void;
+    exec_all_scripts(): void;
+    scripts_onrange(r: any): void;
+    modify_overlay(upd: any): void;
+    data_changed(args: any): void;
+    set_loading(flag: any): void;
+    send_meta_2_ww(): void;
+    merge_presets(proto: any, preset: any): void;
+    grid_mousedown(args: any): void;
+    drawing_mode_off(): void;
+    build_tool(grid_id: any, type: any): void;
+    system_tool(type: any): void;
+    change_settings(args: any): void;
+    on_scroll_lock(flag: any): void;
+    object_selected(args: any): void;
+    add_trash_icon(): void;
+    remove_trash_icon(): void;
+    on_overlay_data(data: any): void;
+    on_overlay_update(data: any): void;
+    before_destroy(): void;
+    get_overlay(obj: any): any;
+}
+import WebWork from './script_ww_api.js';

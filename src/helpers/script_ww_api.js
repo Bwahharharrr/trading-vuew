@@ -1,12 +1,14 @@
 
 // Webworker interface
 
-// Compiled webworker (see webpack/ww_plugin.js)
-import worker_data from './tmp/ww$$$.json'
+// Vite inlines the worker as a self-contained module worker (`?worker&inline`)
+// instantiated from a text/javascript Blob (data: URI fallback) — no separate
+// worker asset and no build-time compile step. Replaces the old
+// webpack/ww_plugin.js dance (HTTP-fetch compiled worker -> lz-compress ->
+// tmp/ww$$$.json -> Blob).
+import ScriptWorker from './script_ww.js?worker&inline'
 import Utils from '../stuff/utils.js'
-import lz from 'lz-string'
 import { toRaw, isReactive, isRef } from 'vue'
-import {} from './script_ww.js' // For webworker-loader to find the ww
 
 // Deep unwrap Vue 3 reactive proxies for postMessage compatibility
 function deepToRaw(obj) {
@@ -43,7 +45,6 @@ class WebWork {
         this.dc = dc
         this.tasks = {}
         this.msg_queue = []
-        this._workerUrl = null
         this.onevent = () => {}
         this.start()
     }
@@ -51,9 +52,7 @@ class WebWork {
     start() {
         const hasWorkerSupport =
             typeof window !== 'undefined' &&
-            typeof Worker !== 'undefined' &&
-            typeof Blob !== 'undefined' &&
-            typeof URL !== 'undefined'
+            typeof Worker !== 'undefined'
 
         // Node/tests fallback: allow DataCube core logic without web workers
         if (!hasWorkerSupport) {
@@ -66,27 +65,9 @@ class WebWork {
             this.worker.terminate()
             this.worker = null
         }
-        if (this._workerUrl) {
-            URL.revokeObjectURL(this._workerUrl)
-            this._workerUrl = null
-        }
-        // URL.createObjectURL
-        window.URL = window.URL || window.webkitURL
-        let data = lz.decompressFromBase64(worker_data[0])
-        let blob
-        try {
-            blob = new Blob([data], {type: 'application/javascript'})
-        } catch (e) {
-            // Backwards-compatibility
-            window.BlobBuilder = window.BlobBuilder ||
-                window.WebKitBlobBuilder ||
-                window.MozBlobBuilder
-            blob = new BlobBuilder()
-            blob.append(data)
-            blob = blob.getBlob()
-        }
-        this._workerUrl = URL.createObjectURL(blob)
-        this.worker = new Worker(this._workerUrl)
+        // Vite's `?worker&inline` import yields a Worker subclass that wraps
+        // the inlined blob; instantiation manages its own object URL.
+        this.worker = new ScriptWorker()
         this.worker.onmessage = e => this.onmessage(e)
     }
 
@@ -196,10 +177,6 @@ class WebWork {
             this.worker.onmessage = null
             this.worker.terminate()
             this.worker = null
-        }
-        if (this._workerUrl) {
-            URL.revokeObjectURL(this._workerUrl)
-            this._workerUrl = null
         }
         if (this.socket) {
             this.socket.close()

@@ -2,27 +2,48 @@
   "name": "trading-vue-js",
   "version": "1.0.2",
   "description": "Hackable charting lib for traders",
+  "type": "module",
   "main": "./dist/trading-vue.js",
-  "scripts": {
-    "test": "webpack serve --config webpack/test.config.js --mode development --progress --hot",
-    "auto-test": "ava",
-    "eslint": "./node_modules/.bin/eslint --ext .js,.vue src",
-    "dev": "webpack serve --config webpack/dev.config.js --mode development --progress --hot",
-    "ww": "webpack serve --config webpack/dev.config.js --mode production --progress --hot",
-    "build": "webpack  --config webpack/build.config.js --mode production --progress",
-    "cdn": "webpack serve --config webpack/cdn.config.js --mode development --progress --hot"
-  },
-  "ava": {
-    "babel": {
-      "compileAsTests": [
-        "test/auto_tests/**/*",
-        "src/**/*"
-      ]
+  "module": "./dist/trading-vue.es.js",
+  "types": "./dist/types/index.d.ts",
+  "unpkg": "./dist/trading-vue.min.js",
+  "jsdelivr": "./dist/trading-vue.min.js",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/trading-vue.es.js",
+      "require": "./dist/trading-vue.js"
     },
-    "files": [
-      "test/auto_tests/**/*"
-    ]
+    "./dist/*": "./dist/*",
+    "./src/*": "./src/*"
   },
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run build:lib && npm run build:types",
+    "build:lib": "BUILD_TARGET=umd vite build && BUILD_TARGET=umd-min vite build && BUILD_TARGET=es vite build",
+    "build:types": "vue-tsc -p tsconfig.build.json --emitDeclarationOnly",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:golden": "vitest run test/golden",
+    "test:visual": "vitest run test/visual",
+    "auto-test": "vitest run",
+    "typecheck": "vue-tsc --noEmit",
+    "lint": "eslint --ext .js,.vue src",
+    "eslint": "eslint --ext .js,.vue src",
+    "size": "size-limit"
+  },
+  "size-limit": [
+    {
+      "name": "ESM (vue external, gzip)",
+      "path": "dist/trading-vue.es.js",
+      "limit": "130 kB"
+    },
+    {
+      "name": "UMD min (vue bundled, gzip)",
+      "path": "dist/trading-vue.min.js",
+      "limit": "190 kB"
+    }
+  ],
   "author": "C451",
   "license": "MIT",
   "files": [
@@ -43,35 +64,28 @@
   "homepage": "https://github.com/C451/trading-vue-js#readme",
   "repository": "github:C451/trading-vue-js",
   "devDependencies": {
-    "@ava/babel": "^1.0.1",
-    "@babel/core": "^7.13.10",
-    "@babel/plugin-transform-parameters": "^7.13.0",
-    "@babel/plugin-transform-runtime": "^7.13.10",
-    "@babel/preset-env": "^7.13.10",
+    "@size-limit/file": "^11.2.0",
+    "@types/node": "^25.9.1",
+    "@vitejs/plugin-vue": "^6.0.7",
     "@vue/compiler-sfc": "^3.4.0",
-    "ava": "^3.15.0",
-    "babel-loader": "^8.2.2",
-    "css-loader": "^3.6.0",
+    "@vue/test-utils": "^2.4.10",
     "eslint": "^7.21.0",
-    "eslint-config-eslint": "^7.0.0",
     "eslint-plugin-vue": "^9.0.0",
-    "html-webpack-plugin": "^5.3.1",
-    "null-loader": "^4.0.1",
-    "raw-loader": "^4.0.2",
-    "terser-webpack-plugin": "^5.1.1",
-    "vue-loader": "^17.4.0",
-    "vue-style-loader": "^4.1.3",
-    "webpack": "^5.24.4",
-    "webpack-cli": "^4.5.0",
-    "webpack-dev-server": "^4.15.0",
-    "worker-loader": "^3.0.8"
+    "httpxy": "^0.5.3",
+    "jsdom": "^29.1.1",
+    "size-limit": "^11.2.0",
+    "skia-canvas": "^2.0.2",
+    "terser": "^5.48.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16",
+    "vite-plugin-css-injected-by-js": "^5.0.1",
+    "vitest": "^4.1.8",
+    "vue-tsc": "^3.3.3"
   },
   "dependencies": {
-    "@babel/runtime": "^7.13.10",
     "arrayslicer": "^1.2.3",
     "hammerjs": "^2.0.8",
     "hamsterjs": "^1.1.3",
-    "lz-string": "^1.4.4",
     "mitt": "^3.0.1",
     "vue": "^3.4.0"
   }

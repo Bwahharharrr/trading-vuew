@@ -1,0 +1,48 @@
+export default class GridRenderer {
+    constructor(grid: any);
+    grid: any;
+    overlays: any[];
+    crosshair: any;
+    engine: RenderEngine;
+    _lastRange: any;
+    _lastCursorX: any;
+    _lastCursorY: any;
+    _staticDirty: boolean;
+    _overlaysDirty: boolean;
+    _crosshairOnly: boolean;
+    _lastDataLength: number;
+    _lastLayoutRef: any;
+    _sortedOverlays: any[];
+    _overlaysSortDirty: boolean;
+    get ctx(): any;
+    get ctxDynamic(): any;
+    get hasDualCanvas(): boolean;
+    get layout(): any;
+    get $p(): any;
+    get data(): any;
+    get range(): any;
+    get interval(): any;
+    get cursor(): any;
+    get id(): any;
+    new_layer(layer: any): void;
+    del_layer(id: any): void;
+    show_hide_layer(event: any): void;
+    markStaticDirty(): void;
+    _detectCrosshairOnlyUpdate(): boolean;
+    update(): void;
+    updateDynamic(): void;
+    _shaderProps(): {
+        layout: any;
+        range: any;
+        interval: any;
+        tf: any;
+        cursor: any;
+        colors: any;
+        sub: any;
+        font: any;
+        config: any;
+        meta: any;
+    };
+    propagate(name: any, event: any): void;
+}
+import { RenderEngine } from '../../../render/render-engine.js';

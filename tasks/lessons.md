@@ -459,3 +459,62 @@ UxLayer received `updater: Math.random()` in render, causing Vue to detect prop 
 29. **Use Map caches with FIFO eviction** - Limit size to prevent memory growth
 30. **Never use Math.random() in render** - Use deterministic keys for Vue prop comparison
 31. **Pre-allocate arrays with known size** - `new Array(n)` vs building with push
+
+---
+
+## 2026-06-02: Phase 1 Modernization (Vite/Vitest/TS + safety nets)
+
+### Lesson: Vite `?worker&inline` replaces the webpack blob dance
+The old worker pipeline (build worker separately → HTTP-fetch compiled JS →
+lz-compress → `tmp/ww$$$.json` → runtime Blob) exists only to make the worker a
+self-contained single file for CDN UMD. Vite's `import W from './x?worker&inline'`
+does exactly that natively. Deleting the dance removed `ww_plugin.js`, the tmp
+JSON, and the `lz-string` dependency with zero behaviour change.
+**Rule:** for self-contained worker bundles use `?worker&inline`, not manual blobs.
+
+### Lesson: "type": "module" breaks CommonJS dotfiles/tools
+Setting `"type":"module"` makes Node treat `.js` as ESM, breaking
+`.eslintrc.js` and `tools/*.js` that use `module.exports`. Rename them to `.cjs`.
+
+### Lesson: preserve the dist *contract*, not just "a build"
+The old UMD bundle (a) bundled Vue, (b) injected CSS via JS (vue-style-loader),
+(c) exposed a named UMD namespace. A naive Vite lib build externalises Vue and
+emits a separate `.css`, silently breaking consumers. Preserve: keep UMD with
+Vue bundled + `vite-plugin-css-injected-by-js`, ADD a separate ESM (Vue
+external) for tree-shaking. Use `output.exports:'named'` when the entry mixes
+default + named exports.
+
+### Lesson: golden-master an orchestrated singleton by driving it like its caller
+The ScriptEngine is a module singleton reachable only via the worker's
+postMessage protocol. To pin it in Node, replicate the worker's message handlers
+(`se.data[id]=new DatasetWW`, `se.recalc_size()`, `se.queue.push(s)`,
+`se.exec_all()`) and capture `se.send('overlay-data', …)`. Reset every mutated
+field between runs for hermetic tests despite the singleton.
+- Script descriptor gotcha: ScriptEnv's `this.src` is the WHOLE descriptor, so
+  `use_for` and `sett` must be TOP-LEVEL on the descriptor (prep() reads
+  `this.src.use_for[0]`), not only under `descriptor.src`.
+- `make_box` swallows build errors and falls back to an empty update (silent
+  null output) — when a golden series is all-null, the box `Function()` threw.
+
+### Lesson: `no-undef` as a hard error earns its keep
+Modernizing the eslint config (ecmaVersion 2018→2021, which fixed 27 spurious
+`?.` parse errors) surfaced two REAL latent bugs — both the block-scoped-`let`
+pattern already in memory: a `let` declared inside a loop/`if` and used outside
+(`utils.js index_shift`, `pan-manager.js range`). Both throw ReferenceError at
+runtime. Keep `no-undef` blocking; downgrade only stylistic legacy rules to warn.
+
+### Lesson: scope SSR-safe-import honestly for a canvas lib
+hammerjs/hamsterjs touch `window` at module-eval, so the full component can't be
+imported under SSR (true of every canvas charting lib). Pin import-safety for the
+DOM-free LOGIC core (Utils/Constants/metrics/ws-helpers/engine) instead; defer
+full-component lazy-gesture loading to Phase 4 where the component is restructured.
+
+### Prevention rules (build/test infra)
+32. **Verify the migrated build's CONTRACT** (bundled deps, CSS injection,
+    export shape, single-file worker), not just that it compiles.
+33. **Golden masters before any engine/store refactor** — drive the real code,
+    capture exact numerics, prove determinism on re-run, define an FP tolerance.
+34. **A visual baseline must be sensitivity-checked** — confirm a tiny rendering
+    change actually flips the signature, else it's a false safety net.
+35. **Modernize eslint parserOptions to match the code** — stale ecmaVersion
+    produces fake parse errors that mask real ones.

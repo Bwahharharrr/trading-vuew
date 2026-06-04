@@ -1,0 +1,93 @@
+export class ScriptEngine {
+    map: {};
+    data: {};
+    exec_id: NodeJS.Timeout | null;
+    queue: any[];
+    delta_queue: any[];
+    update_queue: any[];
+    sett: {};
+    state: {};
+    mods: {};
+    std_plus: {};
+    tf: any;
+    _outputCache: Map<any, any>;
+    _dataHash: string | null;
+    _hooksCache: {};
+    _hooksModsKey: any;
+    _updateTemplate: {
+        id: string;
+        src: any;
+    }[] | null;
+    _computationHash(script: any): string;
+    _computeDataHash(): string;
+    _isDisplayOnlyChange(delta: any, scriptId: any): boolean;
+    _restoreFromCache(scriptId: any): boolean;
+    _saveToCache(scriptId: any): void;
+    _isCacheValid(scriptId: any): boolean;
+    syncState(): void;
+    exec_all(): void;
+    exec_sel(delta: any): Promise<void>;
+    exec(s: any): void;
+    update(candles: any): void;
+    iter: number | undefined;
+    t: any;
+    init_state(sel: any): boolean;
+    _restart: boolean | undefined;
+    open: any;
+    high: any;
+    low: any;
+    close: any;
+    vol: any;
+    tss: {} | undefined;
+    shared: {} | undefined;
+    skip: boolean | undefined;
+    running: boolean | undefined;
+    task: any;
+    std_inject(std: any): any;
+    _onScriptError(id: any, phase: any, e: any): void;
+    send_state(): void;
+    send_update(): void;
+    re_init_map(): void;
+    run(sel: any): Promise<void>;
+    perf: number | undefined;
+    step(data: any, unshift?: boolean): void;
+    limit(): void;
+    start(ohlcv: any): number;
+    drain_queues(): void;
+    _bsGTE(arr: any, t: any): number;
+    _bsGT(arr: any, t: any): number;
+    _rangeSlice(arr: any, t1: any, t2: any): any;
+    format_map(sel: any, range: any, output: any): ({
+        id: any;
+        data: null;
+        new_ovs?: undefined;
+    } | {
+        id: any;
+        data: any;
+        new_ovs: {
+            onchart: {};
+            offchart: {};
+        };
+    } | {
+        id: string;
+        data: any;
+        new_ovs?: undefined;
+    })[];
+    _buildUpdateTemplate(): void;
+    format_update(): any[];
+    restarted(): boolean;
+    remove_scripts(ids: any): void;
+    pre_run_mods(sel: any): void;
+    post_run_mods(sel: any): void;
+    make_mods_hooks(name: any): any;
+    data_required(s: any): {
+        type: string;
+    }[] | null;
+    match_ds(id: any, type: any): string | undefined;
+    make_ohlcv(): void;
+    recalc_size(): void;
+    data_size: number | undefined;
+    limit_size(): void;
+}
+declare const _default: ScriptEngine;
+export default _default;

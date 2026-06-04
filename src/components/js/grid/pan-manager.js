@@ -28,9 +28,13 @@ export default class PanManager {
 
         let ls = this.layout.grid.logScale
 
+        // `range` is consumed by the sidebar-transform emit below, so it must
+        // live at function scope — declaring it inside the `if` made the
+        // `range || drug.y_r` reference throw in log-scale pans.
+        let range
         if (ls && drug.y_r) {
             let dy = drug.y - y
-            let range = drug.y_r.slice()
+            range = drug.y_r.slice()
             range[0] = math.exp((0 - drug.B + dy) / this.layout.A)
             range[1] = math.exp((this.layout.height - drug.B + dy) / this.layout.A)
         }

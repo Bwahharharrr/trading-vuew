@@ -1,0 +1,32 @@
+export default class Pin {
+    constructor(comp: any, name: any, params?: {});
+    RADIUS: any;
+    RADIUS_SQ: number;
+    COLOR_BACK: any;
+    COLOR_BR: any;
+    comp: any;
+    layout: any;
+    mouse: any;
+    name: any;
+    state: any;
+    hidden: any;
+    re_init(): void;
+    draw(ctx: any): void;
+    draw_circle(ctx: any): void;
+    x: any;
+    y: any;
+    update(): void;
+    y$: any;
+    t: any;
+    update_from(data: any, emit?: boolean): void;
+    rec_position(): void;
+    t1: any;
+    y$1: any;
+    mousemove(event: any): void;
+    moved: boolean | undefined;
+    mousedown(event: any, force?: boolean): void;
+    mouseup(event: any): void;
+    on(name: any, handler: any): void;
+    on_settled: any;
+    hover(): boolean;
+}

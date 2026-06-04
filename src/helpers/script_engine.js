@@ -60,7 +60,7 @@ function fastDeepCopy(obj) {
 // Yield frequency for long-running script execution (in iterations)
 const YIELD_FREQUENCY = 2000  // Yield every 2000 candles for better responsiveness
 
-class ScriptEngine {
+export class ScriptEngine {
 
     constructor() {
         this.map = {}
@@ -482,6 +482,26 @@ class ScriptEngine {
         return std
     }
 
+    // Report a per-indicator failure as a structured, typed error (Phase 3.x).
+    // Surfaced to the DC via the `script-error` event (whitelisted in
+    // wireEngineEvents) and re-emitted on the public EventMap as
+    // `indicator-error`, so the UI can show WHICH indicator failed and why —
+    // replacing the old anonymous "Script execution error" console line.
+    _onScriptError(id, phase, e) {
+        const scr = this.map[id]
+        const err = {
+            uuid: id,
+            name: scr && scr.name,
+            type: scr && scr.type,
+            phase,                                   // 'init' | 'exec' | 'post'
+            message: (e && e.message) || String(e),
+        }
+        this.send('script-error', err)
+        if (typeof console !== 'undefined') {
+            console.error(`Script "${err.name || id}" ${phase} error:`, e)
+        }
+    }
+
     send_state() {
         this.send('engine-state', {
             scripts: Object.keys(this.map).length,
@@ -516,10 +536,21 @@ class ScriptEngine {
         let mfs1 = this.make_mods_hooks('pre_step')
         let mfs2 = this.make_mods_hooks('post_step')
 
+        // Per-indicator error boundary: a script that throws is recorded
+        // (structured error, sent to the DC) and skipped for the rest of THIS
+        // run, so one bad indicator no longer aborts the whole batch. Empty on
+        // the happy path, so behaviour/output is unchanged (golden-verified).
+        const skip = new Set()
+
         try {
 
             for (let id of sel) {
-                this.map[id].env.init()
+                try {
+                    this.map[id].env.init()
+                } catch (e) {
+                    skip.add(id)
+                    this._onScriptError(id, 'init', e)
+                }
             }
 
             let ohlcv = this.data.ohlcv.data
@@ -572,7 +603,16 @@ class ScriptEngine {
                 }
 
                 // PERF: Indexed loop avoids iterator protocol overhead
-                for (let j = 0; j < selLen; j++) this.map[sel[j]].env.step()
+                for (let j = 0; j < selLen; j++) {
+                    const id = sel[j]
+                    if (skip.has(id)) continue
+                    try {
+                        this.map[id].env.step()
+                    } catch (e) {
+                        skip.add(id)
+                        this._onScriptError(id, 'exec', e)
+                    }
+                }
 
                 if (hasMods2) {
                     for (let m = 0; m < mfs2.length; m++) mfs2[m](sel)
@@ -583,11 +623,25 @@ class ScriptEngine {
             }
 
             for (let j = 0; j < selLen; j++) {
-                this.map[sel[j]].env.output.post()
+                const id = sel[j]
+                if (skip.has(id)) continue
+                try {
+                    this.map[id].env.output.post()
+                } catch (e) {
+                    skip.add(id)
+                    this._onScriptError(id, 'post', e)
+                }
             }
 
         } catch(e) {
+            // Last-resort boundary for errors outside a single script's step
+            // (candle step, mod hooks, custom_main). Per-indicator failures are
+            // handled inline above.
             console.error('Script execution error:', e)
+            this.send('script-error', {
+                uuid: null, phase: 'engine',
+                message: (e && e.message) || String(e)
+            })
         }
 
         this.post_run_mods(sel)

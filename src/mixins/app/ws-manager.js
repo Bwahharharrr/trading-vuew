@@ -6,6 +6,8 @@
 // state belonging to the new connection.
 
 import { buildWsUrl, classifyDataFile, msgMatchesMeta } from '../../helpers/ws-helpers.js'
+import { validateCandle } from '../../helpers/schema/validate.js'
+import { report } from '../../helpers/schema/diagnostics.js'
 
 export default {
     data() {
@@ -153,6 +155,18 @@ export default {
             if (!this._wsMsgMatchesCurrentFile(msg)) return
 
             const candle = msg.data // [ts, o, h, l, c, v]
+
+            // Surface a typed diagnostic for a malformed live candle instead of
+            // dropping it silently. Shape-only (ordering is handled below by the
+            // lastChartTs check + the same-ts in-place update path). Respects the
+            // DataCube's `validation` mode; default 'warn' is non-breaking.
+            const vmode = (this.chart && this.chart.sett && this.chart.sett.validation) || 'warn'
+            if (vmode !== 'off') {
+                const out = []
+                validateCandle(candle, 'live-feed candle', out)
+                if (out.length) report(out, vmode === 'strict' ? 'warn' : vmode, 'live candle')
+            }
+
             if (!candle || candle.length < 6) return
             if (!this.chart || !this.originalChartData) return
             if (!this.originalChartData.length) return

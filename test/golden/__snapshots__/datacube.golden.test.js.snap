@@ -1,0 +1,246 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`DataCube.get_by_query resolution > bare type queries both panes 1`] = `
+[
+  "EMA, 20",
+]
+`;
+
+exports[`DataCube.get_by_query resolution > chart.data resolves the candle series 1`] = `
+[
+  {
+    "i": "data",
+    "v": [
+      [
+        1000,
+        1,
+        2,
+        0.5,
+        1.5,
+        10,
+      ],
+      [
+        1001,
+        1.5,
+        2.5,
+        1,
+        2,
+        12,
+      ],
+    ],
+  },
+]
+`;
+
+exports[`DataCube.get_by_query resolution > offchart.RSI resolves the offchart overlay 1`] = `
+[
+  "RSI, 14",
+]
+`;
+
+exports[`DataCube.get_by_query resolution > onchart.EMA resolves by name prefix 1`] = `
+[
+  "EMA, 20",
+]
+`;
+
+exports[`DataCube.merge_ts overlap matrix > matrix 1`] = `
+{
+  "dst[.]src": [
+    [
+      1000,
+      1,
+    ],
+    [
+      1001,
+      2,
+    ],
+    [
+      1002,
+      33,
+    ],
+    [
+      1003,
+      44,
+    ],
+    [
+      1004,
+      55,
+    ],
+    [
+      1005,
+      66,
+    ],
+  ],
+  "dst[src]": [
+    [
+      1000,
+      1,
+    ],
+    [
+      1001,
+      22,
+    ],
+    [
+      1002,
+      33,
+    ],
+    [
+      1003,
+      44,
+    ],
+    [
+      1004,
+      55,
+    ],
+    [
+      1005,
+      6,
+    ],
+  ],
+  "equal": [
+    [
+      1000,
+      11,
+    ],
+    [
+      1001,
+      22,
+    ],
+    [
+      1002,
+      33,
+    ],
+  ],
+  "mixed_fractional": [
+    [
+      1000,
+      11,
+    ],
+    [
+      1001,
+      22,
+    ],
+    [
+      1002,
+      4,
+    ],
+    [
+      1002.5,
+      33,
+    ],
+    [
+      1003,
+      5,
+    ],
+    [
+      1003.5,
+      44,
+    ],
+    [
+      1004,
+      6,
+    ],
+  ],
+  "src...dst": [
+    [
+      1000,
+      11,
+    ],
+    [
+      1001,
+      22,
+    ],
+    [
+      1002,
+      33,
+    ],
+    [
+      1005,
+      4,
+    ],
+    [
+      1006,
+      5,
+    ],
+    [
+      1007,
+      6,
+    ],
+  ],
+  "src.dst": [
+    [
+      1000,
+      11,
+    ],
+    [
+      1001,
+      22,
+    ],
+    [
+      1002,
+      33,
+    ],
+    [
+      1003,
+      4,
+    ],
+    [
+      1004,
+      5,
+    ],
+    [
+      1005,
+      6,
+    ],
+  ],
+  "src[.]dst": [
+    [
+      1000,
+      11,
+    ],
+    [
+      1001,
+      22,
+    ],
+    [
+      1002,
+      33,
+    ],
+    [
+      1003,
+      5,
+    ],
+    [
+      1004,
+      6,
+    ],
+  ],
+  "src[dst]": [
+    [
+      1000,
+      11,
+    ],
+    [
+      1001,
+      22,
+    ],
+    [
+      1002,
+      33,
+    ],
+    [
+      1003,
+      44,
+    ],
+    [
+      1004,
+      55,
+    ],
+    [
+      1005,
+      66,
+    ],
+  ],
+}
+`;

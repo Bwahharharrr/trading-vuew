@@ -174,6 +174,20 @@ export default class ScriptEnv {
                 }
             `)
         } catch(e) {
+            // The box failed to compile (bad indicator source, undefined std
+            // call, etc.). Previously this silently produced all-null output
+            // with no signal. Surface a structured build error (Phase 3.x) so
+            // the UI shows WHICH indicator is broken, then fall back to a no-op
+            // box so the engine itself does not crash.
+            if (se && se.send) {
+                se.send('script-error', {
+                    uuid: this.id,
+                    name: this.src && this.src.name,
+                    type: this.src && this.src.type,
+                    phase: 'build',
+                    message: (e && e.message) || String(e),
+                })
+            }
             return Function('self,shared', `
                 'use strict';
                 this.init = () => {}

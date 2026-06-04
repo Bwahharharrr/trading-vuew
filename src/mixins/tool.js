@@ -60,7 +60,7 @@ export default {
             // If layer $uuid is changed, then re-init
             // pins & collisions
             if (n.$uuid !== p.$uuid) {
-                for (var p of this.pins) p.re_init()
+                for (let pin of this.pins) pin.re_init()
                 this.collisions = []
                 this.show_pins = false
                 this.drag = null

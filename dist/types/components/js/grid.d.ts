@@ -1,0 +1,84 @@
+export default class Grid {
+    constructor(canvas: any, comp: any, canvasDynamic?: null);
+    MIN_ZOOM: any;
+    MAX_ZOOM: any;
+    canvas: any;
+    ctx: any;
+    canvasDynamic: any;
+    ctxDynamic: any;
+    comp: any;
+    $p: any;
+    data: any;
+    id: any;
+    layout: any;
+    interval: any;
+    cursor: any;
+    offset_x: number;
+    offset_y: number;
+    deltas: number;
+    wmode: any;
+    trackpad: boolean;
+    _offsetCached: boolean;
+    _offsetCacheTime: number;
+    zoomManager: ZoomManager;
+    panManager: PanManager;
+    renderer: GridRenderer;
+    _cursorEventPool: import("../../stuff/pool.js").ObjectPool;
+    _pooledCursorEvent: any;
+    get range(): any;
+    set overlays(v: any[]);
+    get overlays(): any[];
+    listeners(): void;
+    hm: any;
+    _throttledWheel: {
+        (...args: any[]): void;
+        cancel(): void;
+    } | undefined;
+    mc: any;
+    drug: {
+        x: any;
+        y: any;
+        r: any;
+        t: number;
+        o: any;
+        y_r: any;
+        B: any;
+        t0: number;
+    } | null | undefined;
+    _throttledPanmove: {
+        (...args: any[]): void;
+        cancel(): void;
+    } | undefined;
+    pinch: {
+        t: number;
+        r: any;
+    } | null | undefined;
+    gesturestart(event: any): void;
+    gesturechange(event: any): void;
+    gestureend(event: any): void;
+    mousemove(event: any): void;
+    mouseout(event: any): void;
+    mouseup(event: any): void;
+    mousedown(event: any): void;
+    sim_mousedown(event: any): void;
+    touch2mouse(e: any): {
+        original: any;
+        layerX: any;
+        layerY: any;
+        preventDefault: () => void;
+    };
+    click(event: any): void;
+    emit_cursor_coord(event: any, add: any): void;
+    calc_offset(force?: boolean): void;
+    invalidate_offset(): void;
+    new_layer(layer: any): void;
+    del_layer(id: any): void;
+    show_hide_layer(event: any): void;
+    update(): void;
+    propagate(name: any, event: any): void;
+    change_range(): void;
+    destroy(): void;
+}
+import { ZoomManager } from './grid/index.js';
+import { PanManager } from './grid/index.js';
+import { GridRenderer } from './grid/index.js';

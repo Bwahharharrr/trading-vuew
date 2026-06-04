@@ -6,6 +6,8 @@ import Utils from '../stuff/utils.js'
 import DCCore from './dc_core.js'
 import SettProxy from './sett_proxy.js'
 import AggTool from './agg_tool.js'
+import { validateData } from './schema/validate.js'
+import { report } from './schema/diagnostics.js'
 
 
 // Interface methods. Private methods in dc_core.js
@@ -20,13 +22,24 @@ export default class DataCube extends DCCore {
             scripts: true,          // Enable overlays scripts,
             ww_ram_limit: 0,        // WebWorker RAM limit (MB)
             node_url: null,         // Use node.js instead of WW
-            shift_measure: true     // Draw measurment shift+click
+            shift_measure: true,    // Draw measurment shift+click
+            validation: 'warn'      // 'off' | 'warn' | 'strict' (data ingest)
         }
         sett = Object.assign(def_sett, sett)
 
         super()
         this.sett = sett
         this.data = data
+
+        // Validate at the primary ingestion choke point. Default 'warn' is
+        // non-breaking (loud but never throws); 'strict' fails fast on malformed
+        // data. Skip trivial empty construction (`new DataCube()`).
+        if (sett.validation !== 'off' && data && Object.keys(data).length) {
+            const { diagnostics } = validateData(data)
+            if (diagnostics.length) {
+                report(diagnostics, sett.validation, 'chart data')
+            }
+        }
         this.sett = SettProxy(sett, this.ww)
         this.agg = new AggTool(this, sett.aggregation)
         this.se_state = {}
@@ -34,92 +47,38 @@ export default class DataCube extends DCCore {
         //this.agg.update = this.agg_update.bind(this)
     }
 
+    // Public data API — delegates to the typed ChartData store (Phase 3.1b).
+    // The mutation bodies moved verbatim into src/stores/chart-data.js; these
+    // remain the stable public surface used by overlays/mixins/consumers.
+
     // Add new overlay
     add(side, overlay) {
-
-        if (side !== 'onchart' && side !== 'offchart' &&
-            side !== 'datasets') {
-            return
-        }
-
-        this.data[side].push(overlay)
-        this.update_ids()
-
-        return overlay.id
+        return this.cd.add(side, overlay)
     }
 
     // Get all objects matching the query
     get(query) {
-        return this.get_by_query(query).map(x => x.v)
+        return this.cd.get(query)
     }
 
     // Get first object matching the query
     get_one(query) {
-        return this.get_by_query(query).map(x => x.v)[0]
+        return this.cd.getOne(query)
     }
 
     // Set data (reactively)
     set(query, data) {
-
-        let objects = this.get_by_query(query)
-
-        for (var obj of objects) {
-
-            let i = obj.i !== undefined ?
-                obj.i :
-                obj.p.indexOf(obj.v)
-
-            if (i !== -1) {
-                obj.p[i] = data
-            }
-        }
-
-        this.update_ids()
-
+        return this.cd.set(query, data)
     }
 
     // Merge object or array (reactively)
     merge(query, data) {
-
-        let objects = this.get_by_query(query)
-
-        for (var obj of objects) {
-            if (Array.isArray(obj.v)) {
-                if (!Array.isArray(data)) continue
-                // If array is a timeseries, merge it by timestamp
-                // else merge by item index
-                if (obj.v[0] && obj.v[0].length >= 2) {
-                    this.merge_ts(obj, data)
-                } else {
-                    this.merge_objects(obj, data, [])
-                }
-            } else if (typeof obj.v === 'object') {
-                this.merge_objects(obj, data)
-            }
-        }
-
-        this.update_ids()
-
+        return this.cd.merge(query, data)
     }
 
     // Remove an overlay by query (id/type/name/...)
     del(query) {
-
-        let objects = this.get_by_query(query)
-
-        for (var obj of objects) {
-
-            // Find current index of the field (if not defined)
-            let i = typeof obj.i !== 'number' ?
-                obj.i : obj.p.indexOf(obj.v)
-
-            if (i !== -1) {
-                obj.p.splice(i, 1)
-            }
-
-        }
-
-        this.update_ids()
+        return this.cd.del(query)
     }
 
     // Update/append data point, depending on timestamp
@@ -134,23 +93,13 @@ export default class DataCube extends DCCore {
     // Lock overlays from being pulled by query_search
     // TODO: subject to review
     lock(query) {
-        let objects = this.get_by_query(query)
-        objects.forEach(x => {
-            if (x.v && x.v.id && x.v.type) {
-                x.v.locked = true
-            }
-        })
+        return this.cd.lock(query)
     }
 
     // Unlock overlays from being pulled by query_search
     //
     unlock(query) {
-        let objects = this.get_by_query(query, true)
-        objects.forEach(x => {
-            if (x.v && x.v.id && x.v.type) {
-                x.v.locked = false
-            }
-        })
+        return this.cd.unlock(query)
     }
 
     // Show indicator

@@ -3,11 +3,19 @@
 // - Static canvas: grid, candles, overlays (redrawn only when data/range changes)
 // - Dynamic canvas: crosshair (redrawn on every cursor move)
 
+import { RenderEngine } from '../../../render/render-engine.js'
+
 export default class GridRenderer {
     constructor(grid) {
         this.grid = grid
         this.overlays = []
         this.crosshair = null
+
+        // Framework-agnostic drawing core (Phase 3.3b). Owns the per-overlay
+        // error boundary; persisted across frames so a persistently-failing
+        // overlay is reported once, not every frame. grid-renderer keeps the
+        // dirty-flag/dual-canvas/lifecycle orchestration and delegates drawing.
+        this.engine = new RenderEngine()
 
         // Dirty tracking for smart redraws
         this._lastRange = null
@@ -142,13 +150,6 @@ export default class GridRenderer {
             return
         }
 
-        // Full redraw of static canvas
-        this.ctx.clearRect(0, 0, this.grid.canvas.width, this.grid.canvas.height)
-
-        if (this.$p.shaders.length) this.apply_shaders()
-
-        this.drawGrid()
-
         // PERFORMANCE: Cache sorted overlays - only re-sort when overlays change
         if (this._overlaysSortDirty || this._sortedOverlays.length !== this.overlays.length) {
             this._sortedOverlays = this.overlays.slice()
@@ -156,27 +157,24 @@ export default class GridRenderer {
             this._overlaysSortDirty = false
         }
 
-        this._sortedOverlays.forEach(l => {
-            if (!l.display) return
-            this.ctx.save()
-            try {
-                let r = l.renderer
-                if (r.pre_draw) r.pre_draw(this.ctx)
-                r.draw(this.ctx)
-                if (r.post_draw) r.post_draw(this.ctx)
-            } catch(e) {
-                console.error('Overlay draw error:', e)
-            } finally {
-                this.ctx.restore()
-            }
+        // Build an immutable frame and delegate the draw to the RenderEngine
+        // (clear -> shaders -> grid -> overlays -> crosshair). Identical
+        // sequence to the old inline code.
+        this.engine.renderStatic(this.ctx, {
+            canvas: this.grid.canvas,
+            layout: this.layout,
+            colors: this.$p.colors,
+            overlays: this._sortedOverlays,
+            shaders: this.$p.shaders,
+            shaderProps: this.$p.shaders.length ? this._shaderProps() : null,
+            // Draw crosshair on the static canvas only when there's no dynamic one.
+            crosshair: this.crosshair,
+            drawCrosshairHere: !this.hasDualCanvas,
+            upperBorder: !!this.$p.grid_id,
         })
 
-        // Draw crosshair on dynamic canvas if available, otherwise on static
-        if (this.hasDualCanvas) {
-            this.updateDynamic()
-        } else if (this.crosshair) {
-            this.crosshair.renderer.draw(this.ctx)
-        }
+        // With a dynamic canvas, the crosshair is drawn there instead.
+        if (this.hasDualCanvas) this.updateDynamic()
 
         // Reset dirty flags after successful draw
         this._staticDirty = false
@@ -186,23 +184,14 @@ export default class GridRenderer {
     // Update only the dynamic canvas (crosshair layer)
     // This is much faster than full redraw for cursor-only changes
     updateDynamic() {
-        if (!this.crosshair) return
-
         const canvas = this.grid.canvasDynamic || this.grid.canvas
-        const ctx = this.ctxDynamic
-
-        // Clear dynamic canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-        // Draw crosshair
-        this.crosshair.renderer.draw(ctx)
+        this.engine.renderDynamic(this.ctxDynamic, canvas, this.crosshair)
     }
 
-    apply_shaders() {
-        // PERF: Use already-resolved layout instead of re-traversing props
-        let layout = this.layout
-        if (!layout) return
-        let props = {
+    // Props passed to grid shaders (resolved layout + theme + cursor).
+    _shaderProps() {
+        const layout = this.layout
+        return {
             layout: layout,
             range: this.range,
             interval: this.interval,
@@ -214,39 +203,6 @@ export default class GridRenderer {
             config: this.$p.config,
             meta: this.$p.meta
         }
-        for (let s of this.$p.shaders) {
-            this.ctx.save()
-            s.draw(this.ctx, props)
-            this.ctx.restore()
-        }
-    }
-
-    drawGrid() {
-        this.ctx.strokeStyle = this.$p.colors.grid
-        this.ctx.beginPath()
-
-        const ymax = this.layout.height
-        for (let [x, p] of this.layout.xs) {
-            this.ctx.moveTo(x - 0.5, 0)
-            this.ctx.lineTo(x - 0.5, ymax)
-        }
-
-        for (let [y, y$] of this.layout.ys) {
-            this.ctx.moveTo(0, y - 0.5)
-            this.ctx.lineTo(this.layout.width, y - 0.5)
-        }
-
-        this.ctx.stroke()
-
-        if (this.$p.grid_id) this.drawUpperBorder()
-    }
-
-    drawUpperBorder() {
-        this.ctx.strokeStyle = this.$p.colors.scale
-        this.ctx.beginPath()
-        this.ctx.moveTo(0, 0.5)
-        this.ctx.lineTo(this.layout.width, 0.5)
-        this.ctx.stroke()
     }
 
     // Propagate mouse event to overlays

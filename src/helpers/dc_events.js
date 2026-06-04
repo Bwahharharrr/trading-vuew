@@ -46,6 +46,11 @@ export default class DCEvents {
                 case 'script-signal':
                     this.tv.$emit('signal', e.data.data)
                     break
+                case 'script-error':
+                    // Per-indicator failure (Phase 3.x): surface on the public
+                    // EventMap so consumers know WHICH indicator failed and why.
+                    this.tv.$emit('indicator-error', e.data.data)
+                    break
             }
             for (let ctrl of this.tv.controllers) {
                 if (ctrl.post_ww) ctrl.post_ww(e.data)

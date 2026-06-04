@@ -226,8 +226,12 @@ export default {
         if (!data.length) return 0
         let first = data[0][0]
         let second
+        // `i` is the index where `second` was found; it must stay in scope for
+        // the shift calculation below. (Was block-scoped to the first loop,
+        // making `j - i` throw a ReferenceError in IB-mode.)
+        let i = 1
 
-        for (let i = 1; i < data.length; i++) {
+        for (; i < data.length; i++) {
             if (data[i][0] !== first) {
                 second = data[i][0]
                 break

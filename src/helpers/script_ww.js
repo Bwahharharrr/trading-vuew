@@ -1,162 +1,18 @@
 
-// Web-worker
+// Web-worker entry (WorkerTransport side of the Phase 3.2 seam).
+//
+// Thin wrapper: the message-handling logic now lives in script_dispatch.js and
+// is shared with SyncTransport. Here we just bind it to the worker's
+// postMessage/onmessage.
 
 import se from './script_engine.js'
-import Utils from '../stuff/utils.js'
-import * as u from './script_utils.js'
-import { DatasetWW } from './dataset.js'
+import { makeDispatcher, wireEngineEvents } from './script_dispatch.js'
 
-let data_requested = false
 const wwGlobal = typeof self !== 'undefined' ? self : globalThis
 
-// DC => WW
+// engine -> DC: post events back to the main thread.
+wireEngineEvents(se, (msg) => wwGlobal.postMessage(msg))
 
-wwGlobal.onmessage = async e => {
-    //console.log('Worker got:', e.data.type)
-    switch(e.data.type) {
-
-        case 'update-dc-settings':
-
-            se.sett = e.data.data
-
-            break
-
-        case 'exec-script':
-
-            let req = se.data_required(e.data.data.s)
-            if (req && !data_requested) {
-                data_requested = true
-                wwGlobal.postMessage({
-                    type: 'request-data', data: req
-                })
-            }
-            se.tf = u.tf_from_str(e.data.data.tf)
-            se.range = e.data.data.range
-            se.queue.push(e.data.data.s)
-            se.exec_all()
-
-            break
-
-        case 'exec-all-scripts':
-
-            let req2 = se.data_required(e.data.data.s)
-            if (req2 && !data_requested) {
-                data_requested = true
-                wwGlobal.postMessage({
-                    type: 'request-data', data: req2
-                })
-            }
-
-            se.tf = u.tf_from_str(e.data.data.tf)
-            se.range = e.data.data.range
-            se.exec_all()
-
-            break
-
-        case 'upload-data':
-            wwGlobal.postMessage({ type: 'data-uploaded' })
-
-            await Utils.pause(1)
-
-            for (let id in e.data.data) {
-                let data = e.data.data[id]
-                se.data[id] = new DatasetWW(id, data)
-            }
-
-            se.recalc_size()
-            data_requested = false
-            se.exec_all()
-
-            break
-
-        case 'upload-module':
-
-            let lib = u.make_module_lib(e.data.data)
-            se.mods[e.data.data.id] = new (
-                new Function(
-                    'mod', 'se', 'lib',
-                    u.f_body(e.data.data.main)
-                )
-            )(e.data.data.id, se, lib)
-
-            break
-
-        case 'module-event':
-            // TODO: this
-            break
-
-        case 'update-data':
-
-            DatasetWW.update_all(se, e.data.data)
-
-            if (e.data.data.ohlcv) {
-                se.update(e.data.data.ohlcv)
-            }
-
-            break
-
-        case 'get-dataset':
-
-            wwGlobal.postMessage({
-                id: e.data.id,
-                data: se.data[e.data.data]
-            })
-
-            break
-
-        case 'dataset-op':
-
-            await Utils.pause(1)
-
-            if (e.data.data.id in se.data) {
-                se.data[e.data.data.id].op(se, e.data.data)
-            }
-
-            if (e.data.data.exec) se.exec_all()
-
-            break
-
-        case 'update-ov-settings':
-
-            se.tf = u.tf_from_str(e.data.data.tf)
-            se.range = e.data.data.range
-            se.exec_sel(e.data.data.delta)
-
-            break
-
-        case 'send-meta-info':
-
-            se.tf = u.tf_from_str(e.data.data.tf)
-            se.range = e.data.data.range
-
-            break
-
-        case 'remove-scripts':
-
-            se.remove_scripts(e.data.data)
-
-            break
-    }
-
-}
-
-// WW => DC
-
-se.send = (type, data) => {
-
-    switch(type) {
-
-        case 'overlay-data':
-        case 'overlay-update':
-        case 'engine-state':
-        case 'modify-overlay':
-        case 'module-data':
-        case 'script-signal':
-
-            wwGlobal.postMessage({type, data})
-
-            break
-
-    }
-
-}
+// DC -> engine: dispatch inbound messages.
+const dispatch = makeDispatcher(se, (msg) => wwGlobal.postMessage(msg))
+wwGlobal.onmessage = (e) => dispatch(e.data)

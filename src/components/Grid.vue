@@ -26,6 +26,9 @@ import Histogram from "./overlays/Histogram.vue"
 import Bar from "./overlays/Bar.vue"
 import Zones from "./overlays/Zones.vue"
 
+import { validateOverlayComponent } from '../helpers/schema/validate-overlay.js'
+import { report } from '../helpers/schema/diagnostics.js'
+
 
 export default {
     name: 'Grid',
@@ -86,7 +89,15 @@ export default {
         // Custom overlay components overwrite built-ins:
         let tools = []
         this._list.forEach((x, i) => {
-            if (!x || !x.methods || !x.methods.use_for) return
+            if (!x) return // empty slot in the overlays list
+            // Validate the overlay contract at REGISTRATION (loud, typed) rather
+            // than skipping it silently / surfacing the "reload the browser"
+            // draw stub at mount. Non-breaking: invalid overlays are skipped.
+            const v = validateOverlayComponent(x)
+            if (v.diagnostics.length) {
+                report(v.diagnostics, 'warn', `overlay registration #${i}`)
+            }
+            if (!v.ok) return
             let use_for = x.methods.use_for()
             if (x.methods.tool) tools.push({
                 use_for, info: x.methods.tool()

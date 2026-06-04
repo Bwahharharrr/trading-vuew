@@ -1,0 +1,13 @@
+export function f_args(src: any): string[];
+export function f_body(src: any): any;
+export function wrap_idxs(src: any, pre?: string): any;
+export function make_module_lib(mod: any): {};
+export function get_raw_src(f: any): any;
+export function tf_from_pair(num: any, pf: any): number;
+export function tf_from_str(str: any): any;
+export function get_fn_id(pre: any, id: any): string;
+export function ovf(obj: any, f: any): {};
+export function nextt(data: any, t: any, ti?: number): number | undefined;
+export function size_of_dss(data: any): number;
+export function size_of(object: any): number;
+export function update(data: any, val: any): void;

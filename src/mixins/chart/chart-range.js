@@ -186,9 +186,10 @@ export default {
                 buttons: this.$props.buttons,
                 meta: this.meta,
                 skin: this.$props.skin,
-                // Reactive render-invalidation counter from DataCube root,
-                // forwarded so Grid.dataKey can detect in-place mutations.
-                dataVersion: this.$props.data?.dataVersion ?? 0
+                // Reactive render-invalidation signal from the DataCube store,
+                // forwarded so Grid.dataKey can detect in-place mutations
+                // (e.g. live candle colour writes) that the OHLC key misses.
+                dataVersion: this.$props.data?.$cd?.revision?.() ?? 0
             }
         },
 
@@ -261,11 +262,11 @@ export default {
             const lastTs = ohlcv[ohlcvLen - 1]?.[0] ?? ''
             const lastClose = ohlcv[ohlcvLen - 1]?.[4] ?? ''
             const scrollLock = data.scrollLock ? '1' : '0'
-            // Bumped by DataCube.touchData() on any render-relevant in-place
-            // mutation (tick close, color slot writes, etc) that Vue's deep
-            // array reactivity does not reliably observe.
-            const dataVersion = data.dataVersion ?? 0
-            return `${ohlcvLen},${firstTs},${lastTs},${lastClose},${scrollLock},${dataVersion}`
+            // Store revision — bumped by DataCube.touchData()/cd.invalidate() on
+            // any render-relevant in-place mutation (tick close, colour slot
+            // writes, etc) that the OHLC fields above don't capture.
+            const revision = data.$cd?.revision?.() ?? 0
+            return `${ohlcvLen},${firstTs},${lastTs},${lastClose},${scrollLock},${revision}`
         }
     },
 

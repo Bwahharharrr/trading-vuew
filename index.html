@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <title>TradingVue Demo</title>
+</head>
+
+<body>
+    <!-- Our vue app will be mounted on this DOM element -->
+    <div id="app"></div>
+    <!--
+      Vite dev entry. Live-feed reload suppression that used to live here as a
+      WebSocket-interception preboot (webpack-HMR specific) is now handled by
+      server.watch.ignored = ['**/data/**'] in vite.config.ts: the backend
+      rewrites data/*.json on every closed candle, and ignoring that dir stops
+      Vite from full-reloading the chart and discarding live WS state.
+    -->
+    <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>

@@ -6,6 +6,13 @@ import Utils from '../stuff/utils.js'
 import DCEvents from './dc_events.js'
 import Dataset from './dataset.js'
 import emitter from '../stuff/eventBus.js'
+import { getByQuery, querySearch, chartAsPiv } from '../stores/query.js'
+import {
+    mergeTs, mergeObjects, tsOverlap, combine,
+    binarySearchGTE, binarySearchLTE,
+} from '../stores/merge.js'
+import ChartUI from '../stores/chart-ui.js'
+import ChartData from '../stores/chart-data.js'
 
 export default class DCCore extends DCEvents {
 
@@ -104,36 +111,61 @@ export default class DCCore extends DCEvents {
             this.data['datasets'] = []
         }
 
-        // Reactive invalidation counter — bumped by touchData() whenever any
-        // render-relevant in-place mutation occurs (tick close updates,
-        // candle color writes, etc). Read by Chart.dataHashKey and the Grid
-        // dataKey prop chain so the static canvas repaints without relying
-        // on Vue's deep reactivity for nested OHLCV arrays.
-        this.data['dataVersion'] = 0
-
         // Init dataset proxies
         for (let ds of this.data.datasets) {
             if (!this.dss) this.dss = {}
             this.dss[ds.id] = new Dataset(this, ds)
         }
 
+        // Typed UI-state facade (Phase 3.1 data/UI seam). Backed by `this.data`
+        // so reactivity and existing `this.data.tool` readers are unaffected;
+        // call-site migration + physical separation is the 3.1b sub-step.
+        this.ui = new ChartUI(this.data)
+
+        // Force-create the chart-DATA store (and its invalidation signal) now,
+        // outside any render computed, so consumers can read `revision()`
+        // without the lazy getter firing mid-render.
+        void this.cd
+
+        // The `data` PROP passed to Chart/Grid is `dc.data` (this object), not
+        // the DataCube — so the old `dataVersion` lived here. Expose the store
+        // via a non-enumerable back-ref so Chart.dataHashKey / Grid.dataKey can
+        // reach the revision signal from the data object. Non-enumerable keeps
+        // it out of spreads / Object.keys / worker payloads.
+        Object.defineProperty(this.data, '$cd', {
+            value: this.cd, enumerable: false, configurable: true, writable: true,
+        })
+
     }
 
-    // Bump the reactive render-invalidation counter. Call after any in-place
-    // mutation to OHLCV / overlay data / candle color slots so consumers
-    // (Chart.dataHashKey, Grid.dataKey) recompute and trigger redraw.
+    // Typed chart-DATA store (Phase 3.1b): query + structural mutations +
+    // the render-invalidation signal, composing the framework-agnostic
+    // query/merge engines. Provided lazily so it works mounted or not.
+    get cd() {
+        if (!this._cd) {
+            const self = this
+            this._cd = new ChartData({
+                get data() { return self.data },
+                get dss() { return self.dss },
+                updateIds: () => self.update_ids(),
+            })
+        }
+        return this._cd
+    }
+
+    // Render-invalidation entry point (Phase 3.1b-final). Call after any
+    // in-place mutation to OHLCV / overlay data / candle colour slots so
+    // consumers (Chart.dataHashKey, Grid.dataKey) recompute and redraw.
     //
-    // Vue 3 reactivity caveat: DataCube methods are often invoked with `this`
-    // bound to the RAW instance (e.g. from AggTool, which captured `this`
-    // in its own constructor before Vue wrapped the DataCube in reactive()).
-    // Direct writes like `this.data['x'] = ...` mutate the underlying object
-    // but bypass the Proxy traps, so Vue does not see them. Route through
-    // `this.tv.$props.data.data` when mounted — that is Vue's reactive view
-    // of the same object, and the write fires watchers correctly.
+    // Replaces the old `data.dataVersion` integer + the `this.tv.$props.data
+    // .data` raw/reactive routing hack: now a single delegate to the store's
+    // reactive `invalidate()`, whose signal lives in a closure ref (so it is
+    // never auto-unwrapped through a reactive proxy, and the AggTool raw-`this`
+    // problem disappears — the ref is reactive on its own, not via the data
+    // object). Kept as `touchData()` for the external callers in
+    // ws-manager / view-manager.
     touchData() {
-        const target = (this.tv && this.tv.$props && this.tv.$props.data &&
-                        this.tv.$props.data.data) || this.data
-        target.dataVersion = (target.dataVersion || 0) + 1
+        this.cd.invalidate()
     }
 
     // Range change callback (called by TradingVue)
@@ -317,263 +349,30 @@ export default class DCCore extends DCEvents {
 
     // Returns array of objects matching query.
     // Object contains { parent, index, value }
-    // TODO: query caching
+    // Delegates to the framework-agnostic query engine (src/stores/query.js).
+    // Thin wrappers are kept so existing callers (and the `this.query_search`
+    // call sites) work unchanged during the strangler-fig migration.
     get_by_query(query, chuck) {
-
-        let tuple = query.split('.')
-
-        let result
-        switch (tuple[0]) {
-            case 'chart':
-                result = this.chart_as_piv(tuple)
-                break
-            case 'onchart':
-            case 'offchart':
-                result = this.query_search(query, tuple)
-                break
-            case 'datasets':
-                result = this.query_search(query, tuple)
-                for (let r of result) {
-                    if (r.i === 'data') {
-                        r.v = this.dss[r.p.id].data()
-                    }
-                }
-                break
-            default:
-                let on = this.query_search(query, [
-                    'onchart',
-                    tuple[0],
-                    tuple[1]
-                ])
-                let off = this.query_search(query, [
-                    'offchart',
-                    tuple[0],
-                    tuple[1]
-                ])
-                result = [...on, ...off]
-                break
-        }
-        return result.filter(
-            x => !(x.v || {}).locked || chuck)
+        return getByQuery({ data: this.data, dss: this.dss }, query, chuck)
     }
 
     chart_as_piv(tuple) {
-        let field = tuple[1]
-        if (field) return [{
-            p: this.data.chart,
-            i: field,
-            v: this.data.chart[field]
-        }]
-        else return [{
-            p: this.data,
-            i: 'chart',
-            v: this.data.chart
-        }]
+        return chartAsPiv(this.data, tuple)
     }
 
     query_search(query, tuple) {
-
-        let side = tuple[0]
-        let path = tuple[1] || ''
-        let field = tuple[2]
-
-        let arr = this.data[side].filter(x => (
-            x.id === query ||
-            (x.id && x.id.includes(path)) ||
-            x.name === query ||
-            (x.name && x.name.includes(path)) ||
-            query.includes((x.settings || {}).$uuid)
-        ))
-
-        if (field) {
-            return arr.map(x => ({
-                p: x,
-                i: field,
-                v: x[field]
-            }))
-        }
-
-        // PERFORMANCE: Build index map for O(1) lookup instead of indexOf O(n) per element
-        // This changes O(n²) to O(n) for the entire operation
-        const sideData = this.data[side]
-        const indexMap = new Map(sideData.map((item, idx) => [item, idx]))
-        return arr.map(x => ({
-            p: sideData,
-            i: indexMap.get(x),
-            v: x
-        }))
+        return querySearch(this.data, query, tuple)
     }
 
-    merge_objects(obj, data, new_obj = {}) {
-
-        // The only way to get Vue to update all stuff
-        // reactively is to create a brand new object.
-        // TODO: Is there a simpler approach?
-        Object.assign(new_obj, obj.v)
-        Object.assign(new_obj, data)
-        obj.p[obj.i] = new_obj
-
-    }
-
-    // Merge overlapping time series
-    merge_ts(obj, data) {
-
-        // Assume that both arrays are pre-sorted
-
-        if (!data.length) return obj.v
-
-        let r1 = [obj.v[0][0], obj.v[obj.v.length - 1][0]]
-        let r2 = [data[0][0],  data[data.length - 1][0]]
-
-        // Overlap
-        let o = [Math.max(r1[0],r2[0]), Math.min(r1[1],r2[1])]
-
-        if (o[1] >= o[0]) {
-
-            let { od, d1, d2 } = this.ts_overlap(obj.v, data, o)
-
-            obj.v.splice(...d1)
-            data.splice(...d2)
-
-            // Dst === Overlap === Src
-            if (!obj.v.length && !data.length) {
-                obj.p[obj.i] = od
-                return obj.v
-            }
-
-            // If src is totally contained in dst
-            if (!data.length) { data = obj.v.splice(d1[0]) }
-
-            // If dst is totally contained in src
-            if (!obj.v.length) { obj.v = data.splice(d2[0]) }
-
-            obj.p[obj.i] = this.combine(obj.v, od, data)
-
-        } else {
-
-            obj.p[obj.i] = this.combine(obj.v, [], data)
-
-        }
-
-        return obj.v
-
-    }
-
-    // Optimized: O(n) instead of O(n²) using binary search for index lookup
-    ts_overlap(arr1, arr2, range) {
-
-        const t1 = range[0]
-        const t2 = range[1]
-
-        // PERF: Map with numeric keys avoids string coercion from Object keys
-        let ts = new Map()
-
-        // Use binary search to find indices directly instead of filter + indexOf
-        // This avoids O(n) indexOf calls inside the O(n) loop = O(n²)
-        let id11 = this.binarySearchGTE(arr1, t1)
-        let id12 = this.binarySearchLTE(arr1, t2)
-        let id21 = this.binarySearchGTE(arr2, t1)
-        let id22 = this.binarySearchLTE(arr2, t2)
-
-        // Handle edge cases
-        if (id11 === -1 || id12 === -1 || id11 > id12) {
-            id11 = 0
-            id12 = -1
-        }
-        if (id21 === -1 || id22 === -1 || id21 > id22) {
-            id21 = 0
-            id22 = -1
-        }
-
-        // Build timestamp map from found segments
-        for (let i = id11; i <= id12 && i < arr1.length; i++) {
-            ts.set(arr1[i][0], arr1[i])
-        }
-
-        for (let i = id21; i <= id22 && i < arr2.length; i++) {
-            ts.set(arr2[i][0], arr2[i])
-        }
-
-        // PERF: Sort numeric keys directly (no string→number coercion)
-        let keys = Array.from(ts.keys()).sort((a, b) => a - b)
-
-        return {
-            od: keys.map(k => ts.get(k)),
-            d1: [id11, Math.max(0, id12 - id11 + 1)],
-            d2: [id21, Math.max(0, id22 - id21 + 1)]
-        }
-
-    }
-
-    // Binary search: find first index where arr[i][0] >= target
-    binarySearchGTE(arr, target) {
-        if (!arr.length) return -1
-        let lo = 0, hi = arr.length - 1
-        while (lo < hi) {
-            let mid = (lo + hi) >> 1
-            if (arr[mid][0] < target) {
-                lo = mid + 1
-            } else {
-                hi = mid
-            }
-        }
-        return arr[lo][0] >= target ? lo : -1
-    }
-
-    // Binary search: find last index where arr[i][0] <= target
-    binarySearchLTE(arr, target) {
-        if (!arr.length) return -1
-        let lo = 0, hi = arr.length - 1
-        while (lo < hi) {
-            let mid = (lo + hi + 1) >> 1
-            if (arr[mid][0] > target) {
-                hi = mid - 1
-            } else {
-                lo = mid
-            }
-        }
-        return arr[lo][0] <= target ? lo : -1
-    }
-
-    // Combine parts together:
-    // (destination, overlap, source)
-    combine(dst, o, src) {
-
-        function last(arr) { return arr[arr.length - 1][0] }
-
-        if (!dst.length) { dst = o; o = [] }
-        if (!src.length) { src = o; o = [] }
-
-        // The overlap right in the middle
-        if (src[0][0] >= dst[0][0] && last(src) <= last(dst)) {
-
-            return Object.assign(dst, o)
-
-        // The overlap is on the right
-        } else if (last(src) > last(dst)) {
-
-            // Psh(...) is faster but can overflow the stack
-            if (o.length < 100000 && src.length < 100000) {
-                dst.push(...o, ...src)
-                return dst
-            } else {
-                return dst.concat(o, src)
-            }
-
-        // The overlap is on the left
-        } else if (src[0][0] < dst[0][0]) {
-
-            // Push(...) is faster but can overflow the stack
-            if (o.length < 100000 && src.length < 100000) {
-                src.push(...o, ...dst)
-                return src
-            } else {
-                return src.concat(o, dst)
-            }
-
-        } else {  return []  }
-
-    }
+    // Merge primitives now live in the framework-agnostic merge engine
+    // (src/stores/merge.js). Thin delegates are kept so existing callers
+    // (datacube.merge, dc.test.js, the golden masters) work unchanged.
+    merge_objects(obj, data, new_obj = {}) { return mergeObjects(obj, data, new_obj) }
+    merge_ts(obj, data) { return mergeTs(obj, data) }
+    ts_overlap(arr1, arr2, range) { return tsOverlap(arr1, arr2, range) }
+    binarySearchGTE(arr, target) { return binarySearchGTE(arr, target) }
+    binarySearchLTE(arr, target) { return binarySearchLTE(arr, target) }
+    combine(dst, o, src) { return combine(dst, o, src) }
 
     // Simple data-point merge (faster)
     fast_merge(data, point, main = true) {
