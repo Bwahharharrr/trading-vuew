@@ -109,6 +109,12 @@ export class CorkyClient {
 
         sock.onopen = () => {
             this._retries = 0
+            // Flush frames queued while the socket was still CONNECTING.
+            const queued = this._sendQueue || []
+            this._sendQueue = []
+            for (const data of queued) {
+                try { sock.send(data) } catch (_) { /* socket died mid-flush */ }
+            }
             this._emitter.emit('open')
         }
         sock.onmessage = (ev) => this._handleMessage(ev)
@@ -130,6 +136,9 @@ export class CorkyClient {
 
     _handleClose(ev) {
         this._emitter.emit('close', ev)
+        // Drop any frames queued-but-unsent: their requests are failed below,
+        // and a reconnected socket must not replay stale frames.
+        this._sendQueue = []
         if (this._closedByUser) return
         // A non-user drop abandons any in-flight request/response: the new
         // socket has no memory of them. Fail them with a RETRYABLE error so
@@ -263,7 +272,17 @@ export class CorkyClient {
 
     _send(frame) {
         if (!this._socket) throw new Error('CorkyClient: not connected (call connect())')
-        this._socket.send(JSON.stringify(frame))
+        const data = JSON.stringify(frame)
+        // WebSocket.CONNECTING === 0. While the socket is still connecting,
+        // calling .send() throws "Failed to execute 'send': Still in CONNECTING
+        // state" — so QUEUE the frame and flush it in onopen. A caller can thus
+        // fire a request immediately after connect() (as App.vue does). Test
+        // fake sockets have no readyState (undefined) → treated as open, sent now.
+        if (this._socket.readyState === 0) {
+            (this._sendQueue || (this._sendQueue = [])).push(data)
+            return
+        }
+        this._socket.send(data)
     }
 
     // ── inbound plumbing ───────────────────────────────────────────────────────

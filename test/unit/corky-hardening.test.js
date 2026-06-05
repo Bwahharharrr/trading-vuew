@@ -62,6 +62,29 @@ describe('client hardening', () => {
         drop(code = 1006) { if (this.onclose) this.onclose({ code }) }
     }
 
+    it('queues frames sent while CONNECTING and flushes them on open', async () => {
+        // FakeSocket that models readyState: 0 (CONNECTING) until open() → 1 (OPEN).
+        class ConnectingSocket {
+            constructor(url) { this.url = url; this.readyState = 0; this.sent = []; this.onopen = null }
+            send(raw) { this.sent.push(raw) }
+            close() {}
+            open() { this.readyState = 1; if (this.onopen) this.onopen({}) }
+        }
+        let sock
+        const client = new CorkyClient({
+            url: 'ws://fake/corky',
+            socketFactory: (url) => (sock = new ConnectingSocket(url)),
+            backoff: false,
+        })
+        client.connect()
+        // Fire a request BEFORE the socket opens — must NOT throw, must NOT send yet.
+        client.listCandleStates()
+        expect(sock.sent).toHaveLength(0)          // queued, not sent while CONNECTING
+        sock.open()                                 // onopen → flush
+        expect(sock.sent).toHaveLength(1)          // now flushed
+        expect(JSON.parse(sock.sent[0]).command.type).toBe('list_candle_states')
+    })
+
     it('fails an in-flight request with a retryable connection_lost on a non-user drop', async () => {
         let sock
         const client = new CorkyClient({
