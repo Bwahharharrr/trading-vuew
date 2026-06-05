@@ -82,7 +82,27 @@
 
     <!-- Right Panel -->
     <div class="right-panel" :style="{ width: rightPanelWidth + 'px', height: height + 'px' }">
+        <!-- Source toggle: File (default) | Gateway (Corky) -->
         <div class="panel-section">
+            <div class="section-title">Source</div>
+            <div class="tf-buttons">
+                <button
+                    class="tf-btn"
+                    :class="{ active: feedMode === 'file' }"
+                    @click="setFeedMode('file')">
+                    File
+                </button>
+                <button
+                    class="tf-btn"
+                    :class="{ active: feedMode === 'gateway' }"
+                    @click="setFeedMode('gateway')">
+                    Gateway
+                </button>
+            </div>
+        </div>
+
+        <!-- FILE source (default, unchanged) -->
+        <div class="panel-section" v-if="feedMode === 'file'">
             <div class="section-title">Data</div>
             <div class="control-group">
                 <label>Data File</label>
@@ -93,6 +113,20 @@
                 </select>
             </div>
         </div>
+
+        <!-- GATEWAY source (Corky discovery), opt-in -->
+        <corky-discovery-panel
+            v-if="feedMode === 'gateway'"
+            :states="corkyStates"
+            :current="corkyCurrent"
+            :loading="corkyLoading"
+            :progress="corkyProgress"
+            :error="corkyError"
+            @select="onCorkySelect"
+            @add-timeframe="onCorkyAddTimeframe"
+            @add-indicator="onCorkyAddIndicator"
+            @retry="onCorkyRetry">
+        </corky-discovery-panel>
 
         <div class="panel-section" v-if="candleColoringOptions.length > 0">
             <div class="section-title">Views</div>
@@ -188,10 +222,16 @@
 <script>
 import TradingVue from './TradingVue.vue'
 import IndicatorSettings from './components/IndicatorSettings.vue'
+import CorkyDiscoveryPanel from './components/feed/CorkyDiscoveryPanel.vue'
 import DataCube from '../src/helpers/datacube.js'
+import { CorkyClient } from '../src/helpers/feed/corky-client.js'
+import { CorkyFeed } from '../src/helpers/feed/corky-feed.js'
 import BuysAndSells from './components/overlays/BuysAndSells.js'
 import Balance from './components/overlays/Balance.js'
 import LineTracker from './components/overlays/LineTracker.js'
+
+// Gateway WS endpoint for the Corky chart-feed (opt-in "Gateway" source).
+const CORKY_URL = 'ws://127.0.0.1:7070'
 
 // App mixins (decomposed concerns)
 import { ViewManager, IndicatorManager, FileManager, ChartState, DrawingTools, WsManager } from './mixins/app/index.js'
@@ -201,14 +241,29 @@ export default {
     mixins: [ViewManager, IndicatorManager, FileManager, ChartState, DrawingTools, WsManager],
     components: {
         TradingVue,
-        IndicatorSettings
+        IndicatorSettings,
+        CorkyDiscoveryPanel
     },
     data() {
         return {
             chart: new DataCube(),
             overlays: [BuysAndSells, Balance, LineTracker],
             // Store DataCube class for mixin use
-            DataCubeClass: DataCube
+            DataCubeClass: DataCube,
+
+            // ── Corky gateway source (opt-in; File stays the default) ──
+            // 'file' = the existing file-based feed (unchanged default).
+            // 'gateway' = the Corky chart-feed driving the SAME DataCube.
+            feedMode: 'file',
+            corkyClient: null,   // lazily-built CorkyClient (own its socket)
+            corkyFeed: null,     // CorkyFeed over (client, this.chart)
+            // Reactive discovery surface rendered by CorkyDiscoveryPanel.
+            corkyStates: [],
+            corkyCurrent: null,
+            corkyLoading: false,
+            corkyProgress: null,
+            corkyError: null,
+            corkyHandle: null,   // active subscription handle (single stream)
         }
     },
     mounted() {
@@ -252,6 +307,194 @@ export default {
     },
     beforeUnmount() {
         window.removeEventListener('resize', this.onResize)
+        // Tear down the gateway feed if it was ever activated (no dangling
+        // sockets/listeners on unmount).
+        this.teardownCorky()
+    },
+    methods: {
+        // ── Source toggle ─────────────────────────────────────────────────────
+        // Switch between the File feed (default) and the Corky Gateway feed.
+        // Switching to one cleanly tears down the other.
+        setFeedMode(mode) {
+            if (mode === this.feedMode) return
+            if (mode === 'gateway') {
+                this.enterGatewayMode()
+            } else {
+                // Back to File: drop the gateway socket/listeners entirely, then
+                // restore the file feed — reload the selected file so its data
+                // repopulates the DataCube the gateway overwrote, and re-arm the
+                // file WS (the currentFileMeta watcher reconnects on the reload).
+                this.teardownCorky()
+                if (this.selectedDataFile) this.onFileSelected(this.selectedDataFile)
+            }
+            this.feedMode = mode
+        },
+
+        // Lazily build CorkyClient + CorkyFeed over the App's DataCube and
+        // kick off discovery. Idempotent — a second call just re-discovers.
+        enterGatewayMode() {
+            // Pause the FILE live feed (ws-manager) first: it drives the SAME
+            // this.chart DataCube, so leaving it connected would let both feeds
+            // mutate the candles concurrently. wsDisconnect() also cancels any
+            // pending file-WS reconnect.
+            this.wsDisconnect()
+            if (!this.corkyFeed) {
+                this.corkyClient = new CorkyClient({ url: CORKY_URL })
+                this.corkyClient.connect()
+                this.corkyFeed = new CorkyFeed({
+                    client: this.corkyClient,
+                    dataCube: this.chart,
+                })
+            }
+            this.corkyDiscover()
+        },
+
+        // Discover the catalog → populate the reactive `corkyStates`.
+        async corkyDiscover(venue) {
+            if (!this.corkyFeed) return
+            this.corkyLoading = true
+            this.corkyError = null
+            try {
+                const list = await this.corkyFeed.discover(venue)
+                this.corkyStates = Array.isArray(list) ? list : (list ? [list] : [])
+            } catch (err) {
+                this.corkyError = this._corkyErr(err)
+            } finally {
+                this.corkyLoading = false
+            }
+            return this.corkyStates
+        },
+
+        // Subscribe to a stream (single active subscription): drop the prior
+        // one, then drive the DataCube from the gateway.
+        async corkySelect(opts) {
+            if (!this.corkyFeed) return
+            // Single active stream: tear down the previous subscription first.
+            await this._corkyUnsub()
+            this.corkyLoading = true
+            this.corkyError = null
+            this.corkyProgress = null
+            this.corkyCurrent = {
+                venue: opts.venue,
+                symbol: opts.symbol,
+                timeframe: opts.timeframe,
+                indicators: opts.indicators,
+            }
+            try {
+                this.corkyHandle = await this.corkyFeed.subscribe(opts, {
+                    onStatus: (status) => {
+                        this.corkyProgress = status
+                        if (status && (status.phase === 'history-complete' ||
+                                       status.phase === 'live')) {
+                            this.corkyLoading = false
+                        }
+                    },
+                    onError: (err) => { this.corkyError = this._corkyErr(err) },
+                })
+            } catch (err) {
+                this.corkyError = this._corkyErr(err)
+                this.corkyCurrent = null
+            } finally {
+                this.corkyLoading = false
+            }
+        },
+
+        // Panel: select a venue/symbol/timeframe (+ default indicators).
+        onCorkySelect(opts) {
+            this.corkySelect(opts)
+        },
+
+        // Panel: add a timeframe → patch the candle-state, re-discover, then
+        // re-select the new timeframe so it streams.
+        async onCorkyAddTimeframe(req) {
+            // Stream the new tf WITH its default indicators, matching the
+            // chip-click select path (which always sends defaultIndicators).
+            const indicators = this._corkyDefaultIndicators(
+                req.venue, req.symbol, req.timeframe)
+            await this._corkyPatchAndReselect(
+                { venue: req.venue, symbol: req.symbol, timeframes: [req.timeframe] },
+                { venue: req.venue, symbol: req.symbol, timeframe: req.timeframe, indicators },
+            )
+        },
+
+        // Default indicator display-labels for a venue/symbol/timeframe, mirroring
+        // CorkyDiscoveryPanel.defaultIndicators so add-tf and chip-select agree.
+        _corkyDefaultIndicators(venue, symbol, timeframe) {
+            const st = this.corkyStates.find(
+                (s) => s.venue === venue && s.symbol === symbol)
+            const inds = (st && Array.isArray(st.indicators)) ? st.indicators : []
+            return inds
+                .filter((ind) => !ind.timeframe || ind.timeframe === timeframe)
+                .map((ind) => ind.display_label)
+        },
+
+        // Panel: add an indicator → patch the candle-state, re-discover, then
+        // re-select with the indicator included so it streams.
+        async onCorkyAddIndicator(req) {
+            const cur = this.corkyCurrent
+            const inds = (cur && Array.isArray(cur.indicators))
+                ? cur.indicators.slice() : []
+            if (req.indicator && !inds.includes(req.indicator)) inds.push(req.indicator)
+            await this._corkyPatchAndReselect(
+                { venue: req.venue, symbol: req.symbol, indicators: [req.indicator] },
+                { venue: req.venue, symbol: req.symbol, timeframe: req.timeframe, indicators: inds },
+            )
+        },
+
+        // Patch the candle-state on the gateway, re-discover the catalog, then
+        // re-select so the newly-added tf/indicator actually streams.
+        async _corkyPatchAndReselect(patch, selectOpts) {
+            if (!this.corkyClient) return
+            this.corkyError = null
+            try {
+                await this.corkyClient.patchCandleState(patch)
+            } catch (err) {
+                this.corkyError = this._corkyErr(err)
+                return
+            }
+            await this.corkyDiscover()
+            await this.corkySelect(selectOpts)
+        },
+
+        // Panel: retry after an error → re-run discovery.
+        onCorkyRetry() {
+            this.corkyDiscover()
+        },
+
+        // Drop the active subscription (if any) without closing the client.
+        async _corkyUnsub() {
+            const h = this.corkyHandle
+            this.corkyHandle = null
+            if (h != null && this.corkyFeed) {
+                await Promise.resolve(this.corkyFeed.unsubscribe(h)).catch(() => {})
+            }
+        },
+
+        // Full gateway teardown: unsubscribe + destroy the feed (which closes
+        // the client). Leaves the DataCube intact for the File feed to reuse.
+        teardownCorky() {
+            this._corkyUnsub()
+            if (this.corkyFeed) {
+                try { this.corkyFeed.destroy() } catch (_) { /* already gone */ }
+            }
+            this.corkyFeed = null
+            this.corkyClient = null
+            this.corkyStates = []
+            this.corkyCurrent = null
+            this.corkyProgress = null
+            this.corkyError = null
+            this.corkyLoading = false
+        },
+
+        // Normalise an error into the { message, retryable } shape the panel
+        // renders (errors arrive as CorkyError, plain Error, or wire events).
+        _corkyErr(err) {
+            if (!err) return { message: 'Unknown error', retryable: false }
+            return {
+                message: err.message || err.code || String(err),
+                retryable: !!err.retryable,
+            }
+        },
     }
 }
 </script>
