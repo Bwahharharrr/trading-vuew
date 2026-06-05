@@ -19,8 +19,17 @@
 //     --control-endpoint tcp://127.0.0.1:6565
 //   (+ corky-zmq proxy on :5558 and a public runtime publishing snapshots)
 //
+// If discovery returns no usable state, the smoke BOOTSTRAPS one with
+// upsert_candle_state (create-or-replace desired state), then re-discovers.
+// NOTE: the gateway accepts desired state but does NOT launch runtimes, so a
+// public runtime must still be up for the bootstrapped state to populate.
+//
 // USAGE:
 //   node scripts/corky-gateway-smoke.mjs [ws://host:port] [--tf 1m] [--live-wait 20]
+//   # bootstrap target (used when discovery is empty, or to force a symbol):
+//   node scripts/corky-gateway-smoke.mjs --venue BITFINEX --symbol tBTCUSD \
+//        --bootstrap-tfs 1m,5m --buffer 200
+//   node scripts/corky-gateway-smoke.mjs --no-bootstrap   # discovery-only
 //   CORKY_URL=ws://127.0.0.1:7070 node scripts/corky-gateway-smoke.mjs
 //
 // EXIT: 0 = candles rendered (live tick is a warning if missing); 1 = failure.
@@ -43,9 +52,17 @@ const flag = (name, def) => {
 }
 const PREFER_TF = flag('--tf', null)
 const LIVE_WAIT_S = Number(flag('--live-wait', '20'))
+// Bootstrap target (desired state to upsert when discovery has nothing usable).
+const WANT_VENUE = flag('--venue', 'BITFINEX')
+const WANT_SYMBOL = flag('--symbol', 'tBTCUSD')
+const EXPLICIT_TARGET = argv.includes('--venue') || argv.includes('--symbol')
+const BOOTSTRAP = !argv.includes('--no-bootstrap')
+const BOOT_TFS = flag('--bootstrap-tfs', '1m,5m').split(',').map((s) => s.trim()).filter(Boolean)
+const BUFFER = Number(flag('--buffer', '200'))
 
 const log = (...a) => console.log(...a)
 const fail = (msg) => { console.error('\n✗ FAIL:', msg); process.exitCode = 1 }
+const asArray = (x) => (Array.isArray(x) ? x : (x ? [x] : []))
 
 if (typeof WebSocket === 'undefined') {
   fail('global WebSocket is not available in this Node. Use Node >= 22, or run the browser smoke instead.')
@@ -57,10 +74,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 async function main() {
   log(`→ connecting to ${URL}`)
   const client = new CorkyClient({ url: URL, backoff: false })
-
-  // Surface unsolicited errors.
-  client.on('error', (e) => log('  [gateway error event]', e && e.message))
-
   client.connect()
   // Wait for the socket to actually open (or fail fast).
   await waitOpen(client).catch((e) => { fail(`could not connect: ${e.message}`); process.exit(1) })
@@ -74,16 +87,26 @@ async function main() {
     fail(`list_candle_states rejected: ${e.code || ''} ${e.message}`)
     return cleanup(client)
   }
-  states = Array.isArray(states) ? states : (states ? [states] : [])
-  log(`\n● Discovery: ${states.length} candle state(s)`)
-  for (const s of states) {
-    log(`    ${s.venue} ${s.symbol}  [${(s.available_timeframes || []).join(', ')}]  ` +
-        `indicators: ${(s.indicators || []).map((i) => i.display_label).join(', ') || '(none)'}`)
-  }
-  if (!states.length) { fail('no candle states maintained by the gateway (start a public runtime / upsert a state).'); return cleanup(client) }
+  states = asArray(states)
+  logDiscovery(states)
 
-  // Pick a state + timeframe.
-  const state = states.find((s) => (s.available_timeframes || []).length) || states[0]
+  // Resolve a target state. If none is usable, BOOTSTRAP one with
+  // upsert_candle_state, then re-discover.
+  let state = pickState(states)
+  if (!state && BOOTSTRAP) {
+    states = await bootstrapState(client)
+    logDiscovery(states)
+    state = pickState(states)
+  }
+  if (!state) {
+    fail('no usable candle state' + (BOOTSTRAP
+      ? ` even after upsert — the gateway accepts desired state but does NOT launch runtimes; ` +
+        `start the public runtime for ${WANT_VENUE} (and ensure it publishes snapshots), then re-run.`
+      : ' (re-run without --no-bootstrap to upsert one, or start a public runtime).'))
+    return cleanup(client)
+  }
+
+  // Pick a timeframe within the chosen state.
   const tfs = state.available_timeframes || []
   const timeframe = (PREFER_TF && tfs.includes(PREFER_TF)) ? PREFER_TF : (tfs.includes('1m') ? '1m' : tfs[0])
   if (!timeframe) { fail(`state ${state.venue}:${state.symbol} exposes no timeframes`); return cleanup(client) }
@@ -181,6 +204,59 @@ async function main() {
   // Tidy unsubscribe.
   try { await client.unsubscribe(subscription_id) } catch (_) { /* closing anyway */ }
   cleanup(client)
+}
+
+function logDiscovery(states) {
+  log(`\n● Discovery: ${states.length} candle state(s)`)
+  for (const s of states) {
+    log(`    ${s.venue} ${s.symbol}  [${(s.available_timeframes || []).join(', ')}]  ` +
+        `indicators: ${(s.indicators || []).map((i) => i.display_label).join(', ') || '(none)'}`)
+  }
+}
+
+// Choose a usable state: the explicit --venue/--symbol target if given,
+// else the first state that exposes any timeframe.
+function pickState(states) {
+  if (!states.length) return null
+  const eq = (a, b) => String(a).toLowerCase() === String(b).toLowerCase()
+  if (EXPLICIT_TARGET) {
+    return states.find((s) => eq(s.venue, WANT_VENUE) && eq(s.symbol, WANT_SYMBOL) && (s.available_timeframes || []).length)
+        || states.find((s) => eq(s.venue, WANT_VENUE) && eq(s.symbol, WANT_SYMBOL))
+        || null
+  }
+  return states.find((s) => (s.available_timeframes || []).length) || states[0]
+}
+
+// Create-or-replace a desired candle state, then poll discovery until it
+// registers. Returns the (re-discovered) states[]. Logs the control_ack.
+async function bootstrapState(client) {
+  const indicators = [{ kind: 'sma', timeframe: BOOT_TFS[0], source: 'close', params: { period: '20' } }]
+  log(`\n● Bootstrapping desired state via upsert_candle_state: ` +
+      `${WANT_VENUE}:${WANT_SYMBOL} [${BOOT_TFS.join(',')}] + sma(20), buffer ${BUFFER}`)
+  let ack
+  try {
+    ack = await client.upsertCandleState({
+      venue: WANT_VENUE, symbol: WANT_SYMBOL, timeframes: BOOT_TFS, indicators, buffer: BUFFER,
+    })
+  } catch (e) {
+    log(`    ✗ upsert_candle_state rejected: ${e.code || ''} ${e.message}` +
+        (e.code === 'runtime_not_found' ? ` — no public runtime observed for ${WANT_VENUE}.` : ''))
+    return []
+  }
+  log(`    control_ack: status=${ack && ack.status != null ? ack.status : '?'}` +
+      (ack && ack.outcome != null ? ` outcome=${ack.outcome}` : '') +
+      (ack && ack.restart_required != null ? ` restart_required=${ack.restart_required}` : '') +
+      (ack && ack.target_runtime_id ? ` runtime=${ack.target_runtime_id}` : '') +
+      (ack && ack.message ? ` — ${ack.message}` : ''))
+  // The runtime may take a moment to seed/register the new state — poll.
+  for (let i = 0; i < 8; i++) {
+    await sleep(1000)
+    const again = asArray(await client.listCandleStates().catch(() => []))
+    if (pickState(again)) { log(`\r    state registered after ${i + 1}s ✓                `); return again }
+    process.stdout.write(`\r    waiting for state to register… ${i + 1}/8   `)
+  }
+  log('')
+  return asArray(await client.listCandleStates().catch(() => []))
 }
 
 function waitOpen(client, timeoutMs = 8000) {
