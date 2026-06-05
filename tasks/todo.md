@@ -426,6 +426,18 @@ block referenced every export.
       Full per-export tree-shaking needs those eliminated too (separate follow-up).
 - 222 tests; all gates green; dist self-contained; UMD CDN contract intact.
 
+### ✅ Browser smoke (Playwright/Chromium on real `npm run dev`) — found + fixed a real bug
+- ❌→✅ **Chart.vue:76 `require('./js/layout.js')`** (webpack-polyfilled leftover) threw
+      "require is not defined" under Vite/ESM → BLANK chart in the browser. The
+      whole jsdom/unit suite missed it (vitest polyfills require). Fixed → static
+      ESM import. Chart now renders (913×520 non-blank canvas).
+- ✅ Verified under REAL input: inline ES-module worker boots; mouse-drag pans +
+      wheel zooms (confirms the Phase 4.6 async lazy-gesture load works); 0 page errors.
+- ✅ Fixed a validator false-positive (Histogram/Bar `draw` comes from the
+      BarChartBase mixin; validator now checks mixins). Commit c6e0daa.
+- Closes the audit's "browser-only paths unverified" risk for render+worker+gestures.
+  Live-feed WS path still needs a mock backend to smoke.
+
 ### ⏭ 4.x remaining — `<TradingChart>` thin shell; full tree-shaking
       (de-side-effect the component graph; the gesture root is now fixed).
 
