@@ -434,6 +434,25 @@ export default {
                                        status.phase === 'live')) {
                             this.corkyLoading = false
                         }
+                        // Refit the visible range to the freshly-loaded history.
+                        // The gateway pushes the new timeframe's candles into the
+                        // shared DataCube but never resets the chart's range; on a
+                        // tf switch (e.g. 1D → 1m) the OLD wide range still
+                        // partially overlaps the new data's tail, so the chart's
+                        // dataHashKey watcher (which only re-inits when `sub` is
+                        // empty) leaves the stale range in place and the candles
+                        // squish to a sliver. resetChart(true) re-runs
+                        // init_range() over the new ohlcv (the same path the FILE
+                        // feed uses via onFileSelected), showing the latest
+                        // DEFAULT_LEN window. Deferred to nextTick so the chart's
+                        // data watcher has applied the new candles first.
+                        if (status && status.phase === 'history-complete') {
+                            this.$nextTick(() => {
+                                if (this.$refs.tradingVue) {
+                                    this.$refs.tradingVue.resetChart(true)
+                                }
+                            })
+                        }
                     },
                     onError: (err) => { this.corkyError = this._corkyErr(err) },
                 })

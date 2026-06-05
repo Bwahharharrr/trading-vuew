@@ -9,12 +9,41 @@ import Const from '../../stuff/constants.js'
 export default {
     methods: {
         range_changed(r) {
+            r = this.clamp_range(r)
             let sub = this.subset(r)
             Utils.overwrite(this.range, r)
             Utils.overwrite(this.sub, sub)
             this.update_layout()
             this.$emit('range-changed', r)
             if (this.$props.ib) this.save_data_t()
+        },
+
+        // Keep the visible range overlapping the data so a redraw never empties
+        // the chart. Over-scroll past one edge stays allowed (normal panning,
+        // setRange, goto) — we only step in when a range has been pushed ENTIRELY
+        // off the data (e.g. an X-axis drag-to-scale anchored far outside the new
+        // timeframe's bounds): in that case shift it back, preserving its span,
+        // so at least one candle remains visible. No-op when ohlcv is empty so
+        // the bootstrap/default_range path is untouched. Returns a (possibly new)
+        // [t1, t2]; never mutates the input.
+        clamp_range(r) {
+            const ohlcv = this.ohlcv
+            if (!ohlcv || ohlcv.length < 1) return r
+            let t1 = r[0], t2 = r[1]
+            if (!Number.isFinite(t1) || !Number.isFinite(t2) || t1 > t2) return r
+            const first = this.$props.ib ? 0 : ohlcv[0][0]
+            const last = this.$props.ib ? ohlcv.length - 1 : ohlcv[ohlcv.length - 1][0]
+            const span = t2 - t1
+            if (t2 < first) {
+                // Entirely left of the data → pin the data's first bar inside.
+                t1 = first - span + this.interval
+                t2 = t1 + span
+            } else if (t1 > last) {
+                // Entirely right of the data → pin the data's last bar inside.
+                t2 = last + span - this.interval
+                t1 = t2 - span
+            }
+            return [t1, t2]
         },
 
         goto(t) {

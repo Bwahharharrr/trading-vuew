@@ -1,6 +1,7 @@
 declare namespace _default {
     namespace methods {
         function range_changed(r: any): void;
+        function clamp_range(r: any): any;
         function goto(t: any): void;
         function setRange(t1: any, t2: any): void;
         function calc_interval(): void;

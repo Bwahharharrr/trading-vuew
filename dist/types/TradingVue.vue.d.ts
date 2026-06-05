@@ -531,6 +531,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     } | {
         methods: {
             range_changed(r: any): void;
+            clamp_range(r: any): any;
             goto(t: any): void;
             setRange(t1: any, t2: any): void;
             calc_interval(): void;

@@ -21113,7 +21113,7 @@ pointers: 1 },
 				if (p[0] > width - sb) continue;
 				this.ctx.moveTo(p[0] - .5, 0);
 				this.ctx.lineTo(p[0] - .5, 4.5);
-				const shouldDim = !this.lbl_highlight(p[1][0]);
+				const shouldDim = !this.lbl_highlight(p);
 				if (shouldDim !== dimmed) {
 					this.ctx.globalAlpha = shouldDim ? .85 : 1;
 					dimmed = shouldDim;
@@ -21189,12 +21189,14 @@ pointers: 1 },
 			}
 			return `${date}  ${time}`;
 		}
-		lbl_highlight(t) {
+		lbl_highlight(p) {
 			let ti = this.$p.interval;
-			if (t === 0) return true;
-			if (utils_default.month_start(t) === t) return true;
-			if (utils_default.day_start(t) === t) return true;
-			if (ti <= MINUTE15 && t % HOUR$1 === 0) return true;
+			const ti_map = this.grid_0.ti_map;
+			let tZ = ti_map.i2t(p[1][0]) + (ti_map.tf < DAY$1 ? 1 : 0) * this.$p.timezone * HOUR$1;
+			if (tZ === 0) return true;
+			if (utils_default.month_start(tZ) === tZ) return true;
+			if (utils_default.day_start(tZ) === tZ) return true;
+			if (ti <= MINUTE15 && tZ % HOUR$1 === 0) return true;
 			return false;
 		}
 		mousemove() {}
@@ -22272,12 +22274,30 @@ pointers: 1 },
 			{
 				methods: {
 					range_changed(r) {
+						r = this.clamp_range(r);
 						let sub = this.subset(r);
 						utils_default.overwrite(this.range, r);
 						utils_default.overwrite(this.sub, sub);
 						this.update_layout();
 						this.$emit("range-changed", r);
 						if (this.$props.ib) this.save_data_t();
+					},
+					clamp_range(r) {
+						const ohlcv = this.ohlcv;
+						if (!ohlcv || ohlcv.length < 1) return r;
+						let t1 = r[0], t2 = r[1];
+						if (!Number.isFinite(t1) || !Number.isFinite(t2) || t1 > t2) return r;
+						const first = this.$props.ib ? 0 : ohlcv[0][0];
+						const last = this.$props.ib ? ohlcv.length - 1 : ohlcv[ohlcv.length - 1][0];
+						const span = t2 - t1;
+						if (t2 < first) {
+							t1 = first - span + this.interval;
+							t2 = t1 + span;
+						} else if (t1 > last) {
+							t2 = last + span - this.interval;
+							t1 = t2 - span;
+						}
+						return [t1, t2];
 					},
 					goto(t) {
 						const dt = this.range[1] - this.range[0];

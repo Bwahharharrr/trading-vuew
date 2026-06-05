@@ -210,7 +210,7 @@ export default class Botbar {
             this.ctx.moveTo(p[0] - 0.5, 0)
             this.ctx.lineTo(p[0] - 0.5, 4.5)
 
-            const shouldDim = !this.lbl_highlight(p[1][0])
+            const shouldDim = !this.lbl_highlight(p)
             if (shouldDim !== dimmed) {
                 this.ctx.globalAlpha = shouldDim ? 0.85 : 1
                 dimmed = shouldDim
@@ -332,14 +332,25 @@ export default class Botbar {
     // but if there is no grid line in place, there
     // will be no month name on t-axis. Sad.
     // Solution: manipulate the grid, skew it, you know
-    lbl_highlight(t) {
+    lbl_highlight(p) {
 
         let ti = this.$p.interval
 
-        if (t === 0) return true
-        if (Utils.month_start(t) === t) return true
-        if (Utils.day_start(t) === t) return true
-        if (ti <= MINUTE15 && t % HOUR === 0) return true
+        // Mirror format_date()'s timestamp normalisation so the boundary checks
+        // run on the SAME adjusted time that produced the label text. `p` is the
+        // grid entry [px, candleRow, rank]; p[1][0] is the candle ts (or index in
+        // IB mode). Without the i2t + timezone shift below, the raw ts rarely
+        // matched a month/day/hour boundary once a non-zero timezone was applied,
+        // so every label got dimmed to near-invisibility — the "no X labels" bug.
+        const ti_map = this.grid_0.ti_map
+        let t = ti_map.i2t(p[1][0])
+        let k = ti_map.tf < DAY ? 1 : 0
+        let tZ = t + k * this.$p.timezone * HOUR
+
+        if (tZ === 0) return true
+        if (Utils.month_start(tZ) === tZ) return true
+        if (Utils.day_start(tZ) === tZ) return true
+        if (ti <= MINUTE15 && tZ % HOUR === 0) return true
 
         return false
 

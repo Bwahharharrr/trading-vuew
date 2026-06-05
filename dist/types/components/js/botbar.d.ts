@@ -36,7 +36,7 @@ export default class Botbar {
     panel(): void;
     format_date(p: any): any;
     format_cursor_x(): any;
-    lbl_highlight(t: any): boolean;
+    lbl_highlight(p: any): boolean;
     mousemove(): void;
     mouseout(): void;
     mouseup(): void;
