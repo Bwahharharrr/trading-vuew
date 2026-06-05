@@ -29,21 +29,66 @@
         </button>
     </div>
 
+    <!-- Search + category filters -->
+    <div v-if="venues.length || loading" class="corky-filters">
+        <div class="corky-search">
+            <input
+                type="text"
+                class="corky-search-input"
+                placeholder="Search symbols…"
+                aria-label="Search symbols"
+                v-model="query">
+            <button
+                v-if="query"
+                type="button"
+                class="corky-search-clear"
+                aria-label="Clear search"
+                @click="query = ''">
+                ×
+            </button>
+        </div>
+        <div class="tf-buttons corky-cat-row" role="group" aria-label="Category filters">
+            <button
+                v-for="cat in categoryFilters"
+                :key="cat.value"
+                type="button"
+                class="tf-btn corky-cat-chip"
+                :class="{ active: activeCategory === cat.value }"
+                :aria-pressed="activeCategory === cat.value ? 'true' : 'false'"
+                @click="activeCategory = cat.value">
+                {{ cat.label }}
+            </button>
+            <span class="corky-symbol-count">{{ symbolCount }} {{ symbolCount === 1 ? 'symbol' : 'symbols' }}</span>
+        </div>
+    </div>
+
     <!-- Empty state -->
     <div v-if="!venues.length && !loading" class="corky-empty">
         No feeds discovered.
     </div>
+    <div v-else-if="!filteredVenues.length && !loading" class="corky-empty">
+        No symbols match your filters.
+    </div>
 
     <!-- Venue → Symbol → Timeframe → Indicator tree -->
     <div class="corky-tree">
-        <div v-for="group in venues" :key="group.venue" class="corky-venue">
+        <div v-for="group in filteredVenues" :key="group.venue" class="corky-venue">
             <div class="corky-venue-title">{{ group.venue }}</div>
 
             <div
                 v-for="row in group.symbols"
                 :key="row.key"
                 class="corky-symbol">
-                <div class="corky-symbol-title">{{ row.symbol }}</div>
+                <div class="corky-symbol-title">
+                    <span class="corky-symbol-name">{{ row.symbol }}</span>
+                    <span
+                        v-for="cat in row.categories"
+                        :key="cat"
+                        class="corky-cat-badge"
+                        :class="'corky-cat-badge-' + cat">
+                        {{ categoryLabel(cat) }}
+                    </span>
+                </div>
 
                 <!-- Timeframe chips -->
                 <div class="tf-buttons corky-tf-row">
@@ -97,6 +142,11 @@
                             {{ ind.display_label }}
                         </span>
                         <span
+                            v-if="ind.timeframe"
+                            class="corky-badge corky-ind-tf badge-tf">
+                            {{ ind.timeframe }}
+                        </span>
+                        <span
                             class="corky-badge"
                             :class="ind.ready ? 'badge-ready' : 'badge-warmup'">
                             {{ ind.ready ? 'ready' : 'warmup' }}
@@ -110,6 +160,16 @@
 </template>
 
 <script>
+import { symbolCategories, SYMBOL_CATEGORIES } from '../../helpers/feed/symbol-meta.js'
+
+// Short, human display labels for each derived category.
+const CATEGORY_LABELS = {
+    exchange: 'Exch',
+    margin: 'Margin',
+    derivative: 'Deriv',
+    funding: 'Fund',
+}
+
 export default {
     name: 'CorkyDiscoveryPanel',
     props: {
@@ -120,7 +180,21 @@ export default {
         error: { type: Object, default: null },
     },
     emits: ['select', 'add-timeframe', 'add-indicator', 'retry'],
+    data() {
+        return {
+            // Local UI state — presentational only, never emitted.
+            query: '',
+            activeCategory: 'all',
+        }
+    },
     computed: {
+        // The category filter chips: 'All' + one per derived category.
+        categoryFilters() {
+            return [
+                { value: 'all', label: 'All' },
+                ...SYMBOL_CATEGORIES.map((c) => ({ value: c, label: this.categoryLabel(c) })),
+            ]
+        },
         // Group the flat State[] by venue → symbol, each carrying the source
         // state so we can derive tf readiness + indicators on demand.
         venues() {
@@ -134,10 +208,34 @@ export default {
                     venue,
                     symbol: st.symbol,
                     state: st,
+                    categories: symbolCategories(st.symbol),
                     timeframes: this.timeframesFor(st),
                 })
             }
             return Array.from(byVenue, ([venue, symbols]) => ({ venue, symbols }))
+        },
+        // venues[] narrowed by the search query AND the active category filter.
+        // Venues with no surviving symbols are dropped entirely.
+        filteredVenues() {
+            const q = this.query.trim().toLowerCase()
+            const cat = this.activeCategory
+            const out = []
+            for (const group of this.venues) {
+                const symbols = group.symbols.filter((row) => {
+                    if (cat !== 'all' && !row.categories.includes(cat)) return false
+                    if (q) {
+                        const hay = `${row.venue} ${row.symbol}`.toLowerCase()
+                        if (!hay.includes(q)) return false
+                    }
+                    return true
+                })
+                if (symbols.length) out.push({ venue: group.venue, symbols })
+            }
+            return out
+        },
+        // Live count of symbols visible after filtering.
+        symbolCount() {
+            return this.filteredVenues.reduce((n, g) => n + g.symbols.length, 0)
         },
         hasProgress() {
             const p = this.progress
@@ -159,6 +257,10 @@ export default {
         },
     },
     methods: {
+        // Short display label for a derived category (e.g. 'exchange' → 'Exch').
+        categoryLabel(cat) {
+            return CATEGORY_LABELS[cat] || cat
+        },
         // The available timeframes for a state, decorated with the ready/stale
         // flags from that state's matching ranges[] entry.
         timeframesFor(st) {
@@ -341,6 +443,78 @@ export default {
     padding: 4px 0;
 }
 
+/* Search + category filters */
+.corky-filters {
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.corky-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.corky-search-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: #131722;
+    color: #d1d4dc;
+    border: 1px solid #2a2e39;
+    border-radius: 4px;
+    padding: 6px 26px 6px 10px;
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+
+.corky-search-input::placeholder {
+    color: #5d6470;
+}
+
+.corky-search-input:focus {
+    border-color: #35a776;
+}
+
+.corky-search-clear {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    color: #808a9d;
+    border: none;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 6px;
+}
+
+.corky-search-clear:hover {
+    color: #d1d4dc;
+}
+
+.corky-cat-row {
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.corky-cat-chip.active {
+    border-color: #35a776;
+    color: #35a776;
+}
+
+.corky-symbol-count {
+    color: #808a9d;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-left: auto;
+}
+
 /* Tree */
 .corky-tree {
     display: flex;
@@ -370,6 +544,45 @@ export default {
     font-size: 12px;
     font-weight: 600;
     margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.corky-symbol-name {
+    margin-right: 2px;
+}
+
+/* Derived category badges (from symbol naming, not the protocol) */
+.corky-cat-badge {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    padding: 1px 5px;
+    border-radius: 8px;
+    line-height: 1.4;
+}
+
+.corky-cat-badge-exchange {
+    background: rgba(78, 138, 229, 0.18);
+    color: #6ba2f0;
+}
+
+.corky-cat-badge-margin {
+    background: rgba(159, 122, 234, 0.18);
+    color: #b08ef0;
+}
+
+.corky-cat-badge-derivative {
+    background: rgba(229, 165, 75, 0.18);
+    color: #e5a54b;
+}
+
+.corky-cat-badge-funding {
+    background: rgba(53, 167, 118, 0.18);
+    color: #35a776;
 }
 
 .corky-tf-row {
@@ -417,6 +630,11 @@ export default {
 .badge-warmup {
     background: rgba(128, 138, 157, 0.2);
     color: #808a9d;
+}
+
+.badge-tf {
+    background: rgba(78, 138, 229, 0.18);
+    color: #6ba2f0;
 }
 
 /* Indicators */

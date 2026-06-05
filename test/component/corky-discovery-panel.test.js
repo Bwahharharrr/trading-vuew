@@ -141,4 +141,134 @@ describe('CorkyDiscoveryPanel', () => {
             venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '5m', indicator: 'SMA(20)',
         })
     })
+
+    test('an indicator row shows its timeframe as a badge', () => {
+        const w = mountPanel({
+            current: { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '5m', indicators: [] },
+        })
+        const row = w.find('.corky-indicator-row')
+        expect(row.exists()).toBe(true)
+        const tfBadge = row.find('.corky-ind-tf')
+        expect(tfBadge.exists()).toBe(true)
+        // SMA(20) is on the 5m timeframe.
+        expect(tfBadge.text()).toBe('5m')
+    })
+})
+
+// ── Search + category filtering, category badges ─────────────────────────────
+// Hand-built states exercising the three Bitfinex symbol shapes so we drive the
+// derived symbolCategories() heuristic through the real component.
+function makeState(symbol) {
+    return {
+        venue: 'BITFINEX',
+        symbol,
+        state: 'Ready',
+        available_timeframes: ['1m'],
+        requested_timeframes: ['1m'],
+        ranges: [{ timeframe: '1m', ready: true, stale: false }],
+        indicators: [],
+    }
+}
+
+const multiStates = [
+    makeState('tBTCUSD'),      // exchange + margin
+    makeState('tBTCF0:USTF0'), // derivative + margin
+    makeState('fUSD:p30'),     // funding
+]
+
+function mountMulti(props = {}) {
+    return mount(CorkyDiscoveryPanel, {
+        props: { states: multiStates, ...props },
+    })
+}
+
+describe('CorkyDiscoveryPanel — search + categories', () => {
+    test('renders category badges derived from the symbol naming', () => {
+        const w = mountMulti()
+        const text = w.text()
+        // tBTCUSD → Exch + Margin, tBTCF0 → Deriv + Margin, fUSD → Fund
+        expect(text).toContain('Exch')
+        expect(text).toContain('Margin')
+        expect(text).toContain('Deriv')
+        expect(text).toContain('Fund')
+        // funding row carries the funding badge class
+        expect(w.find('.corky-cat-badge-funding').exists()).toBe(true)
+        expect(w.find('.corky-cat-badge-derivative').exists()).toBe(true)
+    })
+
+    test('typing in the search filters the rendered symbols', async () => {
+        const w = mountMulti()
+        expect(w.findAll('.corky-symbol').length).toBe(3)
+
+        const input = w.find('.corky-search-input')
+        await input.setValue('f0')
+        // case-insensitive substring on venue+symbol → only tBTCF0:USTF0
+        const symbols = w.findAll('.corky-symbol')
+        expect(symbols.length).toBe(1)
+        expect(w.text()).toContain('tBTCF0:USTF0')
+        expect(w.text()).not.toContain('fUSD:p30')
+        // live count reflects the filter
+        expect(w.find('.corky-symbol-count').text()).toContain('1 symbol')
+    })
+
+    test('a category filter narrows the visible symbols', async () => {
+        const w = mountMulti()
+        const chips = w.findAll('.corky-cat-chip')
+        const funding = chips.find((c) => c.text() === 'Fund')
+        expect(funding).toBeTruthy()
+        await funding.trigger('click')
+        expect(funding.attributes('aria-pressed')).toBe('true')
+
+        const symbols = w.findAll('.corky-symbol')
+        expect(symbols.length).toBe(1)
+        expect(w.text()).toContain('fUSD:p30')
+        expect(w.text()).not.toContain('tBTCUSD')
+    })
+
+    test('Margin filter keeps both exchange and derivative symbols', async () => {
+        const w = mountMulti()
+        const chips = w.findAll('.corky-cat-chip')
+        const margin = chips.find((c) => c.text() === 'Margin')
+        await margin.trigger('click')
+        const symbols = w.findAll('.corky-symbol')
+        expect(symbols.length).toBe(2)
+        expect(w.text()).toContain('tBTCUSD')
+        expect(w.text()).toContain('tBTCF0:USTF0')
+        expect(w.text()).not.toContain('fUSD:p30')
+    })
+
+    test('search + category combine (AND)', async () => {
+        const w = mountMulti()
+        const margin = w.findAll('.corky-cat-chip').find((c) => c.text() === 'Margin')
+        await margin.trigger('click')
+        await w.find('.corky-search-input').setValue('btcusd')
+        const symbols = w.findAll('.corky-symbol')
+        expect(symbols.length).toBe(1)
+        expect(w.text()).toContain('tBTCUSD')
+    })
+
+    test('clear affordance resets the query', async () => {
+        const w = mountMulti()
+        await w.find('.corky-search-input').setValue('zzz')
+        expect(w.findAll('.corky-symbol').length).toBe(0)
+        const clear = w.find('.corky-search-clear')
+        expect(clear.exists()).toBe(true)
+        await clear.trigger('click')
+        expect(w.findAll('.corky-symbol').length).toBe(3)
+    })
+
+    test('filtering preserves the select emit payload unchanged', async () => {
+        const w = mountMulti()
+        await w.find('.corky-search-input').setValue('btcusd')
+        const chip = w.findAll('.corky-tf-chip').find((c) => c.text().includes('1m'))
+        await chip.trigger('click')
+        const emitted = w.emitted('select')
+        expect(emitted).toBeTruthy()
+        expect(emitted[0][0]).toEqual({
+            venue: 'BITFINEX',
+            symbol: 'tBTCUSD',
+            timeframe: '1m',
+            indicators: [],
+        })
+    })
 })
