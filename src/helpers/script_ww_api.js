@@ -74,15 +74,18 @@ class WebWork {
     start_socket() {
         if (!this.dc.sett.node_url) return
         this.socket = new WebSocket(this.dc.sett.node_url)
-        this.socket.addEventListener('message', e => {
+        this._socketMessageHandler = e => {
             this.onmessage({data: JSON.parse(e.data)})
-        })
-        this.socket.addEventListener('error', e => {
+        }
+        this._socketErrorHandler = e => {
             console.warn('WebSocket error:', e)
-        })
-        this.socket.addEventListener('close', () => {
+        }
+        this._socketCloseHandler = () => {
             this.socket = null
-        })
+        }
+        this.socket.addEventListener('message', this._socketMessageHandler)
+        this.socket.addEventListener('error', this._socketErrorHandler)
+        this.socket.addEventListener('close', this._socketCloseHandler)
         if (!this.msg_queue) this.msg_queue = []
     }
 
@@ -179,6 +182,9 @@ class WebWork {
             this.worker = null
         }
         if (this.socket) {
+            this.socket.removeEventListener('message', this._socketMessageHandler)
+            this.socket.removeEventListener('error', this._socketErrorHandler)
+            this.socket.removeEventListener('close', this._socketCloseHandler)
             this.socket.close()
             this.socket = null
         }

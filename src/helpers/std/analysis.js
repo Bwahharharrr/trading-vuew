@@ -289,7 +289,7 @@ export default {
         let id = this._tsid(_id, `since()`)
         if (cond && cond.__id__) cond = cond[0]
         let s = this.ts(undefined, id)
-        s[0] = cond ? 0 : s[1] + 1
+        s[0] = cond ? 0 : this.nz(s[1], 0) + 1
         return s
     },
 

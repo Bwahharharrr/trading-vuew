@@ -21,6 +21,13 @@ export default {
 
     expand(self, height) {
         // expand log scale
+        if (math.log(self.$_hi) === math.log(self.$_lo)) {
+            // Collapsed range (all prices identical): nudge $_hi/$_lo
+            // apart to avoid div-by-zero on log(hi) - log(lo)
+            self.$_hi *= 1.05
+            self.$_lo *= 0.95
+            return
+        }
         let A = - height / (math.log(self.$_hi) - math.log(self.$_lo))
         let B = - math.log(self.$_hi) * A
 

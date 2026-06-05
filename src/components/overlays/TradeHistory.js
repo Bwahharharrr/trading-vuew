@@ -9,8 +9,7 @@ export default {
             ctx.lineWidth = 1
             ctx.strokeStyle = 'white'
 
-            for (var i in this.$props.data) {
-                let p = this.$props.data[i]
+            for (let p of this.$props.data) {
 
                 ctx.fillStyle = p[5] === 'buy' ? this.buy_color : this.sell_color
                 ctx.beginPath()

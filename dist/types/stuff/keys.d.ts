@@ -5,6 +5,7 @@ export default class Keys {
     listeners: number;
     keymap: {};
     on(name: any, handler: any): void;
+    off(name: any, handler: any): void;
     emit(name: any, event: any): void;
     pressed(key: any): any;
 }

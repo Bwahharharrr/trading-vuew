@@ -42,6 +42,10 @@ export default {
     props: ['ux', 'updater', 'colors', 'config'],
     mounted() {
         this.self = document.getElementById(this.uuid)
+        if (!this.self) {
+            console.warn(`UxWrapper: element with id ${this.uuid} not found`)
+            return
+        }
         this.w = this.self.offsetWidth // TODO: => width: "content"
         this.h = this.self.offsetHeight // TODO: => height: "content"
         this.update_position()

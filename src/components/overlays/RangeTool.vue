@@ -169,7 +169,7 @@ export default {
             ctx.font = this.new_font
             // Price delta (anf percent)
             let d$ = (this.p2[1] - this.p1[1]).toFixed(this.prec)
-            let p = (100 * (this.p2[1] / this.p1[1] - 1)).toFixed(this.prec)
+            let p = this.p1[1] !== 0 ? (100 * (this.p2[1] / this.p1[1] - 1)).toFixed(this.prec) : 'N/A'
             // Map interval to the actual tf (in ms)
             let f = t => this.layout.ti_map.smth2t(t)
             let dt = f(this.p2[0]) - f(this.p1[0])

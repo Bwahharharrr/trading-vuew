@@ -16,6 +16,14 @@ export default class Keys {
         this.listeners++
     }
 
+    off(name, handler) {
+        if (!this.map[name]) return
+        let i = this.map[name].indexOf(handler)
+        if (i < 0) return
+        this.map[name].splice(i, 1)
+        this.listeners--
+    }
+
     // Called by grid.js
     emit(name, event) {
         if (name in this.map) {

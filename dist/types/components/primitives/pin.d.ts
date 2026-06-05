@@ -10,7 +10,11 @@ export default class Pin {
     name: any;
     state: any;
     hidden: any;
+    on_mousemove: (e: any) => void;
+    on_mousedown: (e: any) => void;
+    on_mouseup: (e: any) => void;
     re_init(): void;
+    destroy(): void;
     draw(ctx: any): void;
     draw_circle(ctx: any): void;
     x: any;

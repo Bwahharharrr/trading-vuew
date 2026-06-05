@@ -893,9 +893,9 @@ export class ScriptEngine {
     // Match dataset id using script id & required type
     match_ds(id, type) {
         // TODO: develop further
-        for (let id in this.data) {
-            if (this.data[id].type === type) {
-                return id
+        for (let dsId in this.data) {
+            if (this.data[dsId].type === type) {
+                return dsId
             }
         }
     }

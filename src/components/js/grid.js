@@ -330,6 +330,9 @@ export default class Grid {
         }
         // Stop pan fade animation
         if (this.panManager) this.panManager.destroy()
+        // Release module references for GC (no own destroy() methods)
+        if (this.renderer) this.renderer = null
+        if (this.zoomManager) this.zoomManager = null
         // Release canvas/context references for GC
         this.ctx = null
         this.ctxDynamic = null

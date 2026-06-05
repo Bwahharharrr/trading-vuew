@@ -191,10 +191,10 @@ export default class Botbar {
         // PERF: Use LRU-cached Date instead of new Date() per label
         let d = Utils.getCachedDate(tZ)
 
-        if (p[2] === YEAR || Utils.year_start(t) === t) {
+        if (p[2] === YEAR || Utils.year_start(tZ) === tZ) {
             return d.getUTCFullYear()
         }
-        if (p[2] === MONTH || Utils.month_start(t) === t) {
+        if (p[2] === MONTH || Utils.month_start(tZ) === tZ) {
             return MONTHMAP[d.getUTCMonth()]
         }
         // TODO(*) see grid_maker.js

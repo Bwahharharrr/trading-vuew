@@ -38,7 +38,7 @@ export class RenderEngine {
      */
     renderStatic(ctx, frame) {
         const { canvas, layout } = frame
-        if (!layout) return
+        if (!layout || !canvas) return
 
         ctx.clearRect(0, 0, canvas.width, canvas.height)
 
@@ -57,7 +57,7 @@ export class RenderEngine {
 
     /** Render only the dynamic canvas (crosshair). */
     renderDynamic(ctx, canvas, crosshair) {
-        if (!crosshair) return
+        if (!crosshair || !canvas) return
         ctx.clearRect(0, 0, canvas.width, canvas.height)
         crosshair.renderer.draw(ctx)
     }

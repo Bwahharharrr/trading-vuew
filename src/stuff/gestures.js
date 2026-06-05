@@ -28,6 +28,11 @@ export function loadGestures() {
         cache = { Hammer, Hamster }
         inFlight = null
         return cache
+    }).catch(err => {
+        // Clear the in-flight promise on failure so a later call can retry
+        // instead of replaying the same rejected promise forever.
+        inFlight = null
+        throw err
     })
     return inFlight
 }

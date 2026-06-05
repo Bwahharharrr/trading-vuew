@@ -7,8 +7,7 @@ export default {
         draw(ctx) {
             let layout = this.$props.layout
 
-            for (var i in this.$props.data) {
-                let p = this.$props.data[i]
+            for (let p of this.$props.data) {
                 let x = layout.t2screen(p[0])
                 let y = layout.$2screen(p[1])
                 const amt = p[2]

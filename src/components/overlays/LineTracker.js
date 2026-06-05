@@ -14,7 +14,7 @@ export default {
 
                 try {
                     let c = this.$props.data[i];
-                    let nxt = this.$props.data[i + 1];
+                    let nxt = i + 1 < this.$props.data.length ? this.$props.data[i + 1] : null;
 
                     if (c[1] == null) {
                         continue;
@@ -41,12 +41,12 @@ export default {
                     } else {
                         // Y coordinate
                         let y = layout.$2screen(c[1])
-                        let y1 = layout.$2screen(nxt[1])
 
                         ctx.beginPath()
                         ctx.moveTo( x-half, y )
                         ctx.lineTo(x + half , y)
-                        if (this.linkLines && nxt[1] !== null) {
+                        if (this.linkLines && nxt && nxt[1] !== null) {
+                            let y1 = layout.$2screen(nxt[1])
                             ctx.lineTo(x + half,y1)
                         }
 

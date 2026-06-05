@@ -105,7 +105,7 @@ export default {
         let sm1 = this.sum(g, len, id+'1')[0]
         let sm2 = this.sum(l, len, id+'2')[0]
 
-        return this.ts(100 * (sm1 - sm2) / (sm1 + sm2), id, src.__tf__)
+        return this.ts((sm1 + sm2) === 0 ? NaN : 100 * (sm1 - sm2) / (sm1 + sm2), id, src.__tf__)
     },
 
     /** Center of Gravity
@@ -114,13 +114,13 @@ export default {
      * @return {TS} - New time-series
      */
     cog(src, len, _id) {
-        let id = this._tsid(_id, `cmo(${len})`)
+        let id = this._tsid(_id, `cog(${len})`)
         let sum = this.sum(src, len, id)[0]
         let num = 0
         for (let i = 0; i < len; i++) {
             num += src[i] * (i + 1)
         }
-        return this.ts(-num / sum, id, src.__tf__)
+        return this.ts(sum === 0 ? NaN : -num / sum, id, src.__tf__)
     },
 
     /** Deviation from SMA
@@ -242,7 +242,7 @@ export default {
     kcw(src, len, mult, use_tr = true, _id, _tf) {
         let id = this._tsid(_id, `kcw(${len},${mult},${use_tr})`)
         let kc = this.kc(src, len, mult, use_tr, `kcw`, _tf)
-        return this.ts((kc[1][0] - kc[2][0]) / kc[0][0], id, src.__tf__)
+        return this.ts(kc[0][0] === 0 ? NaN : (kc[1][0] - kc[2][0]) / kc[0][0], id, src.__tf__)
     },
 
     /** Linear Regression

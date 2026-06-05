@@ -77,8 +77,8 @@ export default {
         },
         volscale() {
             return this.sett.volscale ||
-            this.$props.grid_id > 0 ? 0.85 :
-            this.$props.config.VOLSCALE
+            (this.$props.grid_id > 0 ? 0.85 :
+            this.$props.config.VOLSCALE)
         }
     },
     data() {

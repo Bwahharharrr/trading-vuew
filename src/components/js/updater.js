@@ -47,7 +47,7 @@ class CursorUpdater {
     // PERFORMANCE: Find nearest screen X with caching
     // Cache invalidates when range or data changes
     _nearestScreenX(x, data, grid) {
-        const cacheKey = `${grid.t1},${grid.t2},${data.length}`
+        const cacheKey = `${grid.startx},${grid.px_step},${data.length}`
 
         if (this._screenCacheKey !== cacheKey || !this._screenCache) {
             // Rebuild cache - only happens when range/data changes

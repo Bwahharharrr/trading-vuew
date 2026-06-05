@@ -26,9 +26,13 @@ export default class Pin {
         this.state = params.state || 'settled'
         this.hidden = params.hidden || false
 
-        this.mouse.on('mousemove', e => this.mousemove(e))
-        this.mouse.on('mousedown', e => this.mousedown(e))
-        this.mouse.on('mouseup', e => this.mouseup(e))
+        this.on_mousemove = e => this.mousemove(e)
+        this.on_mousedown = e => this.mousedown(e)
+        this.on_mouseup = e => this.mouseup(e)
+
+        this.mouse.on('mousemove', this.on_mousemove)
+        this.mouse.on('mousedown', this.on_mousedown)
+        this.mouse.on('mouseup', this.on_mouseup)
 
         if (comp.state === 'finished') {
             this.state = 'settled'
@@ -46,6 +50,12 @@ export default class Pin {
         this.update_from(
             this.comp.$props.settings[this.name]
         )
+    }
+
+    destroy() {
+        this.mouse.off('mousemove', this.on_mousemove)
+        this.mouse.off('mousedown', this.on_mousedown)
+        this.mouse.off('mouseup', this.on_mouseup)
     }
 
     draw(ctx) {

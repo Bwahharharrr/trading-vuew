@@ -9,6 +9,9 @@ declare class WebWork {
     worker: Worker | null | undefined;
     start_socket(): void;
     socket: WebSocket | null | undefined;
+    _socketMessageHandler: ((e: any) => void) | undefined;
+    _socketErrorHandler: ((e: any) => void) | undefined;
+    _socketCloseHandler: (() => void) | undefined;
     send(msg: any, tx_keys: any): void;
     send_node(msg: any, tx_keys: any): void;
     onmessage(e: any): void;

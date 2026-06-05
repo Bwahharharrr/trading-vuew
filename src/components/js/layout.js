@@ -169,9 +169,11 @@ function Layout(params) {
             return
         }
 
-        // Performance: Generate cache key based on inputs that affect output
-        // Note: px_step is derived from range and width, so A and B already capture transform state
-        const cacheKey = `${range[0]},${range[1]},${sub.length},${interval},${$p.height},${self.A.toFixed(6)},${self.B.toFixed(0)}`
+        // Performance: Generate cache key based on inputs that affect output.
+        // A/B capture the vertical (price) transform; px_step captures the
+        // horizontal one (it derives from width - sidebar, so a width-only
+        // resize changes px_step without changing range/A/B and must bust the cache).
+        const cacheKey = `${range[0]},${range[1]},${sub.length},${interval},${$p.height},${self.A.toFixed(6)},${self.B.toFixed(6)},${self.px_step.toFixed(4)}`
 
         // Check if we can reuse cached candles/volume
         if (layoutCache.key === cacheKey && layoutCache.candles && layoutCache.volume) {

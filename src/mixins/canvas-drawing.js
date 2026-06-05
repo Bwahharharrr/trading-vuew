@@ -87,14 +87,14 @@ export default {
             for (let i = 0; i < data.length; i++) {
                 let p = data[i]
                 let x = layout.t2screen(p[0])
-                let y = layout.$2screen(p[topIndex] || undefined)
+                let y = layout.$2screen(p[topIndex] != null ? p[topIndex] : undefined)
                 ctx.lineTo(x, y)
             }
             // Reverse pass for bottom line
             for (let i = data.length - 1; i >= 0; i--) {
                 let p = data[i]
                 let x = layout.t2screen(p[0])
-                let y = layout.$2screen(p[bottomIndex] || undefined)
+                let y = layout.$2screen(p[bottomIndex] != null ? p[bottomIndex] : undefined)
                 ctx.lineTo(x, y)
             }
             ctx.fill()

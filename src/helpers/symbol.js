@@ -64,6 +64,7 @@ export default class Sym {
 
         if (this.main) {
             if (!this.tf) throw 'Main tf should be defined'
+            if (!this.data || !this.data.length || !this.data[0]) throw 'Main symbol requires non-empty data'
             se.custom_main = this
             let t0 = this.data[0][0]
             se.t = t0 - t0 % this.tf

@@ -46,6 +46,8 @@ export default {
         let dx = p3[0] - p2[0]
         let dy = p3[1] - p2[1]
         let base = Math.sqrt(dx * dx + dy * dy)
+        // Degenerate line (p2 === p3): avoid /0 → NaN/Infinity
+        if (base === 0) return { area, base: 1 }
         return { area, base }
     },
 

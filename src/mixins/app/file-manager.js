@@ -127,6 +127,14 @@ export default {
                     viewData = selectedOption?.viewData
                 }
 
+                // Guard: a multi-timeframe file with no timeframes leaves
+                // firstTfData undefined. prepareChartData would then destructure
+                // chartData.chart off undefined and throw, so bail out cleanly.
+                if (!firstTfData) {
+                    console.error('No loadable timeframe data in file:', filename)
+                    return
+                }
+
                 // Build combined offchart with persistent indicators BEFORE creating DataCube
                 // Pass originalChartData to avoid re-copying chart.data (applyCurrentColoring overwrites it)
                 const preparedData = this.prepareChartData(firstTfData, firstTf, this.originalChartData)

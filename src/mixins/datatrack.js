@@ -34,8 +34,8 @@ export default {
 
         },
         reindex_delta(n, p) {
-            n = n || [[0]]
-            p = p || [[0]]
+            n = n || [0]
+            p = p || [0]
             let dt = n[0] - p[0]
             if (dt !== 0 && this._data_t) {
                 // Convert t back to index

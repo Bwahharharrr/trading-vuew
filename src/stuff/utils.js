@@ -204,7 +204,7 @@ export default {
         if (c.length === 7) {
             let n = Math.floor(op * 255)
             n = this.clamp(n, 0, 255)
-            c += n.toString(16)
+            c += n.toString(16).padStart(2, '0')
         }
         return c
     },
