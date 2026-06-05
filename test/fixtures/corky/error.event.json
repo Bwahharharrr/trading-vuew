@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-subscribe-1",
+  "event": {
+    "type": "error",
+    "code": "state_not_found",
+    "message": "no maintained candle state matched BITFINEX tBTCUSD 1m",
+    "retryable": false
+  }
+}

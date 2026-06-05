@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-list-1",
+  "command": {
+    "type": "list_candle_states",
+    "venue": "BITFINEX"
+  }
+}

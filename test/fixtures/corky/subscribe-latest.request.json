@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-subscribe-1",
+  "command": {
+    "type": "subscribe_candles",
+    "subscription_id": "chart-sub-tbtc-1m",
+    "target_runtime_id": "public-market-main",
+    "venue": "BITFINEX",
+    "symbol": "tBTCUSD",
+    "timeframe": "1m",
+    "range": {
+      "type": "latest",
+      "limit": 200
+    },
+    "include_indicators": true,
+    "chunk_rows": 200
+  }
+}

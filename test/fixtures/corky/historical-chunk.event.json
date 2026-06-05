@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-subscribe-1",
+  "event": {
+    "type": "historical_chunk",
+    "subscription_id": "chart-sub-tbtc-1m",
+    "chunk_index": 0,
+    "timeframe": "1m",
+    "rows": [
+      {
+        "timeframe": "1m",
+        "candle": {
+          "timestamp_ms": 1779464940000,
+          "open": "77880",
+          "high": "77884",
+          "low": "77867",
+          "close": "77871",
+          "volume": "0.48485427"
+        },
+        "indicators": {
+          "sma:20": {
+            "sma": "77865.25"
+          }
+        }
+      }
+    ]
+  }
+}

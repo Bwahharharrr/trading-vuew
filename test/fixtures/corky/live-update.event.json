@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "event": {
+    "type": "live_update",
+    "subscription_id": "chart-sub-tbtc-1m",
+    "sequence": 42,
+    "row": {
+      "timeframe": "1m",
+      "candle": {
+        "timestamp_ms": 1779465000000,
+        "open": "77871",
+        "high": "77895",
+        "low": "77860",
+        "close": "77890",
+        "volume": "1.25000000"
+      },
+      "indicators": {
+        "sma:20": {
+          "sma": "77866.20"
+        }
+      }
+    }
+  }
+}

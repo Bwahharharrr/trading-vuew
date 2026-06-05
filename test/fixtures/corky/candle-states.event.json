@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-list-1",
+  "event": {
+    "type": "candle_states",
+    "states": [
+      {
+        "runtime_id": "public-market-main",
+        "shard_id": "bitfinex-shard-0",
+        "state_id": "candles:BITFINEX:tBTCUSD",
+        "venue": "BITFINEX",
+        "symbol": "tBTCUSD",
+        "state": "Ready",
+        "source_channel": "candles:trade:1m:tBTCUSD",
+        "source_timeframe": "1m",
+        "seed_source": "1m",
+        "live_source": "1m",
+        "requested_timeframes": [
+          "1m",
+          "5m"
+        ],
+        "available_timeframes": [
+          "1m",
+          "5m"
+        ],
+        "buffer_target": 200,
+        "ranges": [
+          {
+            "timeframe": "1m",
+            "source_timeframe": "1m",
+            "live_source": "1m",
+            "seed_source": "1m",
+            "held_count": 200,
+            "buffer_target": 200,
+            "first_ts_ms": 1779453000000,
+            "last_closed_ts_ms": 1779464940000,
+            "current_ts_ms": 1779465000000,
+            "ready": true,
+            "readiness_status": "ready",
+            "stale": false
+          },
+          {
+            "timeframe": "5m",
+            "source_timeframe": "1m",
+            "live_source": "1m",
+            "seed_source": "1m",
+            "held_count": 200,
+            "buffer_target": 200,
+            "first_ts_ms": 1779405300000,
+            "last_closed_ts_ms": 1779464700000,
+            "current_ts_ms": 1779465000000,
+            "ready": true,
+            "readiness_status": "ready",
+            "stale": false
+          }
+        ],
+        "indicators": [
+          {
+            "kind": "sma",
+            "display_label": "SMA(20)",
+            "timeframe": "5m",
+            "source": "close",
+            "state": "Ready",
+            "readiness_status": "ready",
+            "warmup": 20,
+            "samples_seen": 200,
+            "ready": true,
+            "last_timestamp_ms": 1779464700000,
+            "outputs": [
+              "sma"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

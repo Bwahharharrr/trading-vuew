@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-upsert-1",
+  "event": {
+    "type": "control_ack",
+    "status": "Applied",
+    "message": "desired candle state updated",
+    "restart_required": false,
+    "outcome": "applied_hot",
+    "target_runtime_id": "public-market-main"
+  }
+}

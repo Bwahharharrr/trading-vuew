@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-upsert-1",
+  "command": {
+    "type": "upsert_candle_state",
+    "target_runtime_id": "public-market-main",
+    "venue": "BITFINEX",
+    "symbol": "tBTCUSD",
+    "timeframes": [
+      "1m",
+      "5m",
+      "1D"
+    ],
+    "indicators": [
+      {
+        "kind": "sma",
+        "timeframe": "5m",
+        "source": "close",
+        "params": {
+          "period": "20"
+        }
+      }
+    ],
+    "buffer": 200
+  }
+}
