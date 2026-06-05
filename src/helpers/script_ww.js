@@ -15,4 +15,4 @@ wireEngineEvents(se, (msg) => wwGlobal.postMessage(msg))
 
 // DC -> engine: dispatch inbound messages.
 const dispatch = makeDispatcher(se, (msg) => wwGlobal.postMessage(msg))
-wwGlobal.onmessage = (e) => dispatch(e.data)
+wwGlobal.onmessage = (e) => dispatch(e.data).catch(err => console.error('[ScriptWorker] dispatch failed:', err))

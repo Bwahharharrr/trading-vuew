@@ -171,7 +171,8 @@ export default class Grid {
             this.panManager.stopFade()
             this.calc_offset()
             this.emit_cursor_coord(event, { mode: 'aim' })
-            setTimeout(() => this.update())
+            if (this._pressTimeout) clearTimeout(this._pressTimeout)
+            this._pressTimeout = setTimeout(() => this.update())
             this.sim_mousedown(event)
         })
 
@@ -232,7 +233,8 @@ export default class Grid {
         this.renderer.propagate('mousemove', this.touch2mouse(event))
         this.update()
         this.renderer.propagate('mousedown', this.touch2mouse(event))
-        setTimeout(() => {
+        if (this._clickTimeout) clearTimeout(this._clickTimeout)
+        this._clickTimeout = setTimeout(() => {
             this.renderer.propagate('click', this.touch2mouse(event))
         })
     }
@@ -319,6 +321,9 @@ export default class Grid {
         // Cancel any pending throttled callbacks
         if (this._throttledWheel) this._throttledWheel.cancel()
         if (this._throttledPanmove) this._throttledPanmove.cancel()
+        // Clear any pending one-shot timeouts
+        if (this._pressTimeout) clearTimeout(this._pressTimeout)
+        if (this._clickTimeout) clearTimeout(this._clickTimeout)
         // Release pooled objects
         if (this._cursorEventPool && this._pooledCursorEvent) {
             this._cursorEventPool.release(this._pooledCursorEvent)

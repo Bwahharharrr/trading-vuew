@@ -6,9 +6,15 @@ export default {
     methods: {
         draw(ctx) {
             if (!this.data.length) return
-            for (var i0 = 0; i0 < this.data.length; i0++) {
-                if (typeof this.data[i0][1] === 'number') break
+            if (this._balData !== this.data) {
+                let i0 = 0
+                for (; i0 < this.data.length; i0++) {
+                    if (typeof this.data[i0][1] === 'number') break
+                }
+                this._balData = this.data
+                this._balFirst = i0
             }
+            var i0 = this._balFirst
 
             const layout = this.$props.layout
 

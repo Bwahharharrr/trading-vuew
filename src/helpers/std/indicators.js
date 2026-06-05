@@ -74,7 +74,7 @@ export default {
         let id = this._tsid(_id, `bbw(${len},${mult})`)
         let basis = this.sma(src, len, id)[0]
         let dev = this.stdev(src, len, id)[0] * mult
-        return this.ts(2 * dev / basis, id, src.__tf__)
+        return this.ts(basis === 0 ? NaN : 2 * dev / basis, id, src.__tf__)
     },
 
     /** Commodity Channel Index
@@ -86,7 +86,7 @@ export default {
         let id = this._tsid(_id, `cci(${len})`)
         let ma = this.sma(src, len, id)
         let dev = this.dev(src, len, id)
-        let cci = (src[0] - ma[0]) / (0.015 * dev[0])
+        let cci = dev[0] === 0 ? NaN : (src[0] - ma[0]) / (0.015 * dev[0])
         return this.ts(cci, id, src.__tf__)
     },
 
@@ -480,7 +480,7 @@ export default {
         let id = this._tsid(_id, `sum(${len})`)
         let x = 100 * (src[0] - this.lowest(low, len)[0])
         let y = this.highest(high, len)[0] - this.lowest(low, len)[0]
-        return this.ts(x / y, id, src.__tf__)
+        return this.ts(y === 0 ? NaN : x / y, id, src.__tf__)
     },
 
     /** Supertrend Indicator
@@ -503,7 +503,7 @@ export default {
         ls[0] = close[1] > ls1 ? Math.max(ls[0], ls1) : ls[0]
 
         let ss = this.ts(hl2 + atr, id+'3', _tf)
-        let ss1 = this.nz(ss[1], ss)
+        let ss1 = this.nz(ss[1], ss[0])
         ss[0] = close[1] < ss1 ? Math.min(ss[0], ss1) : ss[0]
 
         let dir = this.ts(1, id+'4', _tf)
@@ -613,7 +613,7 @@ export default {
         let hh = this.highest(high, len, id)
         let ll = this.lowest(low, len, id)
 
-        let res = (hh[0] - close[0]) / (hh[0] - ll[0])
+        let res = (hh[0] - ll[0]) === 0 ? NaN : (hh[0] - close[0]) / (hh[0] - ll[0])
         return this.ts(-res * 100 , id, _tf)
     }
 }

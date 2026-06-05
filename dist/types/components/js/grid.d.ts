@@ -54,6 +54,7 @@ export default class Grid {
         t: number;
         r: any;
     } | null | undefined;
+    _pressTimeout: NodeJS.Timeout | undefined;
     gesturestart(event: any): void;
     gesturechange(event: any): void;
     gestureend(event: any): void;
@@ -62,6 +63,7 @@ export default class Grid {
     mouseup(event: any): void;
     mousedown(event: any): void;
     sim_mousedown(event: any): void;
+    _clickTimeout: NodeJS.Timeout | undefined;
     touch2mouse(e: any): {
         original: any;
         layerX: any;

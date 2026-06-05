@@ -181,7 +181,7 @@ function Layout(params) {
         }
 
         let maxv = Utils.maxAtIndex(sub, 5)
-        let vs = $p.config.VOLSCALE * $p.height / maxv
+        let vs = maxv > 0 ? $p.config.VOLSCALE * $p.height / maxv : 0
         let x1, x2, mid, prev = undefined
 
         let splitter = self.px_step > 5 ? 1 : 0

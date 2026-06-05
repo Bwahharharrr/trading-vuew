@@ -1,7 +1,7 @@
 import type { Plugin } from 'vite'
 import { createProxyServer } from 'httpxy'
-import { readdirSync, existsSync, readFileSync } from 'node:fs'
-import { resolve, dirname } from 'node:path'
+import { readdirSync, existsSync, readFileSync, realpathSync } from 'node:fs'
+import { resolve, dirname, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { IncomingMessage } from 'node:http'
 import type { Socket } from 'node:net'
@@ -55,11 +55,16 @@ export function devServerPlugin(): Plugin {
         }
 
         if (req.method === 'GET' && url.startsWith('/debug')) {
+          if (url.length > 10000) {
+            res.statusCode = 413
+            res.end()
+            return
+          }
           try {
             const q = new URL(url, 'http://localhost').searchParams.get('argv')
             if (q) console.log(...JSON.parse(q))
-          } catch {
-            /* ignore malformed debug payloads */
+          } catch (e: any) {
+            console.warn('[debug] malformed payload:', e.message)
           }
           res.end('[OK]')
           return
@@ -67,10 +72,18 @@ export function devServerPlugin(): Plugin {
 
         if (url.startsWith('/data/')) {
           const file = resolve(DATA_DIR, url.slice('/data/'.length).split('?')[0])
-          if (file.startsWith(DATA_DIR) && existsSync(file)) {
-            res.setHeader('Content-Type', 'application/json')
-            res.setHeader('Cache-Control', 'no-cache')
-            res.end(readFileSync(file))
+          try {
+            const realFile = realpathSync(file)
+            const realDataDir = realpathSync(DATA_DIR)
+            if (realFile === realDataDir || realFile.startsWith(realDataDir + sep)) {
+              res.setHeader('Content-Type', 'application/json')
+              res.setHeader('Cache-Control', 'no-cache')
+              res.end(readFileSync(realFile))
+              return
+            }
+          } catch {
+            res.statusCode = 404
+            res.end()
             return
           }
         }

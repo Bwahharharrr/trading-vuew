@@ -20,6 +20,19 @@ export default function(self, range) {
     // Cache size limit to prevent unbounded memory growth
     const MAX_CACHE_SIZE = 2000
 
+    // Cached timestamp array for magnet lookups, tied to candle array identity.
+    // Rebuilt only when the underlying candles array reference changes, so
+    // t_magnet/c_magnet don't re-scan the whole array on every call.
+    let magnetCn = null
+    let magnetTs = null
+    const magnet_ts = cn => {
+        if (cn !== magnetCn) {
+            magnetCn = cn
+            magnetTs = cn.map(x => x.raw[0])
+        }
+        return magnetTs
+    }
+
     Object.assign(self, {
         // Time to screen coordinates (memoized)
         t2screen: t => {
@@ -57,7 +70,7 @@ export default function(self, range) {
         t_magnet: t => {
             if (ib) t = self.ti_map.smth2i(t)
             const cn = self.candles || self.master_grid.candles
-            const arr = cn.map(x => x.raw[0])
+            const arr = magnet_ts(cn)
             const i = Utils.nearest_a(t, arr)[0]
             if (!cn[i]) return
             return Math.floor(cn[i].x) - 0.5
@@ -92,9 +105,15 @@ export default function(self, range) {
         // Nearest candlestick
         c_magnet: t => {
             const cn = self.candles || self.master_grid.candles
-            const arr = cn.map(x => x.raw[0])
+            const arr = magnet_ts(cn)
             const i = Utils.nearest_a(t, arr)[0]
             return cn[i]
+        },
+        // Index of the nearest candlestick (avoids O(n) indexOf at call site)
+        c_magnet_i: t => {
+            const cn = self.candles || self.master_grid.candles
+            const arr = magnet_ts(cn)
+            return Utils.nearest_a(t, arr)[0]
         },
         // Nearest data points
         data_magnet: t => {  /* TODO: implement */ },

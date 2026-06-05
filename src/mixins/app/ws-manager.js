@@ -245,11 +245,22 @@ export default {
             // touch the visible chart — they only mutate liveAlerts/liveZones
             // for potential future use. The chart itself is only mutated
             // when the loaded file is an alerts file (below).
+            // Cap the standalone accumulators so a long-running session can't
+            // grow them without bound (they're only otherwise cleared on file
+            // switch). These arrays aren't index-aligned to chartData, so
+            // dropping the oldest entries is safe and preserves ordering.
+            const MAX_LIVE = 10000
             if (msg.alert) {
                 this.liveAlerts.push(msg.alert)
+                if (this.liveAlerts.length > MAX_LIVE) {
+                    this.liveAlerts.splice(0, this.liveAlerts.length - MAX_LIVE)
+                }
             }
             if (msg.zones && msg.zones.length > 0) {
                 this.liveZones.push(...msg.zones)
+                if (this.liveZones.length > MAX_LIVE) {
+                    this.liveZones.splice(0, this.liveZones.length - MAX_LIVE)
+                }
             }
 
             const onAlertsFile = classifyDataFile(this.currentDataFile) === 'alert'

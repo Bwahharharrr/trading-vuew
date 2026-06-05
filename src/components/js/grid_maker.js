@@ -80,6 +80,10 @@ function GridMaker(id, params, master_grid = null) {
             }
 
             if (self.$_hi === self.$_lo) {
+                if (self.$_hi === 0 && self.$_lo === 0) {
+                    self.$_hi = 1  // Avoid collapsed range at price 0
+                    self.$_lo = -1
+                }
                 if (!ls) {
                     self.$_hi *= 1.05  // Expand if height range === 0
                     self.$_lo *= 0.95

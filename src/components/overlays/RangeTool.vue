@@ -175,12 +175,7 @@ export default {
             let dt = f(this.p2[0]) - f(this.p1[0])
             let tf = this.layout.ti_map.tf
             // Bars count (through the candle index)
-            let f2 = t => {
-                let c = this.layout.c_magnet(t)
-                let cn = this.layout.candles ||
-                    this.layout.master_grid.candles
-                return cn.indexOf(c)
-            }
+            let f2 = t => this.layout.c_magnet_i(t)
             // Bars count (and handling the negative values)
             let b = f2(this.p2[0]) - f2(this.p1[0])
             // Format time delta

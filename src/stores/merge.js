@@ -71,6 +71,9 @@ export function combine(dst, o, src) {
     if (!dst.length) { dst = o; o = [] }
     if (!src.length) { src = o; o = [] }
 
+    // src fully inside dst: from mergeTs's call sites this branch is only ever
+    // reached after the `!src.length` reassignment above forced o = [], so the
+    // Object.assign is a no-op (dst already holds the result) — no front-write.
     if (src[0][0] >= dst[0][0] && last(src) <= last(dst)) {
         return Object.assign(dst, o)
     } else if (last(src) > last(dst)) {
