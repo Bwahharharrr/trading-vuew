@@ -81,6 +81,14 @@ export default {
         'common', 'values', 'grid_id', 'meta_props', 'layout_override'
     ],
     components: { ButtonGroup, Spinner },
+    created() {
+        // Non-reactive render caches for the OHLCV legend toFixed() results.
+        // Initialise here so they exist before the first render reads them —
+        // Vue 3 warns when a `_`-prefixed property is accessed during render
+        // before it is defined on the instance.
+        this._ohlcvCacheKey = null
+        this._ohlcvCache = null
+    },
     computed: {
         ohlcv() {
             if (!this.$props.values || !this.$props.values.ohlcv || !this.layout) {

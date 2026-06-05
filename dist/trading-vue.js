@@ -20423,6 +20423,10 @@ pointers: 1 },
 			ButtonGroup: ButtonGroup_default,
 			Spinner: /* @__PURE__ */ _plugin_vue_export_helper_default(_sfc_main$12, [["render", _sfc_render$10]])
 		},
+		created() {
+			this._ohlcvCacheKey = null;
+			this._ohlcvCache = null;
+		},
 		computed: {
 			ohlcv() {
 				if (!this.$props.values || !this.$props.values.ohlcv || !this.layout) return Array(6).fill("n/a");

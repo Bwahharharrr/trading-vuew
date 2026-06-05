@@ -230,8 +230,28 @@ import BuysAndSells from './components/overlays/BuysAndSells.js'
 import Balance from './components/overlays/Balance.js'
 import LineTracker from './components/overlays/LineTracker.js'
 
-// Gateway WS endpoint for the Corky chart-feed (opt-in "Gateway" source).
-const CORKY_URL = 'ws://127.0.0.1:7070'
+// Resolve the Corky chart-feed gateway WS URL (opt-in "Gateway" source).
+// Mirrors the file feed's two-mode buildWsUrl logic so it works from a REMOTE
+// browser (where `127.0.0.1` is the browser's localhost, not the gateway box):
+//   - explicit override via `?corky=ws://…` or localStorage('corkyUrl')
+//   - same-origin localhost page → connect directly to 127.0.0.1:7070
+//   - remote page → proxy through the dev-server's wildcard /live-ws/<port>
+//     handler (vite/dev-server-plugin.ts forwards /live-ws/7070 → ws://127.0.0.1:7070).
+const CORKY_GATEWAY_PORT = 7070
+function deriveCorkyUrl() {
+    try {
+        const q = new URLSearchParams(window.location.search).get('corky')
+        if (q) return q
+        const saved = window.localStorage.getItem('corkyUrl')
+        if (saved) return saved
+    } catch (_) { /* no URL/storage access — fall through to derivation */ }
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = window.location.hostname
+    if (host === 'localhost' || host === '127.0.0.1' || host === '') {
+        return `${proto}//127.0.0.1:${CORKY_GATEWAY_PORT}`
+    }
+    return `${proto}//${window.location.host}/live-ws/${CORKY_GATEWAY_PORT}`
+}
 
 // App mixins (decomposed concerns)
 import { ViewManager, IndicatorManager, FileManager, ChartState, DrawingTools, WsManager } from './mixins/app/index.js'
@@ -339,7 +359,9 @@ export default {
             // pending file-WS reconnect.
             this.wsDisconnect()
             if (!this.corkyFeed) {
-                this.corkyClient = new CorkyClient({ url: CORKY_URL })
+                const url = deriveCorkyUrl()
+                console.log('[Corky] gateway URL:', url)
+                this.corkyClient = new CorkyClient({ url })
                 this.corkyClient.connect()
                 this.corkyFeed = new CorkyFeed({
                     client: this.corkyClient,
