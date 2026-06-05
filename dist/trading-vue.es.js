@@ -1,4 +1,4 @@
-(function() {	try {		if (typeof document != "undefined") {			var elementStyle = document.createElement("style");			elementStyle.appendChild(document.createTextNode(".trading-vue-ux-wrapper {\n        position: absolute;\n        display: flex;\n}\n.tvjs-ux-wrapper-pin {\n        position: absolute;\n        width: 9px;\n        height: 9px;\n        z-index: 100;\n        background-color: #23a776;\n        border-radius: 10px;\n        margin-left: -6px;\n        margin-top: -6px;\n        pointer-events: none;\n}\n.tvjs-ux-wrapper-head {\n        position: absolute;\n        height: 23px;\n        width: 100%;\n}\n.tvjs-ux-wrapper-close {\n        position: absolute;\n        width: 11px;\n        height: 11px;\n        font-size: 1.5em;\n        line-height: 0.5em;\n        padding: 1px 1px 1px 1px;\n        border-radius: 10px;\n        right: 5px;\n        top: 5px;\n        user-select: none;\n        text-align: center;\n        z-index: 100;\n}\n.tvjs-ux-wrapper-close-hb {\n}\n.tvjs-ux-wrapper-close:hover {\n        background-color: #FF605C !important;\n        color: #692324 !important;\n}\n.tvjs-ux-wrapper-full {\n}\n\n.t-vue-lbtn {\n    z-index: 100;\n    pointer-events: all;\n    cursor: pointer;\n}\n\n.t-vue-lbtn-grp {\n    margin-left: 0.5em;\n}\n\n.tvjs-spinner {\n    display: inline-block;\n    position: relative;\n    width: 20px;\n    height: 16px;\n    margin: -4px 0px -1px 0px;\n    opacity: 0.7;\n}\n.tvjs-spinner div {\n    position: absolute;\n    top: 8px;\n    width: 4px;\n    height: 4px;\n    border-radius: 50%;\n    animation-timing-function: cubic-bezier(1, 1, 1, 1);\n}\n.tvjs-spinner div:nth-child(1) {\n    left: 2px;\n    animation: tvjs-spinner1 0.6s infinite;\n    opacity: 0.9;\n}\n.tvjs-spinner div:nth-child(2) {\n    left: 2px;\n    animation: tvjs-spinner2 0.6s infinite;\n}\n.tvjs-spinner div:nth-child(3) {\n    left: 9px;\n    animation: tvjs-spinner2 0.6s infinite;\n}\n.tvjs-spinner div:nth-child(4) {\n    left: 16px;\n    animation: tvjs-spinner3 0.6s infinite;\n    opacity: 0.9;\n}\n@keyframes tvjs-spinner1 {\n0% {\n        transform: scale(0);\n}\n100% {\n        transform: scale(1);\n}\n}\n@keyframes tvjs-spinner3 {\n0% {\n        transform: scale(1);\n}\n100% {\n        transform: scale(0);\n}\n}\n@keyframes tvjs-spinner2 {\n0% {\n        transform: translate(0, 0);\n}\n100% {\n        transform: translate(7px, 0);\n}\n}\n\n.trading-vue-legend {\n    position: relative;\n    z-index: 100;\n    font-size: 1.25em;\n    margin-left: 10px;\n    pointer-events: auto;\n    text-align: left;\n    user-select: none;\n    font-weight: 300;\n    cursor: default;\n}\n@media (min-resolution: 2x) {\n.trading-vue-legend {\n        font-weight: 400;\n}\n}\n.trading-vue-ohlcv {\n    pointer-events: auto;\n    margin-bottom: 0.5em;\n}\n.t-vue-lspan {\n    font-variant-numeric: tabular-nums;\n    font-size: 0.95em;\n    color: #999999; /* TODO: move => params */\n    margin-left: 0.1em;\n    margin-right: 0.2em;\n}\n.t-vue-title {\n    margin-right: 0.25em;\n    font-size: 1.45em;\n}\n.t-vue-ind {\n    margin-left: 0.2em;\n    margin-bottom: 0.5em;\n    font-size: 1.0em;\n    margin-top: 0.3em;\n    display: flex;\n    align-items: center;\n    flex-wrap: wrap;\n    pointer-events: auto;\n}\n.t-vue-settings-btn {\n    background: none;\n    border: none;\n    color: #808a9d;\n    cursor: pointer;\n    padding: 2px 4px;\n    margin-left: 4px;\n    border-radius: 3px;\n    display: inline-flex;\n    align-items: center;\n    justify-content: center;\n    transition: all 0.15s ease;\n    position: relative;\n    z-index: 10;\n}\n.t-vue-settings-btn:hover {\n    color: #35a776;\n    background: rgba(53, 167, 118, 0.1);\n}\n.t-vue-settings-btn svg {\n    display: block;\n}\n.t-vue-close-btn {\n    background: none;\n    border: none;\n    color: #808a9d;\n    cursor: pointer;\n    padding: 2px 4px;\n    margin-left: 2px;\n    border-radius: 3px;\n    display: inline-flex;\n    align-items: center;\n    justify-content: center;\n    transition: all 0.15s ease;\n    position: relative;\n    z-index: 10;\n}\n.t-vue-close-btn:hover {\n    color: #e54077;\n    background: rgba(229, 64, 119, 0.1);\n}\n.t-vue-close-btn svg {\n    display: block;\n}\n.t-vue-ivalue {\n    margin-left: 0.5em;\n}\n.t-vue-unknown {\n    color: #999999; /* TODO: move => params */\n}\n.tvjs-appear-enter-active,\n.tvjs-appear-leave-active\n{\n    transition: all .25s ease;\n}\n.tvjs-appear-enter, .tvjs-appear-leave-to\n{\n    opacity: 0;\n}\n\n.trading-vue-section {\n    height: 0;\n    position: absolute;\n}\n\n.trading-vue-botbar {\n    position: relative !important;\n}\n\n.grid-resizer {\n    position: absolute;\n    height: 12px;\n    z-index: 1000;\n    cursor: row-resize;\n    pointer-events: all;\n}\n.resizer-line {\n    position: absolute;\n    top: 5px;\n    left: 0;\n    right: 0;\n    height: 3px;\n    background: #888;\n    pointer-events: none;\n    transition: background 0.15s ease, height 0.15s ease, top 0.15s ease;\n}\n.resizer-hitbox {\n    position: absolute;\n    top: 0;\n    left: 0;\n    right: 0;\n    bottom: 0;\n    pointer-events: all;\n}\n.grid-resizer:hover .resizer-line {\n    background: #7777ff !important;\n    height: 3px;\n    top: 4.5px;\n}\n.grid-resizer.dragging .resizer-line {\n    background: #9999ff !important;\n    height: 4px;\n    top: 4px;\n}\n\n.tvjs-item-list {\n    position: absolute;\n    user-select: none;\n    margin-top: -5px;\n}\n.tvjs-item-list-item {\n    display: flex;\n    align-items: center;\n    padding-right: 20px;\n    font-size: 1.15em;\n    letter-spacing: 0.05em;\n}\n.tvjs-item-list-item:hover {\n    background-color: #76878319;\n}\n.tvjs-item-list-item * {\n    position: relative !important;\n}\n\n.trading-vue-tbitem {\n}\n.trading-vue-tbitem:hover {\n    background-color: #76878319;\n}\n.trading-vue-tbitem-exp {\n    position: absolute;\n    right: -3px;\n    padding: 18.5px 5px;\n    font-stretch: extra-condensed;\n    transform: scaleX(0.6);\n    font-size: 0.6em;\n    opacity: 0.0;\n    user-select: none;\n    line-height: 0;\n}\n.trading-vue-tbitem:hover\n.trading-vue-tbitem-exp {\n    opacity: 0.5;\n}\n.trading-vue-tbitem-exp:hover {\n    background-color: #76878330;\n    opacity: 0.9 !important;\n}\n.trading-vue-tbicon {\n    position: absolute;\n}\n.trading-vue-tbitem.selected-item > .trading-vue-tbicon,\n.tvjs-item-list-item.selected-item > .trading-vue-tbicon {\n     filter: brightness(1.45) sepia(1) hue-rotate(90deg) saturate(4.5) !important;\n}\n.tvjs-pixelated {\n    -ms-interpolation-mode: nearest-neighbor;\n    image-rendering: -webkit-optimize-contrast;\n    image-rendering: -webkit-crisp-edges;\n    image-rendering: -moz-crisp-edges;\n    image-rendering: -o-crisp-edges;\n    image-rendering: pixelated;\n}\n\n\n.trading-vue-toolbar {\n    position: absolute;\n    border-right: 1px solid black;\n    z-index: 101;\n    padding-top: 3px;\n    user-select: none;\n}\n\n.tvjs-widgets {\n    position: absolute;\n    z-index: 1000;\n    pointer-events: none;\n}\n\n.tvjs-drift-enter-active {\n    transition: all .3s ease;\n}\n.tvjs-drift-leave-active {\n    transition: all .8s cubic-bezier(1.0, 0.5, 0.8, 1.0);\n}\n.tvjs-drift-enter, .tvjs-drift-leave-to\n{\n    transform: translateX(10px);\n    opacity: 0;\n}\n.tvjs-the-tip {\n    position: absolute;\n    width: 200px;\n    text-align: center;\n    z-index: 10001;\n    color: #ffffff;\n    font-size: 1.5em;\n    line-height: 1.15em;\n    padding: 10px;\n    border-radius: 3px;\n    right: 70px;\n    top: 10px;\n    text-shadow: 1px 1px black;\n}\n\n/* Visually-hidden screen-reader content (a11y data fallback). */\n.tvjs-sr-only {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    padding: 0;\n    margin: -1px;\n    overflow: hidden;\n    clip: rect(0, 0, 0, 0);\n    white-space: nowrap;\n    border: 0;\n}\n/* Anit-boostrap tactix */\n.trading-vue *, ::after, ::before {\n    box-sizing: content-box;\n}\n.trading-vue img {\n    vertical-align: initial;\n}\n/*$vite$:1*/"));			document.head.appendChild(elementStyle);		}	} catch (e) {		console.error("vite-plugin-css-injected-by-js", e);	}})();
+(function() {	try {		if (typeof document != "undefined") {			var elementStyle = document.createElement("style");			elementStyle.appendChild(document.createTextNode(".trading-vue-ux-wrapper {\n        position: absolute;\n        display: flex;\n}\n.tvjs-ux-wrapper-pin {\n        position: absolute;\n        width: 9px;\n        height: 9px;\n        z-index: 100;\n        background-color: #23a776;\n        border-radius: 10px;\n        margin-left: -6px;\n        margin-top: -6px;\n        pointer-events: none;\n}\n.tvjs-ux-wrapper-head {\n        position: absolute;\n        height: 23px;\n        width: 100%;\n}\n.tvjs-ux-wrapper-close {\n        position: absolute;\n        width: 11px;\n        height: 11px;\n        font-size: 1.5em;\n        line-height: 0.5em;\n        padding: 1px 1px 1px 1px;\n        border-radius: 10px;\n        right: 5px;\n        top: 5px;\n        user-select: none;\n        text-align: center;\n        z-index: 100;\n}\n.tvjs-ux-wrapper-close-hb {\n}\n.tvjs-ux-wrapper-close:hover {\n        background-color: #FF605C !important;\n        color: #692324 !important;\n}\n.tvjs-ux-wrapper-full {\n}\n\n.t-vue-lbtn {\n    z-index: 100;\n    pointer-events: all;\n    cursor: pointer;\n}\n\n.t-vue-lbtn-grp {\n    margin-left: 0.5em;\n}\n\n.tvjs-spinner {\n    display: inline-block;\n    position: relative;\n    width: 20px;\n    height: 16px;\n    margin: -4px 0px -1px 0px;\n    opacity: 0.7;\n}\n.tvjs-spinner div {\n    position: absolute;\n    top: 8px;\n    width: 4px;\n    height: 4px;\n    border-radius: 50%;\n    animation-timing-function: cubic-bezier(1, 1, 1, 1);\n}\n.tvjs-spinner div:nth-child(1) {\n    left: 2px;\n    animation: tvjs-spinner1 0.6s infinite;\n    opacity: 0.9;\n}\n.tvjs-spinner div:nth-child(2) {\n    left: 2px;\n    animation: tvjs-spinner2 0.6s infinite;\n}\n.tvjs-spinner div:nth-child(3) {\n    left: 9px;\n    animation: tvjs-spinner2 0.6s infinite;\n}\n.tvjs-spinner div:nth-child(4) {\n    left: 16px;\n    animation: tvjs-spinner3 0.6s infinite;\n    opacity: 0.9;\n}\n@keyframes tvjs-spinner1 {\n0% {\n        transform: scale(0);\n}\n100% {\n        transform: scale(1);\n}\n}\n@keyframes tvjs-spinner3 {\n0% {\n        transform: scale(1);\n}\n100% {\n        transform: scale(0);\n}\n}\n@keyframes tvjs-spinner2 {\n0% {\n        transform: translate(0, 0);\n}\n100% {\n        transform: translate(7px, 0);\n}\n}\n\n.trading-vue-legend {\n    position: relative;\n    z-index: 100;\n    font-size: 1.25em;\n    margin-left: 10px;\n    pointer-events: auto;\n    text-align: left;\n    user-select: none;\n    font-weight: 300;\n    cursor: default;\n}\n@media (min-resolution: 2x) {\n.trading-vue-legend {\n        font-weight: 400;\n}\n}\n.trading-vue-ohlcv {\n    pointer-events: auto;\n    margin-bottom: 0.5em;\n}\n.t-vue-lspan {\n    font-variant-numeric: tabular-nums;\n    font-size: 0.95em;\n    color: #999999; /* TODO: move => params */\n    margin-left: 0.1em;\n    margin-right: 0.2em;\n}\n.t-vue-title {\n    margin-right: 0.25em;\n    font-size: 1.45em;\n}\n.t-vue-ind {\n    margin-left: 0.2em;\n    margin-bottom: 0.5em;\n    font-size: 1.0em;\n    margin-top: 0.3em;\n    display: flex;\n    align-items: center;\n    flex-wrap: wrap;\n    pointer-events: auto;\n}\n.t-vue-settings-btn {\n    background: none;\n    border: none;\n    color: #808a9d;\n    cursor: pointer;\n    padding: 2px 4px;\n    margin-left: 4px;\n    border-radius: 3px;\n    display: inline-flex;\n    align-items: center;\n    justify-content: center;\n    transition: all 0.15s ease;\n    position: relative;\n    z-index: 10;\n}\n.t-vue-settings-btn:hover {\n    color: #35a776;\n    background: rgba(53, 167, 118, 0.1);\n}\n.t-vue-settings-btn svg {\n    display: block;\n}\n.t-vue-close-btn {\n    background: none;\n    border: none;\n    color: #808a9d;\n    cursor: pointer;\n    padding: 2px 4px;\n    margin-left: 2px;\n    border-radius: 3px;\n    display: inline-flex;\n    align-items: center;\n    justify-content: center;\n    transition: all 0.15s ease;\n    position: relative;\n    z-index: 10;\n}\n.t-vue-close-btn:hover {\n    color: #e54077;\n    background: rgba(229, 64, 119, 0.1);\n}\n.t-vue-close-btn svg {\n    display: block;\n}\n.t-vue-vol {\n    margin-left: 0.2em;\n    margin-bottom: 0.5em;\n    font-size: 1.0em;\n    margin-top: 0.3em;\n    display: flex;\n    align-items: center;\n    flex-wrap: wrap;\n    pointer-events: auto;\n}\n.t-vue-detach-btn {\n    background: none;\n    border: none;\n    color: #808a9d;\n    cursor: pointer;\n    padding: 2px 4px;\n    margin-left: 2px;\n    border-radius: 3px;\n    display: inline-flex;\n    align-items: center;\n    justify-content: center;\n    transition: all 0.15s ease;\n    position: relative;\n    z-index: 10;\n}\n.t-vue-detach-btn:hover {\n    color: #35a776;\n    background: rgba(53, 167, 118, 0.1);\n}\n.t-vue-detach-btn svg {\n    display: block;\n}\n.t-vue-ivalue {\n    margin-left: 0.5em;\n}\n.t-vue-unknown {\n    color: #999999; /* TODO: move => params */\n}\n.tvjs-appear-enter-active,\n.tvjs-appear-leave-active\n{\n    transition: all .25s ease;\n}\n.tvjs-appear-enter, .tvjs-appear-leave-to\n{\n    opacity: 0;\n}\n\n.trading-vue-section {\n    height: 0;\n    position: absolute;\n}\n\n.trading-vue-botbar {\n    position: relative !important;\n}\n\n.grid-resizer {\n    position: absolute;\n    height: 12px;\n    z-index: 1000;\n    cursor: row-resize;\n    pointer-events: all;\n}\n.resizer-line {\n    position: absolute;\n    top: 5px;\n    left: 0;\n    right: 0;\n    height: 3px;\n    background: #888;\n    pointer-events: none;\n    transition: background 0.15s ease, height 0.15s ease, top 0.15s ease;\n}\n.resizer-hitbox {\n    position: absolute;\n    top: 0;\n    left: 0;\n    right: 0;\n    bottom: 0;\n    pointer-events: all;\n}\n.grid-resizer:hover .resizer-line {\n    background: #7777ff !important;\n    height: 3px;\n    top: 4.5px;\n}\n.grid-resizer.dragging .resizer-line {\n    background: #9999ff !important;\n    height: 4px;\n    top: 4px;\n}\n\n.tvjs-item-list {\n    position: absolute;\n    user-select: none;\n    margin-top: -5px;\n}\n.tvjs-item-list-item {\n    display: flex;\n    align-items: center;\n    padding-right: 20px;\n    font-size: 1.15em;\n    letter-spacing: 0.05em;\n}\n.tvjs-item-list-item:hover {\n    background-color: #76878319;\n}\n.tvjs-item-list-item * {\n    position: relative !important;\n}\n\n.trading-vue-tbitem {\n}\n.trading-vue-tbitem:hover {\n    background-color: #76878319;\n}\n.trading-vue-tbitem-exp {\n    position: absolute;\n    right: -3px;\n    padding: 18.5px 5px;\n    font-stretch: extra-condensed;\n    transform: scaleX(0.6);\n    font-size: 0.6em;\n    opacity: 0.0;\n    user-select: none;\n    line-height: 0;\n}\n.trading-vue-tbitem:hover\n.trading-vue-tbitem-exp {\n    opacity: 0.5;\n}\n.trading-vue-tbitem-exp:hover {\n    background-color: #76878330;\n    opacity: 0.9 !important;\n}\n.trading-vue-tbicon {\n    position: absolute;\n}\n.trading-vue-tbitem.selected-item > .trading-vue-tbicon,\n.tvjs-item-list-item.selected-item > .trading-vue-tbicon {\n     filter: brightness(1.45) sepia(1) hue-rotate(90deg) saturate(4.5) !important;\n}\n.tvjs-pixelated {\n    -ms-interpolation-mode: nearest-neighbor;\n    image-rendering: -webkit-optimize-contrast;\n    image-rendering: -webkit-crisp-edges;\n    image-rendering: -moz-crisp-edges;\n    image-rendering: -o-crisp-edges;\n    image-rendering: pixelated;\n}\n\n\n.trading-vue-toolbar {\n    position: absolute;\n    border-right: 1px solid black;\n    z-index: 101;\n    padding-top: 3px;\n    user-select: none;\n}\n\n.tvjs-widgets {\n    position: absolute;\n    z-index: 1000;\n    pointer-events: none;\n}\n\n.tvjs-drift-enter-active {\n    transition: all .3s ease;\n}\n.tvjs-drift-leave-active {\n    transition: all .8s cubic-bezier(1.0, 0.5, 0.8, 1.0);\n}\n.tvjs-drift-enter, .tvjs-drift-leave-to\n{\n    transform: translateX(10px);\n    opacity: 0;\n}\n.tvjs-the-tip {\n    position: absolute;\n    width: 200px;\n    text-align: center;\n    z-index: 10001;\n    color: #ffffff;\n    font-size: 1.5em;\n    line-height: 1.15em;\n    padding: 10px;\n    border-radius: 3px;\n    right: 70px;\n    top: 10px;\n    text-shadow: 1px 1px black;\n}\n\n/* Visually-hidden screen-reader content (a11y data fallback). */\n.tvjs-sr-only {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    padding: 0;\n    margin: -1px;\n    overflow: hidden;\n    clip: rect(0, 0, 0, 0);\n    white-space: nowrap;\n    border: 0;\n}\n/* Anit-boostrap tactix */\n.trading-vue *, ::after, ::before {\n    box-sizing: content-box;\n}\n.trading-vue img {\n    vertical-align: initial;\n}\n/*$vite$:1*/"));			document.head.appendChild(elementStyle);		}	} catch (e) {		console.error("vite-plugin-css-injected-by-js", e);	}})();
 /*!
 TradingVue.JS - v1.0.2
 https://github.com/tvjsx/trading-vue-js
@@ -7623,6 +7623,20 @@ var _sfc_main$11 = {
 		},
 		show_values() {
 			return this.$props.common?.cursor?.mode !== "explore";
+		},
+		main_overlay() {
+			return this.json_data.find((x) => x.main);
+		},
+		show_volume_row() {
+			return !!this.main_overlay;
+		},
+		chart_show_volume() {
+			let s = this.main_overlay?.settings;
+			return !s || !("showVolume" in s) ? true : s.showVolume;
+		},
+		volume_detached() {
+			let off = this.$props.common?.volume_detached;
+			return off === void 0 ? false : off;
 		}
 	},
 	methods: {
@@ -7680,6 +7694,26 @@ var _sfc_main$11 = {
 				index: indicator.index,
 				gridId: this.$props.grid_id
 			});
+		},
+		openVolumeSettings() {
+			this.$emit("open-indicator-settings", {
+				name: "Volume",
+				type: "Volume",
+				index: -1,
+				settings: this.main_overlay?.settings || {},
+				gridId: 0
+			});
+		},
+		volume_button_click(event) {
+			this.button_click(event);
+		},
+		toggleVolumeDetach() {
+			this.$emit("legend-button-click", {
+				button: "volume-detach",
+				overlay: "Volume",
+				grid: 0,
+				detach: !this.volume_detached
+			});
 		}
 	}
 };
@@ -7689,14 +7723,31 @@ var _hoisted_3 = { class: "t-vue-lspan" };
 var _hoisted_4 = { class: "t-vue-lspan" };
 var _hoisted_5 = { class: "t-vue-lspan" };
 var _hoisted_6 = { class: "t-vue-lspan" };
-var _hoisted_7 = { class: "t-vue-iname" };
-var _hoisted_8 = ["onClick"];
-var _hoisted_9 = ["onClick"];
+var _hoisted_7 = {
+	key: 1,
+	class: "t-vue-vol"
+};
+var _hoisted_8 = ["title", "aria-label"];
+var _hoisted_9 = {
+	key: 0,
+	viewBox: "0 0 24 24",
+	width: "14",
+	height: "14"
+};
 var _hoisted_10 = {
+	key: 1,
+	viewBox: "0 0 24 24",
+	width: "14",
+	height: "14"
+};
+var _hoisted_11 = { class: "t-vue-iname" };
+var _hoisted_12 = ["onClick"];
+var _hoisted_13 = ["onClick"];
+var _hoisted_14 = {
 	key: 2,
 	class: "t-vue-ivalues"
 };
-var _hoisted_11 = {
+var _hoisted_15 = {
 	key: 3,
 	class: "t-vue-unknown"
 };
@@ -7707,101 +7758,148 @@ function _sfc_render$9(_ctx, _cache, $props, $setup, $data, $options) {
 		key: 0,
 		class: "trading-vue-legend",
 		style: normalizeStyle($options.calc_style),
-		onDblclick: _cache[0] || (_cache[0] = (...args) => $options.on_dblclick && $options.on_dblclick(...args))
-	}, [$props.grid_id === 0 ? (openBlock(), createElementBlock("div", {
-		key: 0,
-		class: "trading-vue-ohlcv",
-		style: normalizeStyle({ "max-width": ($props.common?.layout?.grids?.[0]?.width || 200) + "px" })
+		onDblclick: _cache[2] || (_cache[2] = (...args) => $options.on_dblclick && $options.on_dblclick(...args))
 	}, [
-		createElementVNode("span", {
-			class: "t-vue-title",
-			style: normalizeStyle({ color: $props.common?.colors?.title })
-		}, toDisplayString($props.common.title_txt), 5),
-		$options.show_values ? (openBlock(), createElementBlock("span", _hoisted_1$3, [
-			_cache[1] || (_cache[1] = createTextVNode(" O", -1)),
-			createElementVNode("span", _hoisted_2$1, toDisplayString($options.ohlcv[0]), 1),
-			_cache[2] || (_cache[2] = createTextVNode(" H", -1)),
-			createElementVNode("span", _hoisted_3, toDisplayString($options.ohlcv[1]), 1),
-			_cache[3] || (_cache[3] = createTextVNode(" L", -1)),
-			createElementVNode("span", _hoisted_4, toDisplayString($options.ohlcv[2]), 1),
-			_cache[4] || (_cache[4] = createTextVNode(" C", -1)),
-			createElementVNode("span", _hoisted_5, toDisplayString($options.ohlcv[3]), 1),
-			_cache[5] || (_cache[5] = createTextVNode(" V", -1)),
-			createElementVNode("span", _hoisted_6, toDisplayString($options.ohlcv[4]), 1)
-		])) : createCommentVNode("", true),
-		!$options.show_values ? (openBlock(), createElementBlock("span", {
-			key: 1,
-			class: "t-vue-lspan",
-			style: normalizeStyle({ color: $props.common?.colors?.text })
-		}, toDisplayString(($props.common.meta.last || [])[4]), 5)) : createCommentVNode("", true)
-	], 4)) : createCommentVNode("", true), (openBlock(true), createElementBlock(Fragment, null, renderList(this.indicators, (ind) => {
-		return openBlock(), createElementBlock("div", {
-			class: "t-vue-ind",
-			key: ind.id
+		$props.grid_id === 0 ? (openBlock(), createElementBlock("div", {
+			key: 0,
+			class: "trading-vue-ohlcv",
+			style: normalizeStyle({ "max-width": ($props.common?.layout?.grids?.[0]?.width || 200) + "px" })
 		}, [
-			createElementVNode("span", _hoisted_7, toDisplayString(ind.name), 1),
-			$props.grid_id > 0 ? (openBlock(), createElementBlock("button", {
-				key: 0,
+			createElementVNode("span", {
+				class: "t-vue-title",
+				style: normalizeStyle({ color: $props.common?.colors?.title })
+			}, toDisplayString($props.common.title_txt), 5),
+			$options.show_values ? (openBlock(), createElementBlock("span", _hoisted_1$3, [
+				_cache[3] || (_cache[3] = createTextVNode(" O", -1)),
+				createElementVNode("span", _hoisted_2$1, toDisplayString($options.ohlcv[0]), 1),
+				_cache[4] || (_cache[4] = createTextVNode(" H", -1)),
+				createElementVNode("span", _hoisted_3, toDisplayString($options.ohlcv[1]), 1),
+				_cache[5] || (_cache[5] = createTextVNode(" L", -1)),
+				createElementVNode("span", _hoisted_4, toDisplayString($options.ohlcv[2]), 1),
+				_cache[6] || (_cache[6] = createTextVNode(" C", -1)),
+				createElementVNode("span", _hoisted_5, toDisplayString($options.ohlcv[3]), 1),
+				_cache[7] || (_cache[7] = createTextVNode(" V", -1)),
+				createElementVNode("span", _hoisted_6, toDisplayString($options.ohlcv[4]), 1)
+			])) : createCommentVNode("", true),
+			!$options.show_values ? (openBlock(), createElementBlock("span", {
+				key: 1,
+				class: "t-vue-lspan",
+				style: normalizeStyle({ color: $props.common?.colors?.text })
+			}, toDisplayString(($props.common.meta.last || [])[4]), 5)) : createCommentVNode("", true)
+		], 4)) : createCommentVNode("", true),
+		$props.grid_id === 0 && $options.show_volume_row ? (openBlock(), createElementBlock("div", _hoisted_7, [
+			_cache[11] || (_cache[11] = createElementVNode("span", { class: "t-vue-iname" }, "Volume", -1)),
+			createElementVNode("button", {
 				class: "t-vue-settings-btn",
-				onClick: withModifiers(($event) => $options.openSettings(ind), ["stop"]),
-				title: "Settings"
-			}, [..._cache[6] || (_cache[6] = [createElementVNode("svg", {
+				onClick: _cache[0] || (_cache[0] = withModifiers((...args) => $options.openVolumeSettings && $options.openVolumeSettings(...args), ["stop"])),
+				title: "Volume settings",
+				"aria-label": "Volume settings"
+			}, [..._cache[8] || (_cache[8] = [createElementVNode("svg", {
 				viewBox: "0 0 24 24",
 				width: "14",
 				height: "14"
 			}, [createElementVNode("path", {
 				fill: "currentColor",
 				d: "M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"
-			})], -1)])], 8, _hoisted_8)) : createCommentVNode("", true),
-			$props.grid_id > 0 ? (openBlock(), createElementBlock("button", {
-				key: 1,
-				class: "t-vue-close-btn",
-				onClick: withModifiers(($event) => $options.closeIndicator(ind), ["stop"]),
-				title: "Remove indicator"
-			}, [..._cache[7] || (_cache[7] = [createElementVNode("svg", {
-				viewBox: "0 0 24 24",
-				width: "14",
-				height: "14"
-			}, [createElementVNode("path", {
+			})], -1)])]),
+			createElementVNode("button", {
+				class: "t-vue-detach-btn",
+				onClick: _cache[1] || (_cache[1] = withModifiers((...args) => $options.toggleVolumeDetach && $options.toggleVolumeDetach(...args), ["stop"])),
+				title: $options.volume_detached ? "Attach volume to candles" : "Detach volume to its own pane",
+				"aria-label": $options.volume_detached ? "Attach volume to candles" : "Detach volume to its own pane"
+			}, [!$options.volume_detached ? (openBlock(), createElementBlock("svg", _hoisted_9, [..._cache[9] || (_cache[9] = [createElementVNode("path", {
 				fill: "currentColor",
-				d: "M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
-			})], -1)])], 8, _hoisted_9)) : createCommentVNode("", true),
-			createVNode(_component_button_group, {
-				buttons: $props.common.buttons,
+				d: "M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"
+			}, null, -1)])])) : (openBlock(), createElementBlock("svg", _hoisted_10, [..._cache[10] || (_cache[10] = [createElementVNode("path", {
+				fill: "currentColor",
+				d: "M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"
+			}, null, -1)])]))], 8, _hoisted_8),
+			!$options.volume_detached ? (openBlock(), createBlock(_component_button_group, {
+				key: 0,
+				buttons: [{ name: "display" }],
 				config: $props.common.config,
-				ov_id: ind.id,
-				grid_id: $props.grid_id,
-				index: ind.index,
+				ov_id: "Volume",
+				grid_id: 0,
+				index: -1,
 				tv_id: $props.common.tv_id,
-				display: ind.v,
-				onLegendButtonClick: $options.button_click
+				display: $options.chart_show_volume,
+				onLegendButtonClick: $options.volume_button_click
 			}, null, 8, [
-				"buttons",
 				"config",
-				"ov_id",
-				"grid_id",
-				"index",
 				"tv_id",
 				"display",
 				"onLegendButtonClick"
-			]),
-			ind.v ? (openBlock(), createElementBlock("span", _hoisted_10, [$options.show_values ? (openBlock(true), createElementBlock(Fragment, { key: 0 }, renderList(ind.values, (v, idx) => {
-				return openBlock(), createElementBlock("span", {
-					class: "t-vue-lspan t-vue-ivalue",
-					key: idx,
-					style: normalizeStyle({ color: v.color })
-				}, toDisplayString(v.value), 5);
-			}), 128)) : createCommentVNode("", true)])) : createCommentVNode("", true),
-			ind.unk ? (openBlock(), createElementBlock("span", _hoisted_11, " (Unknown type) ")) : createCommentVNode("", true),
-			createVNode(Transition, { name: "tvjs-appear" }, {
-				default: withCtx(() => [ind.loading ? (openBlock(), createBlock(_component_spinner, {
+			])) : createCommentVNode("", true)
+		])) : createCommentVNode("", true),
+		(openBlock(true), createElementBlock(Fragment, null, renderList(this.indicators, (ind) => {
+			return openBlock(), createElementBlock("div", {
+				class: "t-vue-ind",
+				key: ind.id
+			}, [
+				createElementVNode("span", _hoisted_11, toDisplayString(ind.name), 1),
+				$props.grid_id > 0 ? (openBlock(), createElementBlock("button", {
 					key: 0,
-					colors: $props.common?.colors
-				}, null, 8, ["colors"])) : createCommentVNode("", true)]),
-				_: 2
-			}, 1024)
-		]);
-	}), 128))], 36)) : createCommentVNode("", true);
+					class: "t-vue-settings-btn",
+					onClick: withModifiers(($event) => $options.openSettings(ind), ["stop"]),
+					title: "Settings"
+				}, [..._cache[12] || (_cache[12] = [createElementVNode("svg", {
+					viewBox: "0 0 24 24",
+					width: "14",
+					height: "14"
+				}, [createElementVNode("path", {
+					fill: "currentColor",
+					d: "M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"
+				})], -1)])], 8, _hoisted_12)) : createCommentVNode("", true),
+				$props.grid_id > 0 ? (openBlock(), createElementBlock("button", {
+					key: 1,
+					class: "t-vue-close-btn",
+					onClick: withModifiers(($event) => $options.closeIndicator(ind), ["stop"]),
+					title: "Remove indicator"
+				}, [..._cache[13] || (_cache[13] = [createElementVNode("svg", {
+					viewBox: "0 0 24 24",
+					width: "14",
+					height: "14"
+				}, [createElementVNode("path", {
+					fill: "currentColor",
+					d: "M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+				})], -1)])], 8, _hoisted_13)) : createCommentVNode("", true),
+				createVNode(_component_button_group, {
+					buttons: $props.common.buttons,
+					config: $props.common.config,
+					ov_id: ind.id,
+					grid_id: $props.grid_id,
+					index: ind.index,
+					tv_id: $props.common.tv_id,
+					display: ind.v,
+					onLegendButtonClick: $options.button_click
+				}, null, 8, [
+					"buttons",
+					"config",
+					"ov_id",
+					"grid_id",
+					"index",
+					"tv_id",
+					"display",
+					"onLegendButtonClick"
+				]),
+				ind.v ? (openBlock(), createElementBlock("span", _hoisted_14, [$options.show_values ? (openBlock(true), createElementBlock(Fragment, { key: 0 }, renderList(ind.values, (v, idx) => {
+					return openBlock(), createElementBlock("span", {
+						class: "t-vue-lspan t-vue-ivalue",
+						key: idx,
+						style: normalizeStyle({ color: v.color })
+					}, toDisplayString(v.value), 5);
+				}), 128)) : createCommentVNode("", true)])) : createCommentVNode("", true),
+				ind.unk ? (openBlock(), createElementBlock("span", _hoisted_15, " (Unknown type) ")) : createCommentVNode("", true),
+				createVNode(Transition, { name: "tvjs-appear" }, {
+					default: withCtx(() => [ind.loading ? (openBlock(), createBlock(_component_spinner, {
+						key: 0,
+						colors: $props.common?.colors
+					}, null, 8, ["colors"])) : createCommentVNode("", true)]),
+					_: 2
+				}, 1024)
+			]);
+		}), 128))
+	], 36)) : createCommentVNode("", true);
 }
 var Legend_default = /*#__PURE__*/ _plugin_vue_export_helper_default(_sfc_main$11, [["render", _sfc_render$9]]);
 //#endregion
@@ -9334,7 +9432,483 @@ var TI = class {
 	}
 };
 //#endregion
+//#region src/mixins/chart/chart-range.js
+var chart_range_default = {
+	methods: {
+		range_changed(r) {
+			r = this.clamp_range(r);
+			let sub = this.subset(r);
+			utils_default.overwrite(this.range, r);
+			utils_default.overwrite(this.sub, sub);
+			this.update_layout();
+			this.$emit("range-changed", r);
+			if (this.$props.ib) this.save_data_t();
+		},
+		clamp_range(r) {
+			const ohlcv = this.ohlcv;
+			if (!ohlcv || ohlcv.length < 1) return r;
+			let t1 = r[0], t2 = r[1];
+			if (!Number.isFinite(t1) || !Number.isFinite(t2) || t1 > t2) return r;
+			const first = this.$props.ib ? 0 : ohlcv[0][0];
+			const last = this.$props.ib ? ohlcv.length - 1 : ohlcv[ohlcv.length - 1][0];
+			const span = t2 - t1;
+			if (t2 < first) {
+				t1 = first - span + this.interval;
+				t2 = t1 + span;
+			} else if (t1 > last) {
+				t2 = last + span - this.interval;
+				t1 = t2 - span;
+			}
+			return [t1, t2];
+		},
+		goto(t) {
+			const dt = this.range[1] - this.range[0];
+			this.range_changed([t - dt, t]);
+		},
+		setRange(t1, t2) {
+			this.range_changed([t1, t2]);
+		},
+		calc_interval() {
+			let tf = utils_default.parse_tf(this.forced_tf);
+			if (this.ohlcv.length < 2 && !tf) return;
+			this.interval_ms = tf || utils_default.detect_interval(this.ohlcv);
+			this.interval = this.$props.ib ? 1 : this.interval_ms;
+			utils_default.warn(() => this.$props.ib && !this.chart.tf, constants_default.IB_TF_WARN, constants_default.SECOND);
+		},
+		set_ytransform(s) {
+			let existing = this.y_transforms[s.grid_id] || {};
+			let obj = Object.assign({}, existing, s);
+			if (obj.range) obj.range = [...obj.range];
+			this.y_transforms[s.grid_id] = obj;
+			this.update_layout();
+		},
+		default_range() {
+			const dl = this.$props.config.DEFAULT_LEN;
+			const ml = this.$props.config.MINIMUM_LEN + .5;
+			const l = this.ohlcv.length - 1;
+			if (this.ohlcv.length < 2) return;
+			let s, d;
+			if (this.ohlcv.length <= dl) {
+				s = 0;
+				d = ml;
+			} else {
+				s = l - dl;
+				d = .5;
+			}
+			if (!this.$props.ib) utils_default.overwrite(this.range, [this.ohlcv[s][0] - this.interval * d, this.ohlcv[l][0] + this.interval * ml]);
+			else utils_default.overwrite(this.range, [s - this.interval * d, l + this.interval * ml]);
+		},
+		subset(range = this.range) {
+			let [res, index] = this.filter(this.ohlcv, range[0] - this.interval, range[1]);
+			this.ti_map = new TI();
+			if (res) {
+				this.sub_start = index;
+				this.ti_map.init(this, res);
+				if (!this.$props.ib) return res || [];
+				return this.ti_map.sub_i;
+			}
+			return [];
+		},
+		init_range() {
+			this.calc_interval();
+			this.default_range();
+		},
+		update_layout(clac_tf, forceResize = false) {
+			if (clac_tf) this.calc_interval();
+			if (this.range[0] === void 0 || this.range[1] === void 0) if (this.ohlcv && this.ohlcv.length >= 2) {
+				this.init_range();
+				const sub = this.subset();
+				utils_default.overwrite(this.sub, sub);
+			} else return;
+			const rangeArr = [this.range[0], this.range[1]];
+			const subArr = Array.from(this.sub);
+			const layoutParams = {
+				chart: this.chart,
+				sub: subArr,
+				offsub: this.offsub,
+				interval: this.interval,
+				range: rangeArr,
+				ctx: this.ctx,
+				layers_meta: this.layers_meta,
+				ti_map: this.ti_map,
+				$props: this.$props,
+				y_transforms: this.y_transforms,
+				customGridHeights: this.customGridHeights,
+				minimizedGrids: this.minimizedGrids
+			};
+			this.chartLayout = markRaw(new Layout(layoutParams));
+			this.rerender++;
+			const layout = this.chartLayout;
+			if (forceResize) {
+				if (this.$refs.sec) this.$refs.sec.forEach((section, i) => {
+					const grid = section && section.$refs.grid;
+					const sidebar = section && section.$refs["sb-" + i];
+					if (grid && grid.resize_from_layout) grid.resize_from_layout(layout);
+					if (sidebar && sidebar.resize_from_layout) sidebar.resize_from_layout(layout);
+					if (section && section.updateLegendPosition) section.updateLegendPosition(layout);
+				});
+			} else if (this.$refs.sec) this.$refs.sec.forEach((section, i) => {
+				const grid = section && section.$refs.grid;
+				const sidebar = section && section.$refs["sb-" + i];
+				if (grid) {
+					if (grid.layoutOverride) grid.layoutOverride = null;
+					if (grid.renderer) grid.renderer.layout = layout.grids[i];
+				}
+				if (sidebar) {
+					if (sidebar.layoutOverride) sidebar.layoutOverride = null;
+					if (sidebar.renderer) sidebar.renderer.layout = layout.grids[i];
+				}
+				if (section && section.clearLayoutOverride) section.clearLayoutOverride();
+			});
+			if (this._hook_update) this.ce("?chart-update", this.chartLayout);
+		},
+		common_props() {
+			return {
+				title_txt: this.chart.name || this.$props.title_txt,
+				layout: this.chartLayout,
+				sub: this.sub,
+				range: this.range,
+				interval: this.interval,
+				cursor: this.cursor,
+				colors: this.$props.colors,
+				font: this.$props.font,
+				y_ts: this.y_transforms,
+				tv_id: this.$props.tv_id,
+				config: this.$props.config,
+				buttons: this.$props.buttons,
+				meta: this.meta,
+				skin: this.$props.skin,
+				dataVersion: this.$props.data?.$cd?.revision?.() ?? 0
+			};
+		},
+		overlay_subset(source, side) {
+			return source.map((d, i) => {
+				let res = utils_default.fast_filter(d.data, this.ti_map.i2t_mode(this.range[0] - this.interval, d.indexSrc), this.ti_map.i2t_mode(this.range[1], d.indexSrc));
+				return {
+					type: d.type,
+					name: utils_default.format_name(d),
+					data: this.ti_map.parse(res[0] || [], d.indexSrc || "map"),
+					settings: d.settings || this.settings_ov,
+					grid: d.grid || {},
+					tf: utils_default.parse_tf(d.tf),
+					i0: res[1],
+					loading: d.loading,
+					last: (this.last_values[side] || [])[i]
+				};
+			});
+		},
+		update_last_values() {
+			this.last_candle = this.ohlcv ? this.ohlcv[this.ohlcv.length - 1] : void 0;
+			this.last_values = {
+				onchart: [],
+				offchart: []
+			};
+			this.onchart.forEach((x, i) => {
+				let d = x.data || [];
+				this.last_values.onchart[i] = d[d.length - 1];
+			});
+			this.offchart.forEach((x, i) => {
+				let d = x.data || [];
+				this.last_values.offchart[i] = d[d.length - 1];
+			});
+		}
+	},
+	data() {
+		return {
+			sub: [],
+			range: [],
+			interval: 0,
+			interval_ms: 0,
+			y_transforms: {},
+			sub_start: void 0,
+			last_candle: [],
+			last_values: {},
+			rerender: 0,
+			chartLayout: null
+		};
+	},
+	computed: {
+		dimensions() {
+			return `${this.width}x${this.height}`;
+		},
+		dataHashKey() {
+			const data = this.$props.data;
+			if (!data) return "";
+			const ohlcv = data.ohlcv || data.chart?.data || [];
+			const ohlcvLen = ohlcv.length;
+			return `${ohlcvLen},${ohlcv[0]?.[0] ?? ""},${ohlcv[ohlcvLen - 1]?.[0] ?? ""},${ohlcv[ohlcvLen - 1]?.[4] ?? ""},${data.scrollLock ? "1" : "0"},${data.$cd?.revision?.() ?? 0}`;
+		}
+	},
+	watch: {
+		dimensions() {
+			this.update_layout();
+			if (this._hook_resize) this.ce("?chart-resize");
+		},
+		ib(nw) {
+			if (!nw) {
+				let t1 = this.ti_map.i2t(this.range[0]);
+				let t2 = this.ti_map.i2t(this.range[1]);
+				utils_default.overwrite(this.range, [t1, t2]);
+				this.interval = this.interval_ms;
+			} else {
+				this.init_range();
+				utils_default.overwrite(this.range, this.range);
+				this.interval = 1;
+			}
+			let sub = this.subset();
+			utils_default.overwrite(this.sub, sub);
+			this.update_layout();
+		},
+		timezone() {
+			this.update_layout();
+		},
+		colors() {
+			utils_default.overwrite(this.range, this.range);
+		},
+		forced_tf(n, p) {
+			this.calc_interval();
+			this.update_layout(true);
+			this.ce("exec-all-scripts");
+		},
+		dataHashKey(newKey, oldKey) {
+			if (!newKey || newKey === oldKey) return;
+			const n = this.$props.data;
+			if (!this.sub.length) this.init_range();
+			const sub = this.subset();
+			if (this.sub.length || sub.length) utils_default.overwrite(this.sub, sub);
+			let nw = this.data_changed();
+			this.update_layout(nw);
+			utils_default.overwrite(this.range, this.range);
+			this.cursor.scroll_lock = !!n.scrollLock;
+			if (n.scrollLock && this.cursor.locked) this.cursor.locked = false;
+			if (this._hook_data) this.ce("?chart-data", nw);
+			this.update_last_values();
+			this.rerender++;
+		}
+	}
+};
+//#endregion
+//#region src/mixins/chart/chart-resize.js
+var chart_resize_default = {
+	methods: {
+		on_resize_grids(e) {
+			this.isResizing = true;
+			this.customGridHeights[e.gridAbove] = e.heightAbove;
+			this.customGridHeights[e.gridBelow] = e.heightBelow;
+			this._throttledResizeUpdate();
+		},
+		_throttledResizeUpdate() {
+			if (this._resizeThrottleRAF) return;
+			this._resizeThrottleRAF = requestAnimationFrame(() => {
+				this._resizeThrottleRAF = null;
+				this.update_layout(false, true);
+			});
+		},
+		on_resize_complete() {
+			this.chartLayout.grids.forEach((g, i) => {
+				if (!this.minimizedGrids[i]) this.savedGridHeights[i] = g.height;
+			});
+			this.isResizing = false;
+		},
+		on_toggle_minimize(gridId) {
+			const isMinimized = this.minimizedGrids[gridId];
+			if (isMinimized) {
+				this.minimizedGrids[gridId] = false;
+				if (this.savedGridHeights[gridId]) this.customGridHeights[gridId] = this.savedGridHeights[gridId];
+				else delete this.customGridHeights[gridId];
+			} else {
+				const currentHeight = this.chartLayout.grids[gridId]?.height;
+				if (currentHeight) this.savedGridHeights[gridId] = currentHeight;
+				this.minimizedGrids[gridId] = true;
+			}
+			this.redistribute_heights(gridId, isMinimized);
+			this.update_layout(false, true);
+		},
+		redistribute_heights(changedGridId, wasMinimized) {
+			const grids = this.chartLayout.grids;
+			const MINIMIZED_HEIGHT = 28;
+			const MIN_MAIN_CHART_HEIGHT = 100;
+			const MIN_OFFCHART_HEIGHT = 50;
+			if (wasMinimized) {
+				const restoreHeight = this.savedGridHeights[changedGridId] || 150;
+				let remainingDelta = restoreHeight - MINIMIZED_HEIGHT;
+				const mainChartHeight = this.customGridHeights[0] || grids[0]?.height || 100;
+				const mainAvailable = Math.max(0, mainChartHeight - MIN_MAIN_CHART_HEIGHT);
+				const takeFromMain = Math.min(remainingDelta, mainAvailable);
+				if (takeFromMain > 0) {
+					this.customGridHeights[0] = mainChartHeight - takeFromMain;
+					remainingDelta -= takeFromMain;
+				}
+				if (remainingDelta > 0) for (let i = changedGridId - 1; i >= 1; i--) {
+					if (this.minimizedGrids[i]) continue;
+					const gridHeight = this.customGridHeights[i] || grids[i]?.height || 100;
+					const available = Math.max(0, gridHeight - MIN_OFFCHART_HEIGHT);
+					const takeAmount = Math.min(remainingDelta, available);
+					if (takeAmount > 0) {
+						this.customGridHeights[i] = gridHeight - takeAmount;
+						remainingDelta -= takeAmount;
+					}
+					if (remainingDelta <= 0) break;
+				}
+				const actualHeight = restoreHeight - remainingDelta;
+				if (actualHeight > MINIMIZED_HEIGHT) this.customGridHeights[changedGridId] = actualHeight;
+			} else {
+				const gridAboveId = changedGridId - 1;
+				if (gridAboveId < 0) return;
+				let targetGridId = gridAboveId;
+				if (this.minimizedGrids[gridAboveId]) {
+					for (let i = gridAboveId; i >= 0; i--) if (!this.minimizedGrids[i]) {
+						targetGridId = i;
+						break;
+					}
+				}
+				const targetHeight = this.customGridHeights[targetGridId] || grids[targetGridId]?.height || 100;
+				const heightDelta = (this.savedGridHeights[changedGridId] || 150) - MINIMIZED_HEIGHT;
+				this.customGridHeights[targetGridId] = targetHeight + heightDelta;
+			}
+		},
+		minimize_all_offcharts() {
+			const grids = this.chartLayout.grids;
+			const MINIMIZED_HEIGHT = 28;
+			let hasExpandedOffchart = false;
+			for (let i = 1; i < grids.length; i++) if (!this.minimizedGrids[i]) {
+				hasExpandedOffchart = true;
+				break;
+			}
+			if (hasExpandedOffchart) {
+				let totalHeightGained = 0;
+				for (let i = 1; i < grids.length; i++) if (!this.minimizedGrids[i]) {
+					const currentHeight = this.customGridHeights[i] || grids[i]?.height;
+					if (currentHeight) {
+						this.savedGridHeights[i] = currentHeight;
+						totalHeightGained += currentHeight - MINIMIZED_HEIGHT;
+					}
+					this.minimizedGrids[i] = true;
+				}
+				const mainHeight = this.customGridHeights[0] || grids[0]?.height || 100;
+				this.customGridHeights[0] = mainHeight + totalHeightGained;
+			} else {
+				let totalHeightNeeded = 0;
+				for (let i = 1; i < grids.length; i++) {
+					const restoreHeight = this.savedGridHeights[i] || 150;
+					totalHeightNeeded += restoreHeight - MINIMIZED_HEIGHT;
+				}
+				const mainHeight = this.customGridHeights[0] || grids[0]?.height || 100;
+				const available = Math.max(0, mainHeight - 100);
+				const takeFromMain = Math.min(totalHeightNeeded, available);
+				if (takeFromMain > 0) this.customGridHeights[0] = mainHeight - takeFromMain;
+				const ratio = takeFromMain / totalHeightNeeded;
+				for (let i = 1; i < grids.length; i++) {
+					this.minimizedGrids[i] = false;
+					const actualHeight = MINIMIZED_HEIGHT + ((this.savedGridHeights[i] || 150) - MINIMIZED_HEIGHT) * (ratio < 1 ? ratio : 1);
+					this.customGridHeights[i] = actualHeight;
+				}
+			}
+			this.update_layout(false, true);
+		}
+	},
+	data() {
+		return {
+			customGridHeights: {},
+			minimizedGrids: {},
+			savedGridHeights: {},
+			isResizing: false
+		};
+	},
+	beforeUnmount() {
+		if (this._resizeThrottleRAF) {
+			cancelAnimationFrame(this._resizeThrottleRAF);
+			this._resizeThrottleRAF = null;
+		}
+	}
+};
+//#endregion
+//#region src/mixins/chart/chart-cursor.js
+var chart_cursor_default = {
+	methods: {
+		cursor_changed(e) {
+			if (e.mode) this.cursor.mode = e.mode;
+			if (this.cursor.mode !== "explore" && this.updater) this.updater.sync(e);
+			if (this._hook_xchanged) this.ce("?x-changed", e);
+		},
+		cursor_locked(state) {
+			if (this.cursor.scroll_lock && state) return;
+			this.cursor.locked = state;
+			if (this._hook_xlocked) this.ce("?x-locked", state);
+		},
+		register_kb(event) {
+			if (!this.$refs.keyboard) return;
+			this.$refs.keyboard.register(event);
+		},
+		remove_kb(event) {
+			if (!this.$refs.keyboard) return;
+			this.$refs.keyboard.remove(event);
+		}
+	},
+	data() {
+		return { cursor: {
+			x: null,
+			y: null,
+			t: null,
+			y$: null,
+			grid_id: null,
+			locked: false,
+			values: {},
+			scroll_lock: false,
+			mode: utils_default.xmode()
+		} };
+	}
+};
+//#endregion
+//#region src/mixins/chart/chart-events.js
+var chart_events_default = {
+	methods: {
+		emit_custom_event(d) {
+			this.on_shader_event(d, "botbar");
+			this.$emit("custom-event", d);
+			if (d.event === "remove-layer-meta") this.remove_meta_props(...d.args);
+			if (d.event === "grid-dblclick") this.on_toggle_minimize(d.args[0]);
+			if (d.event === "minimize-all-offcharts") this.minimize_all_offcharts();
+			if (d.event === "open-indicator-settings") this.$emit("open-indicator-settings", d.args[0]);
+		},
+		layer_meta_props(d) {
+			if (!(d.grid_id in this.layers_meta)) this.layers_meta[d.grid_id] = {};
+			this.layers_meta[d.grid_id][d.layer_id] = d;
+			this.update_layout();
+		},
+		remove_meta_props(grid_id, layer_id) {
+			if (grid_id in this.layers_meta) delete this.layers_meta[grid_id][layer_id];
+		},
+		legend_button_click(event) {
+			if (event && event.overlay === "Volume") {
+				if (event.button === "volume-detach") {
+					this.toggleVolumeDetach();
+					return;
+				}
+				if (event.button === "display") {
+					this.setVolumeShown(!this.volumeShown);
+					return;
+				}
+			}
+			this.$emit("legend-button-click", event);
+		},
+		ce(event, ...args) {
+			this.emit_custom_event({
+				event,
+				args
+			});
+		},
+		hooks(...list) {
+			list.forEach((x) => this[`_hook_${x}`] = true);
+		}
+	},
+	data() {
+		return { layers_meta: {} };
+	}
+};
+//#endregion
 //#region src/components/Chart.vue
+var VOLUME_LEGEND_FLAG = "$volumeLegend";
 var _sfc_main$6 = {
 	name: "Chart",
 	props: [
@@ -9356,463 +9930,10 @@ var _sfc_main$6 = {
 	mixins: [
 		shaders_default,
 		datatrack_default,
-		{
-			methods: {
-				range_changed(r) {
-					r = this.clamp_range(r);
-					let sub = this.subset(r);
-					utils_default.overwrite(this.range, r);
-					utils_default.overwrite(this.sub, sub);
-					this.update_layout();
-					this.$emit("range-changed", r);
-					if (this.$props.ib) this.save_data_t();
-				},
-				clamp_range(r) {
-					const ohlcv = this.ohlcv;
-					if (!ohlcv || ohlcv.length < 1) return r;
-					let t1 = r[0], t2 = r[1];
-					if (!Number.isFinite(t1) || !Number.isFinite(t2) || t1 > t2) return r;
-					const first = this.$props.ib ? 0 : ohlcv[0][0];
-					const last = this.$props.ib ? ohlcv.length - 1 : ohlcv[ohlcv.length - 1][0];
-					const span = t2 - t1;
-					if (t2 < first) {
-						t1 = first - span + this.interval;
-						t2 = t1 + span;
-					} else if (t1 > last) {
-						t2 = last + span - this.interval;
-						t1 = t2 - span;
-					}
-					return [t1, t2];
-				},
-				goto(t) {
-					const dt = this.range[1] - this.range[0];
-					this.range_changed([t - dt, t]);
-				},
-				setRange(t1, t2) {
-					this.range_changed([t1, t2]);
-				},
-				calc_interval() {
-					let tf = utils_default.parse_tf(this.forced_tf);
-					if (this.ohlcv.length < 2 && !tf) return;
-					this.interval_ms = tf || utils_default.detect_interval(this.ohlcv);
-					this.interval = this.$props.ib ? 1 : this.interval_ms;
-					utils_default.warn(() => this.$props.ib && !this.chart.tf, constants_default.IB_TF_WARN, constants_default.SECOND);
-				},
-				set_ytransform(s) {
-					let existing = this.y_transforms[s.grid_id] || {};
-					let obj = Object.assign({}, existing, s);
-					if (obj.range) obj.range = [...obj.range];
-					this.y_transforms[s.grid_id] = obj;
-					this.update_layout();
-				},
-				default_range() {
-					const dl = this.$props.config.DEFAULT_LEN;
-					const ml = this.$props.config.MINIMUM_LEN + .5;
-					const l = this.ohlcv.length - 1;
-					if (this.ohlcv.length < 2) return;
-					let s, d;
-					if (this.ohlcv.length <= dl) {
-						s = 0;
-						d = ml;
-					} else {
-						s = l - dl;
-						d = .5;
-					}
-					if (!this.$props.ib) utils_default.overwrite(this.range, [this.ohlcv[s][0] - this.interval * d, this.ohlcv[l][0] + this.interval * ml]);
-					else utils_default.overwrite(this.range, [s - this.interval * d, l + this.interval * ml]);
-				},
-				subset(range = this.range) {
-					let [res, index] = this.filter(this.ohlcv, range[0] - this.interval, range[1]);
-					this.ti_map = new TI();
-					if (res) {
-						this.sub_start = index;
-						this.ti_map.init(this, res);
-						if (!this.$props.ib) return res || [];
-						return this.ti_map.sub_i;
-					}
-					return [];
-				},
-				init_range() {
-					this.calc_interval();
-					this.default_range();
-				},
-				update_layout(clac_tf, forceResize = false) {
-					if (clac_tf) this.calc_interval();
-					if (this.range[0] === void 0 || this.range[1] === void 0) if (this.ohlcv && this.ohlcv.length >= 2) {
-						this.init_range();
-						const sub = this.subset();
-						utils_default.overwrite(this.sub, sub);
-					} else return;
-					const rangeArr = [this.range[0], this.range[1]];
-					const subArr = Array.from(this.sub);
-					const layoutParams = {
-						chart: this.chart,
-						sub: subArr,
-						offsub: this.offsub,
-						interval: this.interval,
-						range: rangeArr,
-						ctx: this.ctx,
-						layers_meta: this.layers_meta,
-						ti_map: this.ti_map,
-						$props: this.$props,
-						y_transforms: this.y_transforms,
-						customGridHeights: this.customGridHeights,
-						minimizedGrids: this.minimizedGrids
-					};
-					this.chartLayout = markRaw(new Layout(layoutParams));
-					this.rerender++;
-					const layout = this.chartLayout;
-					if (forceResize) {
-						if (this.$refs.sec) this.$refs.sec.forEach((section, i) => {
-							const grid = section && section.$refs.grid;
-							const sidebar = section && section.$refs["sb-" + i];
-							if (grid && grid.resize_from_layout) grid.resize_from_layout(layout);
-							if (sidebar && sidebar.resize_from_layout) sidebar.resize_from_layout(layout);
-							if (section && section.updateLegendPosition) section.updateLegendPosition(layout);
-						});
-					} else if (this.$refs.sec) this.$refs.sec.forEach((section, i) => {
-						const grid = section && section.$refs.grid;
-						const sidebar = section && section.$refs["sb-" + i];
-						if (grid) {
-							if (grid.layoutOverride) grid.layoutOverride = null;
-							if (grid.renderer) grid.renderer.layout = layout.grids[i];
-						}
-						if (sidebar) {
-							if (sidebar.layoutOverride) sidebar.layoutOverride = null;
-							if (sidebar.renderer) sidebar.renderer.layout = layout.grids[i];
-						}
-						if (section && section.clearLayoutOverride) section.clearLayoutOverride();
-					});
-					if (this._hook_update) this.ce("?chart-update", this.chartLayout);
-				},
-				common_props() {
-					return {
-						title_txt: this.chart.name || this.$props.title_txt,
-						layout: this.chartLayout,
-						sub: this.sub,
-						range: this.range,
-						interval: this.interval,
-						cursor: this.cursor,
-						colors: this.$props.colors,
-						font: this.$props.font,
-						y_ts: this.y_transforms,
-						tv_id: this.$props.tv_id,
-						config: this.$props.config,
-						buttons: this.$props.buttons,
-						meta: this.meta,
-						skin: this.$props.skin,
-						dataVersion: this.$props.data?.$cd?.revision?.() ?? 0
-					};
-				},
-				overlay_subset(source, side) {
-					return source.map((d, i) => {
-						let res = utils_default.fast_filter(d.data, this.ti_map.i2t_mode(this.range[0] - this.interval, d.indexSrc), this.ti_map.i2t_mode(this.range[1], d.indexSrc));
-						return {
-							type: d.type,
-							name: utils_default.format_name(d),
-							data: this.ti_map.parse(res[0] || [], d.indexSrc || "map"),
-							settings: d.settings || this.settings_ov,
-							grid: d.grid || {},
-							tf: utils_default.parse_tf(d.tf),
-							i0: res[1],
-							loading: d.loading,
-							last: (this.last_values[side] || [])[i]
-						};
-					});
-				},
-				update_last_values() {
-					this.last_candle = this.ohlcv ? this.ohlcv[this.ohlcv.length - 1] : void 0;
-					this.last_values = {
-						onchart: [],
-						offchart: []
-					};
-					this.onchart.forEach((x, i) => {
-						let d = x.data || [];
-						this.last_values.onchart[i] = d[d.length - 1];
-					});
-					this.offchart.forEach((x, i) => {
-						let d = x.data || [];
-						this.last_values.offchart[i] = d[d.length - 1];
-					});
-				}
-			},
-			data() {
-				return {
-					sub: [],
-					range: [],
-					interval: 0,
-					interval_ms: 0,
-					y_transforms: {},
-					sub_start: void 0,
-					last_candle: [],
-					last_values: {},
-					rerender: 0,
-					chartLayout: null
-				};
-			},
-			computed: {
-				dimensions() {
-					return `${this.width}x${this.height}`;
-				},
-				dataHashKey() {
-					const data = this.$props.data;
-					if (!data) return "";
-					const ohlcv = data.ohlcv || data.chart?.data || [];
-					const ohlcvLen = ohlcv.length;
-					return `${ohlcvLen},${ohlcv[0]?.[0] ?? ""},${ohlcv[ohlcvLen - 1]?.[0] ?? ""},${ohlcv[ohlcvLen - 1]?.[4] ?? ""},${data.scrollLock ? "1" : "0"},${data.$cd?.revision?.() ?? 0}`;
-				}
-			},
-			watch: {
-				dimensions() {
-					this.update_layout();
-					if (this._hook_resize) this.ce("?chart-resize");
-				},
-				ib(nw) {
-					if (!nw) {
-						let t1 = this.ti_map.i2t(this.range[0]);
-						let t2 = this.ti_map.i2t(this.range[1]);
-						utils_default.overwrite(this.range, [t1, t2]);
-						this.interval = this.interval_ms;
-					} else {
-						this.init_range();
-						utils_default.overwrite(this.range, this.range);
-						this.interval = 1;
-					}
-					let sub = this.subset();
-					utils_default.overwrite(this.sub, sub);
-					this.update_layout();
-				},
-				timezone() {
-					this.update_layout();
-				},
-				colors() {
-					utils_default.overwrite(this.range, this.range);
-				},
-				forced_tf(n, p) {
-					this.calc_interval();
-					this.update_layout(true);
-					this.ce("exec-all-scripts");
-				},
-				dataHashKey(newKey, oldKey) {
-					if (!newKey || newKey === oldKey) return;
-					const n = this.$props.data;
-					if (!this.sub.length) this.init_range();
-					const sub = this.subset();
-					if (this.sub.length || sub.length) utils_default.overwrite(this.sub, sub);
-					let nw = this.data_changed();
-					this.update_layout(nw);
-					utils_default.overwrite(this.range, this.range);
-					this.cursor.scroll_lock = !!n.scrollLock;
-					if (n.scrollLock && this.cursor.locked) this.cursor.locked = false;
-					if (this._hook_data) this.ce("?chart-data", nw);
-					this.update_last_values();
-					this.rerender++;
-				}
-			}
-		},
-		{
-			methods: {
-				on_resize_grids(e) {
-					this.isResizing = true;
-					this.customGridHeights[e.gridAbove] = e.heightAbove;
-					this.customGridHeights[e.gridBelow] = e.heightBelow;
-					this._throttledResizeUpdate();
-				},
-				_throttledResizeUpdate() {
-					if (this._resizeThrottleRAF) return;
-					this._resizeThrottleRAF = requestAnimationFrame(() => {
-						this._resizeThrottleRAF = null;
-						this.update_layout(false, true);
-					});
-				},
-				on_resize_complete() {
-					this.chartLayout.grids.forEach((g, i) => {
-						if (!this.minimizedGrids[i]) this.savedGridHeights[i] = g.height;
-					});
-					this.isResizing = false;
-				},
-				on_toggle_minimize(gridId) {
-					const isMinimized = this.minimizedGrids[gridId];
-					if (isMinimized) {
-						this.minimizedGrids[gridId] = false;
-						if (this.savedGridHeights[gridId]) this.customGridHeights[gridId] = this.savedGridHeights[gridId];
-						else delete this.customGridHeights[gridId];
-					} else {
-						const currentHeight = this.chartLayout.grids[gridId]?.height;
-						if (currentHeight) this.savedGridHeights[gridId] = currentHeight;
-						this.minimizedGrids[gridId] = true;
-					}
-					this.redistribute_heights(gridId, isMinimized);
-					this.update_layout(false, true);
-				},
-				redistribute_heights(changedGridId, wasMinimized) {
-					const grids = this.chartLayout.grids;
-					const MINIMIZED_HEIGHT = 28;
-					const MIN_MAIN_CHART_HEIGHT = 100;
-					const MIN_OFFCHART_HEIGHT = 50;
-					if (wasMinimized) {
-						const restoreHeight = this.savedGridHeights[changedGridId] || 150;
-						let remainingDelta = restoreHeight - MINIMIZED_HEIGHT;
-						const mainChartHeight = this.customGridHeights[0] || grids[0]?.height || 100;
-						const mainAvailable = Math.max(0, mainChartHeight - MIN_MAIN_CHART_HEIGHT);
-						const takeFromMain = Math.min(remainingDelta, mainAvailable);
-						if (takeFromMain > 0) {
-							this.customGridHeights[0] = mainChartHeight - takeFromMain;
-							remainingDelta -= takeFromMain;
-						}
-						if (remainingDelta > 0) for (let i = changedGridId - 1; i >= 1; i--) {
-							if (this.minimizedGrids[i]) continue;
-							const gridHeight = this.customGridHeights[i] || grids[i]?.height || 100;
-							const available = Math.max(0, gridHeight - MIN_OFFCHART_HEIGHT);
-							const takeAmount = Math.min(remainingDelta, available);
-							if (takeAmount > 0) {
-								this.customGridHeights[i] = gridHeight - takeAmount;
-								remainingDelta -= takeAmount;
-							}
-							if (remainingDelta <= 0) break;
-						}
-						const actualHeight = restoreHeight - remainingDelta;
-						if (actualHeight > MINIMIZED_HEIGHT) this.customGridHeights[changedGridId] = actualHeight;
-					} else {
-						const gridAboveId = changedGridId - 1;
-						if (gridAboveId < 0) return;
-						let targetGridId = gridAboveId;
-						if (this.minimizedGrids[gridAboveId]) {
-							for (let i = gridAboveId; i >= 0; i--) if (!this.minimizedGrids[i]) {
-								targetGridId = i;
-								break;
-							}
-						}
-						const targetHeight = this.customGridHeights[targetGridId] || grids[targetGridId]?.height || 100;
-						const heightDelta = (this.savedGridHeights[changedGridId] || 150) - MINIMIZED_HEIGHT;
-						this.customGridHeights[targetGridId] = targetHeight + heightDelta;
-					}
-				},
-				minimize_all_offcharts() {
-					const grids = this.chartLayout.grids;
-					const MINIMIZED_HEIGHT = 28;
-					let hasExpandedOffchart = false;
-					for (let i = 1; i < grids.length; i++) if (!this.minimizedGrids[i]) {
-						hasExpandedOffchart = true;
-						break;
-					}
-					if (hasExpandedOffchart) {
-						let totalHeightGained = 0;
-						for (let i = 1; i < grids.length; i++) if (!this.minimizedGrids[i]) {
-							const currentHeight = this.customGridHeights[i] || grids[i]?.height;
-							if (currentHeight) {
-								this.savedGridHeights[i] = currentHeight;
-								totalHeightGained += currentHeight - MINIMIZED_HEIGHT;
-							}
-							this.minimizedGrids[i] = true;
-						}
-						const mainHeight = this.customGridHeights[0] || grids[0]?.height || 100;
-						this.customGridHeights[0] = mainHeight + totalHeightGained;
-					} else {
-						let totalHeightNeeded = 0;
-						for (let i = 1; i < grids.length; i++) {
-							const restoreHeight = this.savedGridHeights[i] || 150;
-							totalHeightNeeded += restoreHeight - MINIMIZED_HEIGHT;
-						}
-						const mainHeight = this.customGridHeights[0] || grids[0]?.height || 100;
-						const available = Math.max(0, mainHeight - 100);
-						const takeFromMain = Math.min(totalHeightNeeded, available);
-						if (takeFromMain > 0) this.customGridHeights[0] = mainHeight - takeFromMain;
-						const ratio = takeFromMain / totalHeightNeeded;
-						for (let i = 1; i < grids.length; i++) {
-							this.minimizedGrids[i] = false;
-							const actualHeight = MINIMIZED_HEIGHT + ((this.savedGridHeights[i] || 150) - MINIMIZED_HEIGHT) * (ratio < 1 ? ratio : 1);
-							this.customGridHeights[i] = actualHeight;
-						}
-					}
-					this.update_layout(false, true);
-				}
-			},
-			data() {
-				return {
-					customGridHeights: {},
-					minimizedGrids: {},
-					savedGridHeights: {},
-					isResizing: false
-				};
-			},
-			beforeUnmount() {
-				if (this._resizeThrottleRAF) {
-					cancelAnimationFrame(this._resizeThrottleRAF);
-					this._resizeThrottleRAF = null;
-				}
-			}
-		},
-		{
-			methods: {
-				cursor_changed(e) {
-					if (e.mode) this.cursor.mode = e.mode;
-					if (this.cursor.mode !== "explore" && this.updater) this.updater.sync(e);
-					if (this._hook_xchanged) this.ce("?x-changed", e);
-				},
-				cursor_locked(state) {
-					if (this.cursor.scroll_lock && state) return;
-					this.cursor.locked = state;
-					if (this._hook_xlocked) this.ce("?x-locked", state);
-				},
-				register_kb(event) {
-					if (!this.$refs.keyboard) return;
-					this.$refs.keyboard.register(event);
-				},
-				remove_kb(event) {
-					if (!this.$refs.keyboard) return;
-					this.$refs.keyboard.remove(event);
-				}
-			},
-			data() {
-				return { cursor: {
-					x: null,
-					y: null,
-					t: null,
-					y$: null,
-					grid_id: null,
-					locked: false,
-					values: {},
-					scroll_lock: false,
-					mode: utils_default.xmode()
-				} };
-			}
-		},
-		{
-			methods: {
-				emit_custom_event(d) {
-					this.on_shader_event(d, "botbar");
-					this.$emit("custom-event", d);
-					if (d.event === "remove-layer-meta") this.remove_meta_props(...d.args);
-					if (d.event === "grid-dblclick") this.on_toggle_minimize(d.args[0]);
-					if (d.event === "minimize-all-offcharts") this.minimize_all_offcharts();
-					if (d.event === "open-indicator-settings") this.$emit("open-indicator-settings", d.args[0]);
-				},
-				layer_meta_props(d) {
-					if (!(d.grid_id in this.layers_meta)) this.layers_meta[d.grid_id] = {};
-					this.layers_meta[d.grid_id][d.layer_id] = d;
-					this.update_layout();
-				},
-				remove_meta_props(grid_id, layer_id) {
-					if (grid_id in this.layers_meta) delete this.layers_meta[grid_id][layer_id];
-				},
-				legend_button_click(event) {
-					this.$emit("legend-button-click", event);
-				},
-				ce(event, ...args) {
-					this.emit_custom_event({
-						event,
-						args
-					});
-				},
-				hooks(...list) {
-					list.forEach((x) => this[`_hook_${x}`] = true);
-				}
-			},
-			data() {
-				return { layers_meta: {} };
-			}
-		}
+		chart_range_default,
+		chart_resize_default,
+		chart_cursor_default,
+		chart_events_default
 	],
 	components: {
 		GridSection: Section_default,
@@ -9863,6 +9984,41 @@ var _sfc_main$6 = {
 		refreshOffchartOverlays() {
 			this.rerender++;
 			this.$nextTick(() => this.update_layout());
+		},
+		ensure_chart_settings() {
+			const chart = this.$props.data.chart;
+			if (chart && !chart.settings) chart.settings = {};
+			return chart && chart.settings;
+		},
+		setVolumeShown(shown) {
+			const s = this.ensure_chart_settings();
+			if (s) s.showVolume = shown;
+			const cd = this.$props.data && this.$props.data.$cd;
+			if (cd && cd.invalidate) cd.invalidate();
+		},
+		toggleVolumeDetach() {
+			if (this.volumeIsDetached) this.reattachVolume();
+			else this.detachVolume();
+		},
+		detachVolume() {
+			if (this.volumeIsDetached) return;
+			const data = this.$props.data;
+			if (!Array.isArray(data.offchart)) data.offchart = [];
+			data.offchart.push({
+				type: "Volume",
+				name: "Volume",
+				data: data.chart.data,
+				settings: { [VOLUME_LEGEND_FLAG]: true }
+			});
+			this.setVolumeShown(false);
+			this.refreshOffchartOverlays();
+		},
+		reattachVolume() {
+			const off = this.$props.data.offchart || [];
+			const idx = off.findIndex((x) => x.settings && x.settings["$volumeLegend"]);
+			if (idx !== -1) off.splice(idx, 1);
+			this.setVolumeShown(true);
+			this.refreshOffchartOverlays();
 		}
 	},
 	computed: {
@@ -9881,6 +10037,7 @@ var _sfc_main$6 = {
 				last: this.last_candle
 			});
 			p.overlays = this.$props.overlays;
+			p.volume_detached = this.volumeIsDetached;
 			return p;
 		},
 		sub_section() {
@@ -9940,6 +10097,13 @@ var _sfc_main$6 = {
 		},
 		visibleOffchartCount() {
 			return this.offchart.length;
+		},
+		volumeIsDetached() {
+			return (this.$props.data.offchart || []).some((x) => x.settings && x.settings["$volumeLegend"]);
+		},
+		volumeShown() {
+			const s = this.$props.data.chart && this.$props.data.chart.settings;
+			return !s || !("showVolume" in s) ? true : s.showVolume;
 		},
 		resizerIndices() {
 			if (!this.chartLayout || !this.chartLayout.grids) return [];

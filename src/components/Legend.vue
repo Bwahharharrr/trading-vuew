@@ -22,6 +22,46 @@
             {{(common.meta.last || [])[4]}}
         </span>
     </div>
+    <!-- Volume legend row (main grid only): eye = show/hide, cog = settings,
+         arrow = detach to its own offchart pane / re-attach onto candles. -->
+    <div class="t-vue-vol" v-if="grid_id === 0 && show_volume_row">
+        <span class="t-vue-iname">Volume</span>
+        <button
+            class="t-vue-settings-btn"
+            @click.stop="openVolumeSettings"
+            title="Volume settings"
+            aria-label="Volume settings">
+            <svg viewBox="0 0 24 24" width="14" height="14">
+                <path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+            </svg>
+        </button>
+        <button
+            class="t-vue-detach-btn"
+            @click.stop="toggleVolumeDetach"
+            :title="volume_detached ? 'Attach volume to candles' : 'Detach volume to its own pane'"
+            :aria-label="volume_detached ? 'Attach volume to candles' : 'Detach volume to its own pane'">
+            <svg v-if="!volume_detached" viewBox="0 0 24 24" width="14" height="14">
+                <path fill="currentColor" d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" width="14" height="14">
+                <path fill="currentColor" d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/>
+            </svg>
+        </button>
+        <!-- Eye (candle-pane show/hide) only while ATTACHED: when detached the
+             subplot owns its own visibility, so showing this eye too would let
+             the user draw volume in BOTH panes at once. -->
+        <button-group
+            v-if="!volume_detached"
+            v-bind:buttons="[{ name: 'display' }]"
+            v-bind:config="common.config"
+            v-bind:ov_id="'Volume'"
+            v-bind:grid_id="0"
+            v-bind:index="-1"
+            v-bind:tv_id="common.tv_id"
+            v-bind:display="chart_show_volume"
+            v-on:legend-button-click="volume_button_click">
+        </button-group>
+    </div>
     <div class="t-vue-ind" v-for="ind in this.indicators" :key="ind.id">
         <span class="t-vue-iname">{{ind.name}}</span>
         <button
@@ -180,6 +220,28 @@ export default {
         },
         show_values() {
             return this.$props.common?.cursor?.mode !== 'explore'
+        },
+        // The main candle overlay (carries showVolume in its settings).
+        main_overlay() {
+            return this.json_data.find(x => x.main)
+        },
+        // Only show the Volume legend row when there is a real candle chart on
+        // the main grid (i.e. the data exposes a Candles main overlay). This
+        // keeps the row out of empty/indicator-only charts.
+        show_volume_row() {
+            return !!this.main_overlay
+        },
+        // Visibility of the volume bars on the candle pane (the eye toggle).
+        // Default true — matches Candles.vue show_volume default.
+        chart_show_volume() {
+            let s = this.main_overlay?.settings
+            return !s || !('showVolume' in s) ? true : s.showVolume
+        },
+        // Detached === a Volume overlay exists on the offchart side. The
+        // presence/absence of that overlay IS the state (no extra flag).
+        volume_detached() {
+            let off = this.$props.common?.volume_detached
+            return off === undefined ? false : off
         }
     },
     methods: {
@@ -252,6 +314,32 @@ export default {
                 name: indicator.name,
                 index: indicator.index,
                 gridId: this.$props.grid_id
+            })
+        },
+        // Volume row — settings (cog). Mirrors openSettings() but always points
+        // at the main grid (the volume row lives on the candle pane).
+        openVolumeSettings() {
+            this.$emit('open-indicator-settings', {
+                name: 'Volume',
+                type: 'Volume',
+                index: -1,
+                settings: this.main_overlay?.settings || {},
+                gridId: 0
+            })
+        },
+        // Volume row — eye (show / hide on the candle pane). Reuses the standard
+        // legend-button-click channel; Chart.legend_button_click() recognises
+        // the 'Volume' ov_id and toggles showVolume.
+        volume_button_click(event) {
+            this.button_click(event)
+        },
+        // Volume row — arrow (detach to its own pane / re-attach).
+        toggleVolumeDetach() {
+            this.$emit('legend-button-click', {
+                button: 'volume-detach',
+                overlay: 'Volume',
+                grid: 0,
+                detach: !this.volume_detached
             })
         }
     }
@@ -341,6 +429,38 @@ export default {
     background: rgba(229, 64, 119, 0.1);
 }
 .t-vue-close-btn svg {
+    display: block;
+}
+.t-vue-vol {
+    margin-left: 0.2em;
+    margin-bottom: 0.5em;
+    font-size: 1.0em;
+    margin-top: 0.3em;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    pointer-events: auto;
+}
+.t-vue-detach-btn {
+    background: none;
+    border: none;
+    color: #808a9d;
+    cursor: pointer;
+    padding: 2px 4px;
+    margin-left: 2px;
+    border-radius: 3px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    position: relative;
+    z-index: 10;
+}
+.t-vue-detach-btn:hover {
+    color: #35a776;
+    background: rgba(53, 167, 118, 0.1);
+}
+.t-vue-detach-btn svg {
     display: block;
 }
 .t-vue-ivalue {

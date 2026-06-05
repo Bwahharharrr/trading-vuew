@@ -216,6 +216,11 @@ export class CorkyFeed extends FeedSource {
         // enabledKinds/addedOverlays, so this keeps DC ↔ handle in sync.
         if (dc.data.onchart) dc.data.onchart.length = 0
         if (dc.data.offchart) dc.data.offchart.length = 0
+        // If the user had DETACHED volume into an offchart pane, the wipe above
+        // removed that pane — but the candle-pane copy is hidden (showVolume=
+        // false). Restore it so volume doesn't vanish entirely on a tf re-select
+        // (the detach preference resets to the default 'attached' on each load).
+        if (dc.data.chart && dc.data.chart.settings) dc.data.chart.settings.showVolume = true
         if (typeof dc.update_ids === 'function') dc.update_ids()
 
         // Push candles via the public data API. `set` replaces the series, but

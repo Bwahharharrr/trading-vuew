@@ -484,6 +484,8 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         };
         forced_tf(): any;
         visibleOffchartCount(): any;
+        volumeIsDetached(): any;
+        volumeShown(): any;
         resizerIndices(): number[];
     }, {
         section_props(i: any): {
@@ -505,6 +507,11 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         };
         toggleOverlayVisibility(gridId: any, overlayId: any, display: any): void;
         refreshOffchartOverlays(): void;
+        ensure_chart_settings(): any;
+        setVolumeShown(shown: any): void;
+        toggleVolumeDetach(): void;
+        detachVolume(): void;
+        reattachVolume(): void;
     }, {
         methods: {
             init_shaders(skin: any, prev: any): void;
@@ -885,6 +892,10 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
                 off_data(): any;
                 main_type(): any;
                 show_values(): boolean;
+                main_overlay(): any;
+                show_volume_row(): boolean;
+                chart_show_volume(): any;
+                volume_detached(): any;
             }, {
                 format(id: any, values: any): any;
                 n_a(len: any): any[];
@@ -892,6 +903,9 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
                 on_dblclick(e: any): void;
                 openSettings(indicator: any): void;
                 closeIndicator(indicator: any): void;
+                openVolumeSettings(): void;
+                volume_button_click(event: any): void;
+                toggleVolumeDetach(): void;
             }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, {}, string, import("vue").PublicProps, Readonly<{
                 grid_id?: any;
                 common?: any;

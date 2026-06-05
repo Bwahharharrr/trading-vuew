@@ -438,3 +438,24 @@ describe('CorkyFeed — toggle correctness regressions', () => {
         expect(dc.data.offchart).toHaveLength(0)
     })
 })
+
+// Regression: detached volume must not vanish when the gateway re-selects a tf.
+describe('CorkyFeed — volume detach state on re-select', () => {
+    it('restores candle-pane volume (showVolume=true) on a new history load', async () => {
+        const h1 = await feed.subscribe({ venue: 'X', symbol: 'Y', timeframe: '1D' })
+        client.emit(h1.subscription_id, chunkEvent(h1.subscription_id,
+            [makeRow(1, 100, { macd: 1, signal: 1, sma: 1 })]))
+        client.emit(h1.subscription_id, { type: 'historical_complete' })
+        // Simulate the user having DETACHED volume (candle-pane copy hidden).
+        dc.data.chart.settings = { showVolume: false }
+        await feed.unsubscribe(h1)
+
+        const h2 = await feed.subscribe({ venue: 'X', symbol: 'Y', timeframe: '1m' })
+        client.emit(h2.subscription_id, chunkEvent(h2.subscription_id,
+            [makeRow(5, 200, { macd: 2, signal: 2, sma: 2 })]))
+        client.emit(h2.subscription_id, { type: 'historical_complete' })
+        // The offchart Volume pane was wiped by the baseline reset; volume must
+        // be restored to the candle pane instead of vanishing entirely.
+        expect(dc.data.chart.settings.showVolume).toBe(true)
+    })
+})

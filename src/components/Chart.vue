@@ -50,6 +50,12 @@ import Layout from './js/layout.js'
 // Decomposed chart mixins
 import { ChartRange, ChartResize, ChartCursor, ChartEvents } from '../mixins/chart/index.js'
 
+// Settings marker on the auto-managed "detached volume" offchart overlay.
+// Survives DataCube.update_ids() (which rewrites .id), so it reliably tags the
+// overlay the legend detach toggle created — never a user-added Volume
+// indicator.
+export const VOLUME_LEGEND_FLAG = '$volumeLegend'
+
 export default {
     name: 'Chart',
     props: [
@@ -124,6 +130,62 @@ export default {
         refreshOffchartOverlays() {
             this.rerender++
             this.$nextTick(() => this.update_layout())
+        },
+
+        // ── Volume legend actions ──────────────────────────────────────────
+        // All three operate directly on the reactive decubed data
+        // (this.$props.data === dc.data), so they work identically for the
+        // file feed and the live gateway feed (both drive the same DataCube).
+
+        // Ensure the main chart has a settings object to write showVolume into.
+        ensure_chart_settings() {
+            const chart = this.$props.data.chart
+            if (chart && !chart.settings) chart.settings = {}
+            return chart && chart.settings
+        },
+
+        // Eye toggle: show / hide the volume bars on the candle pane.
+        setVolumeShown(shown) {
+            const s = this.ensure_chart_settings()
+            if (s) s.showVolume = shown
+            // showVolume is read at DRAW time, not as a reactive render
+            // dependency of the canvas — so bump the data revision to force the
+            // candle pane to redraw (otherwise the eye toggle has no effect).
+            const cd = this.$props.data && this.$props.data.$cd
+            if (cd && cd.invalidate) cd.invalidate()
+        },
+
+        // Arrow toggle: detach volume into its own offchart pane, or re-attach.
+        toggleVolumeDetach() {
+            if (this.volumeIsDetached) this.reattachVolume()
+            else this.detachVolume()
+        },
+
+        detachVolume() {
+            if (this.volumeIsDetached) return
+            const data = this.$props.data
+            if (!Array.isArray(data.offchart)) data.offchart = []
+            // Reference the SAME OHLCV array the candles use — so live gateway
+            // updates flow into the detached pane automatically (Vue reactivity).
+            data.offchart.push({
+                type: 'Volume',
+                name: 'Volume',
+                data: data.chart.data,
+                settings: { [VOLUME_LEGEND_FLAG]: true }
+            })
+            // Hide the candle-pane copy so volume isn't drawn twice.
+            this.setVolumeShown(false)
+            this.refreshOffchartOverlays()
+        },
+
+        reattachVolume() {
+            const off = this.$props.data.offchart || []
+            const idx = off.findIndex(
+                x => x.settings && x.settings[VOLUME_LEGEND_FLAG])
+            if (idx !== -1) off.splice(idx, 1)
+            // Re-show volume on the candle pane.
+            this.setVolumeShown(true)
+            this.refreshOffchartOverlays()
         }
     },
     computed: {
@@ -142,6 +204,9 @@ export default {
                 last: this.last_candle
             })
             p.overlays = this.$props.overlays
+            // Detached === a Volume overlay lives on the offchart side. Surface
+            // it so the main-grid Legend can flip its detach arrow + eye state.
+            p.volume_detached = this.volumeIsDetached
             return p
         },
         sub_section() {
@@ -206,6 +271,18 @@ export default {
         },
         visibleOffchartCount() {
             return this.offchart.length
+        },
+        // True when volume has been detached into its own offchart pane.
+        // The presence of the Volume offchart overlay IS the state.
+        volumeIsDetached() {
+            const off = this.$props.data.offchart || []
+            return off.some(x => x.settings && x.settings[VOLUME_LEGEND_FLAG])
+        },
+        // Current candle-pane volume visibility (default true — matches
+        // Candles.vue show_volume default).
+        volumeShown() {
+            const s = this.$props.data.chart && this.$props.data.chart.settings
+            return !s || !('showVolume' in s) ? true : s.showVolume
         },
         resizerIndices() {
             if (!this.chartLayout || !this.chartLayout.grids) {

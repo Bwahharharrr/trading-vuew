@@ -36,6 +36,20 @@ export default {
         },
 
         legend_button_click(event) {
+            // Volume legend row actions are handled in-chart (additive — they
+            // mutate the reactive decubed data + re-layout). Everything else
+            // bubbles up unchanged.
+            if (event && event.overlay === 'Volume') {
+                if (event.button === 'volume-detach') {
+                    this.toggleVolumeDetach()
+                    return
+                }
+                if (event.button === 'display') {
+                    // Eye toggle: flip showVolume on the candle pane.
+                    this.setVolumeShown(!this.volumeShown)
+                    return
+                }
+            }
             this.$emit('legend-button-click', event)
         },
 
