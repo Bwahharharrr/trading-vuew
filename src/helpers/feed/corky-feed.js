@@ -103,7 +103,12 @@ export class CorkyFeed extends FeedSource {
             await this.client.subscribeCandles({
                 subscription_id,
                 venue, symbol, timeframe,
-                indicators,
+                // The candle-state already MAINTAINS its indicator set (via
+                // upsert/patch). On subscribe we only flag include_indicators so
+                // the rows carry those indicators. We deliberately do NOT forward
+                // the UI display-labels (e.g. "SMA(20)") as the wire `indicators`
+                // filter — that is not the gateway's expected shape and makes the
+                // historical request hang. `opts.indicators` stays a UI concern.
                 include_indicators: indicators != null ? true : undefined,
                 range,
             })

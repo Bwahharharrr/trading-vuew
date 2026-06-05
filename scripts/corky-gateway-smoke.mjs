@@ -52,6 +52,7 @@ const flag = (name, def) => {
 }
 const PREFER_TF = flag('--tf', null)
 const LIVE_WAIT_S = Number(flag('--live-wait', '20'))
+const SUBSCRIBE_TIMEOUT_S = Number(flag('--subscribe-timeout', '25'))
 // Bootstrap target (desired state to upsert when discovery has nothing usable).
 const WANT_VENUE = flag('--venue', 'BITFINEX')
 const WANT_SYMBOL = flag('--symbol', 'tBTCUSD')
@@ -70,6 +71,19 @@ if (typeof WebSocket === 'undefined') {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// Reject with a {code:'timeout'} error if `promise` doesn't settle in time.
+function withTimeout(promise, ms, label) {
+  let timer
+  const guard = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const e = new Error(`${label} did not complete within ${ms / 1000}s`)
+      e.code = 'timeout'
+      reject(e)
+    }, ms)
+  })
+  return Promise.race([promise, guard]).finally(() => clearTimeout(timer))
+}
 
 async function main() {
   log(`→ connecting to ${URL}`)
@@ -147,18 +161,25 @@ async function main() {
   })
 
   try {
-    await client.subscribeCandles({
-      subscription_id,
-      venue: state.venue,
-      symbol: state.symbol,
-      timeframe,
-      indicators: indicators.length ? indicators : undefined,
-      include_indicators: indicators.length ? true : undefined,
-      range: { type: 'latest', limit: 200 },
-    })
+    // include_indicators flags the state's MAINTAINED indicators into the rows.
+    // Do NOT send display-labels as the wire `indicators` filter — the gateway
+    // doesn't expect that shape and the historical request hangs. Wrap in a
+    // timeout so a hung/unanswered subscribe fails fast instead of stalling.
+    await withTimeout(
+      client.subscribeCandles({
+        subscription_id,
+        venue: state.venue,
+        symbol: state.symbol,
+        timeframe,
+        include_indicators: true,
+        range: { type: 'latest', limit: 200 },
+      }),
+      SUBSCRIBE_TIMEOUT_S * 1000,
+      `subscribe_candles for ${state.venue}:${state.symbol} ${timeframe}`,
+    )
   } catch (e) {
     unsub && unsub()
-    fail(`subscribe_candles rejected: ${e.code || ''} ${e.message}`)
+    fail(`subscribe_candles ${e.code === 'timeout' ? 'timed out' : 'rejected'}: ${e.code || ''} ${e.message}`)
     return cleanup(client)
   }
 
