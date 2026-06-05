@@ -91,41 +91,81 @@ export function devServerPlugin(): Plugin {
         next()
       })
 
-      // --- Wildcard live-feed WebSocket proxy ---
-      // Vite's built-in server.proxy uses node http-proxy which has no
-      // per-request `router`, so we attach our own upgrade handler. We must
-      // run before Vite's own HMR upgrade handler: only intercept /live-ws/*,
-      // let everything else (including Vite HMR) fall through untouched.
+      // --- Wildcard live-feed WebSocket proxy (/live-ws/<port>) ---
+      // Intercept /live-ws/* upgrades → proxy to ws://127.0.0.1:<port>;
+      // delegate every other upgrade (crucially Vite's HMR socket) back to
+      // Vite's own listeners.
+      //
+      // RACE FIX: capture Vite's upgrade listeners LAZILY on 'listening', not
+      // synchronously in configureServer. At hook time Vite has not necessarily
+      // attached its HMR upgrade listener yet, so an eager capture grabs an
+      // EMPTY list and the removeAllListeners() below then silently kills HMR
+      // ("[vite] server connection lost. Polling for restart…").
       const wsProxy = createProxyServer({})
       const httpServer = server.httpServer
-      if (httpServer) {
-        // Capture Vite's own upgrade listeners, then take over so we can
-        // route /live-ws/* ourselves and delegate the rest back to them.
-        const viteUpgradeListeners = httpServer.listeners('upgrade')
+      // CLI debug output is ON by default (set DEBUG_WS=0 to silence the
+      // per-upgrade lines; the startup banner + proxy errors always print).
+      const VERBOSE = process.env.DEBUG_WS !== '0'
+
+      const installUpgradeProxy = () => {
+        if (!httpServer) return
+        const viteUpgradeListeners = httpServer.listeners('upgrade') as Array<
+          (...a: unknown[]) => void
+        >
         httpServer.removeAllListeners('upgrade')
+        console.log(
+          `[dev-server] /live-ws WS proxy active — captured ` +
+            `${viteUpgradeListeners.length} Vite HMR upgrade listener(s)` +
+            (viteUpgradeListeners.length === 0
+              ? '  ⚠ NONE captured — HMR delegation is broken (timing). Report this.'
+              : '')
+        )
+
         httpServer.on(
           'upgrade',
           (req: IncomingMessage, socket: Socket, head: Buffer) => {
-            const m = (req.url || '').match(/^\/live-ws\/(\d+)/)
+            const url = req.url || ''
+            const from = req.socket.remoteAddress || '?'
+            const m = url.match(/^\/live-ws\/(\d+)/)
             if (m) {
               const port = m[1]
+              const target = `ws://127.0.0.1:${port}`
               // Strip the /live-ws/<port> prefix before forwarding.
-              req.url = (req.url || '').replace(/^\/live-ws\/\d+/, '') || '/'
-              wsProxy.ws(req, socket, {
-                target: `ws://127.0.0.1:${port}`,
-                changeOrigin: true,
-              }, head).catch((err: Error) => {
-                console.warn('[live-ws] proxy error:', err.message)
-                socket.destroy()
-              })
+              req.url = url.replace(/^\/live-ws\/\d+/, '') || '/'
+              if (VERBOSE) {
+                console.log(`[live-ws] ⇡ upgrade ${url} (from ${from}) → ${target}${req.url}`)
+              }
+              socket.on('error', (e: Error) =>
+                console.warn(`[live-ws] client socket error → ${target}: ${e.message}`)
+              )
+              wsProxy
+                .ws(req, socket, { target, changeOrigin: true }, head)
+                .then(() => { if (VERBOSE) console.log(`[live-ws] ✓ connected upstream ${target}`) })
+                .catch((err: Error) => {
+                  console.warn(
+                    `[live-ws] ✗ proxy error → ${target}: ${err.message}\n` +
+                      `           ↳ is something listening on 127.0.0.1:${port}? ` +
+                      `(corky gateway / qb-new backend). Try: npm run smoke:gateway`
+                  )
+                  socket.destroy()
+                })
               return
             }
             // Not a live-feed socket: hand back to Vite's HMR upgrade handlers.
-            for (const l of viteUpgradeListeners) {
-              ;(l as (...a: any[]) => void)(req, socket, head)
+            if (VERBOSE) {
+              console.log(
+                `[live-ws] ↪ delegating non-live upgrade ${url} (from ${from}) to ` +
+                  `Vite (${viteUpgradeListeners.length} listener(s))`
+              )
             }
+            for (const l of viteUpgradeListeners) l(req, socket, head)
           }
         )
+      }
+
+      if (httpServer) {
+        if (httpServer.listening) installUpgradeProxy()
+        else httpServer.once('listening', installUpgradeProxy)
       }
     },
   }
