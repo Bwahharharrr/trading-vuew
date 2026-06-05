@@ -35,7 +35,9 @@
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint --ext .js,.vue src",
     "eslint": "eslint --ext .js,.vue src",
-    "size": "size-limit"
+    "size": "size-limit",
+    "smoke:gateway": "node scripts/corky-gateway-smoke.mjs",
+    "smoke:browser": "node scripts/corky-browser-smoke.mjs"
   },
   "size-limit": [
     {
