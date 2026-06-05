@@ -18,6 +18,16 @@ export default class Botbar {
         (...args: any[]): void;
         cancel(): void;
     } | undefined;
+    mc: any;
+    drug: {
+        x: any;
+        r: any;
+    } | null | undefined;
+    _throttledPanmove: {
+        (...args: any[]): void;
+        cancel(): void;
+    } | undefined;
+    pandrag(event: any): void;
     mousezoom(delta: any, event: any): void;
     destroy(): void;
     update(): void;

@@ -26,9 +26,16 @@ export default class Sidebar {
         cancel(): void;
     } | undefined;
     update(): void;
+    _labelGeom: {
+        x1Base: number;
+        x2Offset: number;
+        textOffset: number;
+        textAlign: string;
+    } | undefined;
     _lastPanelY: any;
     updatePanelOnly(): void;
     _clearPanel(panelY: any): void;
+    _repaintLabels(top: any, bottom: any): void;
     apply_shaders(): void;
     upper_border(): void;
     panel(): void;

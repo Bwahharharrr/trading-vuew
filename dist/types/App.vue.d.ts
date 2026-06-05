@@ -52,8 +52,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     corkySelect(opts: any): Promise<void>;
     onCorkySelect(opts: any): void;
     onCorkyAddTimeframe(req: any): Promise<void>;
-    _corkyDefaultIndicators(venue: any, symbol: any, timeframe: any): any;
-    onCorkyAddIndicator(req: any): Promise<void>;
+    onCorkyToggleIndicator(req: any): void;
     _corkyPatchAndReselect(patch: any, selectOpts: any): Promise<void>;
     onCorkyRetry(): void;
     _corkyUnsub(): Promise<void>;
@@ -1517,20 +1516,32 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             type: ObjectConstructor;
             default: null;
         };
-    }>, {}, {}, {
+    }>, {}, {
+        query: string;
+        activeCategory: string;
+    }, {
+        categoryFilters(): {
+            value: string;
+            label: any;
+        }[];
         venues(): {
             venue: any;
             symbols: any;
         }[];
+        filteredVenues(): {
+            venue: any;
+            symbols: any;
+        }[];
+        symbolCount(): number;
         hasProgress(): boolean;
         progressPct(): number;
         progressText(): string;
         errorMessage(): any;
     }, {
+        categoryLabel(cat: any): any;
         timeframesFor(st: any): any;
         activeTimeframe(row: any): any;
-        indicatorsFor(row: any): any;
-        defaultIndicators(row: any, tf: any): any;
+        indicatorsFor(row: any): any[];
         isSymbolActive(row: any): boolean;
         isCurrent(row: any, tf: any): boolean;
         isIndicatorOn(row: any, ind: any): boolean;
@@ -1539,7 +1550,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         onSelectTimeframe(row: any, tf: any): void;
         onAddTimeframe(row: any): void;
         onToggleIndicator(row: any, ind: any): void;
-    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("select" | "add-timeframe" | "add-indicator" | "retry")[], "select" | "add-timeframe" | "add-indicator" | "retry", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("select" | "add-timeframe" | "toggle-indicator" | "retry")[], "select" | "add-timeframe" | "toggle-indicator" | "retry", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
         states: {
             type: ArrayConstructor;
             default: () => never[];
@@ -1563,7 +1574,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     }>> & Readonly<{
         onSelect?: ((...args: any[]) => any) | undefined;
         "onAdd-timeframe"?: ((...args: any[]) => any) | undefined;
-        "onAdd-indicator"?: ((...args: any[]) => any) | undefined;
+        "onToggle-indicator"?: ((...args: any[]) => any) | undefined;
         onRetry?: ((...args: any[]) => any) | undefined;
     }>, {
         error: Record<string, any>;

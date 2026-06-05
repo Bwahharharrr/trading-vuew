@@ -51,14 +51,95 @@ export default class Botbar {
     }
 
     async listeners() {
-        const { Hamster } = await loadGestures()
+        const { Hammer, Hamster } = await loadGestures()
         if (this._destroyed) return // unmounted while gestures were loading
-        this.hm = Hamster(this.canvasDynamic || this.canvas)
+        let eventTarget = this.canvasDynamic || this.canvas
+        this.hm = Hamster(eventTarget)
         // Throttle wheel events to ~60fps
         this._throttledWheel = Utils.rafThrottle((delta, event) => {
             this.mousezoom(-delta * 50, event)
         })
         this.hm.wheel((event, delta) => this._throttledWheel(delta, event))
+
+        // X-axis drag-to-scale: a horizontal drag zooms the TIME range about
+        // the anchor where the drag started (mirrors Sidebar's Y-axis pan).
+        let mc = this.mc = new Hammer.Manager(eventTarget)
+        mc.add(new Hammer.Pan({
+            direction: Hammer.DIRECTION_HORIZONTAL,
+            threshold: 0
+        }))
+
+        mc.on('panstart', event => {
+            this.drug = {
+                x: event.center.x,
+                r: this.range.slice()
+            }
+        })
+
+        // Throttle panmove for smoother drag performance
+        this._throttledPanmove = Utils.rafThrottle(event => {
+            if (this.drug) this.pandrag(event)
+        })
+        mc.on('panmove', event => this._throttledPanmove(event))
+
+        mc.on('panend', () => {
+            this.drug = null
+        })
+    }
+
+    // Map a horizontal drag into a symmetric zoom of the time range, anchored
+    // on the position where the drag began. Dragging left expands (zoom out),
+    // dragging right compresses (zoom in) the visible range. Emits the same
+    // 'botbar-zoom' event as wheel zoom so Chart.vue consumes it identically.
+    pandrag(event) {
+        let width = this.layout.botbar.width
+        if (!width) return
+        // No detected interval (≤1 candle) → the MIN/MAX span clamps below would
+        // collapse to a zero-width range. Skip the gesture rather than emit one.
+        if (!this.$p.interval) return
+
+        let r = this.drug.r
+        let span = r[1] - r[0]
+
+        // Normalised drag distance: full half-width drag ~= one full zoom step.
+        let dx = event.center.x - this.drug.x
+        let k = dx / (width * 0.5)
+        // Clamp the per-gesture factor so a fast drag can't invert the range.
+        let factor = Utils.clamp(1 + k, 0.1, 10)
+
+        // Anchor the zoom on the gesture's start x (in time coordinates) so the
+        // bar under the cursor stays put while the rest scales around it.
+        let anchorFrac = this.drug.x / width
+        let anchorT = r[0] + span * anchorFrac
+        let newSpan = span / factor
+
+        let newRange = [
+            anchorT - newSpan * anchorFrac,
+            anchorT + newSpan * (1 - anchorFrac)
+        ]
+
+        // Respect the same bar-count limits as wheel zoom (MIN/MAX_ZOOM are in
+        // bars; convert to a time span via the interval).
+        let interval = this.$p.interval
+        let minSpan = this.MIN_ZOOM * interval
+        let maxSpan = this.MAX_ZOOM * interval
+        let resultSpan = newRange[1] - newRange[0]
+        if (resultSpan < minSpan) {
+            newRange = [
+                anchorT - minSpan * anchorFrac,
+                anchorT + minSpan * (1 - anchorFrac)
+            ]
+        } else if (resultSpan > maxSpan) {
+            newRange = [
+                anchorT - maxSpan * anchorFrac,
+                anchorT + maxSpan * (1 - anchorFrac)
+            ]
+        }
+
+        this.range[0] = newRange[0]
+        this.range[1] = newRange[1]
+
+        this.comp.$emit('botbar-zoom', this.range)
     }
 
     mousezoom(delta, event) {
@@ -85,8 +166,10 @@ export default class Botbar {
 
     destroy() {
         this._destroyed = true // stop a still-loading listeners() from wiring up
+        if (this.mc) this.mc.destroy()
         if (this.hm) this.hm.unwheel()
         if (this._throttledWheel) this._throttledWheel.cancel()
+        if (this._throttledPanmove) this._throttledPanmove.cancel()
         this.canvasDynamic = null
     }
 

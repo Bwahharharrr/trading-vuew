@@ -52,6 +52,7 @@ export class CorkyClient {
     _reconnectTimer: any;
     connect(): this;
     _open(): void;
+    _sendQueue: any[] | undefined;
     close(): void;
     _handleClose(ev: any): void;
     _scheduleReconnect(): void;

@@ -19990,6 +19990,12 @@ pointers: 1 },
 				ctx.fillText(p[1].toFixed(prec), x1Base + textOffset, p[0] + 4);
 			}
 			ctx.stroke();
+			this._labelGeom = {
+				x1Base,
+				x2Offset,
+				textOffset,
+				textAlign
+			};
 			if (this.$p.grid_id) this.upper_border();
 			this.apply_shaders();
 			if (this.$p.cursor.y && this.$p.cursor.y$) this.panel();
@@ -20011,12 +20017,43 @@ pointers: 1 },
 			const panwidth = this.layout.sb + 1;
 			const x = -.5;
 			const y = panelY - PANHEIGHT * .5 - .5 - 1;
-			this.ctx.clearRect(x - 1, y - 1, panwidth + 2, PANHEIGHT + 2);
+			const clearTop = y - 1;
+			const clearBottom = y - 1 + (PANHEIGHT + 2);
+			this.ctx.clearRect(x - 1, clearTop, panwidth + 2, PANHEIGHT + 2);
 			this.ctx.strokeStyle = this.$p.colors.scale;
 			this.ctx.beginPath();
 			this.ctx.moveTo(.5, y);
 			this.ctx.lineTo(.5, y + PANHEIGHT + 2);
 			this.ctx.stroke();
+			this._repaintLabels(clearTop, clearBottom);
+		}
+		_repaintLabels(top, bottom) {
+			const geom = this._labelGeom;
+			if (!geom || !this.layout) return;
+			const points = this.layout.ys;
+			if (!points) return;
+			const ctx = this.ctx;
+			const layoutHeight = this.layout.height;
+			const prec = this.layout.prec;
+			const { x1Base, x2Offset, textOffset, textAlign } = geom;
+			ctx.font = this.$p.font;
+			ctx.fillStyle = this.$p.colors.text;
+			ctx.textAlign = textAlign;
+			ctx.strokeStyle = this.$p.colors.scale;
+			ctx.beginPath();
+			let stroked = false;
+			for (let i = 0; i < points.length; i++) {
+				const p = points[i];
+				if (p[0] > layoutHeight) continue;
+				const labelY = p[0] + 4;
+				if (labelY < top - PANHEIGHT || labelY > bottom + 4) continue;
+				const ty = p[0] - .5;
+				ctx.moveTo(x1Base, ty);
+				ctx.lineTo(x1Base + x2Offset, ty);
+				stroked = true;
+				ctx.fillText(p[1].toFixed(prec), x1Base + textOffset, labelY);
+			}
+			if (stroked) ctx.stroke();
 		}
 		apply_shaders() {
 			let layout = this.layout;
@@ -20985,13 +21022,54 @@ pointers: 1 },
 			return result.width;
 		}
 		async listeners() {
-			const { Hamster } = await loadGestures();
+			const { Hammer, Hamster } = await loadGestures();
 			if (this._destroyed) return;
-			this.hm = Hamster(this.canvasDynamic || this.canvas);
+			let eventTarget = this.canvasDynamic || this.canvas;
+			this.hm = Hamster(eventTarget);
 			this._throttledWheel = utils_default.rafThrottle((delta, event) => {
 				this.mousezoom(-delta * 50, event);
 			});
 			this.hm.wheel((event, delta) => this._throttledWheel(delta, event));
+			let mc = this.mc = new Hammer.Manager(eventTarget);
+			mc.add(new Hammer.Pan({
+				direction: Hammer.DIRECTION_HORIZONTAL,
+				threshold: 0
+			}));
+			mc.on("panstart", (event) => {
+				this.drug = {
+					x: event.center.x,
+					r: this.range.slice()
+				};
+			});
+			this._throttledPanmove = utils_default.rafThrottle((event) => {
+				if (this.drug) this.pandrag(event);
+			});
+			mc.on("panmove", (event) => this._throttledPanmove(event));
+			mc.on("panend", () => {
+				this.drug = null;
+			});
+		}
+		pandrag(event) {
+			let width = this.layout.botbar.width;
+			if (!width) return;
+			if (!this.$p.interval) return;
+			let r = this.drug.r;
+			let span = r[1] - r[0];
+			let k = (event.center.x - this.drug.x) / (width * .5);
+			let factor = utils_default.clamp(1 + k, .1, 10);
+			let anchorFrac = this.drug.x / width;
+			let anchorT = r[0] + span * anchorFrac;
+			let newSpan = span / factor;
+			let newRange = [anchorT - newSpan * anchorFrac, anchorT + newSpan * (1 - anchorFrac)];
+			let interval = this.$p.interval;
+			let minSpan = this.MIN_ZOOM * interval;
+			let maxSpan = this.MAX_ZOOM * interval;
+			let resultSpan = newRange[1] - newRange[0];
+			if (resultSpan < minSpan) newRange = [anchorT - minSpan * anchorFrac, anchorT + minSpan * (1 - anchorFrac)];
+			else if (resultSpan > maxSpan) newRange = [anchorT - maxSpan * anchorFrac, anchorT + maxSpan * (1 - anchorFrac)];
+			this.range[0] = newRange[0];
+			this.range[1] = newRange[1];
+			this.comp.$emit("botbar-zoom", this.range);
 		}
 		mousezoom(delta, event) {
 			event.originalEvent.preventDefault();
@@ -21008,8 +21086,10 @@ pointers: 1 },
 		}
 		destroy() {
 			this._destroyed = true;
+			if (this.mc) this.mc.destroy();
 			if (this.hm) this.hm.unwheel();
 			if (this._throttledWheel) this._throttledWheel.cancel();
+			if (this._throttledPanmove) this._throttledPanmove.cancel();
 			this.canvasDynamic = null;
 		}
 		update() {

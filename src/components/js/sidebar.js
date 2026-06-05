@@ -179,6 +179,10 @@ export default class Sidebar {
 
         ctx.stroke()
 
+        // PERFORMANCE: Cache label geometry so _clearPanel() can repaint just
+        // the labels (and tick marks) it erases without re-deriving the math.
+        this._labelGeom = { x1Base, x2Offset, textOffset, textAlign }
+
         if (this.$p.grid_id) this.upper_border()
 
         this.apply_shaders()
@@ -217,14 +221,59 @@ export default class Sidebar {
         const panwidth = this.layout.sb + 1
         const x = -0.5
         const y = panelY - PANHEIGHT * 0.5 - 0.5 - 1
+        const clearTop = y - 1
+        const clearBottom = y - 1 + (PANHEIGHT + 2)
         // Clear slightly larger area to ensure clean redraw
-        this.ctx.clearRect(x - 1, y - 1, panwidth + 2, PANHEIGHT + 2)
+        this.ctx.clearRect(x - 1, clearTop, panwidth + 2, PANHEIGHT + 2)
         // Redraw the scale line that may have been cleared
         this.ctx.strokeStyle = this.$p.colors.scale
         this.ctx.beginPath()
         this.ctx.moveTo(0.5, y)
         this.ctx.lineTo(0.5, y + PANHEIGHT + 2)
         this.ctx.stroke()
+        // FIX (label-wipe): the grid VALUE labels live on this same (static)
+        // canvas, so the clearRect above erased any that overlapped the old
+        // cursor-panel box. Repaint just those labels back into the band.
+        this._repaintLabels(clearTop, clearBottom)
+    }
+
+    // Repaint grid value labels whose Y baseline falls within [top, bottom].
+    // Mirrors the label drawing in update() exactly so restored labels are
+    // pixel-identical to a full draw.
+    _repaintLabels(top, bottom) {
+        const geom = this._labelGeom
+        if (!geom || !this.layout) return
+        const points = this.layout.ys
+        if (!points) return
+        const ctx = this.ctx
+        const layoutHeight = this.layout.height
+        const prec = this.layout.prec
+        const { x1Base, x2Offset, textOffset, textAlign } = geom
+
+        ctx.font = this.$p.font
+        ctx.fillStyle = this.$p.colors.text
+        ctx.textAlign = textAlign
+        // Ticks share update()'s scale colour (the vertical scale line set it).
+        ctx.strokeStyle = this.$p.colors.scale
+        ctx.beginPath()
+        let stroked = false
+
+        for (let i = 0; i < points.length; i++) {
+            const p = points[i]
+            if (p[0] > layoutHeight) continue
+            // Label baseline used in update(): p[0] + 4. The glyph extends a
+            // few px above the baseline, so widen the band slightly upward.
+            const labelY = p[0] + 4
+            if (labelY < top - PANHEIGHT || labelY > bottom + 4) continue
+            // Repaint the short grid tick (mirrors update(): y = p[0] - 0.5)
+            // that the clearRect also erased.
+            const ty = p[0] - 0.5
+            ctx.moveTo(x1Base, ty)
+            ctx.lineTo(x1Base + x2Offset, ty)
+            stroked = true
+            ctx.fillText(p[1].toFixed(prec), x1Base + textOffset, labelY)
+        }
+        if (stroked) ctx.stroke()
     }
 
     apply_shaders() {
