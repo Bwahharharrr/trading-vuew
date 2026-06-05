@@ -272,9 +272,15 @@ export default {
             DataCubeClass: DataCube,
 
             // ── Corky gateway source (opt-in; File stays the default) ──
-            // 'file' = the existing file-based feed (unchanged default).
-            // 'gateway' = the Corky chart-feed driving the SAME DataCube.
-            feedMode: 'file',
+            // 'gateway' = the Corky chart-feed (DEFAULT) driving the DataCube.
+            // 'file' = the existing file-based feed; selected by a ?file= URL
+            // param (explicit file request) or the Source toggle.
+            feedMode: (() => {
+                try {
+                    return new URLSearchParams(window.location.search).get('file')
+                        ? 'file' : 'gateway'
+                } catch (_) { return 'gateway' }
+            })(),
             corkyClient: null,   // lazily-built CorkyClient (own its socket)
             corkyFeed: null,     // CorkyFeed over (client, this.chart)
             // Reactive discovery surface rendered by CorkyDiscoveryPanel.
@@ -303,26 +309,30 @@ export default {
             this.accordionExpandedViews = savedState.accordionExpandedViews || {}
         }
 
-        // Bootstrap order: ?file=<name> URL param wins (per-tab, no storage
-        // interaction); else per-tab sessionStorage; else first /data-files
-        // entry resolved by the dataFiles watcher in file-manager.js.
-        const params = new URLSearchParams(window.location.search)
-        const fileParam = params.get('file')
-        if (fileParam && !/[\/\\]|\.\./.test(fileParam)) {
-            this.pendingFileLoad = fileParam
-            this.pendingIndicatorSettings = savedState?.indicatorSettings || {}
-        } else if (savedState?.selectedDataFile) {
-            this.pendingFileLoad = savedState.selectedDataFile
-            this.pendingIndicatorSettings = savedState.indicatorSettings || {}
+        // Bootstrap order (FILE mode only): ?file=<name> URL param wins (per-tab,
+        // no storage interaction); else per-tab sessionStorage; else first
+        // /data-files entry resolved by the dataFiles watcher in file-manager.js.
+        // In the default GATEWAY mode we do NOT queue a file load (enterGatewayMode
+        // below drives the chart instead).
+        if (this.feedMode === 'file') {
+            const params = new URLSearchParams(window.location.search)
+            const fileParam = params.get('file')
+            if (fileParam && !/[\/\\]|\.\./.test(fileParam)) {
+                this.pendingFileLoad = fileParam
+                this.pendingIndicatorSettings = savedState?.indicatorSettings || {}
+            } else if (savedState?.selectedDataFile) {
+                this.pendingFileLoad = savedState.selectedDataFile
+                this.pendingIndicatorSettings = savedState.indicatorSettings || {}
+            }
         }
-        // If neither, file-manager's dataFiles watcher will pick the first
-        // data*.json once /data-files responds.
 
         this.$nextTick(() => {
             window.dc = this.chart
             window.tv = this.$refs.tradingVue
             // No unconditional wsConnect() here — the currentFileMeta watcher
             // in ws-manager.js opens the WS once a file is loaded.
+            // Gateway is the default source: connect + discover on mount.
+            if (this.feedMode === 'gateway') this.enterGatewayMode()
         })
     },
     beforeUnmount() {
@@ -344,8 +354,20 @@ export default {
                 // restore the file feed — reload the selected file so its data
                 // repopulates the DataCube the gateway overwrote, and re-arm the
                 // file WS (the currentFileMeta watcher reconnects on the reload).
+                // If no file was ever selected (Gateway was the startup default),
+                // auto-pick the first chart-loadable file.
                 this.teardownCorky()
-                if (this.selectedDataFile) this.onFileSelected(this.selectedDataFile)
+                if (this.selectedDataFile) {
+                    this.onFileSelected(this.selectedDataFile)
+                } else {
+                    const files = this.dataFiles || []
+                    const first = files.find(
+                        (f) => f.startsWith('data_') &&
+                               !f.startsWith('data_alerts_') &&
+                               !f.startsWith('data_scorers_') &&
+                               !f.startsWith('data_tf'))
+                    if (first) this.onFileSelected(first)
+                }
             }
             this.feedMode = mode
         },

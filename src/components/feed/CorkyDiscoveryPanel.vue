@@ -181,16 +181,27 @@ export default {
             const first = row.timeframes[0]
             return first ? first.timeframe : null
         },
-        // Indicators[] of a row's state filtered to the active timeframe.
+        // Indicators[] of a row's state filtered to the active timeframe, with
+        // DUPLICATES removed. The runtime can publish the same indicator
+        // descriptor more than once (e.g. SCMR twice), which would otherwise
+        // produce duplicate v-for keys ("Duplicate keys found …" Vue warning).
+        // Dedupe by full identity so genuinely distinct descriptors are kept
+        // while exact repeats collapse.
         indicatorsFor(row) {
             const tf = this.activeTimeframe(row)
             const inds = (row.state.indicators || [])
-            return inds
-                .filter((ind) => !ind.timeframe || ind.timeframe === tf)
-                .map((ind) => ({
-                    key: `${ind.kind}:${ind.display_label}:${ind.timeframe || ''}`,
-                    ...ind,
-                }))
+            const seen = new Set()
+            const out = []
+            for (const ind of inds) {
+                if (ind.timeframe && ind.timeframe !== tf) continue
+                const key =
+                    `${ind.kind}:${ind.display_label}:${ind.timeframe || ''}:` +
+                    `${ind.source || ''}:${(ind.outputs || []).join(',')}`
+                if (seen.has(key)) continue
+                seen.add(key)
+                out.push({ key, ...ind })
+            }
+            return out
         },
         // Default indicator display set for a (row, tf): all available labels.
         defaultIndicators(row, tf) {

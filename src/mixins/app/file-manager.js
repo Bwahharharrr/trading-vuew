@@ -248,7 +248,9 @@ export default {
             //    (data_*.json). Skips data_alerts_/data_scorers_/target_
             //    by prefix so the default is the "main" chart, not an
             //    overlay-only variant.
-            if (!this.currentDataFile && newFiles.length > 0) {
+            // Only in FILE mode — the default GATEWAY source must not load a
+            // file underneath the gateway feed (both drive the same DataCube).
+            if (this.feedMode === 'file' && !this.currentDataFile && newFiles.length > 0) {
                 const first = newFiles.find(
                     f => f.startsWith('data_') &&
                          !f.startsWith('data_alerts_') &&
