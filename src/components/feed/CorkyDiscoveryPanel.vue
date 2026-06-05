@@ -179,7 +179,7 @@ export default {
         progress: { type: Object, default: null },
         error: { type: Object, default: null },
     },
-    emits: ['select', 'add-timeframe', 'add-indicator', 'retry'],
+    emits: ['select', 'add-timeframe', 'toggle-indicator', 'retry'],
     data() {
         return {
             // Local UI state — presentational only, never emitted.
@@ -305,12 +305,6 @@ export default {
             }
             return out
         },
-        // Default indicator display set for a (row, tf): all available labels.
-        defaultIndicators(row, tf) {
-            return (row.state.indicators || [])
-                .filter((ind) => !ind.timeframe || ind.timeframe === tf)
-                .map((ind) => ind.display_label)
-        },
         isSymbolActive(row) {
             return !!(this.current &&
                 this.current.venue === row.venue &&
@@ -334,11 +328,14 @@ export default {
             return tf.stale ? 'badge-stale' : 'badge-ready'
         },
         onSelectTimeframe(row, tf) {
+            // Load CANDLES ONLY by default — every indicator series ships in the
+            // rows, so the user toggles each on client-side afterwards (no
+            // re-subscribe). `indicators: []` ⇒ candles-only.
             this.$emit('select', {
                 venue: row.venue,
                 symbol: row.symbol,
                 timeframe: tf,
-                indicators: this.defaultIndicators(row, tf),
+                indicators: [],
             })
         },
         onAddTimeframe(row) {
@@ -349,11 +346,16 @@ export default {
             })
         },
         onToggleIndicator(row, ind) {
-            this.$emit('add-indicator', {
+            // Client-side show/hide of an already-loaded indicator (no
+            // re-subscribe). `kind` identifies the overlay set in the feed;
+            // `enabled` is the NEXT state (the opposite of the current one).
+            this.$emit('toggle-indicator', {
                 venue: row.venue,
                 symbol: row.symbol,
                 timeframe: this.activeTimeframe(row),
-                indicator: ind.display_label,
+                kind: ind.kind,
+                display_label: ind.display_label,
+                enabled: !this.isIndicatorOn(row, ind),
             })
         },
     },

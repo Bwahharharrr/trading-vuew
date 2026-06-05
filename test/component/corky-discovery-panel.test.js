@@ -4,7 +4,7 @@
 // It renders the venue → symbol → timeframe → indicator tree from `states`,
 // derives ready/stale badges from each state's ranges[], highlights the
 // `current` selection, shows a loading/progress bar + error banner, and EMITS
-// intents (select / add-timeframe / add-indicator / retry). It owns no client.
+// intents (select / add-timeframe / toggle-indicator / retry). It owns no client.
 import { test, expect, describe } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CorkyDiscoveryPanel from '../../src/components/feed/CorkyDiscoveryPanel.vue'
@@ -81,8 +81,8 @@ describe('CorkyDiscoveryPanel', () => {
         expect(payload.venue).toBe('BITFINEX')
         expect(payload.symbol).toBe('tBTCUSD')
         expect(payload.timeframe).toBe('5m')
-        // default indicator display set = all available for that tf (SMA(20))
-        expect(payload.indicators).toEqual(['SMA(20)'])
+        // candles-only by default: indicators are toggled on client-side later
+        expect(payload.indicators).toEqual([])
     })
 
     test('highlights the current selection with aria-pressed', () => {
@@ -128,17 +128,38 @@ describe('CorkyDiscoveryPanel', () => {
         expect(w.find('.corky-retry-btn').exists()).toBe(false)
     })
 
-    test('toggling an indicator emits add-indicator', async () => {
+    test('toggling an OFF indicator emits a client-side toggle (enabled:true)', async () => {
         const w = mountPanel({
             current: { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '5m', indicators: [] },
         })
         const toggle = w.find('.corky-ind-toggle')
         expect(toggle.exists()).toBe(true)
+        // currently OFF (not in current.indicators)
+        expect(toggle.text()).toBe('○')
         await toggle.trigger('click')
-        const emitted = w.emitted('add-indicator')
+        // no resubscribe path
+        expect(w.emitted('add-indicator')).toBeFalsy()
+        const emitted = w.emitted('toggle-indicator')
         expect(emitted).toBeTruthy()
         expect(emitted[0][0]).toMatchObject({
-            venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '5m', indicator: 'SMA(20)',
+            venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '5m',
+            kind: 'sma', display_label: 'SMA(20)', enabled: true,
+        })
+    })
+
+    test('toggling an ON indicator emits enabled:false', async () => {
+        const w = mountPanel({
+            current: {
+                venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '5m',
+                indicators: ['SMA(20)'],
+            },
+        })
+        const toggle = w.find('.corky-ind-toggle')
+        expect(toggle.text()).toBe('●') // shown as ON
+        await toggle.trigger('click')
+        const emitted = w.emitted('toggle-indicator')
+        expect(emitted[0][0]).toMatchObject({
+            kind: 'sma', display_label: 'SMA(20)', enabled: false,
         })
     })
 

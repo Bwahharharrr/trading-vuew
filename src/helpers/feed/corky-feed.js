@@ -92,7 +92,14 @@ export class CorkyFeed extends FeedSource {
             timeframe,
             chunks: [],            // accumulated historical_chunk events
             history_complete: false,
-            liveView: null,        // {chart,onchart,offchart,timeframe} → DC-owned arrays
+            // FULL built structure (candles + EVERY indicator overlay). This is
+            // the source of truth live updates are applied to so that a series
+            // toggled on later shows up-to-date data. Only the candles (and
+            // toggled-on overlays) are ever pushed to the DataCube.
+            built: null,           // {chart,onchart,offchart,timeframe}
+            liveView: null,        // === built (applyLiveUpdate target)
+            enabledKinds: new Set(),   // indicator kinds currently shown in the DC
+            addedOverlays: new Set(),  // overlay objects currently added to the DC
             lastSeqBySub: {},      // per-sub last sequence (out-of-order guard)
             unsubFanout: null,     // detach the client.onSubscription listener
         }
@@ -180,15 +187,20 @@ export class CorkyFeed extends FeedSource {
         }
     }
 
-    // History → DataCube (once). Assembles chunks, builds the trading-vue
-    // structure, pushes it through the DataCube's PUBLIC API, then captures
-    // references to the DC-OWNED arrays so live updates mutate them in place.
+    // History → DataCube (once). Assembles chunks, builds the FULL trading-vue
+    // structure (candles + EVERY indicator overlay) and RETAINS it on the
+    // handle as the live source of truth — but pushes only the CANDLES to the
+    // DataCube. Indicator overlays start hidden (candles-only default) and are
+    // added/removed client-side by setIndicatorEnabled().
     _finishHistory(handle) {
         if (handle.history_complete) return
         handle.history_complete = true
 
         const rows = assembleChunks(handle.chunks)
         const built = buildChartData(rows, { timeframe: handle.timeframe })
+        // Tag the FULL structure with the timeframe so applyLiveUpdate's single-
+        // tf invariant works when it mutates `built` directly.
+        built.timeframe = handle.timeframe
 
         const dc = this.dc
         // Ensure the data skeleton exists (headless DataCube doesn't run
@@ -196,29 +208,124 @@ export class CorkyFeed extends FeedSource {
         // from creating chart/onchart/offchart + the invalidation store).
         if (typeof dc.init_data === 'function' && !dc.data.chart) dc.init_data()
 
-        // Push candles via the public data API. `set` replaces the series.
+        // Reset the indicator panes to the candles-only baseline. The shared
+        // DataCube is reused across selects; without this, overlays a user
+        // toggled on for a PREVIOUS timeframe stay orphaned here (not in the new
+        // handle.built, so live ticks never refresh them) and keep rendering the
+        // old series on the new chart. The new handle starts with empty
+        // enabledKinds/addedOverlays, so this keeps DC ↔ handle in sync.
+        if (dc.data.onchart) dc.data.onchart.length = 0
+        if (dc.data.offchart) dc.data.offchart.length = 0
+        if (typeof dc.update_ids === 'function') dc.update_ids()
+
+        // Push candles via the public data API. `set` replaces the series, but
+        // we want the DataCube's chart.data to be the SAME array object as
+        // built.chart.data so live upserts (which mutate built.chart.data) are
+        // visible to the chart in place. `set('chart.data', arr)` assigns the
+        // array by reference, satisfying that.
         dc.data.chart.type = built.chart.type
         dc.set('chart.data', built.chart.data)
         // Tag the chart-data object with the timeframe (single-tf invariant for
         // applyLiveUpdate — foreign-tf live rows are dropped).
         dc.data.chart.tf = handle.timeframe
 
-        // Add each overlay to its pane. `add` assigns ids + appends to the live
-        // onchart/offchart arrays the DataCube owns.
-        for (const ov of built.onchart) dc.add('onchart', ov)
-        for (const ov of built.offchart) dc.add('offchart', ov)
+        // RETAIN the full built structure as the live model. `liveView === built`
+        // so applyLiveUpdate keeps EVERY indicator series fresh (enabled or not)
+        // and, because each enabled overlay added to the DataCube is the SAME
+        // object as in `built` (we push the built overlay objects directly in
+        // setIndicatorEnabled), its `.data` updates in place.
+        handle.built = built
+        handle.liveView = built
+        handle.enabledKinds = new Set()
+        handle.addedOverlays = new Set()
 
-        // Build a LIVE VIEW that points at the DataCube's OWN arrays/overlays so
-        // applyLiveUpdate mutates the live model in place (no per-tick rebuild).
-        handle.liveView = {
-            timeframe: handle.timeframe,
-            chart: dc.data.chart,           // { type, data:[...] } — the live OHLCV array
-            onchart: dc.data.onchart,       // live overlay objects (with .settings.corkyKey)
-            offchart: dc.data.offchart,
+        // Signal a redraw for the freshly-loaded history (candles only).
+        dc.touchData()
+    }
+
+    // ── selective indicator overlays (client-side toggle) ───────────────────
+
+    /**
+     * Show/hide every overlay of a given indicator KIND in the DataCube,
+     * WITHOUT re-subscribing — the data is already loaded and kept fresh on
+     * `handle.built`. Idempotent.
+     *
+     * on  → dc.add(pane, ov) for each handle.built overlay whose
+     *       settings.corkyKind === kind that isn't already added (the SAME
+     *       overlay object, so live upserts mutate it in place); track the
+     *       added overlay for later removal.
+     * off → dc.del(ov.id) for each tracked overlay of that kind.
+     *
+     * @param {object} handle - the subscribe() handle.
+     * @param {string} kind   - indicator kind (e.g. 'MACD'); matched against
+     *                          settings.corkyKind.
+     * @param {boolean} on    - enable (show) or disable (hide).
+     * @returns {boolean} whether this kind actually has overlays in the loaded
+     *   data (so the caller knows whether the toggle was meaningful).
+     */
+    setIndicatorEnabled(handle, kind, on) {
+        if (!handle || !handle.built) return false
+        const dc = this.dc
+        const built = handle.built
+        const overlays = [...built.onchart, ...built.offchart]
+            .filter(ov => ov.settings && ov.settings.corkyKind === kind)
+
+        let changed = false
+        if (on) {
+            for (const ov of built.onchart) {
+                if (ov.settings && ov.settings.corkyKind === kind &&
+                    !handle.addedOverlays.has(ov)) {
+                    dc.add('onchart', ov)   // assigns ov.id, appends by reference
+                    handle.addedOverlays.add(ov)
+                    changed = true
+                }
+            }
+            for (const ov of built.offchart) {
+                if (ov.settings && ov.settings.corkyKind === kind &&
+                    !handle.addedOverlays.has(ov)) {
+                    dc.add('offchart', ov)
+                    handle.addedOverlays.add(ov)
+                    changed = true
+                }
+            }
+            if (overlays.length) handle.enabledKinds.add(kind)
+        } else {
+            for (const ov of overlays) {
+                if (handle.addedOverlays.has(ov)) {
+                    this._removeOverlay(dc, ov)
+                    handle.addedOverlays.delete(ov)
+                    changed = true
+                }
+            }
+            handle.enabledKinds.delete(kind)
         }
 
-        // Signal a redraw for the freshly-loaded history.
-        dc.touchData()
+        if (changed) dc.touchData()
+        return overlays.length > 0
+    }
+
+    // Remove one overlay by OBJECT IDENTITY. We must NOT use dc.del(ov.id):
+    // querySearch matches ids by SUBSTRING (`x.id.includes(path)`), so deleting
+    // e.g. 'onchart.Splines1' would ALSO delete 'onchart.Splines10/11/12' —
+    // and macd/bbands/kc/stoch all map to the 'Splines' overlay type, so this
+    // collision is reachable. Splice the exact object, then renumber ids via
+    // the DataCube's public update_ids().
+    _removeOverlay(dc, ov) {
+        for (const pane of ['onchart', 'offchart']) {
+            const arr = dc.data[pane]
+            const i = arr ? arr.indexOf(ov) : -1
+            if (i !== -1) {
+                arr.splice(i, 1)
+                if (typeof dc.update_ids === 'function') dc.update_ids()
+                return
+            }
+        }
+    }
+
+    /** Indicator kinds currently shown in the DataCube for a handle. */
+    enabledKinds(handle) {
+        return handle && handle.enabledKinds
+            ? new Set(handle.enabledKinds) : new Set()
     }
 
     // One live tick → in-place upsert + invalidate. Duplicate / out-of-order
@@ -238,6 +345,17 @@ export class CorkyFeed extends FeedSource {
 
     // ── unsubscribe / destroy ────────────────────────────────────────────────
 
+    // Release a handle's retained model so no overlays/ids leak after teardown.
+    // (Does NOT touch the DataCube — the caller decides whether the DC is reset
+    // or reused by the next subscription.)
+    _clearHandle(h) {
+        if (!h) return
+        h.built = null
+        h.liveView = null
+        if (h.enabledKinds) h.enabledKinds.clear()
+        if (h.addedOverlays) h.addedOverlays.clear()
+    }
+
     /**
      * Stop a stream and release its routing.
      * @param {object|string} handle - the handle from subscribe(), or a raw id.
@@ -248,6 +366,7 @@ export class CorkyFeed extends FeedSource {
         if (!id) return
         const h = this._subs.get(id)
         if (h && h.unsubFanout) h.unsubFanout()
+        this._clearHandle(h)
         this._subs.delete(id)
         await this.client.unsubscribe(id)
     }
@@ -258,6 +377,7 @@ export class CorkyFeed extends FeedSource {
         for (const id of ids) {
             const h = this._subs.get(id)
             if (h && h.unsubFanout) h.unsubFanout()
+            this._clearHandle(h)
             // Fire-and-forget the unsubscribe command; we're tearing down.
             // unsubscribe() is async and the client.close() below rejects any
             // in-flight request, so attach a no-op catch to avoid an unhandled

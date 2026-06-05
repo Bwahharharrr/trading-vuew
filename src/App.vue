@@ -124,7 +124,7 @@
             :error="corkyError"
             @select="onCorkySelect"
             @add-timeframe="onCorkyAddTimeframe"
-            @add-indicator="onCorkyAddIndicator"
+            @toggle-indicator="onCorkyToggleIndicator"
             @retry="onCorkyRetry">
         </corky-discovery-panel>
 
@@ -418,11 +418,13 @@ export default {
             this.corkyLoading = true
             this.corkyError = null
             this.corkyProgress = null
+            // Candles-only by default: indicators are toggled on client-side
+            // afterwards (their data already ships in the rows — no resubscribe).
             this.corkyCurrent = {
                 venue: opts.venue,
                 symbol: opts.symbol,
                 timeframe: opts.timeframe,
-                indicators: opts.indicators,
+                indicators: [],
             }
             try {
                 this.corkyHandle = await this.corkyFeed.subscribe(opts, {
@@ -451,38 +453,38 @@ export default {
         // Panel: add a timeframe → patch the candle-state, re-discover, then
         // re-select the new timeframe so it streams.
         async onCorkyAddTimeframe(req) {
-            // Stream the new tf WITH its default indicators, matching the
-            // chip-click select path (which always sends defaultIndicators).
-            const indicators = this._corkyDefaultIndicators(
-                req.venue, req.symbol, req.timeframe)
+            // Stream the new tf CANDLES-ONLY (matching the chip-click select
+            // path); the user toggles indicators on client-side afterwards.
             await this._corkyPatchAndReselect(
                 { venue: req.venue, symbol: req.symbol, timeframes: [req.timeframe] },
-                { venue: req.venue, symbol: req.symbol, timeframe: req.timeframe, indicators },
+                { venue: req.venue, symbol: req.symbol, timeframe: req.timeframe, indicators: [] },
             )
         },
 
-        // Default indicator display-labels for a venue/symbol/timeframe, mirroring
-        // CorkyDiscoveryPanel.defaultIndicators so add-tf and chip-select agree.
-        _corkyDefaultIndicators(venue, symbol, timeframe) {
-            const st = this.corkyStates.find(
-                (s) => s.venue === venue && s.symbol === symbol)
-            const inds = (st && Array.isArray(st.indicators)) ? st.indicators : []
-            return inds
-                .filter((ind) => !ind.timeframe || ind.timeframe === timeframe)
-                .map((ind) => ind.display_label)
-        },
+        // Panel: toggle an indicator ON/OFF client-side. The indicator DATA is
+        // already loaded on the active subscription handle (the rows carry every
+        // maintained series), so we just show/hide its overlays in the DataCube
+        // — NO patch, NO re-subscribe. Mirror the new state into
+        // corkyCurrent.indicators so the panel's ●/○ reflects it.
+        onCorkyToggleIndicator(req) {
+            if (!this.corkyFeed || !this.corkyHandle) return
+            // Only reflect the toggle in the UI if the kind actually has overlays
+            // in the loaded data (setIndicatorEnabled returns false otherwise),
+            // so a no-op toggle can't leave a filled dot for an empty indicator.
+            const applied = this.corkyFeed.setIndicatorEnabled(
+                this.corkyHandle, req.kind, req.enabled)
+            if (!applied) return
 
-        // Panel: add an indicator → patch the candle-state, re-discover, then
-        // re-select with the indicator included so it streams.
-        async onCorkyAddIndicator(req) {
             const cur = this.corkyCurrent
-            const inds = (cur && Array.isArray(cur.indicators))
-                ? cur.indicators.slice() : []
-            if (req.indicator && !inds.includes(req.indicator)) inds.push(req.indicator)
-            await this._corkyPatchAndReselect(
-                { venue: req.venue, symbol: req.symbol, indicators: [req.indicator] },
-                { venue: req.venue, symbol: req.symbol, timeframe: req.timeframe, indicators: inds },
-            )
+            if (!cur) return
+            const inds = Array.isArray(cur.indicators) ? cur.indicators.slice() : []
+            const i = inds.indexOf(req.display_label)
+            if (req.enabled) {
+                if (i === -1) inds.push(req.display_label)
+            } else if (i !== -1) {
+                inds.splice(i, 1)
+            }
+            cur.indicators = inds
         },
 
         // Patch the candle-state on the gateway, re-discover the catalog, then
