@@ -29,12 +29,19 @@ export class CorkyFeed extends FeedSource {
      * @param {import('../datacube.js').default} cfg.dataCube - the DataCube to
      *   drive. Injectable so tests pass a real headless DataCube.
      */
-    constructor({ client, dataCube } = {}) {
+    constructor({ client, dataCube, subscribeTimeoutMs = 30000 } = {}) {
         super()
         if (!client) throw new Error('CorkyFeed: `client` is required')
         if (!dataCube) throw new Error('CorkyFeed: `dataCube` is required')
         this.client = client
         this.dc = dataCube
+
+        // Safety net: if the gateway never sends historical_complete NOR an
+        // error (a silent hang — e.g. a stuck/unhealthy runtime), fail the
+        // subscribe after this long so the UI shows a clean error instead of
+        // spinning forever. 0/null disables. (The gateway usually DOES send a
+        // 'timed out waiting for historical candles' error itself.)
+        this.subscribeTimeoutMs = subscribeTimeoutMs
 
         // Deterministic subscription_id minting (counter + prefix; no randomness
         // / wall-clock), mirroring CorkyClient's request_id discipline.
@@ -96,11 +103,12 @@ export class CorkyFeed extends FeedSource {
             this._onSubscriptionEvent(handle, event, onStatus, onError)
         })
 
+        let timer = null
         try {
             // Kick off the flow. The client resolves this on historical_complete
             // (errors reject); the actual history → DataCube push happens in the
             // event handler so history is assembled exactly once.
-            await this.client.subscribeCandles({
+            const flow = this.client.subscribeCandles({
                 subscription_id,
                 venue, symbol, timeframe,
                 // The candle-state already MAINTAINS its indicator set (via
@@ -112,9 +120,32 @@ export class CorkyFeed extends FeedSource {
                 include_indicators: indicators != null ? true : undefined,
                 range,
             })
+            // Race a timeout so a silent gateway/runtime hang surfaces cleanly.
+            if (this.subscribeTimeoutMs > 0) {
+                const guard = new Promise((_, reject) => {
+                    timer = setTimeout(() => {
+                        const e = new Error(
+                            `Timed out after ${this.subscribeTimeoutMs / 1000}s waiting for ` +
+                            `historical candles (${venue}:${symbol} ${timeframe}). ` +
+                            `The gateway/runtime may be unhealthy.`)
+                        e.code = 'subscribe_timeout'
+                        e.retryable = true
+                        reject(e)
+                    }, this.subscribeTimeoutMs)
+                })
+                await Promise.race([flow, guard])
+            } else {
+                await flow
+            }
         } catch (err) {
+            // Clean up routing on failure/timeout (don't leak the per-sub
+            // fan-out listener or the _subs entry — the recurring teardown bug).
+            if (handle.unsubFanout) handle.unsubFanout()
+            this._subs.delete(subscription_id)
             onError(err)
             throw err
+        } finally {
+            if (timer) clearTimeout(timer)
         }
 
         return handle

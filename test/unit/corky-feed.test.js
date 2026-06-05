@@ -190,3 +190,31 @@ describe('CorkyFeed.unsubscribe / destroy', () => {
         expect(client.closed).toBe(true)
     })
 })
+
+describe('CorkyFeed.subscribe timeout / failure cleanup', () => {
+    it('rejects with subscribe_timeout and cleans up when the gateway never completes', async () => {
+        // A client whose subscribeCandles never settles (silent gateway/runtime hang).
+        const hangClient = {
+            _subs: new Map(),
+            async listCandleStates() { return [] },
+            subscribeCandles() { return new Promise(() => {}) }, // never resolves
+            async unsubscribe() {},
+            close() {},
+            onSubscription(id, cb) {
+                let s = this._subs.get(id); if (!s) { s = new Set(); this._subs.set(id, s) }
+                s.add(cb); return () => s.delete(cb)
+            },
+        }
+        const dc2 = new DataCube({ chart: { type: 'Candles', data: [] }, onchart: [], offchart: [] })
+        const feed2 = new CorkyFeed({ client: hangClient, dataCube: dc2, subscribeTimeoutMs: 40 })
+
+        await expect(
+            feed2.subscribe({ venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1m' })
+        ).rejects.toMatchObject({ code: 'subscribe_timeout', retryable: true })
+
+        // No leaked subscription handle / fan-out listener after the timeout.
+        expect(feed2._subs.size).toBe(0)
+        const onlySub = [...hangClient._subs.values()][0]
+        expect(onlySub ? onlySub.size : 0).toBe(0) // fan-out listener detached
+    })
+})
