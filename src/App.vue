@@ -305,17 +305,31 @@ export default {
             corkyHandle: null,   // active subscription handle (single stream)
         }
     },
+    watch: {
+        // `this.chart` is REPLACED on every data/timeframe load (chart-state /
+        // file-manager). Re-attach the order agent to the active DataCube each
+        // time (immediate: also attaches to the initial one) so OrderBox's ▶
+        // Submit → dc_events.submit_orders → agent works after any reload.
+        // Without this the agent would point at a stale DataCube and Submit
+        // would be a silent no-op.
+        chart: {
+            immediate: true,
+            handler(dc, old) {
+                if (old && old.orderAgent) {
+                    try { old.orderAgent.destroy() } catch (_) { /* gone */ }
+                    old.orderAgent = null
+                }
+                if (dc && !dc.orderAgent) {
+                    dc.orderAgent = new OrderAgent({
+                        transport: new StubOrderTransport(),
+                        dataCube: dc
+                    })
+                }
+            }
+        }
+    },
     mounted() {
         window.addEventListener('resize', this.onResize)
-        // Attach the order-submission agent (prototype: local stub transport).
-        // OrderBox's Submit (▶) routes custom_event('submit-orders') →
-        // dc_events.submit_orders → this agent (local→pending→confirmed).
-        if (this.chart && !this.chart.orderAgent) {
-            this.chart.orderAgent = new OrderAgent({
-                transport: new StubOrderTransport(),
-                dataCube: this.chart
-            })
-        }
         // loadDataFileList resolves the picker; the watcher on dataFiles
         // (file-manager.js) consumes pendingFileLoad and drives the rest.
         this.loadDataFileList()
@@ -362,6 +376,10 @@ export default {
         // Tear down the gateway feed if it was ever activated (no dangling
         // sockets/listeners on unmount).
         this.teardownCorky()
+        if (this.chart && this.chart.orderAgent) {
+            try { this.chart.orderAgent.destroy() } catch (_) { /* gone */ }
+            this.chart.orderAgent = null
+        }
     },
     methods: {
         // ── Source toggle ─────────────────────────────────────────────────────
