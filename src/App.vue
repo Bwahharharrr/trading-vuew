@@ -361,6 +361,8 @@ export default {
             this.selectedView = savedState.selectedView || ''
             this.persistentIndicatorVisibility = savedState.persistentIndicatorVisibility || {}
             this.accordionExpandedViews = savedState.accordionExpandedViews || {}
+            this.corkyEnabled = (savedState.corkyEnabled && typeof savedState.corkyEnabled === 'object')
+                ? savedState.corkyEnabled : {}
         }
 
         // Bootstrap order (FILE mode only): ?file=<name> URL param wins (per-tab,
@@ -592,6 +594,7 @@ export default {
                 mem.kinds.splice(mi, 1)
             }
             mem.layers = cur.layers.slice()
+            this.saveStateToStorage()   // persist across reloads
         },
 
         // Toggle a single hidden view layer (TL/TH/diagnostics) on/off.
@@ -602,16 +605,20 @@ export default {
             if (!applied) return
             const cur = this.corkyCurrent
             if (cur) cur.layers = [...this.corkyHandle.enabledLayers]
-            // Persist for tf-switch survival.
+            // Persist for tf-switch + reload survival.
             this._corkyMem(req.venue, req.symbol).layers =
                 [...this.corkyHandle.enabledLayers]
+            this.saveStateToStorage()
         },
 
-        // Per-(venue,symbol) enabled-state memory (lazily created).
+        // Per-(venue,symbol) enabled-state memory (lazily created; normalized so a
+        // malformed/older restored entry can't break .kinds/.layers access).
         _corkyMem(venue, symbol) {
             const key = `${venue}|${symbol}`
             let m = this.corkyEnabled[key]
             if (!m) { m = { kinds: [], layers: [] }; this.corkyEnabled[key] = m }
+            if (!Array.isArray(m.kinds)) m.kinds = []
+            if (!Array.isArray(m.layers)) m.layers = []
             return m
         },
 

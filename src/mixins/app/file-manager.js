@@ -189,6 +189,9 @@ export default {
                 indicatorVisibility: this.indicatorVisibility,
                 persistentIndicatorVisibility: this.persistentIndicatorVisibility,
                 accordionExpandedViews: this.accordionExpandedViews,
+                // Corky: enabled indicators + hidden view-layers per venue|symbol
+                // (survives reload as well as tf-switch).
+                corkyEnabled: this.corkyEnabled,
             }
             try {
                 sessionStorage.setItem(SESSION_STATE_KEY, JSON.stringify(tabState))
