@@ -451,8 +451,14 @@ export default {
             this.renderKey++
             nextTick(() => this.redraw())
         },
-        // Watch cursor changes for redraw - use RAF to batch updates
+        // Watch cursor changes for redraw - use RAF to batch updates.
+        // Dual-canvas: the crosshair is already drawn SYNCHRONOUSLY in grid.js
+        // mousemove (same tick the cursor is committed), so deferring another
+        // redraw here would only re-trail it by a frame — skip. This is the
+        // single-canvas FALLBACK (crosshair lives on the static canvas, drawn in
+        // renderStatic), where a coalesced RAF redraw is still correct.
         'cursor.x': function(newX) {
+            if (this.renderer && this.renderer.hasDualCanvas) return
             if (this._cursorRafPending) return
             this._cursorRafPending = true
             requestAnimationFrame(() => {
@@ -504,6 +510,13 @@ export default {
         dataKey(newKey, oldKey) {
             if (!newKey || newKey === oldKey) return
             this.renderKey++
+            // A data/revision-driven redraw must always repaint the static
+            // (candle) layer. Forcing the dirty flag here prevents a live tick
+            // from being misclassified as crosshair-only and taking the
+            // dynamic-only fast path (which would leave the candle frozen until
+            // a pointer event). The cursor.x watcher deliberately does NOT do
+            // this, so pure cursor moves still skip the static redraw.
+            if (this.renderer) this.renderer.markStaticDirty()
             nextTick(() => this.redraw())
         },
         // Watch y-axis transform changes (sidebar zoom/drag)

@@ -98,6 +98,9 @@ class CursorUpdater {
             }
             if (grid.id !== e.grid_id) continue
             this.cursor.x = grid.t2screen(this.cursor.t)
+            // Raw pointer x — the pixel-smooth position for the vertical line +
+            // botbar label box (x above stays candle-snapped for the readouts).
+            this.cursor.xr = e.x
             this.cursor.y = c.y
             this.cursor.y$ = c.y$
         }

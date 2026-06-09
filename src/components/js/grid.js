@@ -197,6 +197,16 @@ export default class Grid {
         })
         this.calc_offset()
         this.renderer.propagate('mousemove', event)
+        // Paint the crosshair in the SAME tick the cursor was committed. $emit is
+        // synchronous, so updater.sync() has already written the reactive cursor.x/y
+        // by now, and the crosshair reads them live at draw time. This removes the
+        // ~1-frame lag of the reactive watcher + requestAnimationFrame round-trip
+        // (the "glued then jumps" stutter). Dynamic-only paint (clearRect + a few
+        // strokes) — never touches the static/candle canvas. Single-canvas mode
+        // falls back to Grid.vue's cursor.x RAF watcher.
+        if (this.renderer.hasDualCanvas && !this.comp.$props.cursor?.locked) {
+            this.renderer.updateDynamic()
+        }
     }
 
     mouseout(event) {
@@ -205,6 +215,8 @@ export default class Grid {
         if (!this.renderer) return
         this.comp.$emit('cursor-changed', {})
         this.renderer.propagate('mouseout', event)
+        // Clear the dynamic crosshair layer in the same tick (dual-canvas).
+        if (this.renderer.hasDualCanvas) this.renderer.updateDynamic()
     }
 
     mouseup(event) {
@@ -288,6 +300,7 @@ export default class Grid {
     del_layer(id) { this.renderer.del_layer(id) }
     show_hide_layer(event) { this.renderer.show_hide_layer(event) }
     update() { this.renderer.update() }
+    markStaticDirty() { this.renderer.markStaticDirty() }
     propagate(name, event) { this.renderer.propagate(name, event) }
 
     change_range() {

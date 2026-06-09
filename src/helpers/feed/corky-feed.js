@@ -336,8 +336,13 @@ export class CorkyFeed extends FeedSource {
     // One live tick → in-place upsert + invalidate. Duplicate / out-of-order
     // sequences are dropped by applyLiveUpdate (no redraw signalled then).
     _applyLive(handle, event, onStatus) {
-        if (!handle.liveView) return // live before history-complete: ignore
+        if (!handle.liveView) {
+            // live before history-complete: ignore
+            this._debugLive(event, { applied: false, reason: 'before-history' }, handle)
+            return
+        }
         const res = applyLiveUpdate(handle.liveView, event, handle.lastSeqBySub)
+        this._debugLive(event, res, handle)
         if (res.applied) {
             this.dc.touchData()
             onStatus({
@@ -346,6 +351,30 @@ export class CorkyFeed extends FeedSource {
                 sequence: res.sequence,
             })
         }
+    }
+
+    // Diagnostic for the "current candle drawn once, never updated" report.
+    // Opt-in (zero cost otherwise): set `window.__CORKY_DEBUG = true` in the
+    // browser console, then watch the live stream. Each live_update logs its
+    // sequence, candle ts/close, and whether it was APPLIED or dropped (and
+    // why). If intra-candle ticks log `dropped: stale-sequence`, the gateway's
+    // `sequence` isn't per-message monotonic; if they never log at all, the
+    // gateway isn't sending intra-candle ticks (cadence, not a frontend bug).
+    _debugLive(event, res, handle) {
+        const dbg = typeof window !== 'undefined' && window.__CORKY_DEBUG
+        if (!dbg) return
+        const c = event && event.row && event.row.candle
+        // eslint-disable-next-line no-console
+        console.log('[corky live]', {
+            seq: event && event.sequence,
+            ts: c && c.timestamp_ms,
+            close: c && c.close,
+            tf: event && event.row && event.row.timeframe,
+            applied: !!(res && res.applied),
+            reason: res && res.reason,
+            lastSeq: handle && handle.lastSeqBySub
+                ? handle.lastSeqBySub[handle.subscription_id] : undefined,
+        })
     }
 
     // ── unsubscribe / destroy ────────────────────────────────────────────────

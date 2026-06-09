@@ -33,6 +33,11 @@ export default {
         return {
             cursor: {
                 x: null,
+                // Raw pointer x (pixel-smooth). `x` is SNAPPED to the nearest
+                // candle (drives the botbar time + value look-ups); `xr` follows
+                // the pointer exactly so the vertical crosshair line + its botbar
+                // label box track smoothly instead of stepping candle-to-candle.
+                xr: null,
                 y: null,
                 t: null,
                 y$: null,

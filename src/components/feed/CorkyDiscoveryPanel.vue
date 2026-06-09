@@ -12,8 +12,7 @@
             </div>
         </div>
         <span class="corky-progress-label">
-            <template v-if="hasProgress">{{ progressText }}</template>
-            <template v-else>Loading…</template>
+            {{ progressText }}
         </span>
     </div>
 
@@ -70,87 +69,134 @@
         No symbols match your filters.
     </div>
 
-    <!-- Venue → Symbol → Timeframe → Indicator tree -->
+    <!-- Venue → Symbol → Timeframe → Indicator tree.
+         Two-level collapse: the venue header toggles its ticker list; each ticker
+         header toggles its own timeframes + indicators. Default: venues expanded,
+         tickers collapsed (a clean exchange → ticker list). -->
     <div class="corky-tree">
         <div v-for="group in filteredVenues" :key="group.venue" class="corky-venue">
-            <div class="corky-venue-title">{{ group.venue }}</div>
+            <!-- Exchange (venue) collapse toggle -->
+            <button
+                type="button"
+                class="corky-venue-toggle"
+                :aria-expanded="isVenueExpanded(group.venue) ? 'true' : 'false'"
+                :title="isVenueExpanded(group.venue) ? 'Collapse exchange' : 'Expand exchange'"
+                @click="toggleVenue(group.venue)">
+                <span class="corky-chevron" :class="{ expanded: isVenueExpanded(group.venue) }">▼</span>
+                <span class="corky-venue-name">{{ group.venue }}</span>
+            </button>
 
-            <div
-                v-for="row in group.symbols"
-                :key="row.key"
-                class="corky-symbol">
-                <div class="corky-symbol-title">
-                    <span class="corky-symbol-name">{{ row.symbol }}</span>
-                    <span
-                        v-for="cat in row.categories"
-                        :key="cat"
-                        class="corky-cat-badge"
-                        :class="'corky-cat-badge-' + cat">
-                        {{ categoryLabel(cat) }}
-                    </span>
-                </div>
-
-                <!-- Timeframe chips -->
-                <div class="tf-buttons corky-tf-row">
-                    <button
-                        v-for="tf in row.timeframes"
-                        :key="tf.timeframe"
-                        type="button"
-                        class="tf-btn corky-tf-chip"
-                        :class="{
-                            active: isCurrent(row, tf.timeframe),
-                            ready: tf.ready,
-                            stale: tf.stale,
-                            'not-ready': !tf.ready
-                        }"
-                        :aria-pressed="isCurrent(row, tf.timeframe) ? 'true' : 'false'"
-                        @click="onSelectTimeframe(row, tf.timeframe)">
-                        <span class="corky-tf-label">{{ tf.timeframe }}</span>
-                        <span
-                            class="corky-badge"
-                            :class="badgeClass(tf)">
-                            {{ badgeText(tf) }}
-                        </span>
-                    </button>
-                    <button
-                        type="button"
-                        class="tf-btn corky-tf-add"
-                        title="Add a timeframe"
-                        @click="onAddTimeframe(row)">
-                        +
-                    </button>
-                </div>
-
-                <!-- Indicators for the active timeframe -->
+            <div v-show="isVenueExpanded(group.venue)" class="corky-symbols-list">
                 <div
-                    v-if="indicatorsFor(row).length"
-                    class="corky-indicators"
-                    :class="{ active: isSymbolActive(row) }">
-                    <div
-                        v-for="ind in indicatorsFor(row)"
-                        :key="ind.key"
-                        class="indicator-item corky-indicator-row">
-                        <button
-                            type="button"
-                            class="visibility-toggle corky-ind-toggle"
-                            :class="{ on: isIndicatorOn(row, ind) }"
-                            :aria-pressed="isIndicatorOn(row, ind) ? 'true' : 'false'"
-                            @click="onToggleIndicator(row, ind)">
-                            {{ isIndicatorOn(row, ind) ? '●' : '○' }}
-                        </button>
-                        <span class="indicator-name corky-ind-label">
-                            {{ ind.display_label }}
+                    v-for="row in group.symbols"
+                    :key="row.key"
+                    class="corky-symbol">
+                    <!-- Ticker collapse toggle: reveals its timeframes + indicators -->
+                    <button
+                        type="button"
+                        class="corky-symbol-toggle"
+                        :aria-expanded="isSymbolExpanded(row.key) ? 'true' : 'false'"
+                        :title="isSymbolExpanded(row.key) ? 'Collapse ticker' : 'Expand ticker'"
+                        @click="toggleSymbol(row.key)">
+                        <span class="corky-chevron" :class="{ expanded: isSymbolExpanded(row.key) }">▼</span>
+                        <span class="corky-symbol-title">
+                            <span class="corky-symbol-name">{{ row.symbol }}</span>
+                            <span
+                                v-for="cat in row.categories"
+                                :key="cat"
+                                class="corky-cat-badge"
+                                :class="'corky-cat-badge-' + cat">
+                                {{ categoryLabel(cat) }}
+                            </span>
                         </span>
-                        <span
-                            v-if="ind.timeframe"
-                            class="corky-badge corky-ind-tf badge-tf">
-                            {{ ind.timeframe }}
-                        </span>
-                        <span
-                            class="corky-badge"
-                            :class="ind.ready ? 'badge-ready' : 'badge-warmup'">
-                            {{ ind.ready ? 'ready' : 'warmup' }}
-                        </span>
+                    </button>
+
+                    <div v-show="isSymbolExpanded(row.key)" class="corky-symbol-details">
+                        <!-- Timeframe chips + add-timeframe picker -->
+                        <div class="tf-buttons corky-tf-row">
+                            <button
+                                v-for="tf in row.timeframes"
+                                :key="tf.timeframe"
+                                type="button"
+                                class="tf-btn corky-tf-chip"
+                                :class="{
+                                    active: isCurrent(row, tf.timeframe),
+                                    ready: tf.ready,
+                                    stale: tf.stale,
+                                    'not-ready': !tf.ready
+                                }"
+                                :aria-pressed="isCurrent(row, tf.timeframe) ? 'true' : 'false'"
+                                @click="onSelectTimeframe(row, tf.timeframe)">
+                                <span class="corky-tf-label">{{ tf.timeframe }}</span>
+                                <span
+                                    class="corky-badge"
+                                    :class="badgeClass(tf)">
+                                    {{ badgeText(tf) }}
+                                </span>
+                            </button>
+                            <!-- Add a timeframe: inline picker of standard TFs not
+                                 already present for this symbol. -->
+                            <div class="corky-tf-add-wrapper">
+                                <button
+                                    type="button"
+                                    class="tf-btn corky-tf-add"
+                                    :title="addingFor === row.key ? 'Close' : 'Add a timeframe'"
+                                    :aria-expanded="addingFor === row.key ? 'true' : 'false'"
+                                    @click="toggleAddPicker(row)">
+                                    +
+                                </button>
+                                <div v-if="addingFor === row.key" class="corky-tf-picker">
+                                    <div v-if="availableTimeframes(row).length === 0" class="corky-tf-picker-empty">
+                                        All timeframes added
+                                    </div>
+                                    <div v-else class="corky-tf-picker-list">
+                                        <button
+                                            v-for="tf in availableTimeframes(row)"
+                                            :key="tf"
+                                            type="button"
+                                            class="tf-btn corky-tf-picker-chip"
+                                            :title="'Add ' + tf"
+                                            @click="onAddTimeframe(row, tf)">
+                                            {{ tf }}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Indicators for the SELECTED timeframe (none until a tf
+                             is chosen for this symbol). -->
+                        <div
+                            v-if="indicatorsFor(row).length"
+                            class="corky-indicators"
+                            :class="{ active: isSymbolActive(row) }">
+                            <div
+                                v-for="ind in indicatorsFor(row)"
+                                :key="ind.key"
+                                class="indicator-item corky-indicator-row">
+                                <button
+                                    type="button"
+                                    class="visibility-toggle corky-ind-toggle"
+                                    :class="{ on: isIndicatorOn(row, ind) }"
+                                    :aria-pressed="isIndicatorOn(row, ind) ? 'true' : 'false'"
+                                    @click="onToggleIndicator(row, ind)">
+                                    {{ isIndicatorOn(row, ind) ? '●' : '○' }}
+                                </button>
+                                <span class="indicator-name corky-ind-label">
+                                    {{ ind.display_label }}
+                                </span>
+                                <span
+                                    v-if="ind.timeframe"
+                                    class="corky-badge corky-ind-tf badge-tf">
+                                    {{ ind.timeframe }}
+                                </span>
+                                <span
+                                    class="corky-badge"
+                                    :class="ind.ready ? 'badge-ready' : 'badge-warmup'">
+                                    {{ ind.ready ? 'ready' : 'warmup' }}
+                                </span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -185,6 +231,14 @@ export default {
             // Local UI state — presentational only, never emitted.
             query: '',
             activeCategory: 'all',
+            // Two-level collapse state. Venues are EXPANDED by default (a name
+            // present in collapsedVenues == collapsed); tickers are COLLAPSED by
+            // default (a key present in expandedSymbols == expanded). Vue 3 makes
+            // these Sets reactive (collection handlers track has/add/delete).
+            collapsedVenues: new Set(),
+            expandedSymbols: new Set(),
+            // row.key of the symbol whose add-timeframe picker is open, or null.
+            addingFor: null,
         }
     },
     computed: {
@@ -247,10 +301,34 @@ export default {
             const { current, total } = this.progress
             return Math.max(0, Math.min(100, Math.round((current / total) * 100)))
         },
-        progressText() {
+        // Human-friendly status for the loading bar. The gateway never sends a
+        // total (only a per-chunk index), so we surface the PHASE + what is being
+        // loaded instead of a meaningless count.
+        progressLabel() {
             const p = this.progress
-            const phase = p && p.phase ? `${p.phase} ` : ''
-            return `${phase}${p.current}/${p.total}`
+            if (!p) return 'Loading…'
+            switch (p.phase) {
+                case 'accepted': return 'Connecting…'
+                case 'history': return `Loading history (chunk ${p.chunk_index || 0})`
+                case 'history-complete': return 'Finalising…'
+                case 'live': return 'Live'
+                default: return 'Loading…'
+            }
+        },
+        // The symbol + timeframe currently being loaded (from the `current` prop).
+        progressStatusText() {
+            const cur = this.current
+            if (!cur) return ''
+            return [cur.symbol, cur.timeframe].filter(Boolean).join(' ')
+        },
+        progressText() {
+            const status = this.progressStatusText
+            return status ? `${this.progressLabel} — ${status}` : this.progressLabel
+        },
+        // Canonical timeframe universe offered by the add-timeframe picker, in
+        // the gateway's format (minutes lowercase, hour+ uppercase — e.g. '1D').
+        standardTimeframes() {
+            return ['1m', '5m', '15m', '30m', '1H', '2H', '4H', '6H', '12H', '1D', '1W', '1M']
         },
         errorMessage() {
             return (this.error && this.error.message) || 'Something went wrong.'
@@ -274,14 +352,14 @@ export default {
                 }
             })
         },
-        // Which timeframe is "expanded"/selected for a row: the current
-        // selection if it matches this row, else the first available one.
+        // The SELECTED timeframe for a row, or null when the user hasn't selected
+        // one. No fallback to the first available timeframe — indicators (which
+        // key off this) must stay hidden until a timeframe is explicitly chosen.
         activeTimeframe(row) {
             if (this.isSymbolActive(row) && this.current.timeframe) {
                 return this.current.timeframe
             }
-            const first = row.timeframes[0]
-            return first ? first.timeframe : null
+            return null
         },
         // Indicators[] of a row's state filtered to the active timeframe, with
         // DUPLICATES removed. The runtime can publish the same indicator
@@ -291,6 +369,8 @@ export default {
         // while exact repeats collapse.
         indicatorsFor(row) {
             const tf = this.activeTimeframe(row)
+            // No timeframe selected ⇒ show no indicators for this symbol.
+            if (!tf) return []
             const inds = (row.state.indicators || [])
             const seen = new Set()
             const out = []
@@ -338,12 +418,51 @@ export default {
                 indicators: [],
             })
         },
-        onAddTimeframe(row) {
+        // ── Two-level collapse ────────────────────────────────────────────
+        isVenueExpanded(venue) {
+            return !this.collapsedVenues.has(venue)
+        },
+        toggleVenue(venue) {
+            if (this.collapsedVenues.has(venue)) this.collapsedVenues.delete(venue)
+            else this.collapsedVenues.add(venue)
+        },
+        isSymbolExpanded(key) {
+            return this.expandedSymbols.has(key)
+        },
+        toggleSymbol(key) {
+            if (this.expandedSymbols.has(key)) this.expandedSymbols.delete(key)
+            else this.expandedSymbols.add(key)
+        },
+
+        // ── Add-timeframe inline picker ───────────────────────────────────
+        // Standard timeframes NOT already present for this symbol (case-
+        // insensitive so a gateway '1D' isn't re-offered as '1d').
+        availableTimeframes(row) {
+            const present = new Set(
+                (row.timeframes || []).map((tf) => tf.timeframe.toLowerCase()))
+            return this.standardTimeframes.filter(
+                (tf) => !present.has(tf.toLowerCase()))
+        },
+        toggleAddPicker(row) {
+            this.addingFor = this.addingFor === row.key ? null : row.key
+        },
+        // Emit a NEW timeframe (the picked one) — not an existing one — and close
+        // the picker. App.onCorkyAddTimeframe patches the candle-state on the
+        // gateway, re-discovers, then selects the new tf so it streams.
+        onAddTimeframe(row, timeframe) {
             this.$emit('add-timeframe', {
                 venue: row.venue,
                 symbol: row.symbol,
-                timeframe: this.activeTimeframe(row),
+                timeframe,
             })
+            this.addingFor = null
+        },
+        // Close the picker if its symbol is no longer visible (e.g. filtered out).
+        closePickerIfNeeded() {
+            if (!this.addingFor) return
+            const stillVisible = this.filteredVenues
+                .some((g) => g.symbols.some((row) => row.key === this.addingFor))
+            if (!stillVisible) this.addingFor = null
         },
         onToggleIndicator(row, ind) {
             // Client-side show/hide of an already-loaded indicator (no
@@ -357,6 +476,13 @@ export default {
                 display_label: ind.display_label,
                 enabled: !this.isIndicatorOn(row, ind),
             })
+        },
+    },
+    watch: {
+        // Drop an open add-timeframe picker when its symbol scrolls out of the
+        // filtered view (search/category change).
+        filteredVenues() {
+            this.closePickerIfNeeded()
         },
     },
 }
@@ -524,32 +650,106 @@ export default {
     gap: 12px;
 }
 
-.corky-venue-title {
+/* Exchange (venue) collapse toggle */
+.corky-venue-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    background: transparent;
+    border: none;
+    padding: 4px 0;
+    margin-bottom: 6px;
     color: #808a9d;
     font-size: 10px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-bottom: 6px;
+    text-align: left;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+
+.corky-venue-toggle:hover {
+    color: #d1d4dc;
+}
+
+.corky-venue-name {
+    flex: 1;
+}
+
+/* Chevron: points down when expanded, left (rotated) when collapsed */
+.corky-chevron {
+    display: inline-block;
+    width: 12px;
+    font-size: 9px;
+    line-height: 1;
+    transition: transform 0.18s ease;
+    transform: rotate(-90deg);
+    flex-shrink: 0;
+}
+
+.corky-chevron.expanded {
+    transform: rotate(0deg);
+}
+
+/* Ticker list (shown/hidden by the venue toggle) */
+.corky-symbols-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
 .corky-symbol {
-    margin-bottom: 10px;
+    margin-bottom: 2px;
 }
 
 .corky-symbol:last-child {
     margin-bottom: 0;
 }
 
-.corky-symbol-title {
+/* Ticker collapse toggle (replaces the old plain symbol title div) */
+.corky-symbol-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    background: transparent;
+    border: none;
+    padding: 2px 0;
     color: #d1d4dc;
     font-size: 12px;
     font-weight: 600;
-    margin-bottom: 6px;
+    text-align: left;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+
+.corky-symbol-toggle:hover {
+    color: #35a776;
+}
+
+.corky-symbol-title {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 5px;
+}
+
+/* Ticker details (timeframes + indicators), shown/hidden by the ticker toggle */
+.corky-symbol-details {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 4px 0 8px 6px;
+    padding-left: 10px;
+    border-left: 1px solid #2a2e39;
+    animation: corky-slide-down 0.18s ease;
+}
+
+@keyframes corky-slide-down {
+    from { opacity: 0; transform: translateY(-3px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .corky-symbol-name {
@@ -605,6 +805,51 @@ export default {
     padding: 6px 9px;
     font-weight: 700;
     line-height: 1;
+}
+
+/* Add-timeframe inline picker */
+.corky-tf-add-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.corky-tf-picker {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    z-index: 20;
+    min-width: 200px;
+    padding: 6px;
+    background: #1a1e2a;
+    border: 1px solid #2a2e39;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.corky-tf-picker-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.corky-tf-picker-chip {
+    font-size: 11px;
+    padding: 4px 8px;
+}
+
+.corky-tf-picker-chip:hover {
+    border-color: #35a776;
+    color: #35a776;
+}
+
+.corky-tf-picker-empty {
+    color: #808a9d;
+    font-size: 10px;
+    padding: 2px 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
 }
 
 /* Badges */

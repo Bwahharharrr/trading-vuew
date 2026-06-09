@@ -173,7 +173,17 @@ function Layout(params) {
         // A/B capture the vertical (price) transform; px_step captures the
         // horizontal one (it derives from width - sidebar, so a width-only
         // resize changes px_step without changing range/A/B and must bust the cache).
-        const cacheKey = `${range[0]},${range[1]},${sub.length},${interval},${$p.height},${self.A.toFixed(6)},${self.B.toFixed(6)},${self.px_step.toFixed(4)}`
+        //
+        // The last visible bar's OHLCV is appended: a live intra-candle tick
+        // mutates only that bar in place, and when its new close/high/low stay
+        // inside the existing auto-scaled hi/lo band, range/sub.length/A/B/px_step
+        // are ALL unchanged — without this term the key would hit and serve stale
+        // candle geometry, freezing the last candle until a pan/zoom changed the
+        // range. (Only the last bar can change on a live tick; earlier bars are
+        // immutable, so hashing it alone is sufficient and keeps pan/zoom cached.)
+        const lb = sub[sub.length - 1]
+        const lbKey = lb ? `${lb[1]},${lb[2]},${lb[3]},${lb[4]},${lb[5]},${lb[6]}` : ''
+        const cacheKey = `${range[0]},${range[1]},${sub.length},${interval},${$p.height},${self.A.toFixed(6)},${self.B.toFixed(6)},${self.px_step.toFixed(4)},${lbKey}`
 
         // Check if we can reuse cached candles/volume
         if (layoutCache.key === cacheKey && layoutCache.candles && layoutCache.volume) {

@@ -247,6 +247,25 @@ export default {
             // payload: { gridId, indicatorIndex, newType, newSettings }
             const { gridId, indicatorIndex, newType, newSettings } = payload
 
+            // Attached (candle-pane) volume: index -1 means there is no offchart
+            // entry — its settings live on the main candle overlay. Merge the
+            // chosen colours there and bump the data revision to redraw (the
+            // volume colour is read at draw time, not as a reactive dep).
+            if (indicatorIndex === -1) {
+                const chartObj = this.chart && this.chart.data && this.chart.data.chart
+                if (chartObj) {
+                    if (!chartObj.settings) chartObj.settings = {}
+                    chartObj.settings = Object.assign({}, chartObj.settings, newSettings)
+                    if (this.indicatorSettingsData) {
+                        this.indicatorSettingsData.settings = chartObj.settings
+                    }
+                    const cd = this.chart.data && this.chart.data.$cd
+                    if (cd && cd.invalidate) cd.invalidate()
+                    this.saveStateToStorage()
+                }
+                return
+            }
+
             // Update the offchart data type and settings immediately
             if (this.chart.data.offchart && this.chart.data.offchart[indicatorIndex]) {
                 this.chart.data.offchart[indicatorIndex].type = newType

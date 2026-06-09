@@ -151,6 +151,14 @@ export default {
                 }
             })
         },
+        // Redraw when the sidebar shader set changes. The last-price tag shader
+        // registers lazily on the first candle draw (Price.init_shader), so
+        // without this the tag wouldn't paint until some other redraw fired.
+        // sb_shaders (Section.vue) returns a fresh filtered array on change, so a
+        // shallow prop watch is enough.
+        shaders() {
+            nextTick(() => this.redraw())
+        },
         rerender() {
             nextTick(() => this.redraw())
         },

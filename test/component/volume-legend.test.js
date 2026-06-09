@@ -60,6 +60,12 @@ describe('volume legend row (detach / attach / show-hide)', () => {
     expect(vol[0].settings.$volumeLegend).toBe(true)
     // It references the SAME OHLCV array (live updates flow through).
     expect(vol[0].data).toBe(dc.data.chart.data)
+    // Detached defaults: Bar style + SOLID colours (own pane reads solid,
+    // candle-pane keeps its translucent theme default).
+    expect(vol[0].settings.style).toBe('Bar')
+    expect(vol[0].settings.colorVolUp).toBe('#23a776')
+    expect(vol[0].settings.colorVolDw).toBe('#e54150')
+    expect(vol[0].settings.colorVolUp).not.toMatch(/.{8}$/) // no 8-digit alpha
     // Candle-pane volume is hidden, state reflects detached.
     expect(chart.volumeShown).toBe(false)
     expect(chart.volumeIsDetached).toBe(true)

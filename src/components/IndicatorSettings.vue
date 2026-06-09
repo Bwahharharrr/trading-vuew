@@ -6,7 +6,9 @@
             <button class="modal-close" @click="close">&times;</button>
         </div>
         <div class="modal-body">
-            <div class="setting-group">
+            <!-- Attached (candle-pane) volume only exposes colours — true style
+                 switching is a detached-pane feature, so hide the type grid. -->
+            <div class="setting-group" v-if="!isAttachedVolume">
                 <label class="setting-label">Visualization Type</label>
                 <div class="type-buttons">
                     <button
@@ -88,11 +90,18 @@ export default {
     },
     data() {
         const settings = this.currentSettings || {}
+        const KNOWN = ['Spline', 'StepLine', 'Histogram', 'Bar']
+        // Volume arrives with type 'Volume' (not a visual style). Seed the
+        // highlighted button from its persisted style, defaulting to 'Bar', so
+        // a recognised type is always selected when the modal opens.
+        const seedType = KNOWN.includes(this.currentType)
+            ? this.currentType
+            : (settings.style || 'Bar')
         return {
-            selectedType: this.currentType,
+            selectedType: seedType,
             lineColor: settings.color || '#42b28a',
-            colorUp: settings.colorUp || settings.color || '#26A69A',
-            colorDown: settings.colorDown || '#EF5350',
+            colorUp: settings.colorVolUp || settings.colorUp || settings.color || '#26A69A',
+            colorDown: settings.colorVolDw || settings.colorDown || '#EF5350',
             lineWidth: settings.lineWidth || 1.5,
             visualTypes: [
                 {
@@ -118,6 +127,20 @@ export default {
             ]
         }
     },
+    computed: {
+        // Volume is special: its overlay 'type' stays 'Volume' and the chosen
+        // visual is carried as a `style` setting (so it keeps plotting the
+        // volume column instead of swapping to a renderer that plots prices).
+        isVolume() {
+            return this.indicatorName === 'Volume' ||
+                this.currentType === 'Volume'
+        },
+        // Attached (candle-pane) volume has no offchart entry (index -1); it only
+        // exposes colours, not style switching.
+        isAttachedVolume() {
+            return this.isVolume && this.indicatorIndex === -1
+        }
+    },
     methods: {
         selectType(type) {
             this.selectedType = type
@@ -130,23 +153,32 @@ export default {
             const settings = {
                 gridId: this.gridId,
                 indicatorIndex: this.indicatorIndex,
-                newType: this.selectedType,
+                // Keep Volume as 'Volume' (style drives the look); other
+                // indicators switch their real overlay type as before.
+                newType: this.isVolume ? 'Volume' : this.selectedType,
                 newSettings: this.buildSettings()
             }
             this.$emit('apply', settings)
         },
         buildSettings() {
-            if (this.selectedType === 'Spline' || this.selectedType === 'StepLine') {
-                return {
-                    color: this.lineColor,
-                    lineWidth: this.lineWidth
-                }
-            } else {
-                return {
-                    colorUp: this.colorUp,
-                    colorDown: this.colorDown
+            const line = this.selectedType === 'Spline' ||
+                this.selectedType === 'StepLine'
+            const s = line
+                ? { color: this.lineColor, lineWidth: this.lineWidth }
+                : { colorUp: this.colorUp, colorDown: this.colorDown }
+
+            if (this.isVolume) {
+                // Drive the volume look via `style` + the colorVol* keys the
+                // Volume overlay reads (Volume.vue colorVolUp/colorVolDw).
+                s.style = this.selectedType
+                if (line) {
+                    s.colorVolUp = this.lineColor
+                } else {
+                    s.colorVolUp = this.colorUp
+                    s.colorVolDw = this.colorDown
                 }
             }
+            return s
         },
         close() {
             this.$emit('close')

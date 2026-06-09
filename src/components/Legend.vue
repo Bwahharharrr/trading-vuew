@@ -24,7 +24,7 @@
     </div>
     <!-- Volume legend row (main grid only): eye = show/hide, cog = settings,
          arrow = detach to its own offchart pane / re-attach onto candles. -->
-    <div class="t-vue-vol" v-if="grid_id === 0 && show_volume_row">
+    <div class="t-vue-vol" v-if="grid_id === 0 && show_volume_row && !volume_detached">
         <span class="t-vue-iname">Volume</span>
         <button
             class="t-vue-settings-btn"
@@ -64,6 +64,19 @@
     </div>
     <div class="t-vue-ind" v-for="ind in this.indicators" :key="ind.id">
         <span class="t-vue-iname">{{ind.name}}</span>
+        <!-- Re-attach arrow: only on the detached-volume row (its own pane).
+             Moves volume back onto the candle pane. Mirrors the down-arrow that
+             lives on the candle-pane volume row while attached. -->
+        <button
+            v-if="grid_id > 0 && isDetachedVolume(ind)"
+            class="t-vue-detach-btn"
+            @click.stop="reattachVolume"
+            title="Attach volume to candles"
+            aria-label="Attach volume to candles">
+            <svg viewBox="0 0 24 24" width="14" height="14">
+                <path fill="currentColor" d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/>
+            </svg>
+        </button>
         <button
             v-if="grid_id > 0"
             class="t-vue-settings-btn"
@@ -73,8 +86,12 @@
                 <path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
             </svg>
         </button>
+        <!-- No close button on the managed detached-volume row: closing it would
+             hide the pane without re-showing candle-pane volume (volumeIsDetached
+             reads the unfiltered offchart), stranding volume off both panes.
+             Re-attach (up-arrow) is the only exit. -->
         <button
-            v-if="grid_id > 0"
+            v-if="grid_id > 0 && !isDetachedVolume(ind)"
             class="t-vue-close-btn"
             @click.stop="closeIndicator(ind)"
             title="Remove indicator">
@@ -114,6 +131,7 @@
 
 import ButtonGroup from './ButtonGroup.vue'
 import Spinner from './Spinner.vue'
+import { VOLUME_LEGEND_FLAG } from '../stuff/volume.js'
 
 export default {
     name: 'ChartLegend',
@@ -340,6 +358,21 @@ export default {
                 overlay: 'Volume',
                 grid: 0,
                 detach: !this.volume_detached
+            })
+        },
+        // Is this offchart indicator the auto-managed detached volume?
+        isDetachedVolume(ind) {
+            return ind.type === 'Volume' &&
+                ind.settings && ind.settings[VOLUME_LEGEND_FLAG]
+        },
+        // Offchart volume pane — up-arrow (re-attach onto the candle pane).
+        // Reuses the volume-detach channel; Chart.toggleVolumeDetach() routes to
+        // reattach because volume is currently detached (the chart owns the flip).
+        reattachVolume() {
+            this.$emit('legend-button-click', {
+                button: 'volume-detach',
+                overlay: 'Volume',
+                grid: this.$props.grid_id
             })
         }
     }

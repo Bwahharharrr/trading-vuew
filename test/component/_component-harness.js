@@ -16,13 +16,24 @@ import { nextTick } from 'vue'
 
 // Every mock context created this test, so we can total draw activity.
 let contexts = []
+// Monotonic op counter (global across all canvases) for ordering ops in a frame.
+let OP_SEQ = 0
 
 function makeMockCtx(canvas) {
-    const log = { calls: 0, clearRect: 0, byMethod: {} }
+    // `ops` (additive, like the prior allContexts helper) records the ARGUMENTS
+    // of geometry/text calls so a test can correlate a fillText at some Y with
+    // whether a clearRect covered that Y *this frame*. Each entry also carries a
+    // monotonic `seq` so ordering across canvases is recoverable.
+    const log = { calls: 0, clearRect: 0, byMethod: {}, ops: [] }
     const rec = (name) => (...args) => {
         log.calls++
         log.byMethod[name] = (log.byMethod[name] || 0) + 1
         if (name === 'clearRect') log.clearRect++
+        if (name === 'clearRect' || name === 'fillRect' || name === 'strokeRect') {
+            log.ops.push({ op: name, seq: ++OP_SEQ, x: args[0], y: args[1], w: args[2], h: args[3] })
+        } else if (name === 'fillText' || name === 'strokeText') {
+            log.ops.push({ op: name, seq: ++OP_SEQ, text: args[0], x: args[1], y: args[2] })
+        }
         return undefined
     }
     const ctx = {
@@ -119,8 +130,33 @@ export function methodTotal(name) {
     return contexts.reduce((a, c) => a + (c._log.byMethod[name] || 0), 0)
 }
 export function resetCounters() {
-    for (const c of contexts) { c._log.calls = 0; c._log.clearRect = 0; c._log.byMethod = {} }
+    OP_SEQ = 0
+    for (const c of contexts) { c._log.calls = 0; c._log.clearRect = 0; c._log.byMethod = {}; c._log.ops = [] }
+}
+
+// Recorded geometry/text ops (clearRect/fillRect/strokeRect/fillText/strokeText
+// with their args + a monotonic seq) for the first canvas whose id matches pred.
+// Used by the bold-labels repro to detect text overdraw without a covering clear.
+export function opsForCanvas(pred) {
+    const c = contexts.find(c => c.canvas && pred(c.canvas.id))
+    return c ? c._log.ops : []
 }
 export function contextCount() { return contexts.length }
+
+// Per-canvas introspection: return every recorded context paired with its
+// canvas DOM id, so a test can tell WHICH canvas (main grid static vs dynamic
+// crosshair vs sidebar) actually drew on a given tick.
+export function allContexts() {
+    return contexts.map(c => ({
+        id: (c.canvas && c.canvas.id) || '',
+        log: c._log,
+        ctx: c,
+    }))
+}
+
+// Find the recording context whose canvas id matches a predicate.
+export function ctxByIdMatch(pred) {
+    return contexts.filter(c => c.canvas && pred(c.canvas.id))
+}
 
 export { mount }

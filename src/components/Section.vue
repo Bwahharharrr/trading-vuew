@@ -235,6 +235,15 @@ export default {
             if (newLen !== oldLen) {
                 this.rerender++
             }
+        },
+        // A live in-place tick bumps the data revision (dataVersion) but changes
+        // neither the layout key nor the data length, so without this the sidebar
+        // (and its last-price tag shader) would never repaint mid-candle — the
+        // boxed Y-axis value would freeze. The Sidebar already watches `rerender`.
+        'common.dataVersion': function(newV, oldV) {
+            if (newV !== oldV) {
+                this.rerender++
+            }
         }
     },
     data() {

@@ -50,11 +50,14 @@ import Layout from './js/layout.js'
 // Decomposed chart mixins
 import { ChartRange, ChartResize, ChartCursor, ChartEvents } from '../mixins/chart/index.js'
 
-// Settings marker on the auto-managed "detached volume" offchart overlay.
-// Survives DataCube.update_ids() (which rewrites .id), so it reliably tags the
-// overlay the legend detach toggle created — never a user-added Volume
-// indicator.
-export const VOLUME_LEGEND_FLAG = '$volumeLegend'
+// Detached-volume marker + defaults live in their own module so the Legend can
+// import the marker without a Chart -> Section -> Legend -> Chart import cycle.
+import {
+    VOLUME_LEGEND_FLAG, VOLUME_SOLID_UP, VOLUME_SOLID_DW, VOLUME_DEFAULT_STYLE
+} from '../stuff/volume.js'
+
+// Re-export for back-compat (callers historically imported it from Chart.vue).
+export { VOLUME_LEGEND_FLAG }
 
 export default {
     name: 'Chart',
@@ -171,7 +174,15 @@ export default {
                 type: 'Volume',
                 name: 'Volume',
                 data: data.chart.data,
-                settings: { [VOLUME_LEGEND_FLAG]: true }
+                // style: how the bars are drawn (default Bar). colorVol*: SOLID
+                // so the own-pane volume isn't translucent (Volume.vue reads
+                // sett.colorVol* before falling back to the translucent theme).
+                settings: {
+                    [VOLUME_LEGEND_FLAG]: true,
+                    style: VOLUME_DEFAULT_STYLE,
+                    colorVolUp: VOLUME_SOLID_UP,
+                    colorVolDw: VOLUME_SOLID_DW
+                }
             })
             // Hide the candle-pane copy so volume isn't drawn twice.
             this.setVolumeShown(false)

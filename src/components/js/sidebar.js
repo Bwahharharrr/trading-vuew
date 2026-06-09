@@ -197,11 +197,21 @@ export default class Sidebar {
     // PERFORMANCE: Update only the cursor panel without redrawing entire sidebar
     // Called when only cursor.y$ changes (not range or layout)
     updatePanelOnly() {
+        // `this.layout` is only resolved by a full update(). A cursor move can
+        // fire this fast path BEFORE the first update() (initial load) or while
+        // this grid's layout is momentarily absent (tf-switch / grid rebuild on
+        // the gateway feed). With no layout there is nothing to clear or repaint
+        // — bail; the next full update() repaints the panel. (Guards _clearPanel
+        // /panel() which dereference this.layout.sb.)
+        if (!this.layout) return
         if (!this.$p.cursor.y || !this.$p.cursor.y$) {
             // Clear old panel if cursor is gone
             if (this._lastPanelY !== undefined) {
                 this._clearPanel(this._lastPanelY)
                 this._lastPanelY = undefined
+                // The cleared band may have erased a sidebar shader (e.g. the
+                // last-price tag). Repaint shaders so it survives the cursor move.
+                this.apply_shaders()
             }
             return
         }
@@ -210,6 +220,12 @@ export default class Sidebar {
         if (this._lastPanelY !== undefined && this._lastPanelY !== this.$p.cursor.y) {
             this._clearPanel(this._lastPanelY)
         }
+
+        // Repaint sidebar shaders (the highlighted last-price tag) BEFORE the
+        // cursor panel, so the panel overlays them — matching update()'s order
+        // (clear → labels → apply_shaders → panel). Without this, _clearPanel
+        // wipes the price tag and the cursor-only fast path never redraws it.
+        this.apply_shaders()
 
         // Draw new panel
         this.panel()
@@ -258,13 +274,27 @@ export default class Sidebar {
         ctx.beginPath()
         let stroked = false
 
+        // _clearPanel cleared EXACTLY [top, bottom]. Repaint a label only when
+        // its glyph box actually intersects that cleared band. The old guard
+        // ([top - PANHEIGHT, bottom + 4]) repainted labels up to 22px ABOVE the
+        // cleared rect — value labels (transparent background, unlike the opaque
+        // cursor panel) were fillText-ed onto un-cleared pixels every frame as
+        // the cursor swept past, so the anti-aliased glyphs accumulated into a
+        // BOLD smear. Derive the glyph extents from the font size so a custom
+        // font scales correctly. Glyph box ≈ [labelY - ascent, labelY + descent].
+        const fsMatch = /(\d+(?:\.\d+)?)px/.exec(ctx.font || '')
+        const fontPx = fsMatch ? parseFloat(fsMatch[1]) : 11
+        const ascent = fontPx * 0.8 + 1
+        const descent = fontPx * 0.25 + 1
+
         for (let i = 0; i < points.length; i++) {
             const p = points[i]
             if (p[0] > layoutHeight) continue
-            // Label baseline used in update(): p[0] + 4. The glyph extends a
-            // few px above the baseline, so widen the band slightly upward.
+            // Label baseline used in update(): p[0] + 4.
             const labelY = p[0] + 4
-            if (labelY < top - PANHEIGHT || labelY > bottom + 4) continue
+            // Skip labels whose glyph does NOT intersect the cleared band — they
+            // were never cleared, so repainting would double them up (bold).
+            if (labelY - ascent > bottom || labelY + descent < top) continue
             // Repaint the short grid tick (mirrors update(): y = p[0] - 0.5)
             // that the clearRect also erased.
             const ty = p[0] - 0.5

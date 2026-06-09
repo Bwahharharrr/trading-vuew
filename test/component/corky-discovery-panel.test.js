@@ -98,13 +98,26 @@ describe('CorkyDiscoveryPanel', () => {
     test('renders a progress bar when loading with progress', () => {
         const w = mountPanel({
             loading: true,
-            progress: { phase: 'history', current: 50, total: 200 },
+            progress: { phase: 'history', current: 50, total: 200, chunk_index: 50 },
         })
         const bar = w.find('.corky-progress')
         expect(bar.exists()).toBe(true)
         const fill = w.find('.corky-progress-fill')
         expect(fill.attributes('style')).toContain('width: 25%')
-        expect(w.text()).toContain('50/200')
+        // The gateway sends no total in practice, so we surface a human phase
+        // label (+ the symbol/timeframe when known) instead of a raw count.
+        expect(w.text()).toContain('Loading history (chunk 50)')
+    })
+
+    test('loading label maps phase + current selection to human text', () => {
+        const w = mountPanel({
+            loading: true,
+            progress: { phase: 'accepted' },
+            current: { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '5m', indicators: [] },
+        })
+        const label = w.find('.corky-progress-label').text()
+        expect(label).toContain('Connecting…')
+        expect(label).toContain('tBTCUSD 5m')
     })
 
     test('renders an error banner with retry when retryable', async () => {
@@ -291,5 +304,90 @@ describe('CorkyDiscoveryPanel — search + categories', () => {
             timeframe: '1m',
             indicators: [],
         })
+    })
+})
+
+// ── Two-level collapse, add-timeframe picker, indicator gating ────────────────
+describe('CorkyDiscoveryPanel — collapse / add-timeframe / indicator gating', () => {
+    test('venue expanded by default; ticker collapsed by default', () => {
+        const w = mountPanel()
+        // Exchange header is a toggle button, expanded.
+        const venueBtn = w.find('.corky-venue-toggle')
+        expect(venueBtn.exists()).toBe(true)
+        expect(venueBtn.attributes('aria-expanded')).toBe('true')
+        expect(w.find('.corky-symbols-list').isVisible()).toBe(true)
+        // Ticker header is a toggle button, collapsed → its details hidden.
+        const symBtn = w.find('.corky-symbol-toggle')
+        expect(symBtn.attributes('aria-expanded')).toBe('false')
+        expect(w.find('.corky-symbol-details').isVisible()).toBe(false)
+    })
+
+    test('clicking the ticker toggle reveals its timeframes', async () => {
+        const w = mountPanel()
+        await w.find('.corky-symbol-toggle').trigger('click')
+        expect(w.find('.corky-symbol-toggle').attributes('aria-expanded')).toBe('true')
+        expect(w.find('.corky-symbol-details').isVisible()).toBe(true)
+    })
+
+    test('clicking the exchange toggle hides the ticker list', async () => {
+        const w = mountPanel()
+        await w.find('.corky-venue-toggle').trigger('click')
+        expect(w.find('.corky-venue-toggle').attributes('aria-expanded')).toBe('false')
+        expect(w.find('.corky-symbols-list').isVisible()).toBe(false)
+    })
+
+    test('add-timeframe picker offers only NOT-present standard timeframes', async () => {
+        const w = mountPanel() // fixture has 1m + 5m present
+        await w.find('.corky-tf-add').trigger('click')
+        const picker = w.find('.corky-tf-picker')
+        expect(picker.exists()).toBe(true)
+        const offered = picker.findAll('.corky-tf-picker-chip').map((b) => b.text())
+        expect(offered).not.toContain('1m')
+        expect(offered).not.toContain('5m')
+        expect(offered).toContain('15m')
+        expect(offered).toContain('1D')
+    })
+
+    test('picking a timeframe emits add-timeframe with the NEW timeframe', async () => {
+        const w = mountPanel()
+        await w.find('.corky-tf-add').trigger('click')
+        const chip = w.findAll('.corky-tf-picker-chip').find((b) => b.text() === '15m')
+        await chip.trigger('click')
+        const emitted = w.emitted('add-timeframe')
+        expect(emitted).toBeTruthy()
+        expect(emitted[0][0]).toEqual({
+            venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '15m',
+        })
+        // Picker closes after selection.
+        expect(w.find('.corky-tf-picker').exists()).toBe(false)
+    })
+
+    // Issue 4: with an indicator on the FIRST timeframe and no selection, the
+    // old code showed it (fell back to timeframes[0]); now nothing shows until a
+    // timeframe is selected.
+    const indOn1m = [{
+        venue: 'KRAKEN', symbol: 'XBTUSD', state: 'Ready',
+        available_timeframes: ['1m', '5m'],
+        requested_timeframes: ['1m', '5m'],
+        ranges: [
+            { timeframe: '1m', ready: true, stale: false },
+            { timeframe: '5m', ready: true, stale: false },
+        ],
+        indicators: [{ kind: 'ema', display_label: 'EMA(9)', timeframe: '1m', ready: true, outputs: ['ema'] }],
+    }]
+
+    test('no timeframe selected → no indicators shown', () => {
+        const w = mountPanel({ states: indOn1m })
+        expect(w.findAll('.corky-indicator-row').length).toBe(0)
+    })
+
+    test('selecting the timeframe reveals its indicators', () => {
+        const w = mountPanel({
+            states: indOn1m,
+            current: { venue: 'KRAKEN', symbol: 'XBTUSD', timeframe: '1m', indicators: [] },
+        })
+        const rows = w.findAll('.corky-indicator-row')
+        expect(rows.length).toBe(1)
+        expect(w.text()).toContain('EMA(9)')
     })
 })

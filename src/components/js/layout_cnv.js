@@ -86,6 +86,13 @@ export function layout_vol(self) {
     let vs = maxv > 0 ? volscale * layout.height / maxv : 0
     let x1, x2, mid, prev = undefined
 
+    // Detached pane (own offchart grid): map bar top + 0-baseline through the
+    // grid Y-transform so the Y-axis scale rescales the bars. The candle-pane
+    // path (grid 0, drawn via Candles.vue) never reaches here, and the glued
+    // `h` field is still emitted as the fallback for the visual-golden harness.
+    let off = $p.grid_id > 0 && typeof layout.$2screen === 'function'
+    let y0base = off ? layout.$2screen(0) : undefined
+
     // Subset interval against main interval
     let [interval2, ratio] = new_interval(layout, $p, sub)
     let px_step2 = layout.px_step * ratio
@@ -110,7 +117,9 @@ export function layout_vol(self) {
             x2: x2,
             h: p[self._i1] * vs,
             green: self._i2(p),
-            raw: p
+            raw: p,
+            y0: off ? y0base : undefined,
+            yTop: off ? layout.$2screen(p[self._i1]) : undefined
         })
         prev = x2 + splitter
     }

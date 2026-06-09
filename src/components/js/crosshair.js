@@ -22,7 +22,9 @@ export default class Crosshair {
         const cursor = this.comp.$props.cursor
         if (!this.visible && cursor.mode === 'explore') return
 
-        this.x = this.$p.cursor.x
+        // Vertical line follows the RAW pointer x (pixel-smooth); fall back to
+        // the candle-snapped x when no raw value is set (e.g. programmatic).
+        this.x = this.$p.cursor.xr != null ? this.$p.cursor.xr : this.$p.cursor.x
         // cursor.y is already grid-relative (offset subtracted in updater.js)
         this.y = this.$p.cursor.y
 

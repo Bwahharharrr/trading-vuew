@@ -16,7 +16,12 @@ export default class Price {
         let comp = this.comp
         let last_bar = () => this.last_bar()
 
-        this.comp.$emit('new-shader', {
+        // Route via the overlay mixin's custom_event (NOT raw $emit): it appends
+        // grid_id/layer_id and re-emits as 'custom-event', which is the only path
+        // Grid/Section wire to on_shader_event. A bare $emit('new-shader') has no
+        // listener (the Vue-3 migration removed overlay.js's `$emit = custom_event`
+        // patch), so the Y-axis last-price tag was never registered.
+        this.comp.custom_event('new-shader', {
             target: 'sidebar', draw: ctx => {
 
                 let bar = last_bar()

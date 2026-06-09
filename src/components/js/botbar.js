@@ -249,7 +249,9 @@ export default class Botbar {
 
         // PERFORMANCE: Use cached measureText
         let panwidth = Math.floor(this.measureTextCached(lbl + '    '))
-        let cursor = this.$p.cursor.x
+        // Position the box at the RAW pointer x so it stays under the pixel-smooth
+        // vertical line; the LABEL text is still the candle-snapped time (cursor.t).
+        let cursor = this.$p.cursor.xr != null ? this.$p.cursor.xr : this.$p.cursor.x
         let x = Math.floor(cursor - panwidth * 0.5)
         let y = - 0.5
         let panheight = this.$p.config?.PANHEIGHT || 22
