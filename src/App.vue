@@ -125,6 +125,7 @@
             @select="onCorkySelect"
             @add-timeframe="onCorkyAddTimeframe"
             @toggle-indicator="onCorkyToggleIndicator"
+            @toggle-layer="onCorkyToggleLayer"
             @retry="onCorkyRetry">
         </corky-discovery-panel>
 
@@ -478,6 +479,7 @@ export default {
                 symbol: opts.symbol,
                 timeframe: opts.timeframe,
                 indicators: [],
+                layers: [],   // enabled view-layer ids (mirrors handle.enabledLayers)
             }
             // Assemble the indicator VIEW map (display_label → { kind, view }) from
             // the discovery descriptors for this venue/symbol so buildChartData can
@@ -569,6 +571,19 @@ export default {
                 inds.splice(i, 1)
             }
             cur.indicators = inds
+            // Mirror the feed handle's enabled view-layers so the panel's
+            // per-layer sub-toggles reflect which layers are showing.
+            cur.layers = this.corkyHandle ? [...this.corkyHandle.enabledLayers] : []
+        },
+
+        // Toggle a single hidden view layer (TL/TH/diagnostics) on/off.
+        onCorkyToggleLayer(req) {
+            if (!this.corkyFeed || !this.corkyHandle) return
+            const applied = this.corkyFeed.setLayerEnabled(
+                this.corkyHandle, req.layerId, req.enabled)
+            if (!applied) return
+            const cur = this.corkyCurrent
+            if (cur) cur.layers = [...this.corkyHandle.enabledLayers]
         },
 
         // Patch the candle-state on the gateway, re-discover the catalog, then

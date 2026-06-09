@@ -195,6 +195,22 @@
                                     :class="ind.ready ? 'badge-ready' : 'badge-warmup'">
                                     {{ ind.ready ? 'ready' : 'warmup' }}
                                 </span>
+                                <!-- Per-layer sub-toggles (view.layers): turn on
+                                     hidden layers like TL1/TL2/diagnostics. -->
+                                <div
+                                    v-if="isIndicatorOn(row, ind) && toggleableLayers(ind).length"
+                                    class="corky-layers">
+                                    <button
+                                        v-for="layer in toggleableLayers(ind)"
+                                        :key="layer.id"
+                                        type="button"
+                                        class="visibility-toggle corky-layer-toggle"
+                                        :class="{ on: isLayerOn(row, ind, layer) }"
+                                        @click="onToggleLayer(row, ind, layer)">
+                                        {{ isLayerOn(row, ind, layer) ? '●' : '○' }}
+                                        {{ layer.label || layer.id }}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -225,7 +241,7 @@ export default {
         progress: { type: Object, default: null },
         error: { type: Object, default: null },
     },
-    emits: ['select', 'add-timeframe', 'toggle-indicator', 'retry'],
+    emits: ['select', 'add-timeframe', 'toggle-indicator', 'toggle-layer', 'retry'],
     data() {
         return {
             // Local UI state — presentational only, never emitted.
@@ -398,6 +414,30 @@ export default {
             const chosen = this.current.indicators
             if (!Array.isArray(chosen)) return true
             return chosen.includes(ind.display_label)
+        },
+        // View layers the user can toggle (exclude candle_color — always on with
+        // the candles — and marker — no renderer). Empty when there's no view.
+        toggleableLayers(ind) {
+            const ls = (ind.view && Array.isArray(ind.view.layers)) ? ind.view.layers : []
+            return ls.filter(l => l && l.kind !== 'candle_color' && l.kind !== 'marker')
+        },
+        // A layer is "on" when its id is in current.layers (mirrors the feed
+        // handle's enabledLayers, set on indicator-enable for visible layers).
+        isLayerOn(row, ind, layer) {
+            if (!this.isIndicatorOn(row, ind)) return false
+            const chosen = this.current && this.current.layers
+            return Array.isArray(chosen) && chosen.includes(layer.id)
+        },
+        onToggleLayer(row, ind, layer) {
+            this.$emit('toggle-layer', {
+                venue: row.venue,
+                symbol: row.symbol,
+                timeframe: this.activeTimeframe(row),
+                kind: ind.kind,
+                display_label: ind.display_label,
+                layerId: layer.id,
+                enabled: !this.isLayerOn(row, ind, layer),
+            })
         },
         badgeText(tf) {
             if (!tf.ready) return 'pending'
@@ -910,6 +950,25 @@ export default {
 }
 
 .corky-ind-toggle.on {
+    color: #35a776;
+}
+
+/* Per-layer sub-toggles (hidden view layers like TL/TH/diagnostics). */
+.corky-layers {
+    flex-basis: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    padding: 4px 0 2px 24px;
+}
+.corky-layer-toggle {
+    color: #808a9d;
+    font-size: 11px;
+    width: auto;
+    padding: 0 2px;
+    white-space: nowrap;
+}
+.corky-layer-toggle.on {
     color: #35a776;
 }
 
