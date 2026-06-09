@@ -43,13 +43,14 @@ Rows still carry raw values as `indicators[display_label][output]`.
   setLayerEnabled in `_finishHistory` after the rebuild. setIndicatorEnabled OFF now cleans enabledLayers.
   Now ALSO persisted to localStorage (file-manager globalState `corkyEnabled`, restored on mount,
   saved on each toggle) → survives a page reload too.
-- [ ] **P6** (optional) Markers overlay for kind=marker (box already → Zones; marker = hidden metadata until then).
+- [x] **P6** Markers overlay (`src/components/overlays/Markers.vue`, registered in Grid._list): kind=marker →
+  'Markers' (glyph per finite-y point at [ts,y,label?]; shape/color/size from style). Now toggleable in the panel.
 
 ## Known limitations / follow-ups
 - Pane grid-index resolver assigns sequential ids per distinct `target.pane`; if VIEW-pane indicators are mixed
   with FALLBACK offchart indicators (no grid.id) the numeric indices can drift — gate with a component-harness
   mount test before relying on multi-indicator pane mixing (single-indicator panes like MACD verified at build level).
-- P5 persistence now spans tf-switch AND page reload (localStorage). P6 Markers overlay still optional.
+- P5 persistence spans tf-switch AND page reload (localStorage). **All phases P0–P6 complete (424 tests).**
 
 ## Targets
 SCMR/SCMR(INV): candle_color visible, TL/TH lines hidden-toggleable. MACD: histogram pane + macd/signal

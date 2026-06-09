@@ -25,6 +25,7 @@ import StepLine from "./overlays/StepLine.vue"
 import Histogram from "./overlays/Histogram.vue"
 import Bar from "./overlays/Bar.vue"
 import Zones from "./overlays/Zones.vue"
+import Markers from "./overlays/Markers.vue"
 
 import { validateOverlayComponent } from '../helpers/schema/validate-overlay.js'
 import { report } from '../helpers/schema/diagnostics.js'
@@ -80,7 +81,7 @@ export default {
         this._list = [
             Spline, Splines, Range, Trades, Channel, Segment,
             Candles, Volume, Splitters, LineTool, RangeTool,
-            StepLine, Histogram, Bar, Zones
+            StepLine, Histogram, Bar, Zones, Markers
         ]
         .concat(this.$props.overlays || [])
         this._registry = {}

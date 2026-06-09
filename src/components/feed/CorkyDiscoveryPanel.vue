@@ -416,10 +416,10 @@ export default {
             return chosen.includes(ind.display_label)
         },
         // View layers the user can toggle (exclude candle_color — always on with
-        // the candles — and marker — no renderer). Empty when there's no view.
+        // the candles, no overlay). Empty when there's no view.
         toggleableLayers(ind) {
             const ls = (ind.view && Array.isArray(ind.view.layers)) ? ind.view.layers : []
-            return ls.filter(l => l && l.kind !== 'candle_color' && l.kind !== 'marker')
+            return ls.filter(l => l && l.kind !== 'candle_color')
         },
         // A layer is "on" when its id is in current.layers (mirrors the feed
         // handle's enabledLayers, set on indicator-enable for visible layers).

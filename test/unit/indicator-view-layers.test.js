@@ -138,6 +138,26 @@ describe('buildChartData — view.layers', () => {
     expect(lines.data[lines.data.length - 1]).toEqual([ts1, 2, 1.5])
   })
 
+  test('marker layer → Markers overlay at [ts, y] (signal-only bars)', () => {
+    const rows = [
+      row(0, { SIG: { buy: '100' } }),
+      row(1, { SIG: {} }),            // no output this bar → no marker point
+      row(2, { SIG: { buy: '105' } })
+    ]
+    const views = {
+      SIG: view('sig', [
+        { id: 'buys', label: 'Buys', kind: 'marker', target: { surface: 'price' }, fields: ['buy'], style: { shape: 'triangle-up', color: '#0f0' }, visible_by_default: true }
+      ])
+    }
+    const cd = buildChartData(rows, { views })
+    const m = cd.onchart.find(o => o.settings.corkyLayerId === 'buys')
+    expect(m.type).toBe('Markers')
+    expect(m.data).toEqual([[T0, 100], [T0 + 2 * TF, 105]]) // only bars carrying the output
+    expect(m.settings.color).toBe('#0f0')
+    expect(m.settings.style.shape).toBe('triangle-up')
+    expect(m.settings.display).toBe(true)
+  })
+
   test('empty view.layers → fallback for that instance', () => {
     const rows = [row(0, { 'SMA(20)': { sma: '100' } })]
     const cd = buildChartData(rows, { views: { 'SMA(20)': view('sma', []) } })

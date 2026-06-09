@@ -89,10 +89,11 @@ export function layerKindToOverlay(kind, fieldCount = 1) {
       return 'Channel'   // [ts, top, mid, bottom]
     case 'box':
       return 'Zones'     // per-ts rectangles
-    case 'candle_color':
     case 'marker':
+      return 'Markers'   // point glyphs at [ts, y]
+    case 'candle_color':
     default:
-      return null
+      return null        // candle_color stamps the candle colour slot
   }
 }
 
