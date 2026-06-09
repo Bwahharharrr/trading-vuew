@@ -83,4 +83,40 @@ describe('OrderBox overlay (P3)', () => {
     await mountWith(seedDc({ side: 'sell' }))
     expect(orderBoxRenderer(wrapper)).toBeTruthy()
   })
+
+  test('renders one row per order (lines + size widgets) when visible', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    resetCounters()
+    dc.touchData()
+    await settle(6)
+    expect(ob._geom.rows.length).toBe(3)              // one per order
+    expect(ob._geom.rows.map(r => r.id)).toEqual(['ord-1', 'ord-2', 'ord-3'])
+    expect(methodTotal('fillText')).toBeGreaterThan(0) // size labels
+  })
+
+  test('eye toggle (visible:false) hides the order rows; box still drawn', async () => {
+    await mountWith(seedDc({ visible: false }))
+    const ob = orderBoxRenderer(wrapper)
+    resetCounters()
+    dc.touchData()
+    await settle(6)
+    expect(ob._geom.rows.length).toBe(0)               // orders hidden
+    expect(methodTotal('strokeRect')).toBeGreaterThan(0) // box still there
+  })
+
+  test('order lines are clamped to the box width', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    dc.touchData()
+    await settle(6)
+    const box = ob.box_rect()
+    for (const row of ob._geom.rows) {
+      expect(row.xL).toBe(box.xL)
+      expect(row.xR).toBe(box.xR)
+      // widget stays inside the box
+      expect(row.widget.x).toBeGreaterThanOrEqual(box.xL - 0.01)
+      expect(row.widget.x + row.widget.w).toBeLessThanOrEqual(box.xR + 0.01)
+    }
+  })
 })
