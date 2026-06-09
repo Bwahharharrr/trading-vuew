@@ -199,6 +199,33 @@ describe('OrderBox overlay (P3)', () => {
     expect(after.xR).toBeGreaterThan(before.xR)
   })
 
+  // Order lines move vertically WITH the box during a body-move drag (live),
+  // and the shifted prices persist on drop (no recompute — spacing preserved).
+  test('box move shifts order lines live + persists on drop', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    dc.touchData(); await settle(6)
+    const start = orders(dc).map(o => o.price)
+    const yBefore = ob._geom.rows.map(r => r.y)
+    const DY = -2 // move down in price (lower)
+    // Simulate a Tool box-body move: this.drag set + pins shifted by dy + cursor moved.
+    ob.drag = { t: 0, y$: 100 }
+    ob.$props.cursor.y$ = 100 + DY
+    const s = dc.data.onchart[0].settings
+    ob.pins[0].update_from([s.c0[0], s.c0[1] + DY], false)
+    ob.pins[1].update_from([s.c1[0], s.c1[1] + DY], false)
+    ob.on_mousemove()
+    expect(ob._moveDy).toBe(DY)
+    dc.touchData(); await settle(2) // redraw with the live offset
+    const yAfter = ob._geom.rows.map(r => r.y)
+    for (let i = 0; i < yAfter.length; i++) {
+      expect(yAfter[i]).toBeGreaterThan(yBefore[i]) // lower price → larger screen y
+    }
+    ob.on_mouseup(fakeEvent())
+    expect(orders(dc).map(o => o.price)).toEqual(start.map(p => p + DY)) // baked in
+    expect(ob._moveDy).toBe(0)
+  })
+
   // BUG 2: dragging a resize handle must change box_rect LIVE (not just settings)
   // — guards the fatal move/resize contradiction (pins kept in sync).
   test('resize handle drag widens box_rect live + persists (resize bug)', async () => {

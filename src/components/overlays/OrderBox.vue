@@ -45,6 +45,8 @@ export default {
 
             this._dragOrder = null
             this._dragResize = null
+            this._moveDy = 0       // live price offset while the box body is dragged
+            this._moving = false
             this.mouse.on('mousedown', e => this.on_mousedown(e))
             this.mouse.on('mousemove', () => this.on_mousemove())
             this.mouse.on('mouseup', e => this.on_mouseup(e))
@@ -112,7 +114,10 @@ export default {
             const rows = []
             if (this.visible) {
                 for (const o of this.orders) {
-                    const y = L.$2screen(o.price)
+                    // _moveDy: live vertical translation while the box body is
+                    // dragged (kept off settings to avoid prop lag; baked in on
+                    // drop) so the order lines move WITH the box.
+                    const y = L.$2screen(o.price + this._moveDy)
                     if (y < r.yT - ROW_H || y > r.yB + ROW_H) continue
                     const want = GRAB_W + MIN_MID + DEL_W
                     const w = Math.min(want, Math.max(GRAB_W + DEL_W + 8, r.xR - r.xL))
@@ -374,12 +379,23 @@ export default {
                 this.custom_event('change-settings', { c0, c1 })
                 return
             }
-            if (this._dragOrder == null) return
-            // cursor.y$ is already updated for this move (grid emits
-            // cursor-changed before propagating to overlays).
-            const price = this.$props.cursor.y$
-            if (price == null) return
-            this.set_orders(o => o.id === this._dragOrder ? { ...o, price } : o)
+            if (this._dragOrder != null) {
+                // cursor.y$ is already updated for this move (grid emits
+                // cursor-changed before propagating to overlays).
+                const price = this.$props.cursor.y$
+                if (price == null) return
+                this.set_orders(o => o.id === this._dragOrder ? { ...o, price } : o)
+                return
+            }
+            // Box-body MOVE (Tool drag active, no order/resize drag): translate the
+            // order lines vertically by the SAME dy the box moves (Tool.drag_update
+            // shifts the corner prices by cursor.y$ - drag.y$). Live offset only —
+            // baked into settings on mouseup; a move preserves relative spacing
+            // (no recompute, since a body drag doesn't fire pin 'settled').
+            if (this.drag) {
+                const y$ = this.$props.cursor.y$
+                if (y$ != null) { this._moveDy = y$ - this.drag.y$; this._moving = true }
+            }
         },
 
         on_mouseup() {
@@ -387,6 +403,13 @@ export default {
                 this._dragResize = null
                 this.custom_event('scroll-lock', false)
                 this.recompute_orders()   // re-derive the distribution for the new range
+                return
+            }
+            if (this._moving) {
+                const dy = this._moveDy
+                this._moving = false
+                this._moveDy = 0
+                if (dy) this.set_orders(o => ({ ...o, price: o.price + dy }))
                 return
             }
             if (this._dragOrder == null) return
