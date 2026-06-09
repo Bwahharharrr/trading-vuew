@@ -28,9 +28,13 @@ import {
  * @returns {number}
  */
 export function decimalToNumber(s) {
-  if (s === null || s === undefined || s === '') return NaN
+  if (s === null || s === undefined) return NaN
+  // Whitespace-only / empty is a GAP, not a real 0 (Number(' ') === 0).
+  if (typeof s === 'string' && s.trim() === '') return NaN
   const n = Number(s)
-  return n // Number('abc') === NaN; Number('77865.25') === 77865.25
+  // Reject ±Infinity (Number('1e999')/'Infinity') — it would blank panes
+  // downstream by stretching the y-range. Only finite numbers pass.
+  return Number.isFinite(n) ? n : NaN
 }
 
 /**
@@ -160,8 +164,8 @@ function makePaneResolver() {
     assign(name) {
       const key = name == null ? '' : String(name)
       let rec = byName.get(key)
-      if (!rec) { rec = { id: next++ }; byName.set(key, rec); return { id: rec.id, anchor: true } }
-      return { id: rec.id, anchor: false }
+      if (!rec) { rec = { id: next++ }; byName.set(key, rec); return { id: rec.id, name: key, anchor: true } }
+      return { id: rec.id, name: key, anchor: false }
     }
   }
 }
@@ -169,10 +173,16 @@ function makePaneResolver() {
 // Build overlay data for a layer's fields: single field → [[ts, v]]; multi →
 // [[ts, f0, f1, ...]] aligned by ts (Splines/Channel multi-column contract).
 function zipFields(fields, outputsMap) {
-  const series = fields.map((f) => outputsMap.get(f)).filter(Boolean)
-  if (!series.length) return { data: [], raw: [] }
+  // `survivors` are the declared fields that actually have a pivoted series, in
+  // declared order. Build columns come from these, so the caller MUST store the
+  // survivor list into settings.corkyFields (not the full declared `fields`) or
+  // live writes (which index by corkyFields.indexOf(output)) land in the wrong
+  // column when a non-final declared field is absent from history.
+  const survivors = fields.filter((f) => outputsMap.get(f))
+  const series = survivors.map((f) => outputsMap.get(f))
+  if (!series.length) return { data: [], raw: [], fields: [] }
   if (series.length === 1) {
-    return { data: series[0].data.map((d) => d.slice()), raw: series[0].raw.map((d) => d.slice()) }
+    return { data: series[0].data.map((d) => d.slice()), raw: series[0].raw.map((d) => d.slice()), fields: survivors }
   }
   const byTs = new Map(); const rawByTs = new Map()
   series.forEach((s, col) => {
@@ -182,7 +192,7 @@ function zipFields(fields, outputsMap) {
   const tss = [...byTs.keys()].sort((a, b) => a - b)
   const data = tss.map((ts) => [ts, ...series.map((_, c) => { const v = byTs.get(ts)[c]; return v == null ? null : v })])
   const raw = tss.map((ts) => [ts, ...series.map((_, c) => { const v = (rawByTs.get(ts) || [])[c]; return v == null ? null : v })])
-  return { data, raw }
+  return { data, raw, fields: survivors }
 }
 
 // Build [ts, value, color] for a `signed_slope_histogram` layer. Colour per bar
@@ -259,7 +269,10 @@ export function buildLayerOverlays(instanceKey, kind, outputsMap, view, paneReso
     } else {
       const z = zipFields(fields, outputsMap)
       data = z.data; raw = z.raw
-      extra = { corkyFields: fields }
+      // Store the SURVIVOR list (declared fields that produced a column), not the
+      // full declared `fields` — build columns and live-write column indices must
+      // agree (live indexes by corkyFields.indexOf(output)+1).
+      extra = { corkyFields: z.fields }
     }
     const surface = (layer.target && layer.target.surface) || 'price'
     const settings = Object.assign(styleToSettings(style), {
@@ -275,6 +288,14 @@ export function buildLayerOverlays(instanceKey, kind, outputsMap, view, paneReso
     if (surface === 'pane') {
       const pane = paneResolver.assign((layer.target && layer.target.pane) || instanceKey)
       if (!pane.anchor) overlay.grid = { id: pane.id } // anchor spawns the grid (no grid.id)
+      // STABLE pane membership tags so the feed can recompute grid.id at DC-push
+      // time from pane membership (the build-time absolute id 1..N goes stale
+      // under incremental toggles, where Section.vue resolves an anchor as the
+      // id-th NO-grid overlay positionally). corkyPaneName identifies the pane;
+      // corkyPaneAnchor distinguishes the grid-spawning anchor (no grid.id) from
+      // its merging siblings (carry grid.id). See corky-feed.js DC-push.
+      settings.corkyPaneName = pane.name
+      settings.corkyPaneAnchor = pane.anchor
       offchart.push(overlay)
     } else {
       onchart.push(overlay)
@@ -284,6 +305,11 @@ export function buildLayerOverlays(instanceKey, kind, outputsMap, view, paneReso
 }
 
 export function buildChartData(rows, opts = {}) {
+  // Drop malformed rows up front (missing candle / non-finite timestamp_ms):
+  // mapped through rowToOhlcv they would seed a corrupt [undefined,...] tuple,
+  // and pivotIndicators keys points by row.candle.timestamp_ms too. Filter once
+  // so candles AND indicator pivots stay consistent.
+  rows = rows.filter((r) => r && r.candle && Number.isFinite(r.candle.timestamp_ms))
   const ohlcv = rows.map(rowToOhlcv)
   ohlcv.sort((a, b) => a[0] - b[0])
 
@@ -466,6 +492,13 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
   }
 
   const row = liveEvent.row
+  // Guard a malformed row: a missing candle / non-finite timestamp_ms would make
+  // upsertByTs's binary search converge to 0 and splice a corrupt [undefined,...]
+  // tuple at the head of the OHLCV array (poisoning every downstream ts lookup).
+  // Skip such a row without bumping lastSeq (so a valid later message applies).
+  if (!row || !row.candle || !Number.isFinite(row.candle.timestamp_ms)) {
+    return { chart: chartDataObj, applied: false, sequence: last, reason: 'bad-timestamp' }
+  }
   // Single-timeframe invariant: one subscription streams one timeframe. If a
   // caller tagged the chart-data object with its timeframe, drop foreign-tf
   // rows rather than mixing them into the same OHLCV array keyed by ts alone.
@@ -504,20 +537,22 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
   // the candles. Also keeps byTs current so a later toggle re-stamps correctly.
   const ccMeta = chartDataObj._candleColor
   const ccActive = chartDataObj._candleColorActive
-  if (ccMeta && ccMeta.length && ccActive && ccActive.size) {
+  if (ccMeta && ccMeta.length) {
     let candle = null
     const arr = chartDataObj.chart.data
     for (let i = arr.length - 1; i >= 0; i--) { if (arr[i][0] === ts) { candle = arr[i]; break } }
-    if (candle) {
-      for (const cc of ccMeta) {
-        if (!ccActive.has(cc.kind)) continue
-        const v = inds[cc.instanceKey] && inds[cc.instanceKey][cc.field]
-        const color = candleColorOf(v, cc.opts)
-        if (color != null) {
-          while (candle.length < 9) candle.push('')
-          candle[6] = color
-          if (cc.byTs) cc.byTs.set(ts, color)
-        }
+    for (const cc of ccMeta) {
+      const v = inds[cc.instanceKey] && inds[cc.instanceKey][cc.field]
+      if (v == null) continue
+      const color = candleColorOf(v, cc.opts)
+      if (color == null) continue
+      // ALWAYS keep byTs current (even while disabled) so enabling this kind
+      // later re-stamps these live bars (the line-504 contract). Only the
+      // candle[6] stamp is gated on the kind being currently active.
+      if (cc.byTs) cc.byTs.set(ts, color)
+      if (candle && ccActive && ccActive.has(cc.kind)) {
+        while (candle.length < 9) candle.push('')
+        candle[6] = color
       }
     }
   }
@@ -538,8 +573,15 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
       } else {
         const d = ov.data
         if (d.length) {
-          const li = d.length - 1
-          const prevVal = (d[li][0] === ts) ? (d.length >= 2 ? d[li - 1][1] : null) : d[li][1]
+          // Locate ts's position (it may be an append OR an older-ts backfill —
+          // upsertByTs supports both and ts monotonicity is not enforced). The
+          // previous bar's value is the element immediately before the insert
+          // index; if ts inserts at the head there is no previous → sign-only.
+          let lo = 0, hi = d.length
+          while (lo < hi) { const m = (lo + hi) >> 1; if (d[m][0] < ts) lo = m + 1; else hi = m }
+          // `lo` is the position of ts (exact match) or its insert slot; the
+          // preceding bar is d[lo-1] in both cases.
+          const prevVal = lo > 0 ? d[lo - 1][1] : null
           if (prevVal != null) slope = value - prevVal
         }
       }
