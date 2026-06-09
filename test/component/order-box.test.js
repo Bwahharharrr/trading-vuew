@@ -169,6 +169,23 @@ describe('OrderBox overlay (P3)', () => {
     expect(orders(dc).every(o => o.status === 'confirmed')).toBe(true)
   })
 
+  test('real Delete keydown removes a selected local box (full keyboard chain)', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    ob.custom_event('object-selected'); await settle(4)
+    expect(ob.selected).toBe(true)
+    // Grid's keydown is gated on is_active (cursor.t set + cursor.grid_id === grid).
+    // Simulate the cursor being over grid 0 (as it is when the user hits Delete).
+    ob.$props.cursor.grid_id = 0
+    ob.$props.cursor.t = dc.data.chart.data[0][0]
+    await settle(1)
+    // Fire a real window keydown — exercises Keyboard.vue → KeyboardListener →
+    // Grid.propagate('keydown') → keys.emit → 'Delete' → remove_tool → remove-tool.
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
+    await settle(4)
+    expect(dc.data.onchart.length).toBe(0) // box removed via the keyboard chain
+  })
+
   test('Delete with only local orders emits remove-tool (delete now)', async () => {
     await mountWith(seedDc())
     const ob = orderBoxRenderer(wrapper)

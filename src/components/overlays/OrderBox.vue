@@ -53,20 +53,6 @@ export default {
             this.mouse.on('mousedown', e => this.on_mousedown(e))
             this.mouse.on('mousemove', () => this.on_mousemove())
             this.mouse.on('mouseup', e => this.on_mouseup(e))
-
-            // DEBUG (delete path): does keydown reach this overlay, and is it
-            // selected when Delete fires?  (Remove once the delete issue is fixed.)
-            if (this.keys) {
-                this.keys.on('keydown', e => {
-                    if (e.key === 'Delete' || e.key === 'Backspace') {
-                        // eslint-disable-next-line no-console
-                        console.log('[OrderBox] keydown', e.key,
-                            '· selected:', this.selected,
-                            '· show_pins:', this.show_pins,
-                            '· $uuid:', this.sett.$uuid)
-                    }
-                })
-            }
         },
 
         // Live corner coords: prefer the Pin's OWN state (set synchronously by
@@ -222,23 +208,10 @@ export default {
         // (pending/confirmed) → request a cancel and KEEP the box until the engine
         // confirms the cancellation (the OrderAgent removes the box then).
         remove_tool() {
-            // DEBUG (delete path) — remove once fixed.
-            // eslint-disable-next-line no-console
-            console.log('[OrderBox] remove_tool · selected:', this.selected,
-                '· hasLive:', this.has_live_orders(),
-                '· statuses:', this.orders.map(o => o.status || 'local'))
-            if (!this.selected) {
-                // eslint-disable-next-line no-console
-                console.log('[OrderBox] remove_tool: NOT selected → ignored (click the box first)')
-                return
-            }
+            if (!this.selected) return
             if (this.has_live_orders()) {
-                // eslint-disable-next-line no-console
-                console.log('[OrderBox] remove_tool: live orders → cancel-orders')
                 this.custom_event('cancel-orders')
             } else {
-                // eslint-disable-next-line no-console
-                console.log('[OrderBox] remove_tool: no live orders → remove-tool (delete now)')
                 this.custom_event('remove-tool')
             }
         },
@@ -497,8 +470,6 @@ export default {
                 }
             }
             // else: fall through to box Pins / Tool (select / move).
-            // eslint-disable-next-line no-console
-            console.log('[OrderBox] mousedown fell through (body) → Tool select/move; selected:', this.selected)
         },
 
         on_mousemove() {

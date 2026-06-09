@@ -19,8 +19,17 @@ export default {
         },
 
         register_kb(event) {
-            if (!this.$refs.keyboard) return
-            this.$refs.keyboard.register(event)
+            // A grid's KeyboardListener registers during the initial child mount,
+            // BEFORE this Chart's `keyboard` ref is populated — bailing here would
+            // silently drop it and NO overlay would ever receive keydown (Delete /
+            // tool shortcuts dead). Defer to nextTick when the ref isn't ready yet.
+            if (this.$refs.keyboard) {
+                this.$refs.keyboard.register(event)
+                return
+            }
+            this.$nextTick(() => {
+                if (this.$refs.keyboard) this.$refs.keyboard.register(event)
+            })
         },
 
         remove_kb(event) {
