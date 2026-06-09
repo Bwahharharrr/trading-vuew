@@ -171,6 +171,36 @@ export interface ChartTimeframeRange {
   preview?: CandlePreview
 }
 
+/** Indicator view layer kind (chart-feed v1). */
+export type IndicatorViewLayerKind =
+  | 'line' | 'histogram' | 'band' | 'candle_color' | 'box' | 'marker' | 'diagnostic'
+
+/** Where a view layer renders. */
+export interface IndicatorViewTarget {
+  surface?: 'price' | 'pane'
+  pane?: string | null
+}
+
+/** One default-render layer of an indicator's view. */
+export interface IndicatorViewLayerSpec {
+  id: string
+  label: string
+  kind: IndicatorViewLayerKind
+  target?: IndicatorViewTarget
+  /** Output names to read from the indicator values map. Default = all outputs. */
+  fields?: string[]
+  /** Client rendering hints (free-form). */
+  style?: Record<string, string>
+  /** Initial visibility; hidden layers stay available for user opt-in. */
+  visible_by_default?: boolean
+}
+
+/** Default rendering intent for an indicator (chart-feed `view`). */
+export interface IndicatorViewSpec {
+  version?: number
+  layers?: IndicatorViewLayerSpec[]
+}
+
 /** Indicator descriptor advertised in discovery (`ChartIndicatorDescriptor`). */
 export interface ChartIndicatorDescriptor {
   kind: string
@@ -187,6 +217,8 @@ export interface ChartIndicatorDescriptor {
   outputs?: string[]
   /** Latest output values keyed by output name. Defaults to `{}`. */
   values?: Record<string, DecimalString>
+  /** Default rendering intent (preferred over plotting every output). */
+  view?: IndicatorViewSpec
 }
 
 /** A maintained candle state (`ChartCandleStateDescriptor`). */
