@@ -125,14 +125,23 @@ const CANDLE_COLOR_ENUM = {
   strong_bull: '#1f9e6b', strong_bear: '#d63a48'
 }
 
+function numOr(v, d) { const n = Number(v); return Number.isFinite(n) ? n : d }
+
 /**
  * Map a `candle_color` field value to a body-colour hex.
- * Pass-through for `#RRGGBB`; categorical enum lookup; else a numeric score
- * ramp (>=0 green, <0 red). Returns null if unmappable.
+ * - `#RRGGBB` → pass-through; categorical enum (`bull`/`bear`/`neutral`/…) → hex.
+ * - Numeric → a ramp with a NEUTRAL DEAD-BAND: `n > bullAbove` green,
+ *   `n < bearBelow` red, in-between neutral. Thresholds are in the field's own
+ *   units and configurable per layer via `candleColorOpts(layer.style)`.
+ *   Defaults: bullAbove=0, bearBelow=0 → >0 green, <0 red, =0 neutral.
+ * Returns null if unmappable.
+ *
  * @param {string|number|null} value
+ * @param {{ bullAbove?:number, bearBelow?:number, neutralBand?:number,
+ *           bullColor?:string, bearColor?:string, neutralColor?:string }} [opts]
  * @returns {string|null}
  */
-export function candleColorOf(value) {
+export function candleColorOf(value, opts = {}) {
   if (value == null || value === '') return null
   if (typeof value === 'string') {
     if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value)) return value
@@ -140,6 +149,30 @@ export function candleColorOf(value) {
     if (CANDLE_COLOR_ENUM[k]) return CANDLE_COLOR_ENUM[k]
   }
   const n = Number(value)
-  if (Number.isFinite(n)) return n >= 0 ? CANDLE_COLOR_ENUM.bull : CANDLE_COLOR_ENUM.bear
-  return null
+  if (!Number.isFinite(n)) return null
+  const band = numOr(opts.neutralBand, 0)
+  const bull = opts.bullAbove != null ? numOr(opts.bullAbove, 0) : band
+  const bear = opts.bearBelow != null ? numOr(opts.bearBelow, 0) : -band
+  if (n > bull) return opts.bullColor || CANDLE_COLOR_ENUM.bull
+  if (n < bear) return opts.bearColor || CANDLE_COLOR_ENUM.bear
+  return opts.neutralColor || CANDLE_COLOR_ENUM.neutral
+}
+
+/**
+ * Build numeric candle-colour thresholds/colours from a layer's `style` hints.
+ * Recognised keys: `bull_above`, `bear_below`, `neutral_band` (thresholds, field
+ * units) and `color_up`/`bull_color`, `color_down`/`bear_color`, `neutral_color`.
+ * @param {Record<string,string>} [style]
+ * @returns {object} opts for candleColorOf
+ */
+export function candleColorOpts(style) {
+  const s = style || {}
+  const out = {}
+  if (s.neutral_band != null) out.neutralBand = Number(s.neutral_band)
+  if (s.bull_above != null) out.bullAbove = Number(s.bull_above)
+  if (s.bear_below != null) out.bearBelow = Number(s.bear_below)
+  if (s.color_up || s.bull_color) out.bullColor = s.color_up || s.bull_color
+  if (s.color_down || s.bear_color) out.bearColor = s.color_down || s.bear_color
+  if (s.neutral_color) out.neutralColor = s.neutral_color
+  return out
 }

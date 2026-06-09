@@ -14,7 +14,7 @@
 //   overlay:  { name, type, data:[[ts, value], ...] }
 
 import {
-  indicatorPlacement, layerKindToOverlay, styleToSettings, candleColorOf
+  indicatorPlacement, layerKindToOverlay, styleToSettings, candleColorOf, candleColorOpts
 } from './indicator-catalog.js'
 
 // ─────────────────────────────────────────────────────────── primitives ──
@@ -198,12 +198,13 @@ export function buildLayerOverlays(instanceKey, kind, outputsMap, view, paneReso
       // source field is kept for the live re-stamp (rowToOhlcv rebuilds the tuple).
       const field = fields[0]
       const s = outputsMap.get(field)
+      const opts = candleColorOpts(layer.style) // per-layer numeric thresholds
       const byTs = new Map()
       if (s) for (const [ts, rawVal] of s.raw) {
-        const c = candleColorOf(rawVal)
+        const c = candleColorOf(rawVal, opts)
         if (c != null) byTs.set(ts, c)
       }
-      candleColor.push({ instanceKey, field, byTs })
+      candleColor.push({ instanceKey, field, byTs, opts })
       continue
     }
     const overlayType = layerKindToOverlay(layer.kind, fields.length)
@@ -461,7 +462,7 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
       for (const cc of ccMeta) {
         if (!ccActive.has(cc.kind)) continue
         const v = inds[cc.instanceKey] && inds[cc.instanceKey][cc.field]
-        const color = candleColorOf(v)
+        const color = candleColorOf(v, cc.opts)
         if (color != null) {
           while (candle.length < 9) candle.push('')
           candle[6] = color
