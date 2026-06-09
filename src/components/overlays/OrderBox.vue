@@ -63,6 +63,8 @@ export default {
         order_geometry(r) {
             const L = this.$props.layout
             const eye = { x: r.xL + 4, y: r.yT + 4, w: EYE, h: EYE }
+            // Submit button (▶) sits just right of the eye.
+            const submit = { x: r.xL + 4 + EYE + 4, y: r.yT + 4, w: EYE, h: EYE }
             const rows = []
             if (this.visible) {
                 for (const o of this.orders) {
@@ -81,8 +83,11 @@ export default {
                     })
                 }
             }
-            return { eye, rows }
+            return { eye, submit, rows }
         },
+
+        // Are any orders still un-submitted (local)?
+        has_local() { return this.orders.some(o => (o.status || 'local') === 'local') },
 
         draw(ctx) {
             const r = this.box_rect()
@@ -107,6 +112,7 @@ export default {
             this._geom = geom
             for (const row of geom.rows) this.draw_order(ctx, row, stroke)
             this.draw_eye(ctx, geom.eye, this.visible, stroke)
+            this.draw_submit(ctx, geom.submit, stroke)
 
             this.render_pins(ctx)
         },
@@ -183,6 +189,20 @@ export default {
             ctx.restore()
         },
 
+        // Submit (▶) — dimmed when nothing is left to submit.
+        draw_submit(ctx, s, color) {
+            ctx.save()
+            ctx.globalAlpha = this.has_local() ? 1 : 0.35
+            ctx.fillStyle = color
+            ctx.beginPath()
+            ctx.moveTo(s.x + 3, s.y + 2)
+            ctx.lineTo(s.x + s.w - 3, s.y + s.h / 2)
+            ctx.lineTo(s.x + 3, s.y + s.h - 2)
+            ctx.closePath()
+            ctx.fill()
+            ctx.restore()
+        },
+
         // ── interaction ──────────────────────────────────────────────────────
         on_mousedown(e) {
             if (Utils.default_prevented(e)) return
@@ -190,6 +210,12 @@ export default {
             if (!g) return
             const mx = this.mouse.x, my = this.mouse.y
 
+            // Submit (▶) — send orders to the agent (local->pending->confirmed).
+            if (inRect(g.submit, mx, my)) {
+                if (this.has_local()) this.custom_event('submit-orders')
+                e.preventDefault()
+                return
+            }
             // Eye toggle (top-left of box).
             if (inRect(g.eye, mx, my)) {
                 this.custom_event('change-settings', { visible: !this.visible })

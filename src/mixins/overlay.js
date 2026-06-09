@@ -80,7 +80,8 @@ export default {
                 event === 'object-selected' ||
                 event === 'new-shader' ||
                 event === 'new-interface' ||
-                event === 'remove-tool') {
+                event === 'remove-tool' ||
+                event === 'submit-orders') {
                 args.push(this.grid_id, this.id)
                 if (this.$props.settings.$uuid) {
                     args.push(this.$props.settings.$uuid)

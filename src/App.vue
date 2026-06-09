@@ -231,6 +231,8 @@
 import TradingVue from './TradingVue.vue'
 import IndicatorSettings from './components/IndicatorSettings.vue'
 import OrderDistributionModal from './components/OrderDistributionModal.vue'
+import { OrderAgent } from './helpers/orders/order-agent.js'
+import { StubOrderTransport } from './helpers/orders/stub-order-transport.js'
 import CorkyDiscoveryPanel from './components/feed/CorkyDiscoveryPanel.vue'
 import DataCube from '../src/helpers/datacube.js'
 import { CorkyClient } from '../src/helpers/feed/corky-client.js'
@@ -305,6 +307,15 @@ export default {
     },
     mounted() {
         window.addEventListener('resize', this.onResize)
+        // Attach the order-submission agent (prototype: local stub transport).
+        // OrderBox's Submit (▶) routes custom_event('submit-orders') →
+        // dc_events.submit_orders → this agent (local→pending→confirmed).
+        if (this.chart && !this.chart.orderAgent) {
+            this.chart.orderAgent = new OrderAgent({
+                transport: new StubOrderTransport(),
+                dataCube: this.chart
+            })
+        }
         // loadDataFileList resolves the picker; the watcher on dataFiles
         // (file-manager.js) consumes pendingFileLoad and drives the rest.
         this.loadDataFileList()

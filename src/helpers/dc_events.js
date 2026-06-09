@@ -94,6 +94,8 @@ export default class DCEvents {
                 break
             case 'remove-tool': this.system_tool('Remove')
                 break
+            case 'submit-orders': this.submit_orders(args)
+                break
             case 'before-destroy': this.before_destroy()
                 break
 
@@ -404,6 +406,20 @@ export default class DCEvents {
         // would otherwise not repaint — bump the render revision so the new
         // settings flow to the overlay AND the grid redraws.
         if (typeof this.touchData === 'function') this.touchData()
+    }
+
+    // Submit an OrderBox's orders to the (app-attached) OrderAgent. args from
+    // custom_event('submit-orders') = [grid_id, layer_id, $uuid]. Prototype seam:
+    // the agent flips local->pending->confirmed via a local stub transport.
+    submit_orders(args) {
+        if (!this.orderAgent) return
+        const uuid = args[args.length - 1]
+        for (const ov of (this.data.onchart || [])) {
+            if (ov.settings && ov.settings.$uuid === uuid) {
+                this.orderAgent.submit(ov.settings)
+                return
+            }
+        }
     }
 
     // Lock the scrolling mechanism

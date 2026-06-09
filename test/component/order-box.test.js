@@ -5,6 +5,8 @@ import { test, expect, describe, beforeEach, afterEach } from 'vitest'
 import TradingVue from '../../src/TradingVue.vue'
 import DataCube from '../../src/helpers/datacube.js'
 import OrderBox from '../../src/components/overlays/OrderBox.vue'
+import { OrderAgent } from '../../src/helpers/orders/order-agent.js'
+import { StubOrderTransport } from '../../src/helpers/orders/stub-order-transport.js'
 import {
   mount, installCanvasEnv, uninstallCanvasEnv, settle, resetCounters, methodTotal,
 } from './_component-harness.js'
@@ -152,6 +154,19 @@ describe('OrderBox overlay (P3)', () => {
     const o1 = orders(dc).find(o => o.id === 'ord-1')
     expect(o1.price).toBe(102.75)
     expect(ob._dragOrder).toBe(null)
+  })
+
+  test('Submit (▶) flips orders local→confirmed via the agent', async () => {
+    await mountWith(seedDc())
+    dc.orderAgent = new OrderAgent({ transport: new StubOrderTransport(), dataCube: dc })
+    const ob = orderBoxRenderer(wrapper)
+    dc.touchData(); await settle(6)
+    expect(orders(dc).every(o => o.status === 'local')).toBe(true)
+    ob.mouse.x = ob._geom.submit.x + 2
+    ob.mouse.y = ob._geom.submit.y + 2
+    ob.on_mousedown(fakeEvent())
+    await settle(6)
+    expect(orders(dc).every(o => o.status === 'confirmed')).toBe(true)
   })
 
   test('order lines are clamped to the box width', async () => {
