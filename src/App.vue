@@ -217,7 +217,15 @@
         @apply="applyIndicatorSettings">
     </indicator-settings>
 
-    <!-- Order Distribution Modal (opened after a box is drawn) -->
+    <!-- Order Type chooser (first popup after a box is drawn) -->
+    <order-type-modal
+        v-if="orderTypeModalOpen"
+        :geometry="pendingBoxGeometry"
+        @select="onOrderTypeSelect"
+        @close="onOrderTypeCancel">
+    </order-type-modal>
+
+    <!-- Scaled Order modal (after choosing the 'scaled' type) -->
     <order-distribution-modal
         v-if="orderModalOpen"
         :geometry="pendingBoxGeometry"
@@ -232,6 +240,7 @@ import { markRaw } from 'vue'
 import TradingVue from './TradingVue.vue'
 import IndicatorSettings from './components/IndicatorSettings.vue'
 import OrderDistributionModal from './components/OrderDistributionModal.vue'
+import OrderTypeModal from './components/OrderTypeModal.vue'
 import { OrderAgent } from './helpers/orders/order-agent.js'
 import { StubOrderTransport } from './helpers/orders/stub-order-transport.js'
 import CorkyDiscoveryPanel from './components/feed/CorkyDiscoveryPanel.vue'
@@ -276,6 +285,7 @@ export default {
         TradingVue,
         IndicatorSettings,
         OrderDistributionModal,
+        OrderTypeModal,
         CorkyDiscoveryPanel
     },
     data() {

@@ -12,30 +12,27 @@ function mountModal() {
 }
 
 describe('OrderDistributionModal', () => {
-  test('confirm emits the captured config (float size, int qty, dist, side)', async () => {
+  test('confirm emits the captured config (float size, int qty, dist) — side is auto', async () => {
     const w = mountModal()
     await w.find('input[type="number"][step="any"]').setValue('12.5')
     await w.find('input[type="number"][step="1"]').setValue('7')
-    // pick desc distribution + sell side
     const distBtns = w.findAll('.type-btn')
     await distBtns[1].trigger('click') // High→Low (desc)
-    await w.find('.side-btn.sell').trigger('click')
     await w.find('.btn-confirm').trigger('click')
 
     const ev = w.emitted('confirm')
     expect(ev).toBeTruthy()
-    expect(ev[0][0]).toEqual({ orderSize: 12.5, orderQty: 7, distribution: 'desc', side: 'sell' })
+    expect(ev[0][0]).toEqual({ orderSize: 12.5, orderQty: 7, distribution: 'desc' }) // no side
     w.unmount()
   })
 
-  test('distribution + side toggles set .active', async () => {
+  test('distribution toggle sets .active; no side control', async () => {
     const w = mountModal()
     const distBtns = w.findAll('.type-btn')
     await distBtns[2].trigger('click') // asc
     expect(distBtns[2].classes()).toContain('active')
     expect(distBtns[0].classes()).not.toContain('active')
-    await w.find('.side-btn.sell').trigger('click')
-    expect(w.find('.side-btn.sell').classes()).toContain('active')
+    expect(w.find('.side-btn.sell').exists()).toBe(false) // side is automatic now
     w.unmount()
   })
 

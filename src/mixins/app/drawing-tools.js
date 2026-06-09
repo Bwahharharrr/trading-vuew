@@ -55,7 +55,9 @@ export default {
             isDrawing: false,
             rectStart: null,
             rectCurrent: null,
-            // Order-distribution modal handoff (opened after a box is drawn).
+            // Order modal handoff (opened after a box is drawn): first the order
+            // TYPE chooser, then (for 'scaled') the Scaled Order distribution modal.
+            orderTypeModalOpen: false,
             orderModalOpen: false,
             pendingBoxGeometry: null   // { tStart, tEnd, low, high } (data coords)
         }
@@ -141,7 +143,8 @@ export default {
                         low: Number(r.low),
                         high: Number(r.high)
                     }
-                    this.orderModalOpen = true
+                    // First popup: choose the order type.
+                    this.orderTypeModalOpen = true
                 }
             }
 
@@ -153,11 +156,31 @@ export default {
             this.rectDrawMode = false
         },
 
+        // Order TYPE chooser (first popup). 'scaled' → open the Scaled Order
+        // modal; 'distribution' is a placeholder (the modal's button is a no-op).
+        onOrderTypeSelect(type) {
+            if (type === 'scaled') {
+                this.orderTypeModalOpen = false
+                this.orderModalOpen = true
+            }
+        },
+        onOrderTypeCancel() {
+            this.orderTypeModalOpen = false
+            this.pendingBoxGeometry = null
+        },
+
         onOrderConfirm(cfg) {
             const g = this.pendingBoxGeometry
             this.orderModalOpen = false
             this.pendingBoxGeometry = null
             if (!g || !this.chart || typeof this.chart.add !== 'function') return
+
+            // Side is automatic: a box ABOVE the current price = SELL (red), BELOW
+            // = BUY (green). Use the box midpoint vs the latest candle close.
+            const ohlcv = this.chart.data && this.chart.data.chart && this.chart.data.chart.data
+            const last = ohlcv && ohlcv.length ? ohlcv[ohlcv.length - 1] : null
+            const cur = last ? last[4] : (g.low + g.high) / 2
+            const side = ((g.low + g.high) / 2) >= cur ? 'sell' : 'buy'
 
             const orders = distributeOrders({
                 low: g.low, high: g.high,
@@ -167,7 +190,7 @@ export default {
             // Persist as an OrderBox overlay anchored to DATA coords (corner Pins
             // c0/c1 = [t, price]); it redraws + tracks zoom/pan automatically.
             this.chart.add('onchart', {
-                name: 'Order Distribution',
+                name: 'Scaled Order',
                 type: 'OrderBox',
                 grid: { id: 0 },
                 data: [],
@@ -177,9 +200,10 @@ export default {
                     $state: 'finished',
                     'z-index': 100,
                     legend: false,
+                    orderType: 'scaled',
                     c0: [g.tStart, g.low],
                     c1: [g.tEnd, g.high],
-                    side: cfg.side,
+                    side,
                     visible: true,
                     totalSize: cfg.orderSize,
                     qty: cfg.orderQty,

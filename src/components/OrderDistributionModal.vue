@@ -2,22 +2,13 @@
 <div class="order-modal-overlay" @click.self="close">
     <div class="order-modal">
         <div class="modal-header">
-            <span class="modal-title">Order Distribution</span>
+            <span class="modal-title">Scaled Order</span>
             <button class="modal-close" @click="close">&times;</button>
         </div>
         <div class="modal-body">
             <div class="range-context" v-if="geometry">
                 Range: {{ fmt(low) }} – {{ fmt(high) }}
-            </div>
-
-            <div class="setting-group">
-                <label class="setting-label">Side</label>
-                <div class="side-buttons">
-                    <button class="side-btn buy" :class="{ active: side === 'buy' }"
-                        @click="side = 'buy'">BUY</button>
-                    <button class="side-btn sell" :class="{ active: side === 'sell' }"
-                        @click="side = 'sell'">SELL</button>
-                </div>
+                <span class="side-note">· side auto (above price = sell, below = buy)</span>
             </div>
 
             <div class="setting-group">
@@ -65,7 +56,6 @@ export default {
             orderSize: 1,
             orderQty: 5,
             distribution: 'flat',
-            side: 'buy',
             distTypes: [
                 { value: 'flat', label: 'Flat',
                   icon: '<svg viewBox="0 0 24 24" width="24" height="24"><line x1="3" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="2"/></svg>' },
@@ -93,8 +83,7 @@ export default {
             this.$emit('confirm', {
                 orderSize: Number(this.orderSize),
                 orderQty: Math.trunc(this.orderQty),
-                distribution: this.distribution,
-                side: this.side
+                distribution: this.distribution
             })
         },
         close() {
@@ -142,6 +131,7 @@ export default {
     color: #808a9d; font-size: 12px; margin-bottom: 16px;
     padding: 8px 10px; background: #131722; border-radius: 4px;
 }
+.side-note { color: #565c68; font-size: 11px; }
 .setting-group { margin-bottom: 15px; }
 .setting-label {
     display: block; color: #808a9d; font-size: 11px; font-weight: 600;

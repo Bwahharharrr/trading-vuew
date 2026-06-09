@@ -209,6 +209,12 @@ describe('OrderBox overlay (P3)', () => {
     expect(dc.data.onchart.length).toBe(0)                              // gone after confirm
   })
 
+  test('summary shows the order type label', async () => {
+    await mountWith(seedDc({ orderType: 'scaled' }))
+    const ob = orderBoxRenderer(wrapper)
+    expect(ob.order_type_label()).toBe('Scaled Order')
+  })
+
   test('order_summary: count, placed, filled, size-weighted avg price', async () => {
     await mountWith(seedDc({
       qty: 4, totalSize: 10,

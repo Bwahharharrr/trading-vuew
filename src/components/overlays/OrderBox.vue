@@ -159,6 +159,12 @@ export default {
             return { label: 'Partially Confirmed', color: accent, submittable: this.has_submittable() }
         },
 
+        // Human label for the order type (shown atop the summary).
+        order_type_label() {
+            const t = this.sett.orderType || 'scaled'
+            return ({ scaled: 'Scaled Order', distribution: 'Distribution' })[t] || 'Order'
+        },
+
         // Any order that can be (re)submitted (local or rejected).
         has_submittable() {
             return this.orders.some(o => { const s = o.status || 'local'; return s === 'local' || s === 'rejected' })
@@ -336,15 +342,18 @@ export default {
                 ctx.restore()
             }
 
-            // Text stats under the eye/submit row: placed (original) / filled / avg.
-            // (Partial-fill QUANTITY per order is backend-dependent — TODO; for now
-            // "filled" counts confirmed orders.)
+            // Text under the eye/submit row: order TYPE title, then placed
+            // (original) / filled / avg. (Partial-fill QUANTITY per order is
+            // backend-dependent — TODO; "filled" counts confirmed orders for now.)
             ctx.save()
             ctx.font = this.font11
-            ctx.fillStyle = this.$props.colors.textHL || '#cfe'
             ctx.textBaseline = 'top'
             const tx = r.xL + 6
             let ty = r.yT + 4 + EYE + 5
+            // Order-type title (accent colour by side).
+            ctx.fillStyle = this.side === 'buy' ? this.color_buy : this.color_sell
+            ctx.fillText(this.order_type_label(), tx, ty); ty += 14
+            ctx.fillStyle = this.$props.colors.textHL || '#cfe'
             const lines = [
                 `placed ${s.origQty} · ${fmtNum(s.origSize)}`,
                 `filled ${s.filledCount}/${s.origQty}`
