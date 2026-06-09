@@ -518,3 +518,46 @@ full-component lazy-gesture loading to Phase 4 where the component is restructur
     change actually flips the signature, else it's a false safety net.
 35. **Modernize eslint parserOptions to match the code** — stale ecmaVersion
     produces fake parse errors that mask real ones.
+
+---
+
+## 2026-06-09: Dev-server failure misattributed to a just-edited file
+
+### Lesson: "module script text/html MIME" is a TRANSPORT/cache problem, not your code
+After editing 3 feed `.js` files, the dev app went blank with
+`Failed to load module script: Expected a JavaScript-or-Wasm module script but
+the server responded with a MIME type of "text/html"` for `vue.js` and
+`env.mjs`. It LOOKED like the edits broke the app, and a source rollback
+"fixed" it — but that was the *restart* coincidentally clearing the real cause,
+not the code. A file-by-file roll-forward re-applied the **identical** full
+change set and it worked. Root cause: I had started a **second `vite` dev
+server** on the same project while the user's was running; two servers writing
+`node_modules/.vite/deps/` corrupt the shared optimize cache, which then
+re-optimizes every launch and (through the user's cloud tunnel) serves
+dependency modules mid-swap as the SPA-fallback `index.html`.
+
+Tells & proof, in order:
+- `env.mjs` is **Vite's own client runtime** (`node_modules/vite/dist/client/
+  env.mjs`) and `vue.js` is the pre-bundled dep — when *Vite's own infra*
+  fails, suspect the cache/transport, not app source.
+- The smoking gun in the terminal: **"Re-optimizing dependencies because vite
+  config has changed" on EVERY launch** (the dev `serve` config is
+  deterministic, so it should optimize once then reuse).
+- Curl the running server directly: `/src/main.js`, the `vue` dep at the served
+  `?v=` hash, and `env.mjs` all returned `200 text/javascript` — under normal
+  headers, `Accept: text/html`, and `Sec-Fetch-Dest: document`. Server healthy
+  ⇒ the `text/html` is injected by the browser↔server transport (proxy/tunnel)
+  or a stale dep hash, never by Vite for those paths.
+
+**Rules:**
+36. **One `vite` per project, ever.** Never start a second dev server (even on a
+    different port) while one is running — they clobber `node_modules/.vite` and
+    cause re-optimize churn. To recover: kill all vite, `rm -rf node_modules/.vite`,
+    start ONE.
+37. **Don't blame the file you just edited for an infra symptom.** A blank page
+    with a *module-MIME* (text/html) error is Vite/cache/proxy, not JS logic —
+    `curl` the served modules first (200 `text/javascript` under varied headers
+    = server fine). Only after the server is cleared do you suspect source.
+38. **Bisect UNCOMMITTED edits by backup + `git checkout HEAD -- <file>`.** Copy
+    the working files to `/tmp`, reset to HEAD, then re-apply one file at a time
+    and test — proves causation instead of assuming the latest change is guilty.

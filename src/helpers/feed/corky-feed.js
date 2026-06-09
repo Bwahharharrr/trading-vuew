@@ -20,6 +20,13 @@ import { CorkyClient } from './corky-client.js'
 import { assembleChunks, buildChartData, applyLiveUpdate } from './corky-ingest.js'
 import { FeedSource } from './feed-source.js'
 
+// Case-insensitive indicator-kind equality. The wire/UI may carry a display
+// label ('SMA(20)') while overlays tag the bare kind ('sma'); kindOf/resolveView
+// already normalise this way, so toggles must match the same way or hit nothing.
+function kindEq(a, b) {
+    return String(a).toLowerCase() === String(b).toLowerCase()
+}
+
 export class CorkyFeed extends FeedSource {
 
     /**
@@ -49,6 +56,26 @@ export class CorkyFeed extends FeedSource {
 
         // subscription_id → handle (the live routing state for that stream).
         this._subs = new Map()
+
+        // subscription_id of the most-recent subscribe() — the only stream allowed
+        // to mutate the DataCube. Guards against a superseded in-flight subscribe's
+        // late historical_complete clobbering a newer selection (mid-load re-select).
+        this._activeSubId = null
+
+        // Wire connection-lifecycle events so a reconnect resubscribes (the gateway
+        // has no session resume — without this the feed goes silently stale after a
+        // drop) and an exhausted reconnect surfaces as an error instead of a freeze.
+        // Guarded: test fakes may not implement on(). off-handles cleaned in destroy.
+        this._offClientEvents = []
+        if (typeof this.client.on === 'function') {
+            this._offClientEvents.push(
+                this.client.on('open', () => this._onClientOpen()),
+                this.client.on('reconnect-exhausted', (e) => this._onReconnectExhausted(e)),
+            )
+        }
+        // True until the FIRST socket open: the initial connect's 'open' must NOT
+        // trigger a resubscribe (there is nothing to resubscribe yet).
+        this._everOpened = false
     }
 
     _nextSubscriptionId() {
@@ -84,14 +111,38 @@ export class CorkyFeed extends FeedSource {
         const onStatus = handlers.onStatus || (() => {})
         const onError = handlers.onError || (() => {})
 
+        // Single active subscription: supersede any still-loading prior stream so
+        // a mid-load re-select can neither double-subscribe nor let the abandoned
+        // selection's late historical_complete clobber the chart. Detaching its
+        // fan-out stops its events routing; unsubscribe stops the gateway stream.
+        // (Completed subscriptions are the caller's to unsubscribe() explicitly.)
+        for (const [sid, h] of this._subs) {
+            if (h.history_complete) continue
+            if (h.unsubFanout) h.unsubFanout()
+            this._subs.delete(sid)
+            Promise.resolve(this.client.unsubscribe(sid)).catch(() => {})
+        }
+
         const subscription_id = this._nextSubscriptionId()
+        this._activeSubId = subscription_id
 
         // Per-subscription routing state.
         const handle = {
             subscription_id,
             timeframe,
+            // Everything needed to RE-issue this subscribe on reconnect (the gateway
+            // forgets the subscription on a drop). include_indicators mirrors the
+            // subscribeCandles call below; opts.indicators stays a UI concern.
+            subscribeArgs: {
+                venue, symbol, timeframe,
+                include_indicators: indicators != null ? true : undefined,
+                range,
+            },
+            onStatus, onError,     // retained so reconnect/exhaustion can report
             chunks: [],            // accumulated historical_chunk events
             history_complete: false,
+            liveAnnounced: false,  // onStatus({phase:'live'}) is emitted ONCE (perf)
+            hiddenLayers: new Set(), // layer ids the user explicitly hid (not resurrected)
             // FULL built structure (candles + EVERY indicator overlay). This is
             // the source of truth live updates are applied to so that a series
             // toggled on later shows up-to-date data. Only the candles (and
@@ -152,6 +203,10 @@ export class CorkyFeed extends FeedSource {
             // fan-out listener or the _subs entry — the recurring teardown bug).
             if (handle.unsubFanout) handle.unsubFanout()
             this._subs.delete(subscription_id)
+            // Tell the gateway to drop the subscription too: on a timeout (or any
+            // error after the command was sent) the gateway may be alive-but-slow
+            // and would otherwise stream a fan-out nobody consumes for the session.
+            Promise.resolve(this.client.unsubscribe(subscription_id)).catch(() => {})
             onError(err)
             throw err
         } finally {
@@ -169,6 +224,9 @@ export class CorkyFeed extends FeedSource {
                 onStatus({ phase: 'accepted', subscription_id: handle.subscription_id })
                 break
             case 'historical_chunk':
+                // Ignore late chunks once history is built: they have no consumer
+                // and would only grow handle.chunks unboundedly (memory leak).
+                if (handle.history_complete) break
                 handle.chunks.push(event)
                 onStatus({
                     phase: 'history',
@@ -177,11 +235,12 @@ export class CorkyFeed extends FeedSource {
                 })
                 break
             case 'historical_complete':
-                this._finishHistory(handle)
-                onStatus({ phase: 'history-complete', subscription_id: handle.subscription_id })
+                if (this._finishHistory(handle, onError)) {
+                    onStatus({ phase: 'history-complete', subscription_id: handle.subscription_id })
+                }
                 break
             case 'live_update':
-                this._applyLive(handle, event, onStatus)
+                this._applyLive(handle, event, onStatus, onError)
                 break
             case 'error':
                 onError(event)
@@ -195,12 +254,36 @@ export class CorkyFeed extends FeedSource {
     // handle as the live source of truth — but pushes only the CANDLES to the
     // DataCube. Indicator overlays start hidden (candles-only default) and are
     // added/removed client-side by setIndicatorEnabled().
-    _finishHistory(handle) {
-        if (handle.history_complete) return
-        handle.history_complete = true
+    // @returns {boolean} whether history was (re)built this call — false if it
+    //   was a no-op (already complete) or skipped (superseded / build failed), so
+    //   the caller only emits 'history-complete' on a genuine build.
+    _finishHistory(handle, onError = () => {}) {
+        if (handle.history_complete) return false
+        // A superseded in-flight subscription (newer selection took over) must
+        // NEVER touch the DataCube — its late historical_complete would clobber
+        // the newer chart. Detaching the fan-out usually prevents this; this is
+        // defense in depth for an event already queued before detach.
+        if (!this._subs.has(handle.subscription_id) ||
+            handle.subscription_id !== this._activeSubId) return false
 
-        const rows = assembleChunks(handle.chunks)
-        const built = buildChartData(rows, { timeframe: handle.timeframe, views: handle.views })
+        let built
+        try {
+            const rows = assembleChunks(handle.chunks)
+            built = buildChartData(rows, { timeframe: handle.timeframe, views: handle.views })
+        } catch (err) {
+            // A single malformed row used to throw here BEFORE history_complete was
+            // set, silently blocking all reprocessing AND every live update (a
+            // permanently blank chart with no error). Surface it and leave
+            // history_complete false so a resubscribe can retry cleanly.
+            onError(err)
+            return false
+        }
+        // Build succeeded: NOW mark complete (so a thrown build above doesn't wedge
+        // the stream) and release the raw chunk payload (consumed once; retaining
+        // it leaks ~the full wire history for the session).
+        handle.history_complete = true
+        handle.chunks.length = 0
+        handle.liveAnnounced = false
         // Tag the FULL structure with the timeframe so applyLiveUpdate's single-
         // tf invariant works when it mutates `built` directly.
         built.timeframe = handle.timeframe
@@ -256,6 +339,7 @@ export class CorkyFeed extends FeedSource {
 
         // Signal a redraw for the freshly-loaded history.
         dc.touchData()
+        return true
     }
 
     // Re-apply handle.enabled = { kinds:[{kind}], layers:[layerId] } onto the
@@ -293,35 +377,35 @@ export class CorkyFeed extends FeedSource {
      */
     setIndicatorEnabled(handle, kind, on) {
         if (!handle || !handle.built) return false
+        if (!handle.hiddenLayers) handle.hiddenLayers = new Set()
         const dc = this.dc
         const built = handle.built
+        // Match kind case-INSENSITIVELY: kindOf/resolveView/_applyCandleColor all
+        // tolerate the display-label wire form ('SMA(20)' → 'SMA'), so an exact
+        // === would silently match zero overlays for that form.
         const overlays = [...built.onchart, ...built.offchart]
-            .filter(ov => ov.settings && ov.settings.corkyKind === kind)
+            .filter(ov => ov.settings && kindEq(ov.settings.corkyKind, kind))
 
-        // For view-driven overlays, auto-add ONLY visible_by_default layers; a
-        // hidden view layer is opt-in via setLayerEnabled. Fallback overlays
-        // (no corkyView) always add (legacy plot-every-output behaviour).
+        // For view-driven overlays, auto-add ONLY visible_by_default layers that
+        // the user has not explicitly hidden; a hidden view layer is opt-in via
+        // setLayerEnabled, and a layer turned off must not be resurrected by a
+        // kind off→on cycle or a tf-switch reapply. Fallback overlays (no
+        // corkyView) always add (legacy plot-every-output behaviour).
         const autoVisible = (ov) =>
-            !ov.settings.corkyView || ov.settings.corkyVisibleDefault !== false
+            (!ov.settings.corkyView || ov.settings.corkyVisibleDefault !== false) &&
+            !(ov.settings.corkyLayerId && handle.hiddenLayers.has(ov.settings.corkyLayerId))
 
         let changed = false
         if (on) {
-            for (const ov of built.onchart) {
-                if (ov.settings && ov.settings.corkyKind === kind && autoVisible(ov) &&
-                    !handle.addedOverlays.has(ov)) {
-                    dc.add('onchart', ov)   // assigns ov.id, appends by reference
-                    handle.addedOverlays.add(ov)
-                    if (ov.settings.corkyLayerId) handle.enabledLayers.add(ov.settings.corkyLayerId)
-                    changed = true
-                }
-            }
-            for (const ov of built.offchart) {
-                if (ov.settings && ov.settings.corkyKind === kind && autoVisible(ov) &&
-                    !handle.addedOverlays.has(ov)) {
-                    dc.add('offchart', ov)
-                    handle.addedOverlays.add(ov)
-                    if (ov.settings.corkyLayerId) handle.enabledLayers.add(ov.settings.corkyLayerId)
-                    changed = true
+            for (const pane of ['onchart', 'offchart']) {
+                for (const ov of built[pane]) {
+                    if (ov.settings && kindEq(ov.settings.corkyKind, kind) && autoVisible(ov) &&
+                        !handle.addedOverlays.has(ov)) {
+                        this._addOverlay(dc, pane, ov)
+                        handle.addedOverlays.add(ov)
+                        if (ov.settings.corkyLayerId) handle.enabledLayers.add(ov.settings.corkyLayerId)
+                        changed = true
+                    }
                 }
             }
             if (overlays.length) handle.enabledKinds.add(kind)
@@ -343,7 +427,7 @@ export class CorkyFeed extends FeedSource {
         const hadCandleColor = this._applyCandleColor(handle, kind, on)
         if (hadCandleColor) changed = true
 
-        if (changed) dc.touchData()
+        if (changed) { this._normalizeOffchartGrids(handle); dc.touchData() }
         return overlays.length > 0 || hadCandleColor
     }
 
@@ -359,17 +443,19 @@ export class CorkyFeed extends FeedSource {
         if (!entries.length) return false
         const data = built.chart.data || []
         const active = built._candleColorActive || (built._candleColorActive = new Set())
+        // Update the active set FIRST, then recompute slot 6 from EVERY remaining
+        // active kind. Recomputing (rather than blanking only this kind's stamps)
+        // is what keeps a second active candle_color kind's colours intact when
+        // one of two is toggled off — the off branch used to wipe the overlap.
+        for (const e of entries) { if (on) active.add(e.kind); else active.delete(e.kind) }
+        const activeEntries = cc.filter((e) => active.has(e.kind))
         for (const c of data) {
             const ts = c[0]
-            if (on) {
-                let color = null
-                for (const e of entries) { const v = e.byTs.get(ts); if (v != null) color = v }
-                if (color != null) { while (c.length < 9) c.push(''); c[6] = color }
-            } else if (c.length >= 7 && c[6] !== '' && entries.some((e) => e.byTs.has(ts))) {
-                c[6] = ''
-            }
+            let color = null
+            for (const e of activeEntries) { const v = e.byTs.get(ts); if (v != null) color = v }
+            if (color != null) { while (c.length < 9) c.push(''); c[6] = color }
+            else if (c.length >= 7 && c[6] !== '') { c[6] = '' }
         }
-        for (const e of entries) { if (on) active.add(e.kind); else active.delete(e.kind) }
         return true
     }
 
@@ -381,6 +467,7 @@ export class CorkyFeed extends FeedSource {
      */
     setLayerEnabled(handle, layerId, on) {
         if (!handle || !handle.built || !layerId) return false
+        if (!handle.hiddenLayers) handle.hiddenLayers = new Set()
         const dc = this.dc
         const built = handle.built
         let changed = false
@@ -391,14 +478,17 @@ export class CorkyFeed extends FeedSource {
                     if (ov.settings && ov.settings.corkyLayerId === layerId) {
                         matched = true
                         if (!handle.addedOverlays.has(ov)) {
-                            dc.add(pane, ov)
+                            this._addOverlay(dc, pane, ov)
                             handle.addedOverlays.add(ov)
                             changed = true
                         }
                     }
                 }
             }
-            if (matched) handle.enabledLayers.add(layerId)
+            if (matched) {
+                handle.enabledLayers.add(layerId)
+                handle.hiddenLayers.delete(layerId) // re-shown: drop the explicit-hide memory
+            }
         } else {
             for (const pane of ['onchart', 'offchart']) {
                 for (const ov of built[pane]) {
@@ -413,9 +503,97 @@ export class CorkyFeed extends FeedSource {
                 }
             }
             handle.enabledLayers.delete(layerId)
+            // Remember an explicit hide so setIndicatorEnabled's autoVisible (and a
+            // tf-switch reapply) doesn't bring this visible_by_default layer back.
+            if (matched) handle.hiddenLayers.add(layerId)
         }
-        if (changed) dc.touchData()
+        if (changed) { this._normalizeOffchartGrids(handle); dc.touchData() }
         return matched
+    }
+
+    // Add one overlay to a pane by REFERENCE (same object as in handle.built so
+    // live upserts mutate it in place). Forces settings.display = true: an overlay
+    // present in the DataCube is, by this design, a VISIBLE overlay — build time
+    // bakes display=false into hidden-by-default layers, which would otherwise be
+    // added but never drawn (Chart.vue/canvas-context skip display===false).
+    _addOverlay(dc, pane, ov) {
+        if (ov.settings) ov.settings.display = true
+        dc.add(pane, ov) // assigns ov.id, appends by reference
+    }
+
+    // Re-establish the offchart pane-grid invariant after any add/remove. Section
+    // .vue resolves grid `id`'s anchor POSITIONALLY (offchart[id-1]) and merges
+    // siblings by grid.id, so anchors must occupy the first N slots in pane order
+    // and each sibling's grid.id must equal its anchor's 1-based index. Build sets
+    // this up, but incremental toggles append in user order with stale build-time
+    // grid.ids — orphaning siblings or merging them into the wrong pane. We rebuild
+    // order + grid.ids from the stable pane tags (corkyPaneName/corkyPaneAnchor),
+    // pulling in any missing anchor so a sibling never renders without its grid.
+    _normalizeOffchartGrids(handle) {
+        const dc = this.dc
+        const arr = dc.data && dc.data.offchart
+        if (!arr) return
+
+        // 1. Every pane with a sibling present needs its anchor present too — else
+        //    the positional anchor lookup resolves the wrong overlay (or none).
+        if (handle && handle.built && handle.built.offchart) {
+            const present = new Set(arr)
+            const haveAnchor = new Set()
+            const needAnchor = new Set()
+            for (const ov of arr) {
+                const s = ov.settings
+                if (!s || s.corkyPaneName == null) continue
+                if (s.corkyPaneAnchor) haveAnchor.add(s.corkyPaneName)
+                else needAnchor.add(s.corkyPaneName)
+            }
+            for (const name of needAnchor) {
+                if (haveAnchor.has(name)) continue
+                const anchor = handle.built.offchart.find(o =>
+                    o.settings && o.settings.corkyPaneName === name && o.settings.corkyPaneAnchor)
+                if (anchor && !present.has(anchor)) {
+                    this._addOverlay(dc, 'offchart', anchor)
+                    handle.addedOverlays.add(anchor)
+                    if (anchor.settings.corkyLayerId) handle.enabledLayers.add(anchor.settings.corkyLayerId)
+                }
+            }
+        }
+        if (!arr.length) { if (typeof dc.update_ids === 'function') dc.update_ids(); return }
+
+        // 2. Group by pane (first-appearance order). Overlays without a pane tag
+        //    are standalone single-overlay panes (each its own anchor) so non-corky
+        //    offchart overlays keep working.
+        const order = []
+        const panes = new Map()
+        let solo = 0
+        for (const ov of arr) {
+            const s = ov.settings || {}
+            let key, isAnchor
+            if (s.corkyPaneName != null) { key = 'p:' + s.corkyPaneName; isAnchor = !!s.corkyPaneAnchor }
+            else { key = 's:' + (solo++); isAnchor = !ov.grid }
+            let rec = panes.get(key)
+            if (!rec) { rec = { anchor: null, sibs: [] }; panes.set(key, rec); order.push(key) }
+            if (isAnchor && !rec.anchor) rec.anchor = ov
+            else rec.sibs.push(ov)
+        }
+
+        // 3. Rebuild: anchors first (pane order), then siblings with grid.id set to
+        //    the pane's 1-based offchart-grid index. A pane that somehow has no
+        //    anchor promotes its first sibling so it still renders.
+        const anchors = []; const sibs = []
+        let gid = 0
+        for (const key of order) {
+            const rec = panes.get(key)
+            let anchor = rec.anchor
+            let paneSibs = rec.sibs
+            if (!anchor) { anchor = paneSibs[0]; paneSibs = paneSibs.slice(1) }
+            if (!anchor) continue
+            gid += 1
+            delete anchor.grid // an anchor spawns the grid — it must carry NO grid.id
+            anchors.push(anchor)
+            for (const s of paneSibs) { s.grid = { id: gid }; sibs.push(s) }
+        }
+        arr.splice(0, arr.length, ...anchors, ...sibs)
+        if (typeof dc.update_ids === 'function') dc.update_ids()
     }
 
     // Remove one overlay by OBJECT IDENTITY. We must NOT use dc.del(ov.id):
@@ -444,21 +622,37 @@ export class CorkyFeed extends FeedSource {
 
     // One live tick → in-place upsert + invalidate. Duplicate / out-of-order
     // sequences are dropped by applyLiveUpdate (no redraw signalled then).
-    _applyLive(handle, event, onStatus) {
+    _applyLive(handle, event, onStatus, onError = () => {}) {
         if (!handle.liveView) {
             // live before history-complete: ignore
             this._debugLive(event, { applied: false, reason: 'before-history' }, handle)
             return
         }
-        const res = applyLiveUpdate(handle.liveView, event, handle.lastSeqBySub)
+        // A superseded stream must not mutate the active chart's DataCube.
+        if (handle.subscription_id !== this._activeSubId) return
+        let res
+        try {
+            res = applyLiveUpdate(handle.liveView, event, handle.lastSeqBySub)
+        } catch (err) {
+            // A malformed live row used to throw into the client's blanket
+            // catch(){} and vanish; surface it so the UI can react.
+            onError(err)
+            return
+        }
         this._debugLive(event, res, handle)
         if (res.applied) {
             this.dc.touchData()
-            onStatus({
-                phase: 'live',
-                subscription_id: handle.subscription_id,
-                sequence: res.sequence,
-            })
+            // Emit the 'live' phase ONCE (on the first applied tick), not per tick:
+            // a fresh status object every tick re-renders the whole discovery panel
+            // for a progress bar that's only visible during loading.
+            if (!handle.liveAnnounced) {
+                handle.liveAnnounced = true
+                onStatus({
+                    phase: 'live',
+                    subscription_id: handle.subscription_id,
+                    sequence: res.sequence,
+                })
+            }
         }
     }
 
@@ -486,6 +680,40 @@ export class CorkyFeed extends FeedSource {
         })
     }
 
+    // ── reconnect ─────────────────────────────────────────────────────────────
+
+    // A socket (re)opened. The first open is the initial connect (nothing to do);
+    // a later open is a reconnect — the gateway has NO session resume, so re-issue
+    // subscribe_candles for each live stream and let the existing fan-out reload
+    // it (history rebuild + enabled/hidden replay). Without this the chart freezes
+    // at the last candle while still claiming "Live".
+    _onClientOpen() {
+        if (!this._everOpened) { this._everOpened = true; return }
+        for (const handle of this._subs.values()) {
+            if (!handle.history_complete) continue // in-flight: its own flow handles it
+            handle.history_complete = false        // allow a fresh history rebuild
+            handle.chunks = []
+            handle.lastSeqBySub = {}
+            Promise.resolve(this.client.subscribeCandles({
+                subscription_id: handle.subscription_id,
+                ...handle.subscribeArgs,
+            })).catch((err) => { if (handle.onError) handle.onError(err) })
+        }
+    }
+
+    // Backoff gave up: the feed is dead. Surface it through every stream's onError
+    // so the UI stops showing "Live" and reports the disconnect (the events used to
+    // be emitted into the void — nothing listened).
+    _onReconnectExhausted(info) {
+        const err = new Error('Corky feed disconnected: reconnect attempts exhausted')
+        err.code = 'reconnect_exhausted'
+        err.retryable = false
+        err.info = info
+        for (const handle of this._subs.values()) {
+            if (handle.onError) handle.onError(err)
+        }
+    }
+
     // ── unsubscribe / destroy ────────────────────────────────────────────────
 
     // Release a handle's retained model so no overlays/ids leak after teardown.
@@ -496,6 +724,8 @@ export class CorkyFeed extends FeedSource {
         h.built = null
         h.liveView = null
         if (h.enabledKinds) h.enabledKinds.clear()
+        if (h.enabledLayers) h.enabledLayers.clear()
+        if (h.hiddenLayers) h.hiddenLayers.clear()
         if (h.addedOverlays) h.addedOverlays.clear()
     }
 
@@ -511,11 +741,16 @@ export class CorkyFeed extends FeedSource {
         if (h && h.unsubFanout) h.unsubFanout()
         this._clearHandle(h)
         this._subs.delete(id)
+        if (id === this._activeSubId) this._activeSubId = null
         await this.client.unsubscribe(id)
     }
 
     /** Unsubscribe every stream and close the client. */
     destroy() {
+        // Detach the connection-lifecycle listeners we registered in the ctor so
+        // a torn-down feed doesn't keep resubscribing on the shared client.
+        for (const off of this._offClientEvents) { try { off() } catch (_) { /* ignore */ } }
+        this._offClientEvents = []
         const ids = [...this._subs.keys()]
         for (const id of ids) {
             const h = this._subs.get(id)
