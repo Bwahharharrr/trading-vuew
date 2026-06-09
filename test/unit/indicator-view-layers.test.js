@@ -46,13 +46,16 @@ describe('buildChartData — view.layers', () => {
     const cd = buildChartData(rows, { views })
     expect(cd.onchart).toHaveLength(0)
     expect(cd.offchart).toHaveLength(3)
-    const [hist, lines, bull] = cd.offchart
+    const byId = id => cd.offchart.find(o => o.settings.corkyLayerId === id)
+    const hist = byId('hist'), lines = byId('lines'), bull = byId('bull')
     // pane 'macd': histogram is the anchor (no grid.id → spawns grid 1); lines merge into it
     expect(hist.type).toBe('Histogram'); expect(hist.grid).toBeUndefined()
     expect(lines.type).toBe('Splines'); expect(lines.grid).toEqual({ id: 1 })
     expect(lines.data[0]).toEqual([T0, 1, 0.5]) // zipped multi-field [ts, macd, signal]
     // pane 'macd_strength': separate pane (anchor, grid 2)
     expect(bull.type).toBe('Histogram'); expect(bull.grid).toBeUndefined()
+    // Section indexing invariant: all anchors first, grid:{id} pane-siblings last
+    expect(cd.offchart.map(o => o.settings.corkyLayerId)).toEqual(['hist', 'bull', 'lines'])
   })
 
   test('SCMR → candle_color stamps slot 6; TL/TH lines built but hidden', () => {

@@ -291,6 +291,18 @@ export function buildChartData(rows, opts = {}) {
     }
   }
 
+  // Section.vue indexes an offchart grid's anchor as offchart[id-1] (the id-th
+  // NO-grid-id overlay) and merges grid:{id} overlays into it. That holds only
+  // if every grid:{id} (pane sibling) overlay sits AFTER all anchors — the per-
+  // instance layer order interleaves them ([hist, lines#id1, bull]), which would
+  // mis-index a 2nd pane. Reorder: anchors first, pane-siblings last. (No-op when
+  // nothing carries .grid → fallback stays byte-identical.)
+  if (offchart.some((o) => o.grid)) {
+    const ordered = offchart.filter((o) => !o.grid).concat(offchart.filter((o) => o.grid))
+    offchart.length = 0
+    offchart.push(...ordered)
+  }
+
   const result = {
     chart: { type: 'Candles', data: ohlcv },
     onchart,
