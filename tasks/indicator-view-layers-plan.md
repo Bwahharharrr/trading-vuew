@@ -2,7 +2,8 @@
 
 Prefer the chart-feed descriptor's `view.layers` over plotting every output; render only
 `visible_by_default` layers; keep hidden layers toggleable; fallback to plot-every-output.
-Planned via ultracode (6-agent workflow + adversarial review). **Status: in progress.**
+Planned via ultracode (6-agent workflow + adversarial review). **Status: P0–P4 DONE (416 tests
+green, typecheck clean). P5 (persistence across tf-reselect) + P6 (markers) = optional follow-ups.**
 
 ## Protocol (confirmed)
 Descriptor (`candle_states.states[].indicators[]`) carries `view = { version, layers[] }`.
@@ -30,15 +31,22 @@ Rows still carry raw values as `indicators[display_label][output]`.
 - tf-reselect wipes overlays + enabled state + slot-6 → persistence + re-apply in `_finishHistory` (Phase 5).
 
 ## Phases (each tested + committed)
-- [ ] **P0** types (`IndicatorViewSpec`/`LayerSpec` + `view?`) + threading (App.corkySelect→subscribe→handle.views
-  →buildChartData, ignored). Verify fallback goldens byte-identical.
-- [ ] **P1** pane-index resolver + `buildLayerOverlays` (line/Splines/histogram/band) + buildChartData branch +
-  `layerKindToOverlay` + ts-zip + style→sett. **Hard gate:** MACD macd+signal+histogram in ONE grid.
-- [ ] **P2** `visible_by_default` gating in setIndicatorEnabled; raw preserved (sidecar for candle_color).
-- [ ] **P3** candle_color (SCMR/CRUP): pad→9, stamp slot-6 at build + **re-stamp in applyLiveUpdate**; value→color.
-- [ ] **P4** per-layer toggle UI (CorkyDiscoveryPanel nested sub-toggles) + `setLayerEnabled` (object-identity).
-- [ ] **P5** persistence (`corkyLayerVisibility`) + re-apply on tf-reselect in `_finishHistory`.
-- [ ] **P6** (optional) Markers overlay for kind=marker (box already → Zones).
+- [x] **P0** types (`IndicatorViewSpec`/`LayerSpec` + `view?`) + threading (App.corkySelect→subscribe→handle.views
+  →buildChartData). Fallback goldens byte-identical. (commit e557820/efa1eaf)
+- [x] **P1** pane-index resolver + `buildLayerOverlays` (line/Splines/histogram/band) + buildChartData branch +
+  `layerKindToOverlay` + ts-zip + style→sett. MACD macd+signal+histogram in ONE grid (anchor no grid.id). (e557820)
+- [x] **P2** `visible_by_default` gating in setIndicatorEnabled; raw preserved (incl. hidden-layer overlays). (efa1eaf)
+- [x] **P3** candle_color (SCMR/CRUP): pad→9, stamp slot-6 at build + re-stamp in applyLiveUpdate; value→color. (e557820/efa1eaf)
+- [x] **P4** per-layer toggle UI (CorkyDiscoveryPanel nested sub-toggles) + `setLayerEnabled` (object-identity). (5e09063)
+- [ ] **P5** (follow-up) persistence (`corkyLayerVisibility`) + re-apply on tf-reselect in `_finishHistory`.
+  tf-switch currently resets hidden-layer toggles (visible defaults + candle_color always restored).
+- [ ] **P6** (optional) Markers overlay for kind=marker (box already → Zones; marker = hidden metadata until then).
+
+## Known limitations / follow-ups
+- Pane grid-index resolver assigns sequential ids per distinct `target.pane`; if VIEW-pane indicators are mixed
+  with FALLBACK offchart indicators (no grid.id) the numeric indices can drift — gate with a component-harness
+  mount test before relying on multi-indicator pane mixing (single-indicator panes like MACD verified at build level).
+- P5 persistence not done: hidden-layer opt-ins reset on tf-switch.
 
 ## Targets
 SCMR/SCMR(INV): candle_color visible, TL/TH lines hidden-toggleable. MACD: histogram pane + macd/signal
