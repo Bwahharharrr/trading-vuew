@@ -238,6 +238,7 @@ import { CorkyFeed } from '../src/helpers/feed/corky-feed.js'
 import BuysAndSells from './components/overlays/BuysAndSells.js'
 import Balance from './components/overlays/Balance.js'
 import LineTracker from './components/overlays/LineTracker.js'
+import OrderBox from './components/overlays/OrderBox.vue'
 
 // Resolve the Corky chart-feed gateway WS URL (opt-in "Gateway" source).
 // Mirrors the file feed's two-mode buildWsUrl logic so it works from a REMOTE
@@ -277,7 +278,7 @@ export default {
     data() {
         return {
             chart: new DataCube(),
-            overlays: [BuysAndSells, Balance, LineTracker],
+            overlays: [BuysAndSells, Balance, LineTracker, OrderBox],
             // Store DataCube class for mixin use
             DataCubeClass: DataCube,
 

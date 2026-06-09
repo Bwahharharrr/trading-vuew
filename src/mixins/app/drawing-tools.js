@@ -2,6 +2,10 @@
 
 import Utils from '../../stuff/utils.js'
 import Const from '../../stuff/constants.js'
+import { distributeOrders } from '../../stuff/order-distribution.js'
+
+// Deterministic per-session counter for OrderBox $uuid (no Date.now/random).
+let ORDER_BOX_SEQ = 0
 
 // Pure conversion for the rectangle readout. Given the MAIN price grid (exposing
 // screen2$/screen2t/ti_map/prec) and a GRID-RELATIVE box rect (pixels measured
@@ -150,11 +154,39 @@ export default {
         },
 
         onOrderConfirm(cfg) {
-            // Build + persist the OrderBox overlay from the drawn geometry + the
-            // modal config. Filled in P3 (needs the OrderBox overlay component).
+            const g = this.pendingBoxGeometry
             this.orderModalOpen = false
             this.pendingBoxGeometry = null
-            void cfg
+            if (!g || !this.chart || typeof this.chart.add !== 'function') return
+
+            const orders = distributeOrders({
+                low: g.low, high: g.high,
+                qty: cfg.orderQty, size: cfg.orderSize, dist: cfg.distribution
+            }).map(o => ({ ...o, status: 'local' }))
+
+            // Persist as an OrderBox overlay anchored to DATA coords (corner Pins
+            // c0/c1 = [t, price]); it redraws + tracks zoom/pan automatically.
+            this.chart.add('onchart', {
+                name: 'Order Distribution',
+                type: 'OrderBox',
+                grid: { id: 0 },
+                data: [],
+                settings: {
+                    $uuid: `orderbox-${++ORDER_BOX_SEQ}`,
+                    $selected: false,
+                    $state: 'finished',
+                    'z-index': 100,
+                    legend: false,
+                    c0: [g.tStart, g.low],
+                    c1: [g.tEnd, g.high],
+                    side: cfg.side,
+                    visible: true,
+                    totalSize: cfg.orderSize,
+                    qty: cfg.orderQty,
+                    distribution: cfg.distribution,
+                    orders
+                }
+            })
         },
 
         onOrderCancel() {
