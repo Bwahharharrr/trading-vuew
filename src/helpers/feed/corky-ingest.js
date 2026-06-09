@@ -136,9 +136,11 @@ function resolveView(views, instanceKey, kind) {
   const get = (k) => (views instanceof Map ? views.get(k) : views[k])
   let v = get(instanceKey)
   if (v) return v.layers ? v : (v.view || null)
-  // kind fallback only if unambiguous
+  // kind fallback only if unambiguous (case-insensitive: rows may use 'sma:20'
+  // while the descriptor kind is 'sma'; kindOf('SMA(20)') is 'SMA').
+  const kl = String(kind).toLowerCase()
   const all = views instanceof Map ? [...views.values()] : Object.values(views)
-  const sameKind = all.filter((e) => (e && (e.kind === kind)) || false)
+  const sameKind = all.filter((e) => e && e.kind && String(e.kind).toLowerCase() === kl)
   if (sameKind.length === 1) {
     const e = sameKind[0]
     return e.layers ? e : (e.view || null)
@@ -187,14 +189,18 @@ function zipFields(fields, outputsMap) {
 // (candle_color stamps the candle colour slot; raw values stay in the pivot).
 export function buildLayerOverlays(instanceKey, kind, outputsMap, view, paneResolver) {
   const onchart = []; const offchart = []; const candleColorByTs = new Map()
+  const candleColorMeta = []
   for (const layer of view.layers) {
     const fields = (layer.fields && layer.fields.length) ? layer.fields : [...outputsMap.keys()]
     if (layer.kind === 'candle_color') {
-      const s = outputsMap.get(fields[0])
+      const field = fields[0]
+      const s = outputsMap.get(field)
       if (s) for (const [ts, rawVal] of s.raw) {
         const c = candleColorOf(rawVal)
         if (c != null) candleColorByTs.set(ts, c)
       }
+      // Live re-stamp needs the source field (applyLiveUpdate rebuilds the tuple).
+      candleColorMeta.push({ instanceKey, field })
       continue
     }
     const overlayType = layerKindToOverlay(layer.kind, fields.length)
@@ -220,7 +226,7 @@ export function buildLayerOverlays(instanceKey, kind, outputsMap, view, paneReso
       onchart.push(overlay)
     }
   }
-  return { onchart, offchart, candleColorByTs }
+  return { onchart, offchart, candleColorByTs, candleColorMeta }
 }
 
 export function buildChartData(rows, opts = {}) {
@@ -247,6 +253,7 @@ export function buildChartData(rows, opts = {}) {
   // 1) view-driven instances → per-layer overlays + candle-colour stamps.
   const paneResolver = makePaneResolver()
   const candleColorByTs = new Map()
+  const candleColorMeta = []
   const viewInstances = new Set()
   for (const [instanceKey, g] of byInstance) {
     const view = viewOf(instanceKey, g.kind)
@@ -256,6 +263,7 @@ export function buildChartData(rows, opts = {}) {
     for (const ov of built.onchart) onchart.push(ov)
     for (const ov of built.offchart) offchart.push(ov)
     for (const [ts, color] of built.candleColorByTs) candleColorByTs.set(ts, color)
+    for (const m of built.candleColorMeta) candleColorMeta.push(m)
   }
 
   // 2) fallback (no/empty view) → plot every output (BYTE-IDENTICAL to legacy).
@@ -283,11 +291,20 @@ export function buildChartData(rows, opts = {}) {
     }
   }
 
-  return {
+  const result = {
     chart: { type: 'Candles', data: ohlcv },
     onchart,
     offchart,
   }
+  // Live-update metadata: candle_color source fields (the tuple is rebuilt each
+  // tick, so applyLiveUpdate must re-stamp slot 6). Non-enumerable so it doesn't
+  // leak into spreads / golden comparisons.
+  if (candleColorMeta.length) {
+    Object.defineProperty(result, '_candleColor', {
+      value: candleColorMeta, enumerable: false, configurable: true, writable: true
+    })
+  }
+  return result
 }
 
 // ─────────────────────────────────────────────────────────── assembling ──
@@ -398,14 +415,78 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
   for (const instanceKey of Object.keys(inds)) {
     const outputs = inds[instanceKey] || {}
     for (const output of Object.keys(outputs)) {
-      const key = instanceKey + '.' + output
-      const ov = findOverlayByKey(chartDataObj, key)
-      if (!ov) continue // overlay not built (indicator wasn't in history)
-      upsertByTs(ov.data, [ts, decimalToNumber(outputs[output])])
-      if (ov.raw) upsertByTs(ov.raw, [ts, outputs[output]])
+      const numv = decimalToNumber(outputs[output])
+      // (a) Legacy/fallback single-output overlay keyed by instanceKey.output.
+      const ov = findOverlayByKey(chartDataObj, instanceKey + '.' + output)
+      if (ov) {
+        upsertByTs(ov.data, [ts, numv])
+        if (ov.raw) upsertByTs(ov.raw, [ts, outputs[output]])
+      }
+      // (b) view overlays consuming this field (by corkyInstance + corkyFields),
+      //     writing the value into its column (multi-field Splines/Channel/Zones).
+      for (const vov of viewOverlaysFor(chartDataObj, instanceKey, output)) {
+        const col = vov.settings.corkyFields.indexOf(output) + 1
+        const ncol = vov.settings.corkyFields.length
+        upsertColumn(vov.data, ts, col, ncol, numv)
+        if (vov.raw) upsertColumn(vov.raw, ts, col, ncol, outputs[output])
+      }
+    }
+  }
+
+  // candle_color: rowToOhlcv above replaced the candle tuple with a fresh
+  // 6-element array, destroying any slot-6 colour — re-stamp it from the live
+  // field value so SCMR/CRUP coloring persists across ticks.
+  const ccMeta = chartDataObj._candleColor
+  if (ccMeta && ccMeta.length) {
+    let candle = null
+    const arr = chartDataObj.chart.data
+    for (let i = arr.length - 1; i >= 0; i--) { if (arr[i][0] === ts) { candle = arr[i]; break } }
+    if (candle) {
+      for (const cc of ccMeta) {
+        const v = inds[cc.instanceKey] && inds[cc.instanceKey][cc.field]
+        const color = candleColorOf(v)
+        if (color != null) { while (candle.length < 9) candle.push(''); candle[6] = color }
+      }
     }
   }
 
   lastSeqBySub[sub] = seq
   return { chart: chartDataObj, applied: true, sequence: seq }
+}
+
+// View overlays (built from view.layers) that consume `output` of `instanceKey`.
+function viewOverlaysFor(chartDataObj, instanceKey, output) {
+  const out = []
+  for (const pane of ['onchart', 'offchart']) {
+    const arr = chartDataObj[pane]
+    if (!arr) continue
+    for (const ov of arr) {
+      const s = ov.settings
+      if (s && s.corkyView && s.corkyInstance === instanceKey &&
+          Array.isArray(s.corkyFields) && s.corkyFields.includes(output)) {
+        out.push(ov)
+      }
+    }
+  }
+  return out
+}
+
+// Upsert a value into column `col` of the row at `ts` in a multi-column array
+// ([ts, c1..cn]); insert a fresh ncol+1 row (nulls) if the ts is new.
+function upsertColumn(data, ts, col, ncol, value) {
+  const last = data.length - 1
+  let rowArr
+  if (last >= 0 && data[last][0] === ts) {
+    rowArr = data[last]
+  } else if (last < 0 || data[last][0] < ts) {
+    rowArr = [ts]; for (let i = 0; i < ncol; i++) rowArr.push(null)
+    data.push(rowArr)
+  } else {
+    // out-of-order: binary search
+    let lo = 0, hi = data.length
+    while (lo < hi) { const m = (lo + hi) >> 1; if (data[m][0] < ts) lo = m + 1; else hi = m }
+    if (lo < data.length && data[lo][0] === ts) rowArr = data[lo]
+    else { rowArr = [ts]; for (let i = 0; i < ncol; i++) rowArr.push(null); data.splice(lo, 0, rowArr) }
+  }
+  rowArr[col] = value
 }

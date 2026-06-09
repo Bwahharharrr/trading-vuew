@@ -479,8 +479,20 @@ export default {
                 timeframe: opts.timeframe,
                 indicators: [],
             }
+            // Assemble the indicator VIEW map (display_label → { kind, view }) from
+            // the discovery descriptors for this venue/symbol so buildChartData can
+            // prefer view.layers over plotting every output. (The select opts from
+            // the panel don't carry descriptors, so read corkyStates here.)
+            const state = (this.corkyStates || []).find(
+                s => s && s.venue === opts.venue && s.symbol === opts.symbol)
+            const views = {}
+            for (const ind of ((state && state.indicators) || [])) {
+                if (ind && ind.view && ind.display_label) {
+                    views[ind.display_label] = { kind: ind.kind, view: ind.view }
+                }
+            }
             try {
-                this.corkyHandle = await this.corkyFeed.subscribe(opts, {
+                this.corkyHandle = await this.corkyFeed.subscribe({ ...opts, views }, {
                     onStatus: (status) => {
                         this.corkyProgress = status
                         if (status && (status.phase === 'history-complete' ||

@@ -80,7 +80,7 @@ export class CorkyFeed extends FeedSource {
      * @returns {Promise<object>} a handle (carries the subscription_id).
      */
     async subscribe(opts = {}, handlers = {}) {
-        const { venue, symbol, timeframe, indicators, range } = opts
+        const { venue, symbol, timeframe, indicators, range, views } = opts
         const onStatus = handlers.onStatus || (() => {})
         const onError = handlers.onError || (() => {})
 
@@ -98,7 +98,9 @@ export class CorkyFeed extends FeedSource {
             // toggled-on overlays) are ever pushed to the DataCube.
             built: null,           // {chart,onchart,offchart,timeframe}
             liveView: null,        // === built (applyLiveUpdate target)
+            views: views || null,      // display_label → { kind, view } (descriptor views)
             enabledKinds: new Set(),   // indicator kinds currently shown in the DC
+            enabledLayers: new Set(),  // per-layer ids currently shown (view.layers)
             addedOverlays: new Set(),  // overlay objects currently added to the DC
             lastSeqBySub: {},      // per-sub last sequence (out-of-order guard)
             unsubFanout: null,     // detach the client.onSubscription listener
@@ -197,7 +199,7 @@ export class CorkyFeed extends FeedSource {
         handle.history_complete = true
 
         const rows = assembleChunks(handle.chunks)
-        const built = buildChartData(rows, { timeframe: handle.timeframe })
+        const built = buildChartData(rows, { timeframe: handle.timeframe, views: handle.views })
         // Tag the FULL structure with the timeframe so applyLiveUpdate's single-
         // tf invariant works when it mutates `built` directly.
         built.timeframe = handle.timeframe
@@ -275,21 +277,29 @@ export class CorkyFeed extends FeedSource {
         const overlays = [...built.onchart, ...built.offchart]
             .filter(ov => ov.settings && ov.settings.corkyKind === kind)
 
+        // For view-driven overlays, auto-add ONLY visible_by_default layers; a
+        // hidden view layer is opt-in via setLayerEnabled. Fallback overlays
+        // (no corkyView) always add (legacy plot-every-output behaviour).
+        const autoVisible = (ov) =>
+            !ov.settings.corkyView || ov.settings.corkyVisibleDefault !== false
+
         let changed = false
         if (on) {
             for (const ov of built.onchart) {
-                if (ov.settings && ov.settings.corkyKind === kind &&
+                if (ov.settings && ov.settings.corkyKind === kind && autoVisible(ov) &&
                     !handle.addedOverlays.has(ov)) {
                     dc.add('onchart', ov)   // assigns ov.id, appends by reference
                     handle.addedOverlays.add(ov)
+                    if (ov.settings.corkyLayerId) handle.enabledLayers.add(ov.settings.corkyLayerId)
                     changed = true
                 }
             }
             for (const ov of built.offchart) {
-                if (ov.settings && ov.settings.corkyKind === kind &&
+                if (ov.settings && ov.settings.corkyKind === kind && autoVisible(ov) &&
                     !handle.addedOverlays.has(ov)) {
                     dc.add('offchart', ov)
                     handle.addedOverlays.add(ov)
+                    if (ov.settings.corkyLayerId) handle.enabledLayers.add(ov.settings.corkyLayerId)
                     changed = true
                 }
             }
@@ -307,6 +317,51 @@ export class CorkyFeed extends FeedSource {
 
         if (changed) dc.touchData()
         return overlays.length > 0
+    }
+
+    /**
+     * Show/hide a single view LAYER (for opt-in of hidden layers like TL/TH/
+     * diagnostics). Matches built overlays by settings.corkyLayerId and add/
+     * removes them by object identity (NOT dc.del — substring-id hazard).
+     * @returns {boolean} whether any overlay matched the layer.
+     */
+    setLayerEnabled(handle, layerId, on) {
+        if (!handle || !handle.built || !layerId) return false
+        const dc = this.dc
+        const built = handle.built
+        let changed = false
+        let matched = false
+        if (on) {
+            for (const pane of ['onchart', 'offchart']) {
+                for (const ov of built[pane]) {
+                    if (ov.settings && ov.settings.corkyLayerId === layerId) {
+                        matched = true
+                        if (!handle.addedOverlays.has(ov)) {
+                            dc.add(pane, ov)
+                            handle.addedOverlays.add(ov)
+                            changed = true
+                        }
+                    }
+                }
+            }
+            if (matched) handle.enabledLayers.add(layerId)
+        } else {
+            for (const pane of ['onchart', 'offchart']) {
+                for (const ov of built[pane]) {
+                    if (ov.settings && ov.settings.corkyLayerId === layerId) {
+                        matched = true
+                        if (handle.addedOverlays.has(ov)) {
+                            this._removeOverlay(dc, ov)
+                            handle.addedOverlays.delete(ov)
+                            changed = true
+                        }
+                    }
+                }
+            }
+            handle.enabledLayers.delete(layerId)
+        }
+        if (changed) dc.touchData()
+        return matched
     }
 
     // Remove one overlay by OBJECT IDENTITY. We must NOT use dc.del(ov.id):

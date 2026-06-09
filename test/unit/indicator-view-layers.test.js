@@ -1,7 +1,7 @@
 // Golden tests for view.layers-driven indicator rendering in buildChartData.
 // Prefer descriptor.view.layers over plot-every-output; fallback byte-identical.
 import { test, expect, describe } from 'vitest'
-import { buildChartData } from '../../src/helpers/feed/corky-ingest.js'
+import { buildChartData, applyLiveUpdate } from '../../src/helpers/feed/corky-ingest.js'
 
 const T0 = 1779465000000, TF = 60000
 function row(i, indicators) {
@@ -103,6 +103,39 @@ describe('buildChartData — view.layers', () => {
     expect(withNull.offchart[0].type).toBe('Spline')
     expect(withNull.offchart[0].settings).toEqual({ corkyKey: 'rsi:14.rsi', corkyKind: 'rsi', corkyOutput: 'rsi' })
     expect(withNull.chart.data[0].length).toBe(6) // no candle_color → tuple unchanged
+  })
+
+  test('live: candle_color re-stamped + multi-field view overlay column write', () => {
+    const views = {
+      MACD: view('macd', [
+        { id: 'lines', label: 'MACD', kind: 'line', target: { surface: 'pane', pane: 'macd' }, fields: ['macd', 'signal'], visible_by_default: true }
+      ]),
+      SCMR: view('scmr', [
+        { id: 'color', label: 'C', kind: 'candle_color', target: { surface: 'price' }, fields: ['ct'], visible_by_default: true }
+      ])
+    }
+    const built = buildChartData([row(0, { MACD: { macd: '1', signal: '0.5' }, SCMR: { ct: 'bull' } })], { views })
+    built.timeframe = '1m'
+    expect(built.chart.data[0][6]).toBe('#23a776')
+
+    const ts1 = T0 + TF
+    const ev = {
+      subscription_id: 's', sequence: 1,
+      row: {
+        timeframe: '1m',
+        candle: { timestamp_ms: ts1, open: '10', high: '12', low: '9', close: '11', volume: '1' },
+        indicators: { MACD: { macd: '2', signal: '1.5' }, SCMR: { ct: 'bear' } }
+      }
+    }
+    const res = applyLiveUpdate(built, ev, {})
+    expect(res.applied).toBe(true)
+    // candle_color re-stamped on the rebuilt candle tuple (slot 6)
+    const c = built.chart.data[built.chart.data.length - 1]
+    expect(c[0]).toBe(ts1)
+    expect(c[6]).toBe('#e54150') // bear
+    // multi-field MACD lines overlay got a new zipped row [ts1, macd, signal]
+    const lines = built.offchart.find(o => o.settings.corkyLayerId === 'lines')
+    expect(lines.data[lines.data.length - 1]).toEqual([ts1, 2, 1.5])
   })
 
   test('empty view.layers → fallback for that instance', () => {
