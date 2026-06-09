@@ -50,7 +50,10 @@ export default {
             rectDrawMode: false,
             isDrawing: false,
             rectStart: null,
-            rectCurrent: null
+            rectCurrent: null,
+            // Order-distribution modal handoff (opened after a box is drawn).
+            orderModalOpen: false,
+            pendingBoxGeometry: null   // { tStart, tEnd, low, high } (data coords)
         }
     },
     methods: {
@@ -123,13 +126,40 @@ export default {
                         `Start: ${r.tStart}  (${r.startStr})\n` +
                         `End:   ${r.tEnd}  (${r.endStr})`
                     )
+
+                    // Hand off to the order-distribution modal (the debug alert
+                    // above is kept). Stash geometry in DATA coords so the saved
+                    // OrderBox overlay can anchor to it (boxReadout high/low are
+                    // formatted strings -> Number()).
+                    this.pendingBoxGeometry = {
+                        tStart: r.tStart,
+                        tEnd: r.tEnd,
+                        low: Number(r.low),
+                        high: Number(r.high)
+                    }
+                    this.orderModalOpen = true
                 }
             }
 
+            // rectDrawMode=false unmounts the z-index:999 .drawing-overlay so it
+            // stops swallowing clicks meant for the saved OrderBox handles.
             this.isDrawing = false
             this.rectStart = null
             this.rectCurrent = null
             this.rectDrawMode = false
+        },
+
+        onOrderConfirm(cfg) {
+            // Build + persist the OrderBox overlay from the drawn geometry + the
+            // modal config. Filled in P3 (needs the OrderBox overlay component).
+            this.orderModalOpen = false
+            this.pendingBoxGeometry = null
+            void cfg
+        },
+
+        onOrderCancel() {
+            this.orderModalOpen = false
+            this.pendingBoxGeometry = null
         }
     }
 }

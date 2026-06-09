@@ -216,12 +216,21 @@
         @close="closeIndicatorSettings"
         @apply="applyIndicatorSettings">
     </indicator-settings>
+
+    <!-- Order Distribution Modal (opened after a box is drawn) -->
+    <order-distribution-modal
+        v-if="orderModalOpen"
+        :geometry="pendingBoxGeometry"
+        @confirm="onOrderConfirm"
+        @close="onOrderCancel">
+    </order-distribution-modal>
 </div>
 </template>
 
 <script>
 import TradingVue from './TradingVue.vue'
 import IndicatorSettings from './components/IndicatorSettings.vue'
+import OrderDistributionModal from './components/OrderDistributionModal.vue'
 import CorkyDiscoveryPanel from './components/feed/CorkyDiscoveryPanel.vue'
 import DataCube from '../src/helpers/datacube.js'
 import { CorkyClient } from '../src/helpers/feed/corky-client.js'
@@ -262,6 +271,7 @@ export default {
     components: {
         TradingVue,
         IndicatorSettings,
+        OrderDistributionModal,
         CorkyDiscoveryPanel
     },
     data() {
