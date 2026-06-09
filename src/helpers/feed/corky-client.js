@@ -149,10 +149,26 @@ export class CorkyClient {
         this._scheduleReconnect()
     }
 
+    // True while the socket may still come back: backoff is enabled, the user
+    // hasn't closed us, and we haven't burned through maxRetries. Used by _send
+    // to decide whether a frame for a dead socket should be queued (a reconnect
+    // will flush it in onopen) or rejected outright.
+    _reconnectPossible() {
+        if (this._closedByUser || !this._backoffCfg) return false
+        return this._retries < this._backoffCfg.maxRetries
+    }
+
     _scheduleReconnect() {
         const cfg = this._backoffCfg
         if (this._retries >= cfg.maxRetries) {
             this._emitter.emit('reconnect-exhausted', { retries: this._retries })
+            // Backoff is spent: no socket is coming back. Fail every still-pending
+            // request (and drop queued-but-unsent frames) so awaiters reject
+            // instead of hanging forever.
+            this._sendQueue = []
+            this._failAllPending(
+                new CorkyError('reconnect_exhausted', 'reconnect attempts exhausted', false),
+            )
             return
         }
         const delay = Math.min(cfg.max, cfg.base * Math.pow(cfg.factor, this._retries))
@@ -273,12 +289,27 @@ export class CorkyClient {
     _send(frame) {
         if (!this._socket) throw new Error('CorkyClient: not connected (call connect())')
         const data = JSON.stringify(frame)
-        // WebSocket.CONNECTING === 0. While the socket is still connecting,
-        // calling .send() throws "Failed to execute 'send': Still in CONNECTING
-        // state" — so QUEUE the frame and flush it in onopen. A caller can thus
-        // fire a request immediately after connect() (as App.vue does). Test
-        // fake sockets have no readyState (undefined) → treated as open, sent now.
-        if (this._socket.readyState === 0) {
+        // WebSocket.readyState: 0 CONNECTING, 1 OPEN, 2 CLOSING, 3 CLOSED.
+        // Only OPEN can take a frame: calling .send() in CONNECTING throws, and
+        // in CLOSING/CLOSED the spec SILENTLY DISCARDS the frame — which would
+        // strand the request promise forever. So for any non-OPEN state we QUEUE
+        // the frame and let onopen flush it once a (re)connected socket opens.
+        //   - CONNECTING: the imminent onopen flushes it (a caller can fire a
+        //     request right after connect(), as App.vue does).
+        //   - CLOSING/CLOSED: a pending/scheduled reconnect's onopen flushes it —
+        //     but only if a reconnect is actually coming. If reconnect is disabled
+        //     or already exhausted, no socket will reopen, so THROW instead and
+        //     let _request convert it into a promise rejection (don't hang).
+        // Test fake sockets have no readyState (undefined) → treated as OPEN.
+        const rs = this._socket.readyState
+        if (rs != null && rs !== 1) {
+            if (rs !== 0 && !this._reconnectPossible()) {
+                throw new CorkyError(
+                    'not_connected',
+                    'socket is closing/closed and no reconnect is pending',
+                    true,
+                )
+            }
             (this._sendQueue || (this._sendQueue = [])).push(data)
             return
         }
