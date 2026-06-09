@@ -18,6 +18,9 @@ const GRAB_W = 20        // grab (≡) zone width
 const DEL_W = 18         // delete (✕) zone width
 const MIN_MID = 44       // min width for the size label segment
 const EYE = 16           // eye icon box size
+const HND = 8            // half resize-handle grab size (px)
+const BTN_H = 16         // status button height
+const BTN_PADX = 8       // status button horizontal padding
 
 function inRect(r, x, y) {
     return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h
@@ -41,14 +44,26 @@ export default {
             this.pins[1].on('settled', () => this.recompute_orders())
 
             this._dragOrder = null
+            this._dragResize = null
             this.mouse.on('mousedown', e => this.on_mousedown(e))
             this.mouse.on('mousemove', () => this.on_mousemove())
             this.mouse.on('mouseup', e => this.on_mouseup(e))
         },
 
-        // Screen-space box rect from the two corner data-coords.
+        // Live corner coords: prefer the Pin's OWN state (set synchronously by
+        // Tool.drag_update / resize during a drag) over settings.c0/c1, which
+        // only refresh after an async re-render — otherwise the box lags the
+        // corner dots ("dots move, box doesn't"). Pins hydrate from settings on
+        // init, so this is correct at rest / on zoom too.
+        corner(i) {
+            const p = this.pins[i]
+            if (p && p.t != null && p.y$ != null) return [p.t, p.y$]
+            return i === 0 ? this.sett.c0 : this.sett.c1
+        },
+
+        // Screen-space box rect from the two (live) corner data-coords.
         box_rect() {
-            const c0 = this.sett.c0, c1 = this.sett.c1
+            const c0 = this.corner(0), c1 = this.corner(1)
             if (!c0 || !c1) return null
             const L = this.$props.layout
             const x0 = L.t2screen(c0[0]), x1 = L.t2screen(c1[0])
@@ -60,11 +75,40 @@ export default {
         },
 
         // Per-frame geometry used by BOTH draw() and hit-testing.
-        order_geometry(r) {
+        order_geometry(ctx, r) {
             const L = this.$props.layout
             const eye = { x: r.xL + 4, y: r.yT + 4, w: EYE, h: EYE }
-            // Submit button (▶) sits just right of the eye.
-            const submit = { x: r.xL + 4 + EYE + 4, y: r.yT + 4, w: EYE, h: EYE }
+            // Status button — width measured to fit the label.
+            const st = this.order_status()
+            ctx.save(); ctx.font = this.font11
+            const tw = Math.ceil(ctx.measureText(st.label).width)
+            ctx.restore()
+            const submit = { x: r.xL + 4 + EYE + 4, y: r.yT + 4, w: tw + BTN_PADX * 2, h: BTN_H, st }
+
+            // Resize handles: 4 corners + 4 edge midpoints. Ownership uses the
+            // LIVE corners (corner()), the same source as r, so a flipped box
+            // maps the visual edge to the correct c0/c1 component each frame.
+            const lc0 = this.corner(0), lc1 = this.corner(1)
+            let resize = []
+            if (lc0 && lc1) {
+                const cxL = L.t2screen(lc0[0]) <= L.t2screen(lc1[0]) ? 0 : 1 // owns left x
+                const cxR = cxL ^ 1
+                const cyT = L.$2screen(lc0[1]) <= L.$2screen(lc1[1]) ? 0 : 1 // owns top y
+                const cyB = cyT ^ 1
+                const mx = (r.xL + r.xR) / 2, my = (r.yT + r.yB) / 2
+                const hb = (cx, cy) => ({ x: cx - HND, y: cy - HND, w: HND * 2, h: HND * 2 })
+                resize = [
+                    { rect: hb(r.xL, r.yT), edits: [{ pin: cxL, axis: 't' }, { pin: cyT, axis: '$' }] },
+                    { rect: hb(r.xR, r.yT), edits: [{ pin: cxR, axis: 't' }, { pin: cyT, axis: '$' }] },
+                    { rect: hb(r.xL, r.yB), edits: [{ pin: cxL, axis: 't' }, { pin: cyB, axis: '$' }] },
+                    { rect: hb(r.xR, r.yB), edits: [{ pin: cxR, axis: 't' }, { pin: cyB, axis: '$' }] },
+                    { rect: hb(r.xL, my), edits: [{ pin: cxL, axis: 't' }] },
+                    { rect: hb(r.xR, my), edits: [{ pin: cxR, axis: 't' }] },
+                    { rect: hb(mx, r.yT), edits: [{ pin: cyT, axis: '$' }] },
+                    { rect: hb(mx, r.yB), edits: [{ pin: cyB, axis: '$' }] }
+                ]
+            }
+
             const rows = []
             if (this.visible) {
                 for (const o of this.orders) {
@@ -83,11 +127,31 @@ export default {
                     })
                 }
             }
-            return { eye, submit, rows }
+            return { eye, submit, rows, resize }
         },
 
-        // Are any orders still un-submitted (local)?
-        has_local() { return this.orders.some(o => (o.status || 'local') === 'local') },
+        // Aggregate order status → button {label, color, submittable}. Some mixed
+        // states only occur with a real backend (TODO) — the sync stub reaches
+        // all-local / pending / all-confirmed / all-rejected.
+        order_status() {
+            const os = this.orders
+            const accent = this.side === 'buy' ? this.color_buy : this.color_sell
+            if (!os.length) return { label: 'No orders', color: '#5b6472', submittable: false }
+            const st = s => os.every(o => (o.status || 'local') === s)
+            const any = s => os.some(o => (o.status || 'local') === s)
+            if (st('local')) return { label: 'Submit', color: accent, submittable: true }
+            if (any('pending')) return { label: 'Pending…', color: '#d0a000', submittable: this.has_submittable() }
+            if (st('confirmed')) return { label: 'Confirmed', color: this.color_buy, submittable: false }
+            if (st('rejected')) return { label: 'Rejected', color: this.color_sell, submittable: true }
+            // TODO(backend): mixed terminal states need the real engine.
+            if (any('rejected')) return { label: 'Partially Rejected', color: this.color_sell, submittable: true }
+            return { label: 'Partially Confirmed', color: accent, submittable: this.has_submittable() }
+        },
+
+        // Any order that can be (re)submitted (local or rejected).
+        has_submittable() {
+            return this.orders.some(o => { const s = o.status || 'local'; return s === 'local' || s === 'rejected' })
+        },
 
         draw(ctx) {
             const r = this.box_rect()
@@ -108,13 +172,30 @@ export default {
             ctx.strokeRect(r.xL + 0.5, r.yT + 0.5, r.xR - r.xL - 1, r.yB - r.yT - 1)
             ctx.restore()
 
-            const geom = this.order_geometry(r)
+            const geom = this.order_geometry(ctx, r)
             this._geom = geom
             for (const row of geom.rows) this.draw_order(ctx, row, stroke)
             this.draw_eye(ctx, geom.eye, this.visible, stroke)
-            this.draw_submit(ctx, geom.submit, stroke)
+            this.draw_submit(ctx, geom.submit)
 
             this.render_pins(ctx)
+            // Resize handles only when the box is selected/hovered (like pins).
+            if (this.selected || this.show_pins) {
+                this.draw_resize_handles(ctx, geom.resize, stroke)
+            }
+        },
+
+        draw_resize_handles(ctx, handles, color) {
+            if (!handles) return
+            ctx.save()
+            ctx.fillStyle = this.$props.colors.back || '#0b0e16'
+            ctx.strokeStyle = color
+            ctx.lineWidth = 1
+            for (const h of handles) {
+                ctx.fillRect(h.rect.x, h.rect.y, h.rect.w, h.rect.h)
+                ctx.strokeRect(h.rect.x + 0.5, h.rect.y + 0.5, h.rect.w - 1, h.rect.h - 1)
+            }
+            ctx.restore()
         },
 
         draw_order(ctx, row, color) {
@@ -189,17 +270,37 @@ export default {
             ctx.restore()
         },
 
-        // Submit (▶) — dimmed when nothing is left to submit.
-        draw_submit(ctx, s, color) {
+        // Labeled status button: filled+clickable when submittable, else an
+        // outlined status display.
+        draw_submit(ctx, s) {
+            const st = s.st
+            const rr = 3
             ctx.save()
-            ctx.globalAlpha = this.has_local() ? 1 : 0.35
-            ctx.fillStyle = color
             ctx.beginPath()
-            ctx.moveTo(s.x + 3, s.y + 2)
-            ctx.lineTo(s.x + s.w - 3, s.y + s.h / 2)
-            ctx.lineTo(s.x + 3, s.y + s.h - 2)
+            ctx.moveTo(s.x + rr, s.y)
+            ctx.arcTo(s.x + s.w, s.y, s.x + s.w, s.y + s.h, rr)
+            ctx.arcTo(s.x + s.w, s.y + s.h, s.x, s.y + s.h, rr)
+            ctx.arcTo(s.x, s.y + s.h, s.x, s.y, rr)
+            ctx.arcTo(s.x, s.y, s.x + s.w, s.y, rr)
             ctx.closePath()
-            ctx.fill()
+            if (st.submittable) {
+                ctx.fillStyle = st.color
+                ctx.fill()
+                ctx.fillStyle = this.$props.colors.back || '#0b0e16'
+            } else {
+                ctx.globalAlpha = 0.6
+                ctx.strokeStyle = st.color
+                ctx.lineWidth = 1
+                ctx.stroke()
+                ctx.globalAlpha = 1
+                ctx.fillStyle = st.color
+            }
+            ctx.font = this.font11
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'middle'
+            ctx.fillText(st.label, s.x + s.w / 2, s.y + s.h / 2 + 0.5)
+            ctx.textAlign = 'left'
+            ctx.textBaseline = 'alphabetic'
             ctx.restore()
         },
 
@@ -210,9 +311,10 @@ export default {
             if (!g) return
             const mx = this.mouse.x, my = this.mouse.y
 
-            // Submit (▶) — send orders to the agent (local->pending->confirmed).
+            // Status button — submit only when there are unsubmitted orders;
+            // otherwise it's a status display (no-op) but still consumes the click.
             if (inRect(g.submit, mx, my)) {
-                if (this.has_local()) this.custom_event('submit-orders')
+                if (g.submit.st.submittable) this.custom_event('submit-orders')
                 e.preventDefault()
                 return
             }
@@ -238,10 +340,40 @@ export default {
                     return
                 }
             }
-            // else: fall through to box Pins / Tool (select / move / resize).
+            // Resize handles (corners/edges) — only active when shown.
+            if (this.selected || this.show_pins) {
+                for (const h of (g.resize || [])) {
+                    if (inRect(h.rect, mx, my)) {
+                        this._dragResize = h.edits
+                        if (!this.selected) this.custom_event('object-selected')
+                        this.custom_event('scroll-lock', true)
+                        e.preventDefault()
+                        return
+                    }
+                }
+            }
+            // else: fall through to box Pins / Tool (select / move).
         },
 
         on_mousemove() {
+            // Resize a corner/edge: edit only the owned c0/c1 components, keep
+            // the PINS' live state in sync (so corner()/box_rect follow THIS
+            // frame — the settings prop only refreshes after the async re-render),
+            // and persist via change-settings.
+            if (this._dragResize) {
+                const t = this.$props.cursor.t, y$ = this.$props.cursor.y$
+                if (t == null || y$ == null) return
+                const c0 = [...this.sett.c0], c1 = [...this.sett.c1]
+                const pick = i => i === 0 ? c0 : c1
+                for (const ed of this._dragResize) {
+                    const p = pick(ed.pin)
+                    if (ed.axis === 't') p[0] = t; else p[1] = y$
+                }
+                this.pins[0].update_from(c0, false)
+                this.pins[1].update_from(c1, false)
+                this.custom_event('change-settings', { c0, c1 })
+                return
+            }
             if (this._dragOrder == null) return
             // cursor.y$ is already updated for this move (grid emits
             // cursor-changed before propagating to overlays).
@@ -251,6 +383,12 @@ export default {
         },
 
         on_mouseup() {
+            if (this._dragResize) {
+                this._dragResize = null
+                this.custom_event('scroll-lock', false)
+                this.recompute_orders()   // re-derive the distribution for the new range
+                return
+            }
             if (this._dragOrder == null) return
             const o = this.orders.find(x => x.id === this._dragOrder)
             this._dragOrder = null
@@ -275,9 +413,11 @@ export default {
             this.custom_event('change-settings', { orders: next })
         },
 
-        // Resize → re-derive the distribution from the new box range.
+        // Resize → re-derive the distribution from the new box range. Use the
+        // live corners (pin state) so it's correct even if the settings prop
+        // hasn't re-propagated yet.
         recompute_orders() {
-            const c0 = this.sett.c0, c1 = this.sett.c1
+            const c0 = this.corner(0), c1 = this.corner(1)
             if (!c0 || !c1) return
             const low = Math.min(c0[1], c1[1])
             const high = Math.max(c0[1], c1[1])

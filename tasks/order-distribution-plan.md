@@ -1,8 +1,12 @@
 # Order Distribution Tool — Implementation Plan
 
 Prototype (visual-first) for a bracket "order distribution" drawing tool, built on the existing box
-tool. Planned via ultracode (7-agent workflow + adversarial review). **Status: planned, awaiting
-approval.**
+tool. Planned via ultracode (7-agent workflow + adversarial review).
+
+**Status: COMPLETE (2026-06-09).** All phases P0–P6 implemented, tested, and committed per-phase
+(7 feat commits + 1 review-fix commit on `modernization/phase-1-4`). 385 tests green, typecheck clean.
+A final 5-agent adversarial review caught + fixed one blocker (agent must follow the active DataCube)
+and hardened the agent for the future async ws swap; it confirmed the rest sound.
 
 ## Goal
 Draw a box → keep the existing debug alert → open a modal (Order Size / Order Qty / distribution /

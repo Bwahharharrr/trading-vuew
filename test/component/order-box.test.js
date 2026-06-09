@@ -183,4 +183,104 @@ describe('OrderBox overlay (P3)', () => {
       expect(row.widget.x + row.widget.w).toBeLessThanOrEqual(box.xR + 0.01)
     }
   })
+
+  // BUG 1: box must follow the corner Pins' LIVE state during a drag (not the
+  // stale settings prop). Moving the pins without settling must shift box_rect.
+  test('box_rect follows live pin state (move bug)', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    dc.touchData(); await settle(6)
+    const before = ob.box_rect()
+    const s = dc.data.onchart[0].settings
+    ob.pins[0].update_from([s.c0[0] + 5 * TF, s.c0[1]], false) // move pins, NO emit/settle
+    ob.pins[1].update_from([s.c1[0] + 5 * TF, s.c1[1]], false)
+    const after = ob.box_rect()
+    expect(after.xL).toBeGreaterThan(before.xL) // box shifted with the dots, live
+    expect(after.xR).toBeGreaterThan(before.xR)
+  })
+
+  // BUG 2: dragging a resize handle must change box_rect LIVE (not just settings)
+  // — guards the fatal move/resize contradiction (pins kept in sync).
+  test('resize handle drag widens box_rect live + persists (resize bug)', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    dc.touchData(); await settle(6)
+    ob.show_pins = true // handles are grabbable once the box is hovered/selected
+    expect(ob._geom.resize.length).toBe(8)
+    const before = ob.box_rect()
+    const rightEdge = ob._geom.resize[5] // [TL,TR,BL,BR,L,R,T,B] → R
+    expect(rightEdge.edits).toEqual([{ pin: 1, axis: 't' }]) // c1 owns right (c0.t<c1.t)
+    ob.mouse.x = rightEdge.rect.x + rightEdge.rect.w / 2
+    ob.mouse.y = rightEdge.rect.y + rightEdge.rect.h / 2
+    ob.on_mousedown(fakeEvent())
+    expect(ob._dragResize).toBeTruthy()
+    ob.$props.cursor.t = dc.data.onchart[0].settings.c1[0] + 20 * TF
+    ob.$props.cursor.y$ = 100
+    ob.on_mousemove()
+    expect(ob.box_rect().xR).toBeGreaterThan(before.xR) // followed LIVE (not frozen)
+    expect(ob.pins[1].t).toBe(ob.$props.cursor.t)       // pin synced
+    ob.on_mouseup(fakeEvent())
+    expect(ob._dragResize).toBe(null)
+  })
+
+  test('resize handles only present/active when selected', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    dc.touchData(); await settle(6)
+    expect(ob.selected).toBeFalsy()
+    expect(ob._geom.resize.length).toBe(8) // geometry always computed…
+    // …but the hit-test is gated on selected||show_pins: a handle click when
+    // deselected falls through (no _dragResize).
+    const h = ob._geom.resize[5]
+    ob.mouse.x = h.rect.x + 2; ob.mouse.y = h.rect.y + 2
+    ob.on_mousedown(fakeEvent())
+    expect(ob._dragResize).toBe(null)
+  })
+
+  // BUG 3: status button label/submittable reflects the aggregate order status.
+  test('status button label + submittable per status mix', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    const set = ss => dc.data.onchart[0].settings.orders.forEach((o, i) => { o.status = ss[i] })
+    set(['local', 'local', 'local'])
+    expect(ob.order_status()).toMatchObject({ label: 'Submit', submittable: true })
+    set(['confirmed', 'confirmed', 'confirmed'])
+    expect(ob.order_status()).toMatchObject({ label: 'Confirmed', submittable: false })
+    set(['rejected', 'rejected', 'rejected'])
+    expect(ob.order_status()).toMatchObject({ label: 'Rejected', submittable: true })
+    set(['pending', 'local', 'local'])
+    expect(ob.order_status().label).toBe('Pending…')
+  })
+
+  test('status button: confirmed=no-op (no submit), rejected=resubmits', async () => {
+    await mountWith(seedDc())
+    dc.orderAgent = new OrderAgent({ transport: new StubOrderTransport(), dataCube: dc })
+    const ob = orderBoxRenderer(wrapper)
+    const clickSubmit = () => {
+      ob.mouse.x = ob._geom.submit.x + 2
+      ob.mouse.y = ob._geom.submit.y + 2
+      ob.on_mousedown(fakeEvent())
+    }
+    // all confirmed → button is a status display, click does NOT resubmit
+    orders(dc).forEach(o => { o.status = 'confirmed' })
+    dc.touchData(); await settle(6)
+    clickSubmit(); await settle(4)
+    expect(orders(dc).every(o => o.status === 'confirmed')).toBe(true)
+    // all rejected → submittable, click resubmits → confirmed (stub)
+    orders(dc).forEach(o => { o.status = 'rejected' })
+    dc.touchData(); await settle(6)
+    clickSubmit(); await settle(4)
+    expect(orders(dc).every(o => o.status === 'confirmed')).toBe(true)
+  })
+
+  test('status button width grows with a longer label', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    orders(dc).forEach(o => { o.status = 'local' })            // 'Submit'
+    dc.touchData(); await settle(6)
+    const wShort = ob._geom.submit.w
+    orders(dc).forEach(o => { o.status = 'confirmed' })        // 'Confirmed' (longer)
+    dc.touchData(); await settle(6)
+    expect(ob._geom.submit.w).toBeGreaterThan(wShort)
+  })
 })
