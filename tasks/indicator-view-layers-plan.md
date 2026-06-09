@@ -38,15 +38,17 @@ Rows still carry raw values as `indicators[display_label][output]`.
 - [x] **P2** `visible_by_default` gating in setIndicatorEnabled; raw preserved (incl. hidden-layer overlays). (efa1eaf)
 - [x] **P3** candle_color (SCMR/CRUP): pad→9, stamp slot-6 at build + re-stamp in applyLiveUpdate; value→color. (e557820/efa1eaf)
 - [x] **P4** per-layer toggle UI (CorkyDiscoveryPanel nested sub-toggles) + `setLayerEnabled` (object-identity). (5e09063)
-- [ ] **P5** (follow-up) persistence (`corkyLayerVisibility`) + re-apply on tf-reselect in `_finishHistory`.
-  tf-switch currently resets hidden-layer toggles (visible defaults + candle_color always restored).
+- [x] **P5** persistence across tf-switch: App `corkyEnabled` memory (per venue|symbol: enabled kinds +
+  layer ids), passed via `subscribe(opts.enabled)`; feed `_reapplyEnabled` re-runs setIndicatorEnabled +
+  setLayerEnabled in `_finishHistory` after the rebuild. setIndicatorEnabled OFF now cleans enabledLayers.
+  In-memory (session) — localStorage reload-persistence is a further optional follow-up.
 - [ ] **P6** (optional) Markers overlay for kind=marker (box already → Zones; marker = hidden metadata until then).
 
 ## Known limitations / follow-ups
 - Pane grid-index resolver assigns sequential ids per distinct `target.pane`; if VIEW-pane indicators are mixed
   with FALLBACK offchart indicators (no grid.id) the numeric indices can drift — gate with a component-harness
   mount test before relying on multi-indicator pane mixing (single-indicator panes like MACD verified at build level).
-- P5 persistence not done: hidden-layer opt-ins reset on tf-switch.
+- P5 persistence is in-memory (per session); a page reload starts fresh (localStorage = optional follow-up).
 
 ## Targets
 SCMR/SCMR(INV): candle_color visible, TL/TH lines hidden-toggleable. MACD: histogram pane + macd/signal

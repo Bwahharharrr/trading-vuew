@@ -80,7 +80,7 @@ export class CorkyFeed extends FeedSource {
      * @returns {Promise<object>} a handle (carries the subscription_id).
      */
     async subscribe(opts = {}, handlers = {}) {
-        const { venue, symbol, timeframe, indicators, range, views } = opts
+        const { venue, symbol, timeframe, indicators, range, views, enabled } = opts
         const onStatus = handlers.onStatus || (() => {})
         const onError = handlers.onError || (() => {})
 
@@ -99,6 +99,7 @@ export class CorkyFeed extends FeedSource {
             built: null,           // {chart,onchart,offchart,timeframe}
             liveView: null,        // === built (applyLiveUpdate target)
             views: views || null,      // display_label → { kind, view } (descriptor views)
+            enabled: enabled || null,  // { kinds:[{display_label,kind}], layers:[layerId] } to re-apply
             enabledKinds: new Set(),   // indicator kinds currently shown in the DC
             enabledLayers: new Set(),  // per-layer ids currently shown (view.layers)
             addedOverlays: new Set(),  // overlay objects currently added to the DC
@@ -244,10 +245,30 @@ export class CorkyFeed extends FeedSource {
         handle.built = built
         handle.liveView = built
         handle.enabledKinds = new Set()
+        handle.enabledLayers = new Set()
         handle.addedOverlays = new Set()
 
-        // Signal a redraw for the freshly-loaded history (candles only).
+        // Re-apply the caller's persisted enabled indicators + hidden layers.
+        // A tf-switch tears down the old handle and wipes the DC overlays above,
+        // so without this the user's shown indicators/layers vanish on every
+        // timeframe change. Idempotent + a no-op for kinds/layers absent here.
+        this._reapplyEnabled(handle)
+
+        // Signal a redraw for the freshly-loaded history.
         dc.touchData()
+    }
+
+    // Re-apply handle.enabled = { kinds:[{kind}], layers:[layerId] } onto the
+    // freshly-built data (used after a tf-switch rebuild).
+    _reapplyEnabled(handle) {
+        const en = handle.enabled
+        if (!en) return
+        for (const k of (en.kinds || [])) {
+            if (k && k.kind) this.setIndicatorEnabled(handle, k.kind, true)
+        }
+        for (const layerId of (en.layers || [])) {
+            this.setLayerEnabled(handle, layerId, true)
+        }
     }
 
     // ── selective indicator overlays (client-side toggle) ───────────────────
@@ -309,6 +330,7 @@ export class CorkyFeed extends FeedSource {
                 if (handle.addedOverlays.has(ov)) {
                     this._removeOverlay(dc, ov)
                     handle.addedOverlays.delete(ov)
+                    if (ov.settings.corkyLayerId) handle.enabledLayers.delete(ov.settings.corkyLayerId)
                     changed = true
                 }
             }

@@ -313,6 +313,10 @@ export default {
             // Reactive discovery surface rendered by CorkyDiscoveryPanel.
             corkyStates: [],
             corkyCurrent: null,
+            // Enabled indicators + hidden layers, persisted per venue|symbol so a
+            // timeframe switch (which tears down the subscription) keeps them on.
+            // `${venue}|${symbol}` → { kinds:[{display_label,kind}], layers:[layerId] }
+            corkyEnabled: {},
             corkyLoading: false,
             corkyProgress: null,
             corkyError: null,
@@ -474,12 +478,16 @@ export default {
             this.corkyProgress = null
             // Candles-only by default: indicators are toggled on client-side
             // afterwards (their data already ships in the rows — no resubscribe).
+            // Persisted enabled indicators/layers for this symbol (survives a
+            // tf-switch). Reflect them optimistically in the panel; the feed
+            // re-applies them after the new history loads (_reapplyEnabled).
+            const mem = this._corkyMem(opts.venue, opts.symbol)
             this.corkyCurrent = {
                 venue: opts.venue,
                 symbol: opts.symbol,
                 timeframe: opts.timeframe,
-                indicators: [],
-                layers: [],   // enabled view-layer ids (mirrors handle.enabledLayers)
+                indicators: mem.kinds.map(k => k.display_label),
+                layers: mem.layers.slice(),   // enabled view-layer ids
             }
             // Assemble the indicator VIEW map (display_label → { kind, view }) from
             // the discovery descriptors for this venue/symbol so buildChartData can
@@ -493,8 +501,9 @@ export default {
                     views[ind.display_label] = { kind: ind.kind, view: ind.view }
                 }
             }
+            const enabled = { kinds: mem.kinds.slice(), layers: mem.layers.slice() }
             try {
-                this.corkyHandle = await this.corkyFeed.subscribe({ ...opts, views }, {
+                this.corkyHandle = await this.corkyFeed.subscribe({ ...opts, views, enabled }, {
                     onStatus: (status) => {
                         this.corkyProgress = status
                         if (status && (status.phase === 'history-complete' ||
@@ -574,6 +583,15 @@ export default {
             // Mirror the feed handle's enabled view-layers so the panel's
             // per-layer sub-toggles reflect which layers are showing.
             cur.layers = this.corkyHandle ? [...this.corkyHandle.enabledLayers] : []
+            // Persist for tf-switch survival (keyed by venue|symbol).
+            const mem = this._corkyMem(req.venue, req.symbol)
+            const mi = mem.kinds.findIndex(k => k.display_label === req.display_label)
+            if (req.enabled) {
+                if (mi === -1) mem.kinds.push({ display_label: req.display_label, kind: req.kind })
+            } else if (mi !== -1) {
+                mem.kinds.splice(mi, 1)
+            }
+            mem.layers = cur.layers.slice()
         },
 
         // Toggle a single hidden view layer (TL/TH/diagnostics) on/off.
@@ -584,6 +602,17 @@ export default {
             if (!applied) return
             const cur = this.corkyCurrent
             if (cur) cur.layers = [...this.corkyHandle.enabledLayers]
+            // Persist for tf-switch survival.
+            this._corkyMem(req.venue, req.symbol).layers =
+                [...this.corkyHandle.enabledLayers]
+        },
+
+        // Per-(venue,symbol) enabled-state memory (lazily created).
+        _corkyMem(venue, symbol) {
+            const key = `${venue}|${symbol}`
+            let m = this.corkyEnabled[key]
+            if (!m) { m = { kinds: [], layers: [] }; this.corkyEnabled[key] = m }
+            return m
         },
 
         // Patch the candle-state on the gateway, re-discover the catalog, then

@@ -63,4 +63,31 @@ describe('view-layer visibility gating', () => {
     const h = handleWithViewOverlays()
     expect(feed.setLayerEnabled(h, 'nope', true)).toBe(false)
   })
+
+  test('disabling the kind clears its layers from enabledLayers', () => {
+    const h = handleWithViewOverlays()
+    feed.setIndicatorEnabled(h, 'SCMR', true)
+    feed.setLayerEnabled(h, 'tl', true)
+    expect([...h.enabledLayers].sort()).toEqual(['main', 'tl'])
+    feed.setIndicatorEnabled(h, 'SCMR', false)
+    expect([...h.enabledLayers]).toEqual([])
+    expect(dc.data.onchart).toHaveLength(0)
+  })
+
+  test('P5: _reapplyEnabled restores indicators + hidden layers after a rebuild', () => {
+    // tf-switch: a fresh handle (new built, wiped DC) + the persisted enabled state
+    const h = handleWithViewOverlays()
+    h.enabled = { kinds: [{ display_label: 'SCMR', kind: 'SCMR' }], layers: ['main', 'tl'] }
+    feed._reapplyEnabled(h)
+    // visible 'main' (via setIndicatorEnabled) + opted-in hidden 'tl'; 'th' stays off
+    expect(dc.data.onchart.map(o => o.settings.corkyLayerId).sort()).toEqual(['main', 'tl'])
+    expect([...h.enabledLayers].sort()).toEqual(['main', 'tl'])
+  })
+
+  test('P5: _reapplyEnabled with null enabled is a no-op', () => {
+    const h = handleWithViewOverlays()
+    h.enabled = null
+    feed._reapplyEnabled(h)
+    expect(dc.data.onchart).toHaveLength(0)
+  })
 })
