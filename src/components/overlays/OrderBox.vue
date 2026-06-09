@@ -21,10 +21,13 @@ const EYE = 16           // eye icon box size
 const HND = 8            // half resize-handle grab size (px)
 const BTN_H = 16         // status button height
 const BTN_PADX = 8       // status button horizontal padding
+const AVG_COLOR = '#e0b030' // average-price line / label colour (distinct gold)
 
 function inRect(r, x, y) {
     return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h
 }
+
+function fmtNum(v) { return Number((Number(v) || 0).toFixed(4)) }
 
 export default {
     name: 'OrderBox',
@@ -159,6 +162,30 @@ export default {
             return this.orders.some(o => { const s = o.status || 'local'; return s === 'local' || s === 'rejected' })
         },
 
+        // Summary stats for the box: originally placed qty/size (from the modal),
+        // current order count, filled (confirmed) count/size, and the size-
+        // weighted average fill price across ALL current orders (if all execute).
+        // Prices include the live move offset so the avg line tracks a drag.
+        order_summary() {
+            const os = this.orders
+            if (!os.length) return null
+            let totalSize = 0, wsum = 0, filledCount = 0, filledSize = 0
+            for (const o of os) {
+                const sz = Number(o.size) || 0
+                const price = Number(o.price) + this._moveDy
+                totalSize += sz
+                wsum += price * sz
+                if ((o.status || 'local') === 'confirmed') { filledCount++; filledSize += sz }
+            }
+            return {
+                count: os.length,
+                origQty: this.sett.qty != null ? this.sett.qty : os.length,
+                origSize: this.sett.totalSize != null ? this.sett.totalSize : totalSize,
+                totalSize, filledCount, filledSize,
+                avgPrice: totalSize > 0 ? wsum / totalSize : null
+            }
+        },
+
         // Orders that are live on the engine (or being cancelled) — the box must
         // not be deleted outright while any exist.
         has_live_orders() {
@@ -205,6 +232,7 @@ export default {
             for (const row of geom.rows) this.draw_order(ctx, row, stroke)
             this.draw_eye(ctx, geom.eye, this.visible, stroke)
             this.draw_submit(ctx, geom.submit)
+            this.draw_summary(ctx, r)
 
             this.render_pins(ctx)
             // Resize handles only when the box is selected/hovered (like pins).
@@ -271,6 +299,56 @@ export default {
             ctx.stroke()
 
             ctx.textAlign = 'left'
+            ctx.textBaseline = 'alphabetic'
+            ctx.restore()
+        },
+
+        // Stats panel (under the eye chrome) + the average-fill-price line.
+        // avgPrice already includes the live move offset (order_summary), so the
+        // line + label track the box during a drag.
+        draw_summary(ctx, r) {
+            const s = this.order_summary()
+            if (!s) return
+            const L = this.$props.layout
+            const prec = (L && L.prec) || 2
+
+            // Average-price reference line (distinct gold), clamped to box width.
+            if (s.avgPrice != null) {
+                const y = L.$2screen(s.avgPrice)
+                ctx.save()
+                ctx.strokeStyle = AVG_COLOR
+                ctx.lineWidth = 1
+                ctx.setLineDash([2, 2])
+                ctx.beginPath()
+                ctx.moveTo(r.xL, y + 0.5)
+                ctx.lineTo(r.xR, y + 0.5)
+                ctx.stroke()
+                ctx.setLineDash([])
+                ctx.fillStyle = AVG_COLOR
+                ctx.font = this.font11
+                ctx.textAlign = 'right'
+                ctx.textBaseline = 'bottom'
+                ctx.fillText(`avg ${s.avgPrice.toFixed(prec)}`, r.xR - 3, y - 1)
+                ctx.textAlign = 'left'
+                ctx.textBaseline = 'alphabetic'
+                ctx.restore()
+            }
+
+            // Text stats under the eye/submit row: placed (original) / filled / avg.
+            // (Partial-fill QUANTITY per order is backend-dependent — TODO; for now
+            // "filled" counts confirmed orders.)
+            ctx.save()
+            ctx.font = this.font11
+            ctx.fillStyle = this.$props.colors.textHL || '#cfe'
+            ctx.textBaseline = 'top'
+            const tx = r.xL + 6
+            let ty = r.yT + 4 + EYE + 5
+            const lines = [
+                `placed ${s.origQty} · ${fmtNum(s.origSize)}`,
+                `filled ${s.filledCount}/${s.origQty}`
+            ]
+            if (s.avgPrice != null) lines.push(`avg ${s.avgPrice.toFixed(prec)}`)
+            for (const ln of lines) { ctx.fillText(ln, tx, ty); ty += 13 }
             ctx.textBaseline = 'alphabetic'
             ctx.restore()
         },

@@ -209,6 +209,39 @@ describe('OrderBox overlay (P3)', () => {
     expect(dc.data.onchart.length).toBe(0)                              // gone after confirm
   })
 
+  test('order_summary: count, placed, filled, size-weighted avg price', async () => {
+    await mountWith(seedDc({
+      qty: 4, totalSize: 10,
+      orders: [
+        { id: 'ord-1', price: 100, size: 1, status: 'confirmed' },
+        { id: 'ord-2', price: 102, size: 3, status: 'local' }
+      ]
+    }))
+    const ob = orderBoxRenderer(wrapper)
+    const s = ob.order_summary()
+    expect(s.count).toBe(2)
+    expect(s.origQty).toBe(4)            // original placed (from the modal)
+    expect(s.origSize).toBe(10)
+    expect(s.filledCount).toBe(1)        // confirmed = filled
+    expect(s.totalSize).toBe(4)
+    expect(s.avgPrice).toBeCloseTo((100 * 1 + 102 * 3) / 4, 6) // size-weighted
+  })
+
+  test('avg-price tracks a box move; summary renders (fillText) on redraw', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    dc.touchData(); await settle(6)
+    const base = ob.order_summary().avgPrice
+    // during a move the avg shifts by the same dy as the box
+    ob._moveDy = -2
+    expect(ob.order_summary().avgPrice).toBeCloseTo(base - 2, 6)
+    ob._moveDy = 0
+    // the real recording ctx draws the summary text on every redraw (no throw)
+    resetCounters()
+    dc.touchData(); await settle(6)
+    expect(methodTotal('fillText')).toBeGreaterThan(0) // includes the stats lines + avg label
+  })
+
   test('order lines are clamped to the box width', async () => {
     await mountWith(seedDc())
     const ob = orderBoxRenderer(wrapper)
