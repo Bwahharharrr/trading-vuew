@@ -51,25 +51,78 @@ export class OrderAgent {
         return request_id
     }
 
+    // Request cancellation of a box's LIVE orders (pending/confirmed → cancelling).
+    // The box is kept until the terminal 'orders_cancelled' arrives, at which
+    // point _maybe_remove_box() removes it once nothing is live.
+    cancel(boxSettings) {
+        const orders = boxSettings && boxSettings.orders
+        if (!orders || !orders.length || !this.transport) return null
+
+        const flipped = []
+        for (const o of orders) {
+            if (o.status === 'pending' || o.status === 'confirmed') {
+                o.status = 'cancelling'
+                flipped.push(o)
+            }
+        }
+        if (!flipped.length) return null
+        this._touch()
+
+        const request_id = `oreq-${++REQ_SEQ}`
+        this._pending[request_id] = { uuid: boxSettings.$uuid, ids: new Set(flipped.map(o => o.id)) }
+        this.transport.send({
+            type: 'cancel_orders',
+            request_id,
+            orders: flipped.map(o => ({ id: o.id }))
+        })
+        return request_id
+    }
+
     _on_event(e) {
         if (!e || !e.request_id) return
         const rec = this._pending[e.request_id]
         if (!rec) return                     // unknown / already handled
         delete this._pending[e.request_id]
-        const status = e.type === 'orders_rejected' ? 'rejected' : 'confirmed'
-        const confirmIds = e.orders ? new Set(e.orders.map(o => o.id)) : null
+        // [from-state, to-state] per terminal event — only flip orders in the
+        // expected source state so a mid-flight edit can't corrupt the status.
+        const TRANS = {
+            orders_confirmed: ['pending', 'confirmed'],
+            orders_rejected: ['pending', 'rejected'],
+            orders_cancelled: ['cancelling', 'cancelled']
+        }
+        const t = TRANS[e.type]
+        if (!t) return
+        const [from, to] = t
+        const ids = e.orders ? new Set(e.orders.map(o => o.id)) : null
         // Re-resolve the CURRENT order objects by box $uuid (settings may have
-        // been replaced by an edit since submit). Flip only those still pending
-        // in this request's set — immune to array replacement + double-confirm.
+        // been replaced by an edit). Flip only those in this request's set.
         let changed = false
         for (const o of this._orders_for(rec.uuid)) {
-            if (o.status === 'pending' && rec.ids.has(o.id) &&
-                (!confirmIds || confirmIds.has(o.id))) {
-                o.status = status
+            if (o.status === from && rec.ids.has(o.id) && (!ids || ids.has(o.id))) {
+                o.status = to
                 changed = true
             }
         }
         if (changed) this._touch()
+        // Once a cancel lands, drop the box if no orders are live any more.
+        if (to === 'cancelled') this._maybe_remove_box(rec.uuid)
+    }
+
+    // Remove the OrderBox overlay once none of its orders are live (the deferred
+    // half of a Delete-with-live-orders). Splice by $uuid identity.
+    _maybe_remove_box(uuid) {
+        const onchart = this.dc && this.dc.data && this.dc.data.onchart
+        if (!onchart) return
+        const i = onchart.findIndex(ov => ov.settings && ov.settings.$uuid === uuid)
+        if (i === -1) return
+        const live = (onchart[i].settings.orders || []).some(o => {
+            const s = o.status || 'local'
+            return s === 'pending' || s === 'confirmed' || s === 'cancelling'
+        })
+        if (live) return                     // still in flight — keep the box
+        onchart.splice(i, 1)
+        if (typeof this.dc.update_ids === 'function') this.dc.update_ids()
+        this._touch()
     }
 
     _orders_for(uuid) {

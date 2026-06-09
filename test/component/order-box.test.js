@@ -169,6 +169,46 @@ describe('OrderBox overlay (P3)', () => {
     expect(orders(dc).every(o => o.status === 'confirmed')).toBe(true)
   })
 
+  test('Delete with only local orders emits remove-tool (delete now)', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    ob.custom_event('object-selected'); await settle(4)
+    expect(ob.selected).toBe(true)
+    let removeEmitted = false
+    const orig = ob.custom_event.bind(ob)
+    ob.custom_event = (e, ...a) => { if (e === 'remove-tool') removeEmitted = true; return orig(e, ...a) }
+    ob.remove_tool()
+    expect(removeEmitted).toBe(true)
+  })
+
+  test('Delete with confirmed orders cancels then removes the box (sync stub)', async () => {
+    await mountWith(seedDc())
+    dc.orderAgent = new OrderAgent({ transport: new StubOrderTransport(), dataCube: dc })
+    const ob = orderBoxRenderer(wrapper)
+    ob.custom_event('object-selected'); await settle(4)
+    orders(dc).forEach(o => { o.status = 'confirmed' })
+    ob.remove_tool()
+    await settle(4)
+    expect(dc.data.onchart.length).toBe(0) // cancelled (sync) → box gone
+  })
+
+  test('Delete with live orders keeps the box until cancel confirmed (async)', async () => {
+    await mountWith(seedDc())
+    let fire
+    const transport = { onevent: () => {}, send(m) { fire = () => transport.onevent({ type: 'orders_cancelled', request_id: m.request_id, orders: m.orders }) }, destroy() {} }
+    dc.orderAgent = new OrderAgent({ transport, dataCube: dc })
+    const ob = orderBoxRenderer(wrapper)
+    ob.custom_event('object-selected'); await settle(4)
+    orders(dc).forEach(o => { o.status = 'confirmed' })
+    ob.remove_tool()
+    await settle(2)
+    expect(orders(dc).every(o => o.status === 'cancelling')).toBe(true) // requested
+    expect(dc.data.onchart.length).toBe(1)                              // box stays
+    fire()
+    await settle(2)
+    expect(dc.data.onchart.length).toBe(0)                              // gone after confirm
+  })
+
   test('order lines are clamped to the box width', async () => {
     await mountWith(seedDc())
     const ob = orderBoxRenderer(wrapper)

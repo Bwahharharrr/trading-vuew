@@ -144,6 +144,7 @@ export default {
             if (!os.length) return { label: 'No orders', color: '#5b6472', submittable: false }
             const st = s => os.every(o => (o.status || 'local') === s)
             const any = s => os.some(o => (o.status || 'local') === s)
+            if (any('cancelling')) return { label: 'Cancelling…', color: '#d0a000', submittable: false }
             if (st('local')) return { label: 'Submit', color: accent, submittable: true }
             if (any('pending')) return { label: 'Pending…', color: '#d0a000', submittable: this.has_submittable() }
             if (st('confirmed')) return { label: 'Confirmed', color: this.color_buy, submittable: false }
@@ -156,6 +157,28 @@ export default {
         // Any order that can be (re)submitted (local or rejected).
         has_submittable() {
             return this.orders.some(o => { const s = o.status || 'local'; return s === 'local' || s === 'rejected' })
+        },
+
+        // Orders that are live on the engine (or being cancelled) — the box must
+        // not be deleted outright while any exist.
+        has_live_orders() {
+            return this.orders.some(o => {
+                const s = o.status || 'local'
+                return s === 'pending' || s === 'confirmed' || s === 'cancelling'
+            })
+        },
+
+        // Delete/Backspace (Tool mixin binds this.remove_tool). Overrides Tool's:
+        // local/rejected orders (or none) → delete the box now; live orders
+        // (pending/confirmed) → request a cancel and KEEP the box until the engine
+        // confirms the cancellation (the OrderAgent removes the box then).
+        remove_tool() {
+            if (!this.selected) return
+            if (this.has_live_orders()) {
+                this.custom_event('cancel-orders')
+            } else {
+                this.custom_event('remove-tool')
+            }
         },
 
         draw(ctx) {

@@ -14,14 +14,22 @@ export class StubOrderTransport {
     }
 
     send(msg) {
-        if (!msg || msg.type !== 'submit_orders') return
+        if (!msg) return
         // Echo a terminal event with the same request_id (synchronous so the
         // prototype works with no real socket).
-        this.onevent({
-            type: this.outcome === 'rejected' ? 'orders_rejected' : 'orders_confirmed',
-            request_id: msg.request_id,
-            orders: (msg.orders || []).map(o => ({ id: o.id }))
-        })
+        if (msg.type === 'submit_orders') {
+            this.onevent({
+                type: this.outcome === 'rejected' ? 'orders_rejected' : 'orders_confirmed',
+                request_id: msg.request_id,
+                orders: (msg.orders || []).map(o => ({ id: o.id }))
+            })
+        } else if (msg.type === 'cancel_orders') {
+            this.onevent({
+                type: 'orders_cancelled',
+                request_id: msg.request_id,
+                orders: (msg.orders || []).map(o => ({ id: o.id }))
+            })
+        }
     }
 
     destroy() { this.onevent = () => {} }

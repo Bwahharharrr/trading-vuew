@@ -96,6 +96,8 @@ export default class DCEvents {
                 break
             case 'submit-orders': this.submit_orders(args)
                 break
+            case 'cancel-orders': this.cancel_orders(args)
+                break
             case 'before-destroy': this.before_destroy()
                 break
 
@@ -417,6 +419,19 @@ export default class DCEvents {
         for (const ov of (this.data.onchart || [])) {
             if (ov.settings && ov.settings.$uuid === uuid) {
                 this.orderAgent.submit(ov.settings)
+                return
+            }
+        }
+    }
+
+    // Cancel an OrderBox's live orders via the agent (the box stays until the
+    // engine confirms the cancellation). args = [grid_id, layer_id, $uuid].
+    cancel_orders(args) {
+        if (!this.orderAgent) return
+        const uuid = args[args.length - 1]
+        for (const ov of (this.data.onchart || [])) {
+            if (ov.settings && ov.settings.$uuid === uuid) {
+                this.orderAgent.cancel(ov.settings)
                 return
             }
         }
