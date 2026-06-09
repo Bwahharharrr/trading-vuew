@@ -242,6 +242,17 @@ describe('OrderBox overlay (P3)', () => {
     expect(methodTotal('fillText')).toBeGreaterThan(0) // includes the stats lines + avg label
   })
 
+  test('box_rect does not throw before pins exist (new-grid-layer fires draw pre-init)', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    const saved = ob.pins
+    ob.pins = undefined // simulate the first draw, before init() created the pins
+    expect(() => ob.box_rect()).not.toThrow()
+    const r = ob.box_rect()
+    expect(r && typeof r.xL === 'number').toBe(true) // falls back to settings.c0/c1
+    ob.pins = saved
+  })
+
   test('order lines are clamped to the box width', async () => {
     await mountWith(seedDc())
     const ob = orderBoxRenderer(wrapper)

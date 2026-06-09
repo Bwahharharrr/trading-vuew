@@ -61,7 +61,9 @@ export default {
         // corner dots ("dots move, box doesn't"). Pins hydrate from settings on
         // init, so this is correct at rest / on zoom too.
         corner(i) {
-            const p = this.pins[i]
+            // `this.pins` doesn't exist until init() — but new-grid-layer fires a
+            // draw BEFORE init (overlay.js mounted order), so guard it.
+            const p = this.pins && this.pins[i]
             if (p && p.t != null && p.y$ != null) return [p.t, p.y$]
             return i === 0 ? this.sett.c0 : this.sett.c1
         },

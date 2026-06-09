@@ -228,6 +228,7 @@
 </template>
 
 <script>
+import { markRaw } from 'vue'
 import TradingVue from './TradingVue.vue'
 import IndicatorSettings from './components/IndicatorSettings.vue'
 import OrderDistributionModal from './components/OrderDistributionModal.vue'
@@ -280,7 +281,9 @@ export default {
     data() {
         return {
             chart: new DataCube(),
-            overlays: [BuysAndSells, Balance, LineTracker, OrderBox],
+            // markRaw: overlay component definitions must not be made reactive
+            // (Vue warns + needless overhead) when held in component data.
+            overlays: [BuysAndSells, Balance, LineTracker, OrderBox].map(c => markRaw(c)),
             // Store DataCube class for mixin use
             DataCubeClass: DataCube,
 
