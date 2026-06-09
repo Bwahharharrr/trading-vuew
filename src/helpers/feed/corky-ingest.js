@@ -14,7 +14,8 @@
 //   overlay:  { name, type, data:[[ts, value], ...] }
 
 import {
-  indicatorPlacement, layerKindToOverlay, styleToSettings, candleColorOf, candleColorOpts
+  indicatorPlacement, layerKindToOverlay, styleToSettings, candleColorOf, candleColorOpts,
+  signedSlopeColor
 } from './indicator-catalog.js'
 
 // ─────────────────────────────────────────────────────────── primitives ──
@@ -184,6 +185,38 @@ function zipFields(fields, outputsMap) {
   return { data, raw }
 }
 
+// Build [ts, value, color] for a `signed_slope_histogram` layer. Colour per bar
+// from the value sign + slope direction (signedSlopeColor). Slope comes from
+// style.slope_field; if a row lacks it, derive from value − previous value; if
+// there's no previous value, fall back to sign-only.
+function buildSignedSlopeHistogram(layer, fields, outputsMap) {
+  const style = layer.style || {}
+  const valueField = style.value_field || fields[0]
+  const slopeField = style.slope_field || null
+  const colors = {
+    positive_rising_color: style.positive_rising_color,
+    positive_falling_color: style.positive_falling_color,
+    negative_falling_color: style.negative_falling_color,
+    negative_rising_color: style.negative_rising_color
+  }
+  const vSeries = outputsMap.get(valueField)
+  const sSeries = slopeField ? outputsMap.get(slopeField) : null
+  const slopeByTs = new Map()
+  if (sSeries) for (const [ts, v] of sSeries.data) slopeByTs.set(ts, v)
+  const vData = vSeries ? vSeries.data : []
+  const vRaw = vSeries ? vSeries.raw : []
+  const data = []; const raw = []
+  let prev = null
+  for (let k = 0; k < vData.length; k++) {
+    const ts = vData[k][0]; const value = vData[k][1]
+    const slope = slopeByTs.has(ts) ? slopeByTs.get(ts) : (prev != null ? value - prev : null)
+    data.push([ts, value, signedSlopeColor(value, slope, colors)])
+    raw.push([ts, vRaw[k] ? vRaw[k][1] : null])
+    prev = value
+  }
+  return { data, raw, valueField, slopeField, colors }
+}
+
 // Build overlays for ONE indicator instance from its view.layers. Returns
 // { onchart, offchart, candleColorByTs }. candle_color/marker produce no overlay
 // (candle_color stamps the candle colour slot; raw values stay in the pivot).
@@ -209,18 +242,35 @@ export function buildLayerOverlays(instanceKey, kind, outputsMap, view, paneReso
     }
     const overlayType = layerKindToOverlay(layer.kind, fields.length)
     if (!overlayType) continue // marker / unknown: no declarative renderer
-    const { data, raw } = zipFields(fields, outputsMap)
+    const style = layer.style || {}
+    let data, raw, extra
+    if (layer.kind === 'histogram' && style.color_rule === 'signed_slope_histogram') {
+      // Per-bar colour by value sign + slope direction. Data is [ts, value, color]
+      // (colour precomputed); the Histogram overlay reads colour from colorIndex.
+      const ss = buildSignedSlopeHistogram(layer, fields, outputsMap)
+      data = ss.data; raw = ss.raw
+      extra = {
+        corkyColorRule: 'signed_slope_histogram',
+        valueField: ss.valueField, slopeField: ss.slopeField, ssColors: ss.colors,
+        dataIndex: 1, colorIndex: 2,
+        zeroLine: style.zero_line === 'true' || style.zero_line === true,
+        corkyFields: [ss.valueField, ss.slopeField].filter(Boolean)
+      }
+    } else {
+      const z = zipFields(fields, outputsMap)
+      data = z.data; raw = z.raw
+      extra = { corkyFields: fields }
+    }
     const surface = (layer.target && layer.target.surface) || 'price'
-    const settings = Object.assign(styleToSettings(layer.style), {
+    const settings = Object.assign(styleToSettings(style), {
       corkyKey: instanceKey + '#' + layer.id,
       corkyKind: kind,
       corkyInstance: instanceKey,
       corkyLayerId: layer.id,
-      corkyFields: fields,
       corkyView: true,
       corkyVisibleDefault: layer.visible_by_default !== false,
       display: layer.visible_by_default !== false
-    })
+    }, extra)
     const overlay = { name: layer.label || layer.id, type: overlayType, data, settings, raw }
     if (surface === 'pane') {
       const pane = paneResolver.assign((layer.target && layer.target.pane) || instanceKey)
@@ -472,6 +522,32 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
     }
   }
 
+  // signed_slope_histogram overlays: recompute the bar wholesale ([ts,value,
+  // color]) — slope from slope_field, else value − previous bar value, else
+  // sign-only. (Excluded from the generic column-write above.)
+  for (const pane of ['onchart', 'offchart']) {
+    for (const ov of (chartDataObj[pane] || [])) {
+      const s = ov.settings
+      if (!s || s.corkyColorRule !== 'signed_slope_histogram') continue
+      const oinds = inds[s.corkyInstance]
+      if (!oinds || oinds[s.valueField] == null) continue
+      const value = decimalToNumber(oinds[s.valueField])
+      let slope = null
+      if (s.slopeField && oinds[s.slopeField] != null) {
+        slope = decimalToNumber(oinds[s.slopeField])
+      } else {
+        const d = ov.data
+        if (d.length) {
+          const li = d.length - 1
+          const prevVal = (d[li][0] === ts) ? (d.length >= 2 ? d[li - 1][1] : null) : d[li][1]
+          if (prevVal != null) slope = value - prevVal
+        }
+      }
+      upsertByTs(ov.data, [ts, value, signedSlopeColor(value, slope, s.ssColors)])
+      if (ov.raw) upsertByTs(ov.raw, [ts, oinds[s.valueField]])
+    }
+  }
+
   lastSeqBySub[sub] = seq
   return { chart: chartDataObj, applied: true, sequence: seq }
 }
@@ -484,7 +560,9 @@ function viewOverlaysFor(chartDataObj, instanceKey, output) {
     if (!arr) continue
     for (const ov of arr) {
       const s = ov.settings
-      if (s && s.corkyView && s.corkyInstance === instanceKey &&
+      // signed_slope histograms are recomputed wholesale (value+slope+colour),
+      // not column-written field-by-field — handled in applyLiveUpdate.
+      if (s && s.corkyView && !s.corkyColorRule && s.corkyInstance === instanceKey &&
           Array.isArray(s.corkyFields) && s.corkyFields.includes(output)) {
         out.push(ov)
       }

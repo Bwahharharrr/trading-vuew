@@ -15,6 +15,9 @@ export default {
             if (data.length < 1) return
 
             const barWidth = Math.max(1, layout.px_step * this.bar_width_ratio)
+            // Optional per-bar colour column (e.g. signed_slope_histogram stores a
+            // precomputed colour at data[k][colorIndex]); else fall back to up/down.
+            const ci = this.sett.colorIndex
 
             for (var k = 0, n = data.length; k < n; k++) {
                 let p = data[k]
@@ -25,13 +28,25 @@ export default {
                 let y0 = layout.$2screen(baseline)
 
                 let isPositive = p[i] >= baseline
-                ctx.fillStyle = isPositive ? this.colorUp : this.colorDown
+                ctx.fillStyle = (ci != null && p[ci]) ? p[ci]
+                    : (isPositive ? this.colorUp : this.colorDown)
 
                 let barX = x - barWidth / 2
                 let barY = Math.min(y, y0)
                 let barHeight = Math.abs(y - y0) || 1
 
                 ctx.fillRect(barX, barY, barWidth, barHeight)
+            }
+
+            // Optional zero (baseline) line across the pane.
+            if (this.sett.zeroLine) {
+                const yz = Math.round(layout.$2screen(baseline)) + 0.5
+                ctx.strokeStyle = this.sett.zeroLineColor || 'rgba(255,255,255,0.25)'
+                ctx.lineWidth = 1
+                ctx.beginPath()
+                ctx.moveTo(0, yz)
+                ctx.lineTo(layout.width, yz)
+                ctx.stroke()
             }
         },
         data_colors() { return [this.colorUp, this.colorDown] },

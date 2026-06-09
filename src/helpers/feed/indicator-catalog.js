@@ -176,3 +176,33 @@ export function candleColorOpts(style) {
   if (s.neutral_color) out.neutralColor = s.neutral_color
   return out
 }
+
+/**
+ * Per-bar colour for a `signed_slope_histogram` layer (style.color_rule).
+ * Picks one of four colours from the value sign and slope direction:
+ *   value>=0 & slope>=0 → positive_rising_color
+ *   value>=0 & slope<0  → positive_falling_color
+ *   value<0  & slope<0  → negative_falling_color
+ *   value<0  & slope>=0 → negative_rising_color
+ * When `slope` is null/non-finite (no slope field AND no previous bar) → sign-
+ * only (positive_rising for >=0, negative_falling for <0). Generic — keyed on
+ * the view-layer style, not the indicator name, so any indicator can reuse it.
+ *
+ * @param {number} value
+ * @param {number|null|undefined} slope
+ * @param {{positive_rising_color?:string, positive_falling_color?:string,
+ *          negative_falling_color?:string, negative_rising_color?:string}} colors
+ * @returns {string|null}
+ */
+export function signedSlopeColor(value, slope, colors = {}) {
+  const v = Number(value)
+  if (!Number.isFinite(v)) return null
+  const pr = colors.positive_rising_color
+  const pf = colors.positive_falling_color
+  const nf = colors.negative_falling_color
+  const nr = colors.negative_rising_color
+  const s = slope == null ? NaN : Number(slope)
+  if (!Number.isFinite(s)) return (v >= 0 ? pr : nf) || null // sign-only fallback
+  if (v >= 0) return (s >= 0 ? pr : pf) || null
+  return (s < 0 ? nf : nr) || null
+}
