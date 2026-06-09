@@ -188,19 +188,22 @@ function zipFields(fields, outputsMap) {
 // { onchart, offchart, candleColorByTs }. candle_color/marker produce no overlay
 // (candle_color stamps the candle colour slot; raw values stay in the pivot).
 export function buildLayerOverlays(instanceKey, kind, outputsMap, view, paneResolver) {
-  const onchart = []; const offchart = []; const candleColorByTs = new Map()
-  const candleColorMeta = []
+  const onchart = []; const offchart = []; const candleColor = []
   for (const layer of view.layers) {
     const fields = (layer.fields && layer.fields.length) ? layer.fields : [...outputsMap.keys()]
     if (layer.kind === 'candle_color') {
+      // Compute the per-ts colours but DO NOT stamp the candles here — candle
+      // colour is applied only when the indicator is enabled (candles-only
+      // default), so the feed stamps/clears slot 6 in setIndicatorEnabled. The
+      // source field is kept for the live re-stamp (rowToOhlcv rebuilds the tuple).
       const field = fields[0]
       const s = outputsMap.get(field)
+      const byTs = new Map()
       if (s) for (const [ts, rawVal] of s.raw) {
         const c = candleColorOf(rawVal)
-        if (c != null) candleColorByTs.set(ts, c)
+        if (c != null) byTs.set(ts, c)
       }
-      // Live re-stamp needs the source field (applyLiveUpdate rebuilds the tuple).
-      candleColorMeta.push({ instanceKey, field })
+      candleColor.push({ instanceKey, field, byTs })
       continue
     }
     const overlayType = layerKindToOverlay(layer.kind, fields.length)
@@ -226,7 +229,7 @@ export function buildLayerOverlays(instanceKey, kind, outputsMap, view, paneReso
       onchart.push(overlay)
     }
   }
-  return { onchart, offchart, candleColorByTs, candleColorMeta }
+  return { onchart, offchart, candleColor }
 }
 
 export function buildChartData(rows, opts = {}) {
@@ -250,10 +253,9 @@ export function buildChartData(rows, opts = {}) {
     return v && Array.isArray(v.layers) && v.layers.length ? v : null
   }
 
-  // 1) view-driven instances → per-layer overlays + candle-colour stamps.
+  // 1) view-driven instances → per-layer overlays + candle-colour metadata.
   const paneResolver = makePaneResolver()
-  const candleColorByTs = new Map()
-  const candleColorMeta = []
+  const candleColor = [] // [{ kind, instanceKey, field, byTs }] — applied on enable
   const viewInstances = new Set()
   for (const [instanceKey, g] of byInstance) {
     const view = viewOf(instanceKey, g.kind)
@@ -262,8 +264,7 @@ export function buildChartData(rows, opts = {}) {
     const built = buildLayerOverlays(instanceKey, g.kind, g.outputs, view, paneResolver)
     for (const ov of built.onchart) onchart.push(ov)
     for (const ov of built.offchart) offchart.push(ov)
-    for (const [ts, color] of built.candleColorByTs) candleColorByTs.set(ts, color)
-    for (const m of built.candleColorMeta) candleColorMeta.push(m)
+    for (const e of built.candleColor) candleColor.push({ kind: g.kind, ...e })
   }
 
   // 2) fallback (no/empty view) → plot every output (BYTE-IDENTICAL to legacy).
@@ -283,13 +284,10 @@ export function buildChartData(rows, opts = {}) {
     else offchart.push(overlay)
   }
 
-  // 3) candle_color: stamp the candle colour slot (index 6; pad tuple to 9).
-  if (candleColorByTs.size) {
-    for (const c of ohlcv) {
-      const color = candleColorByTs.get(c[0])
-      if (color) { while (c.length < 9) c.push(''); c[6] = color }
-    }
-  }
+  // candle_color is NOT stamped at build — candles stay their natural red/green
+  // until the owning indicator is enabled (candles-only default). The feed applies
+  // it in setIndicatorEnabled (and re-applies on tf-switch/reload) using the
+  // _candleColor metadata below.
 
   // Section.vue indexes an offchart grid's anchor as offchart[id-1] (the id-th
   // NO-grid-id overlay) and merges grid:{id} overlays into it. That holds only
@@ -308,14 +306,17 @@ export function buildChartData(rows, opts = {}) {
     onchart,
     offchart,
   }
-  // Live-update metadata: candle_color source fields (the tuple is rebuilt each
-  // tick, so applyLiveUpdate must re-stamp slot 6). Non-enumerable so it doesn't
-  // leak into spreads / golden comparisons.
-  if (candleColorMeta.length) {
-    Object.defineProperty(result, '_candleColor', {
-      value: candleColorMeta, enumerable: false, configurable: true, writable: true
-    })
-  }
+  // candle_color metadata (non-enumerable so it doesn't leak into spreads /
+  // golden comparisons). `_candleColor` = [{ kind, instanceKey, field, byTs }]
+  // (per-layer historical colours + the live source field). `_candleColorActive`
+  // = kinds whose candle colour is currently applied to the candles (empty until
+  // an indicator is enabled — see CorkyFeed.setIndicatorEnabled).
+  Object.defineProperty(result, '_candleColor', {
+    value: candleColor, enumerable: false, configurable: true, writable: true
+  })
+  Object.defineProperty(result, '_candleColorActive', {
+    value: new Set(), enumerable: false, configurable: true, writable: true
+  })
   return result
 }
 
@@ -447,17 +448,25 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
 
   // candle_color: rowToOhlcv above replaced the candle tuple with a fresh
   // 6-element array, destroying any slot-6 colour — re-stamp it from the live
-  // field value so SCMR/CRUP coloring persists across ticks.
+  // field value, but ONLY for kinds whose candle colour is currently applied
+  // (_candleColorActive); an un-enabled candle_color indicator must not colour
+  // the candles. Also keeps byTs current so a later toggle re-stamps correctly.
   const ccMeta = chartDataObj._candleColor
-  if (ccMeta && ccMeta.length) {
+  const ccActive = chartDataObj._candleColorActive
+  if (ccMeta && ccMeta.length && ccActive && ccActive.size) {
     let candle = null
     const arr = chartDataObj.chart.data
     for (let i = arr.length - 1; i >= 0; i--) { if (arr[i][0] === ts) { candle = arr[i]; break } }
     if (candle) {
       for (const cc of ccMeta) {
+        if (!ccActive.has(cc.kind)) continue
         const v = inds[cc.instanceKey] && inds[cc.instanceKey][cc.field]
         const color = candleColorOf(v)
-        if (color != null) { while (candle.length < 9) candle.push(''); candle[6] = color }
+        if (color != null) {
+          while (candle.length < 9) candle.push('')
+          candle[6] = color
+          if (cc.byTs) cc.byTs.set(ts, color)
+        }
       }
     }
   }

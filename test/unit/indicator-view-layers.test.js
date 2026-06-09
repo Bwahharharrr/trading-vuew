@@ -71,10 +71,15 @@ describe('buildChartData — view.layers', () => {
       ])
     }
     const cd = buildChartData(rows, { views })
-    // candle colour stamped on slot 6 (tuple padded to 9)
-    expect(cd.chart.data[0].length).toBe(9)
-    expect(cd.chart.data[0][6]).toBe('#23a776') // bull
-    expect(cd.chart.data[1][6]).toBe('#e54150') // bear
+    // candle_color is NOT applied at build (candles-only default) — metadata only,
+    // candles stay their natural 6-tuple until the indicator is enabled
+    expect(cd.chart.data[0].length).toBe(6)
+    expect(cd.chart.data[0][6]).toBeUndefined()
+    expect(cd._candleColorActive.size).toBe(0)
+    const cc = cd._candleColor.find(e => e.instanceKey === 'SCMR')
+    expect(cc.field).toBe('candle_type_color')
+    expect(cc.byTs.get(T0)).toBe('#23a776')      // bull
+    expect(cc.byTs.get(T0 + TF)).toBe('#e54150') // bear
     // TL/TH are overlays (raw available) but hidden by default
     expect(cd.onchart.map(o => o.settings.corkyLayerId).sort()).toEqual(['th', 'tl'])
     for (const o of cd.onchart) expect(o.settings.display).toBe(false)
@@ -91,7 +96,9 @@ describe('buildChartData — view.layers', () => {
       ])
     }
     const cd = buildChartData(rows, { views })
-    expect(cd.chart.data[0][6]).toBe('#23a776') // score 2 >= 0 → green
+    expect(cd.chart.data[0][6]).toBeUndefined() // not applied at build
+    const cc = cd._candleColor.find(e => e.instanceKey === 'CRUP')
+    expect(cc.byTs.get(T0)).toBe('#23a776') // score 2 >= 0 → green (metadata)
     const box = cd.onchart.find(o => o.settings.corkyLayerId === 'box')
     expect(box.type).toBe('Zones')
     expect(box.data[0]).toEqual([T0, 5, 8]) // zipped [ts, gap_lo, gap_hi]
@@ -119,7 +126,10 @@ describe('buildChartData — view.layers', () => {
     }
     const built = buildChartData([row(0, { MACD: { macd: '1', signal: '0.5' }, SCMR: { ct: 'bull' } })], { views })
     built.timeframe = '1m'
-    expect(built.chart.data[0][6]).toBe('#23a776')
+    // candle_color off by default → not stamped at build
+    expect(built.chart.data[0][6]).toBeUndefined()
+    // simulate the indicator being enabled (setIndicatorEnabled marks it active)
+    for (const e of built._candleColor) built._candleColorActive.add(e.kind)
 
     const ts1 = T0 + TF
     const ev = {

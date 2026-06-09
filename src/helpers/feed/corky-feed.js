@@ -337,8 +337,40 @@ export class CorkyFeed extends FeedSource {
             handle.enabledKinds.delete(kind)
         }
 
+        // Apply / clear candle colouring for this kind (candle_color layers are
+        // not overlays — they stamp the candle colour slot, gated on enable so
+        // the candles-only default stays plain red/green).
+        const hadCandleColor = this._applyCandleColor(handle, kind, on)
+        if (hadCandleColor) changed = true
+
         if (changed) dc.touchData()
-        return overlays.length > 0
+        return overlays.length > 0 || hadCandleColor
+    }
+
+    // Stamp (on) / clear (off) the candle colour slot (index 6) for a kind's
+    // candle_color layers, using the build-time _candleColor metadata. Tracks
+    // built._candleColorActive so applyLiveUpdate only re-stamps enabled kinds.
+    // @returns {boolean} whether this kind had any candle_color layer.
+    _applyCandleColor(handle, kind, on) {
+        const built = handle && handle.built
+        const cc = (built && built._candleColor) || []
+        const kl = String(kind).toLowerCase()
+        const entries = cc.filter((e) => String(e.kind).toLowerCase() === kl)
+        if (!entries.length) return false
+        const data = built.chart.data || []
+        const active = built._candleColorActive || (built._candleColorActive = new Set())
+        for (const c of data) {
+            const ts = c[0]
+            if (on) {
+                let color = null
+                for (const e of entries) { const v = e.byTs.get(ts); if (v != null) color = v }
+                if (color != null) { while (c.length < 9) c.push(''); c[6] = color }
+            } else if (c.length >= 7 && c[6] !== '' && entries.some((e) => e.byTs.has(ts))) {
+                c[6] = ''
+            }
+        }
+        for (const e of entries) { if (on) active.add(e.kind); else active.delete(e.kind) }
+        return true
     }
 
     /**

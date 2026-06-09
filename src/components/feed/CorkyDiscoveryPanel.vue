@@ -940,6 +940,9 @@ export default {
 
 .corky-indicator-row {
     justify-content: flex-start;
+    /* allow the full-width per-layer sub-toggles to wrap BELOW the row
+       (.indicator-item is a non-wrapping flex row by default) */
+    flex-wrap: wrap;
 }
 
 .corky-ind-toggle {

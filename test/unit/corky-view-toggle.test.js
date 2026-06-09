@@ -90,4 +90,27 @@ describe('view-layer visibility gating', () => {
     feed._reapplyEnabled(h)
     expect(dc.data.onchart).toHaveLength(0)
   })
+
+  test('candle_color: applied on enable, cleared on disable (not at build)', () => {
+    const data = [[1000, 1, 2, 0, 1.5, 10], [2000, 1, 2, 0, 1.5, 10]]
+    const built = { chart: { type: 'Candles', data }, onchart: [], offchart: [] }
+    Object.defineProperty(built, '_candleColor', {
+      value: [{ kind: 'SCMR', instanceKey: 'SCMR', field: 'ct', byTs: new Map([[1000, '#23a776'], [2000, '#e54150']]) }],
+      enumerable: false
+    })
+    Object.defineProperty(built, '_candleColorActive', { value: new Set(), enumerable: false })
+    const h = { built, addedOverlays: new Set(), enabledKinds: new Set(), enabledLayers: new Set() }
+
+    expect(data[0][6]).toBeUndefined() // candles-only default: not coloured
+    // enable (no overlays for the kind, but candle_color makes it meaningful → true)
+    expect(feed.setIndicatorEnabled(h, 'scmr', true)).toBe(true)
+    expect(data[0][6]).toBe('#23a776')
+    expect(data[1][6]).toBe('#e54150')
+    expect([...built._candleColorActive]).toEqual(['SCMR'])
+    // disable → cleared
+    feed.setIndicatorEnabled(h, 'scmr', false)
+    expect(data[0][6]).toBe('')
+    expect(data[1][6]).toBe('')
+    expect(built._candleColorActive.size).toBe(0)
+  })
 })
