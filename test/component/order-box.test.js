@@ -105,6 +105,55 @@ describe('OrderBox overlay (P3)', () => {
     expect(methodTotal('strokeRect')).toBeGreaterThan(0) // box still there
   })
 
+  function fakeEvent() {
+    return { defaultPrevented: false, preventDefault() { this.defaultPrevented = true } }
+  }
+  function orders(dc) { return dc.data.onchart[0].settings.orders }
+
+  test('delete (✕) removes exactly that order', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    dc.touchData(); await settle(6)
+    const row = ob._geom.rows[1] // ord-2
+    ob.mouse.x = row.del.x + row.del.w / 2
+    ob.mouse.y = row.del.y + row.del.h / 2
+    ob.on_mousedown(fakeEvent())
+    await settle(4)
+    expect(orders(dc).map(o => o.id)).toEqual(['ord-1', 'ord-3'])
+  })
+
+  test('eye toggle flips visible and hides the rows', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    dc.touchData(); await settle(6)
+    expect(ob.visible).toBe(true)
+    ob.mouse.x = ob._geom.eye.x + 2
+    ob.mouse.y = ob._geom.eye.y + 2
+    ob.on_mousedown(fakeEvent())
+    await settle(6)
+    expect(dc.data.onchart[0].settings.visible).toBe(false)
+    expect(ob._geom.rows.length).toBe(0)
+  })
+
+  test('dragging an order changes its price (persisted)', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    dc.touchData(); await settle(6)
+    const row = ob._geom.rows[0] // ord-1
+    ob.mouse.x = row.grab.x + 4
+    ob.mouse.y = row.grab.y + row.grab.h / 2
+    ob.on_mousedown(fakeEvent())
+    expect(ob._dragOrder).toBe('ord-1')
+    // simulate the cursor moving to a new price, then a move + drop
+    ob.$props.cursor.y$ = 102.75
+    ob.on_mousemove()
+    ob.on_mouseup(fakeEvent())
+    await settle(4)
+    const o1 = orders(dc).find(o => o.id === 'ord-1')
+    expect(o1.price).toBe(102.75)
+    expect(ob._dragOrder).toBe(null)
+  })
+
   test('order lines are clamped to the box width', async () => {
     await mountWith(seedDc())
     const ob = orderBoxRenderer(wrapper)

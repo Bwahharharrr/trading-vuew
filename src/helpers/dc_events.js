@@ -398,6 +398,12 @@ export default class DCEvents {
         delete settings.id
         let grid_id = args[1]
         this.merge(`${args[3]}.settings`, settings)
+        // Settings are read at DRAW time, not as a reactive render dependency of
+        // the canvas (same gotcha as the Volume eye-toggle). A static settings
+        // change with no following cursor move (eye toggle, order delete, etc.)
+        // would otherwise not repaint — bump the render revision so the new
+        // settings flow to the overlay AND the grid redraws.
+        if (typeof this.touchData === 'function') this.touchData()
     }
 
     // Lock the scrolling mechanism
