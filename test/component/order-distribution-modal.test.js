@@ -45,12 +45,13 @@ describe('OrderDistributionModal', () => {
     w.unmount()
   })
 
-  test('Cancel and backdrop click emit close', async () => {
+  test('Cancel closes; a backdrop click does NOT (sticky modal)', async () => {
     const w = mountModal()
     await w.find('.btn-cancel').trigger('click')
     expect(w.emitted('close')).toBeTruthy()
-    await w.find('.order-modal-overlay').trigger('click') // @click.self backdrop
-    expect(w.emitted('close').length).toBeGreaterThanOrEqual(2)
+    // Clicking outside the dialog must NOT dismiss it — explicit Cancel/✕ only.
+    await w.find('.order-modal-overlay').trigger('click')
+    expect(w.emitted('close').length).toBe(1)
     w.unmount()
   })
 

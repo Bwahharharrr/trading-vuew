@@ -11,6 +11,10 @@ export default {
             log_scale: true,
             width: window.innerWidth,
             height: window.innerHeight,
+            // Right-panel width: user-resizable via the panel's left-edge drag
+            // handle; persisted (saveStateToStorage). Default a bit wider than
+            // the old fixed RIGHTBAR=250.
+            panelWidth: 300,
             config: {
                 DEFAULT_LEN: 200,
                 TB_BORDER: 5,
@@ -33,6 +37,10 @@ export default {
             }
         },
         rightPanelWidth() {
+            const w = Number(this.panelWidth)
+            const min = 220
+            const max = Math.max(min, Math.floor(this.width * 0.6))
+            if (Number.isFinite(w)) return Math.min(max, Math.max(min, w))
             return this.config.RIGHTBAR || 250
         },
         chartWidth() {
@@ -52,6 +60,34 @@ export default {
         onResize() {
             this.width = window.innerWidth
             this.height = window.innerHeight
+        },
+
+        // ── Right-panel resize (left-edge drag handle) ──────────────────────
+        // Document-level listeners + body cursor, mirroring GridResizer.vue.
+        startPanelResize(e) {
+            this._panelResizing = true
+            this._onPanelResizeMove = (ev) => {
+                if (!this._panelResizing) return
+                // Width = distance from the pointer to the right edge of the window.
+                this.panelWidth = window.innerWidth - ev.clientX
+            }
+            this._onPanelResizeUp = () => this.endPanelResize()
+            document.addEventListener('mousemove', this._onPanelResizeMove)
+            document.addEventListener('mouseup', this._onPanelResizeUp)
+            document.body.style.cursor = 'col-resize'
+            document.body.style.userSelect = 'none'
+            e.preventDefault()
+        },
+        endPanelResize() {
+            if (!this._panelResizing) return
+            this._panelResizing = false
+            document.removeEventListener('mousemove', this._onPanelResizeMove)
+            document.removeEventListener('mouseup', this._onPanelResizeUp)
+            document.body.style.cursor = ''
+            document.body.style.userSelect = ''
+            // Clamp what we persist to what rightPanelWidth actually renders.
+            this.panelWidth = this.rightPanelWidth
+            if (typeof this.saveStateToStorage === 'function') this.saveStateToStorage()
         },
 
         resetView() {

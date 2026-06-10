@@ -59,7 +59,10 @@ export default {
             // TYPE chooser, then (for 'scaled') the Scaled Order distribution modal.
             orderTypeModalOpen: false,
             orderModalOpen: false,
-            pendingBoxGeometry: null   // { tStart, tEnd, low, high } (data coords)
+            pendingBoxGeometry: null,  // { tStart, tEnd, low, high } (data coords)
+            // Set when the modal was opened from an existing box's cog:
+            // { uuid, geometry:{low,high}, initial:{orderSize,orderQty,distribution} }
+            editingOrderBox: null
         }
     },
     methods: {
@@ -125,18 +128,9 @@ export default {
                     const tz = (tv.$props && tv.$props.timezone) || 0
                     const r = boxReadout(grid, { topY, botY, leftX, rightX }, tz)
 
-                    alert(
-                        `Rectangle:\n` +
-                        `High:  ${r.high}\n` +
-                        `Low:   ${r.low}\n` +
-                        `Start: ${r.tStart}  (${r.startStr})\n` +
-                        `End:   ${r.tEnd}  (${r.endStr})`
-                    )
-
-                    // Hand off to the order-distribution modal (the debug alert
-                    // above is kept). Stash geometry in DATA coords so the saved
-                    // OrderBox overlay can anchor to it (boxReadout high/low are
-                    // formatted strings -> Number()).
+                    // Hand off to the order-distribution modal. Stash geometry in
+                    // DATA coords so the saved OrderBox overlay can anchor to it
+                    // (boxReadout high/low are formatted strings -> Number()).
                     this.pendingBoxGeometry = {
                         tStart: r.tStart,
                         tEnd: r.tEnd,
@@ -169,7 +163,48 @@ export default {
             this.pendingBoxGeometry = null
         },
 
+        // Cog on an existing OrderBox: reopen the Scaled Order modal pre-filled
+        // with the box's current config; confirm re-derives its distribution.
+        onOrderBoxSettings(payload) {
+            if (!payload || !payload.uuid) return
+            this.editingOrderBox = {
+                uuid: payload.uuid,
+                geometry: { low: payload.low, high: payload.high },
+                initial: {
+                    orderSize: payload.totalSize,
+                    orderQty: payload.qty,
+                    distribution: payload.distribution,
+                },
+            }
+            this.orderModalOpen = true
+        },
+
         onOrderConfirm(cfg) {
+            // EDIT path (cog): re-derive the existing box's orders from the new
+            // qty/size/distribution over its own price range; the box stays put.
+            const edit = this.editingOrderBox
+            if (edit) {
+                this.orderModalOpen = false
+                this.editingOrderBox = null
+                const on = (this.chart && this.chart.data && this.chart.data.onchart) || []
+                const ov = on.find(o => o && o.settings && o.settings.$uuid === edit.uuid)
+                if (!ov) return
+                const low = Math.min(ov.settings.c0[1], ov.settings.c1[1])
+                const high = Math.max(ov.settings.c0[1], ov.settings.c1[1])
+                const orders = distributeOrders({
+                    low, high,
+                    qty: cfg.orderQty, size: cfg.orderSize, dist: cfg.distribution
+                }).map(o => ({ ...o, status: 'local' }))
+                Object.assign(ov.settings, {
+                    totalSize: cfg.orderSize,
+                    qty: cfg.orderQty,
+                    distribution: cfg.distribution,
+                    orders,
+                })
+                if (typeof this.chart.touchData === 'function') this.chart.touchData()
+                return
+            }
+
             const g = this.pendingBoxGeometry
             this.orderModalOpen = false
             this.pendingBoxGeometry = null
@@ -216,6 +251,7 @@ export default {
         onOrderCancel() {
             this.orderModalOpen = false
             this.pendingBoxGeometry = null
+            this.editingOrderBox = null
         }
     }
 }

@@ -1,5 +1,7 @@
 <template>
-<div class="order-modal-overlay" @click.self="close">
+<!-- No @click.self close on the overlay: a stray click outside the dialog must
+     NOT dismiss it (explicit Cancel / ✕ only). -->
+<div class="order-modal-overlay">
     <div class="order-modal">
         <div class="modal-header">
             <span class="modal-title">Scaled Order</span>
@@ -7,8 +9,14 @@
         </div>
         <div class="modal-body">
             <div class="range-context" v-if="geometry">
-                Range: {{ fmt(low) }} – {{ fmt(high) }}
-                <span class="side-note">· side auto (above price = sell, below = buy)</span>
+                <div class="range-row">
+                    <span class="range-label">Range</span>
+                    <span class="range-value">{{ fmt(low) }} – {{ fmt(high) }}</span>
+                </div>
+                <div class="side-note">
+                    Side is automatic: box <b>above</b> price → <span class="sell">SELL</span>,
+                    <b>below</b> → <span class="buy">BUY</span>
+                </div>
             </div>
 
             <div class="setting-group">
@@ -48,14 +56,20 @@ export default {
     name: 'OrderDistributionModal',
     props: {
         // { high, low, tStart, tEnd } from boxReadout (read-only context).
-        geometry: { type: Object, default: null }
+        geometry: { type: Object, default: null },
+        // Pre-fill (edit-existing-box via its cog): { orderSize, orderQty,
+        // distribution } — absent fields fall back to the defaults.
+        initial: { type: Object, default: null }
     },
     emits: ['confirm', 'close'],
     data() {
+        const init = this.initial || {}
         return {
-            orderSize: 1,
-            orderQty: 5,
-            distribution: 'flat',
+            orderSize: Number.isFinite(Number(init.orderSize)) && Number(init.orderSize) > 0
+                ? Number(init.orderSize) : 10,
+            orderQty: Number.isFinite(Number(init.orderQty)) && Math.trunc(init.orderQty) >= 1
+                ? Math.trunc(init.orderQty) : 5,
+            distribution: init.distribution || 'flat',
             distTypes: [
                 { value: 'flat', label: 'Flat',
                   icon: '<svg viewBox="0 0 24 24" width="24" height="24"><line x1="3" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="2"/></svg>' },
@@ -128,10 +142,21 @@ export default {
 .modal-close:hover { color: #d1d4dc; }
 .modal-body { padding: 20px; }
 .range-context {
-    color: #808a9d; font-size: 12px; margin-bottom: 16px;
-    padding: 8px 10px; background: #131722; border-radius: 4px;
+    color: #808a9d; margin-bottom: 16px;
+    padding: 10px 12px; background: #131722; border-radius: 4px;
 }
-.side-note { color: #565c68; font-size: 11px; }
+.range-row {
+    display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px;
+}
+.range-label {
+    color: #808a9d; font-size: 12px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.5px;
+}
+.range-value { color: #d1d4dc; font-size: 15px; font-weight: 600; }
+.side-note { color: #8b93a3; font-size: 12px; line-height: 1.5; }
+.side-note b { color: #d1d4dc; }
+.side-note .sell { color: #e54150; font-weight: 700; }
+.side-note .buy { color: #35a776; font-weight: 700; }
 .setting-group { margin-bottom: 15px; }
 .setting-label {
     display: block; color: #808a9d; font-size: 11px; font-weight: 600;

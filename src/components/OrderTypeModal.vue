@@ -1,5 +1,7 @@
 <template>
-<div class="order-modal-overlay" @click.self="$emit('close')">
+<!-- No @click.self close on the overlay: a stray click outside the dialog must
+     NOT dismiss it (explicit Cancel / ✕ only). -->
+<div class="order-modal-overlay">
     <div class="order-modal">
         <div class="modal-header">
             <span class="modal-title">Order Type</span>
