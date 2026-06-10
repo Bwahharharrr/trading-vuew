@@ -97,6 +97,7 @@
     "@vue/test-utils": "^2.4.10",
     "eslint": "^7.21.0",
     "eslint-plugin-vue": "^9.0.0",
+    "html2canvas": "^1.4.1",
     "httpxy": "^0.5.3",
     "jsdom": "^29.1.1",
     "playwright": "^1.60.0",

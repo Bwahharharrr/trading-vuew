@@ -78,6 +78,12 @@
             <div class="bottom-panel-section">
                 <button class="bottom-btn" @click="resetView">Reset View</button>
             </div>
+
+            <div class="bottom-panel-section">
+                <button class="bottom-btn" @click="captureScreen" title="Screenshot the whole browser view and save it as a PNG">
+                    📷 Capture
+                </button>
+            </div>
         </div>
     </div>
 
