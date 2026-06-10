@@ -154,7 +154,12 @@
             @retry="onCorkyRetry">
         </corky-discovery-panel>
 
-        <div class="panel-section" v-if="candleColoringOptions.length > 0">
+        <!-- Legacy FILE-feed indicator UI (Views / Values / Indicators). In
+             GATEWAY mode the Corky discovery panel above owns indicator control,
+             so these are gated to file mode — otherwise gateway-added offchart
+             overlays (e.g. "MACD histogram", "MACD averages") leaked into the
+             "Values" list, duplicating the panel's own toggles. -->
+        <div class="panel-section" v-if="feedMode === 'file' && candleColoringOptions.length > 0">
             <div class="section-title">Views</div>
             <div class="control-group">
                 <select v-model="displayedView" @change="onViewSelected(displayedView)">
@@ -166,7 +171,7 @@
             </div>
         </div>
 
-        <div class="panel-section" v-if="offchartIndicators.length > 0">
+        <div class="panel-section" v-if="feedMode === 'file' && offchartIndicators.length > 0">
             <div class="section-title">Values</div>
             <div class="indicator-list">
                 <div
@@ -193,7 +198,7 @@
         </div>
 
         <!-- View Indicators Accordion Section -->
-        <div class="panel-section" v-if="viewIndicatorsAccordion.length > 0">
+        <div class="panel-section" v-if="feedMode === 'file' && viewIndicatorsAccordion.length > 0">
             <div class="section-title">Indicators</div>
             <div class="accordion-container">
                 <div v-for="view in viewIndicatorsAccordion"
