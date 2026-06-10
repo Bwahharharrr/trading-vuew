@@ -160,6 +160,19 @@ describe('CorkyFeed hub fixes', () => {
     expect(client.sent[client.sent.length - 1].subscription_id).toBe(id)
   })
 
+  test('grid normalize leaves untagged (non-corky) offchart data untouched', () => {
+    // Foreign data using trading-vue's public grid:{id} pane-merge must NOT be
+    // rewritten by the corky pane normalizer (it used to promote such overlays
+    // to their own panes, deleting their grid grouping).
+    const anchor = { name: 'macd', type: 'Splines', data: [], settings: {} }
+    const merged = { name: 'sig', type: 'Spline', data: [], grid: { id: 1 }, settings: {} }
+    dc.data.offchart.push(anchor, merged)
+    const handle = { built: { offchart: [] }, addedOverlays: new Set(), enabledLayers: new Set() }
+    feed._normalizeOffchartGrids(handle)
+    expect(dc.data.offchart).toEqual([anchor, merged]) // order preserved
+    expect(merged.grid).toEqual({ id: 1 })             // grouping preserved
+  })
+
   test('subscribe maps indicators:[] → include_indicators:true (boot-restore contract)', async () => {
     // The boot auto-restore once passed NO indicators field → include_indicators
     // was omitted → the gateway served candles WITHOUT indicator rows → the

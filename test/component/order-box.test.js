@@ -192,6 +192,47 @@ describe('OrderBox overlay (P3)', () => {
     expect(got[0].distribution).toBe('flat')
   })
 
+  test('cog is BLOCKED while live (pending/confirmed) orders exist', async () => {
+    await mountWith(seedDc({
+      orders: [
+        { id: 'ord-1', price: 98, size: 1, status: 'confirmed' },
+        { id: 'ord-2', price: 101, size: 1, status: 'local' }
+      ]
+    }))
+    const ob = orderBoxRenderer(wrapper)
+    dc.touchData(); await settle(6)
+    const got = []
+    const orig = ob.custom_event.bind(ob)
+    ob.custom_event = (e, ...a) => { if (e === 'order-settings') got.push(a[0]); return orig(e, ...a) }
+    ob.mouse.x = ob._geom.cog.x + 2
+    ob.mouse.y = ob._geom.cog.y + 2
+    const ev = fakeEvent()
+    ob.on_mousedown(ev)
+    expect(got.length).toBe(0)          // modal NOT opened
+    expect(ev.defaultPrevented).toBe(true) // but the click is consumed
+  })
+
+  test('releasing a box-move OUTSIDE the canvas still commits (window mouseup fallback)', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    dc.touchData(); await settle(6)
+    const start = orders(dc).map(o => o.price)
+    const DY = -2
+    ob.drag = { t: 0, y$: 100 }
+    ob.$props.cursor.t = 0
+    ob.$props.cursor.y$ = 100 + DY
+    ob.drag_update()
+    expect(ob._ghost).toEqual({ dt: 0, dy: DY })
+    // Pointer leaves the canvas and the button is released on the page:
+    // the grid never sees a mouseup — the Tool's window-level fallback must.
+    ob.mouse.pressed = true
+    window.dispatchEvent(new MouseEvent('mouseup'))
+    await settle(2)
+    expect(ob._ghost).toBe(null)                                  // ghost cleared
+    expect(ob.drag).toBe(null)                                    // drag ended
+    expect(orders(dc).map(o => o.price)).toEqual(start.map(p => p + DY)) // move committed
+  })
+
   test('distribution curve: a faint spline is drawn near the right edge', async () => {
     await mountWith(seedDc())
     const ob = orderBoxRenderer(wrapper)

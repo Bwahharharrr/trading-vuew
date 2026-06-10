@@ -331,7 +331,12 @@ export default {
             this.$emit('close-indicator', {
                 name: indicator.name,
                 index: indicator.index,
-                gridId: this.$props.grid_id
+                gridId: this.$props.grid_id,
+                // The overlay's settings OBJECT (same reference as in dc.data) so
+                // the handler can resolve the exact overlay by IDENTITY — names
+                // alone collide (e.g. SCMR and SCMR(INV) publish identical layer
+                // labels, and a find-by-name would close the wrong instance's pane).
+                settings: indicator.settings
             })
         },
         // Volume row — settings (cog). Mirrors openSettings() but always points

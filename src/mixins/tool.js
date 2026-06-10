@@ -5,6 +5,14 @@ import Keys from '../stuff/keys.js'
 import Utils from '../stuff/utils.js'
 
 export default {
+    beforeUnmount() {
+        // Drop the window-level mouseup fallback registered in init_tool.
+        // (Merges with overlay.js's beforeUnmount — Vue runs both.)
+        if (this._win_mouseup) {
+            window.removeEventListener('mouseup', this._win_mouseup)
+            this._win_mouseup = null
+        }
+    },
     methods: {
         init_tool() {
             // Collision functions (float, float) => bool,
@@ -42,6 +50,17 @@ export default {
             this.keys = new Keys(this)
             this.keys.on('Delete', this.remove_tool)
             this.keys.on('Backspace', this.remove_tool)
+
+            // Releasing the button OUTSIDE the canvas never reaches the grid's
+            // mouseup handler — without this fallback an in-flight drag (and its
+            // scroll-lock / move-ghost) stays stuck until the next in-canvas
+            // click. Route the release through the same mouse pipeline; for an
+            // in-canvas release the canvas (target) handler has already run and
+            // cleared `pressed`, so this is a no-op (no double-dispatch).
+            this._win_mouseup = e => {
+                if (this.mouse.pressed || this.drag) this.mouse.emit('mouseup', e)
+            }
+            window.addEventListener('mouseup', this._win_mouseup)
 
             this.show_pins = false
             this.drag = null

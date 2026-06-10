@@ -270,7 +270,7 @@ export default {
             this._geom = geom
             for (const row of geom.rows) this.draw_order(ctx, row, stroke)
             this.draw_eye(ctx, geom.eye, this.visible, stroke)
-            this.draw_cog(ctx, geom.cog, stroke)
+            this.draw_cog(ctx, geom.cog, stroke, this.has_live_orders())
             this.draw_dist_curve(ctx, r, stroke)
             this.draw_submit(ctx, geom.submit)
             this.draw_summary(ctx, r)
@@ -422,12 +422,14 @@ export default {
             ctx.restore()
         },
 
-        // Gear icon (order config). Same chrome style as the eye.
-        draw_cog(ctx, c, color) {
+        // Gear icon (order config). Same chrome style as the eye; dimmed while
+        // live orders block editing (see the cog branch in on_mousedown).
+        draw_cog(ctx, c, color, locked = false) {
             const cx = c.x + c.w / 2, cy = c.y + c.h / 2
             const ro = c.w / 2 - 2.5  // outer (teeth) radius
             const ri = ro - 2.5       // body radius
             ctx.save()
+            if (locked) ctx.globalAlpha = 0.35
             ctx.strokeStyle = color
             ctx.lineWidth = 1.2
             ctx.beginPath()
@@ -568,8 +570,12 @@ export default {
                 return
             }
             // Cog: open the Scaled Order modal pre-filled with this box's config
-            // (App listens for 'order-settings' on <trading-vue>).
+            // (App listens for 'order-settings' on <trading-vue>). BLOCKED while
+            // any order is live on the engine (pending/confirmed/cancelling):
+            // confirming would regenerate all orders as 'local' and silently
+            // orphan the engine-side ones. Cancel them first.
             if (g.cog && inRect(g.cog, mx, my)) {
+                if (this.has_live_orders()) { e.preventDefault(); return }
                 const c0 = this.corner(0), c1 = this.corner(1)
                 this.custom_event('order-settings', {
                     uuid: this.sett.$uuid,
@@ -688,8 +694,11 @@ export default {
                     if (inRect(h.rect, mx, my)) { this.set_cursor(h.cursor); return }
                 }
             }
-            if (inRect(g.eye, mx, my) || inRect(g.submit, mx, my) ||
-                (g.cog && inRect(g.cog, mx, my))) { this.set_cursor('pointer'); return }
+            if (g.cog && inRect(g.cog, mx, my)) {
+                this.set_cursor(this.has_live_orders() ? 'not-allowed' : 'pointer')
+                return
+            }
+            if (inRect(g.eye, mx, my) || inRect(g.submit, mx, my)) { this.set_cursor('pointer'); return }
             for (const row of g.rows) {
                 if (inRect(row.widget, mx, my)) { this.set_cursor(''); return }
             }
@@ -730,9 +739,12 @@ export default {
                     const orders = this.orders.map(o => ({ ...o, price: o.price + g.dy }))
                     this.pins[0].update_from(c0, false)
                     this.pins[1].update_from(c1, false)
-                    this.custom_event('change-settings', { c0, c1, orders, $ghost: null })
+                    // $ghost: undefined (not null) — the merge overwrites the live
+                    // offset, and undefined keys drop out of JSON serialization so
+                    // the transient repaint driver never persists with the overlay.
+                    this.custom_event('change-settings', { c0, c1, orders, $ghost: undefined })
                 } else if (this.sett && this.sett.$ghost) {
-                    this.custom_event('change-settings', { $ghost: null })
+                    this.custom_event('change-settings', { $ghost: undefined })
                 }
                 return
             }

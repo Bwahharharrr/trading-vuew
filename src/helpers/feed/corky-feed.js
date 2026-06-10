@@ -563,6 +563,13 @@ export class CorkyFeed extends FeedSource {
         const arr = dc.data && dc.data.offchart
         if (!arr) return
 
+        // Only gateway-built data carries pane tags. Without ANY tag there is
+        // nothing of ours to normalize — and rewriting would be DESTRUCTIVE:
+        // foreign/fallback overlays using trading-vue's public grid:{id} pane-
+        // merge would get promoted to their own panes (grid deleted). Leave
+        // untagged data exactly as the caller arranged it.
+        if (!arr.some((o) => o && o.settings && o.settings.corkyPaneName != null)) return
+
         // 1. Every pane with a sibling present needs its anchor present too — else
         //    the positional anchor lookup resolves the wrong overlay (or none).
         if (handle && handle.built && handle.built.offchart) {

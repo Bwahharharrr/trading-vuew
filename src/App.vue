@@ -653,7 +653,21 @@ export default {
                 mem.kinds.splice(mi, 1)
             }
             mem.layers = cur.layers.slice()
+            this._syncHandleEnabled(mem)
             this.saveStateToStorage()   // persist across reloads
+        },
+
+        // Keep the live handle's enabled-snapshot fresh: a WS reconnect replays
+        // handle.enabled (_reapplyEnabled after the gateway re-serves history) —
+        // without this it restores only the SUBSCRIBE-time state and silently
+        // drops every indicator/layer toggled since the load.
+        _syncHandleEnabled(mem) {
+            if (!this.corkyHandle) return
+            this.corkyHandle.enabled = {
+                kinds: mem.kinds.slice(),
+                layers: mem.layers.slice(),
+                hiddenLayers: mem.hiddenLayers.slice(),
+            }
         },
 
         // Toggle a single view layer on/off (TL/TH/diagnostics opt-in, or an
@@ -676,6 +690,7 @@ export default {
             } else if (hi === -1) {
                 mem.hiddenLayers.push(req.layerId)
             }
+            this._syncHandleEnabled(mem)
             this.saveStateToStorage()
         },
 
@@ -688,8 +703,19 @@ export default {
                 !this.corkyHandle || !payload) return false
             const d = this.chart && this.chart.data
             const all = [...((d && d.onchart) || []), ...((d && d.offchart) || [])]
-            const ov = all.find(o => o && o.name === payload.name && o.settings &&
-                (o.settings.corkyLayerId || o.settings.corkyKind))
+            // Resolve by settings IDENTITY first (the Legend passes the overlay's
+            // settings object through): overlay NAMES are just layer labels and
+            // collide across instances (SCMR vs SCMR(INV) publish identical layer
+            // labels) — a name match would close the wrong instance's pane.
+            let ov = payload.settings
+                ? all.find(o => o && o.settings === payload.settings) : null
+            if (ov && !(ov.settings.corkyLayerId || ov.settings.corkyKind)) {
+                return false // identity says it's a non-Corky overlay → File path
+            }
+            if (!ov) {
+                ov = all.find(o => o && o.name === payload.name && o.settings &&
+                    (o.settings.corkyLayerId || o.settings.corkyKind))
+            }
             if (!ov) return false
             const { venue, symbol, timeframe } = this.corkyCurrent
             const s = ov.settings

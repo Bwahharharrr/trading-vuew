@@ -124,6 +124,7 @@ export default {
                 const video = document.createElement('video')
                 video.srcObject = stream
                 video.muted = true
+                video.playsInline = true // Safari refuses inline play() without it
                 await video.play()
                 // Wait for a real decoded frame (not just metadata) so the canvas
                 // isn't black; rVFC where supported, else a short settle.
