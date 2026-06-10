@@ -1,6 +1,14 @@
-import { test, expect, describe } from 'vitest'
+import { test, expect, describe, vi } from 'vitest'
 import { Canvas } from 'skia-canvas'
 import { CanvasContext } from '../../src/render/canvas-context.js'
+
+// skia-canvas is the only native addon in the suite; its getImageData GPU->CPU
+// readbacks (this file does several across 15 canvases) are slow (~0.6s cold)
+// and degrade multi-fold when these files contend with the rest of the parallel
+// run, blowing the 5s default timeout. Give the native-canvas files headroom —
+// the 738 pure-logic/jsdom tests keep the snappy default. It's resource
+// contention, not logic: the pixels are correct whenever the readback finishes.
+vi.setConfig({ testTimeout: 20000 })
 
 const px = (ctx, x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data)
 const layer = (id, draw, display = true) => ({ id, name: id, display, renderer: { draw } })

@@ -4,9 +4,13 @@
 // to candle geometry, body/wick colours, or volume bars after the Phase 3
 // RenderEngine extraction shows up here as a snapshot diff that must be
 // explained — the visual safety net the renderer refactor relies on.
-import { test, expect, describe } from 'vitest'
+import { test, expect, describe, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { renderCandles, pixelSignature } from './_canvas-harness.js'
+
+// See canvas-context.test.js: the skia-canvas pixel readback in pixelSignature()
+// is slow and contention-sensitive; the 5s default is too tight under load.
+vi.setConfig({ testTimeout: 20000 })
 
 const btc = JSON.parse(
   readFileSync(new URL('../data/data_btc.json', import.meta.url))

@@ -19,10 +19,12 @@ export default defineConfig({
     include: ['test/**/*.{test,spec}.{js,ts}'],
     // Golden + visual snapshots live next to their suites.
     globals: false,
-    // The canvas/RAF-driven rendering suites (render-engine, canvas-context,
-    // visual) are occasionally timing-flaky under a fully-loaded run — they pass
-    // in isolation and on retry. Two retries lets the rare flake self-heal
-    // without masking a genuine, reproducible failure.
-    retry: 2,
+    // NB: the three native-addon (skia-canvas) suites — render-engine,
+    // canvas-context, visual — raise their own testTimeout via vi.setConfig()
+    // because their getImageData GPU->CPU readbacks are slow and
+    // contention-sensitive under the full parallel run, blowing the 5s default.
+    // We deliberately do NOT set a global `retry`: a retry would mask genuine
+    // reproducible failures, and the real cause (too-tight default timeout for
+    // native pixel readback) is fixed directly at those source files.
   },
 })

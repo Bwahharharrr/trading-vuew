@@ -1,6 +1,10 @@
-import { test, expect, describe } from 'vitest'
+import { test, expect, describe, vi } from 'vitest'
 import { Canvas } from 'skia-canvas'
 import { RenderEngine } from '../../src/render/render-engine.js'
+
+// See canvas-context.test.js: skia-canvas getImageData readbacks are slow and
+// contention-sensitive; the 5s default is too tight under full-suite load.
+vi.setConfig({ testTimeout: 20000 })
 
 const px = (ctx, x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data)
 
