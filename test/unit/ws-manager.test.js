@@ -145,6 +145,29 @@ describe('_wsHandleCandle merge', () => {
     expect(ctx.liveScmrColors[ctx.liveScmrColors.length - 1]).toBe('#00FF00')
   })
 
+  test('_wsHandleAlert accumulates alerts + zones (capped) and identity-filters', () => {
+    const ctx = mkCtx()
+    ctx._wsHandleAlert({ type: 'alert', exchange: 'bitfinex', ticker: 'tBTCUSD', tf: '1m', alert: { a: 1 }, zones: [[1], [2]] })
+    expect(ctx.liveAlerts).toEqual([{ a: 1 }])
+    expect(ctx.liveZones).toEqual([[1], [2]])
+    // identity mismatch → dropped
+    ctx._wsHandleAlert({ type: 'alert', exchange: 'OTHER', alert: { a: 2 } })
+    expect(ctx.liveAlerts.length).toBe(1)
+  })
+
+  test('_wsHandleSnapshot stores snapshot arrays without mutating the chart', () => {
+    const ctx = mkCtx()
+    const before = ctx.chart.data.chart.data.length
+    ctx._wsHandleSnapshot({
+      type: 'snapshot', exchange: 'bitfinex', ticker: 'tBTCUSD', tf: '1m',
+      candles: [[1]], alerts: [{ a: 1 }], zones: [[2]], scmr_colors: ['#0f0'],
+    })
+    expect(ctx.liveAlerts).toEqual([{ a: 1 }])
+    expect(ctx.liveZones).toEqual([[2]])
+    expect(ctx.liveScmrColors).toEqual(['#0f0'])
+    expect(ctx.chart.data.chart.data.length).toBe(before) // snapshot does not apply
+  })
+
   test('_wsOnMessage routes by type without throwing on unknown types', () => {
     const ctx = mkCtx()
     ctx._wsHandleAlert = vi.fn()

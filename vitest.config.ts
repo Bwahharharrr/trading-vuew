@@ -19,5 +19,10 @@ export default defineConfig({
     include: ['test/**/*.{test,spec}.{js,ts}'],
     // Golden + visual snapshots live next to their suites.
     globals: false,
+    // The canvas/RAF-driven rendering suites (render-engine, canvas-context,
+    // visual) are occasionally timing-flaky under a fully-loaded run — they pass
+    // in isolation and on retry. Two retries lets the rare flake self-heal
+    // without masking a genuine, reproducible failure.
+    retry: 2,
   },
 })

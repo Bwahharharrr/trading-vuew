@@ -333,6 +333,43 @@ describe('price-alarm glue', () => {
   })
 })
 
+describe('feed mode + error mapping', () => {
+  test('_corkyErr normalizes errors to { message, retryable }', () => {
+    const app = mkApp()
+    expect(app._corkyErr(null)).toEqual({ message: 'Unknown error', retryable: false })
+    expect(app._corkyErr({ message: 'boom', retryable: true })).toEqual({ message: 'boom', retryable: true })
+    expect(app._corkyErr({ code: 'state_not_found' })).toEqual({ message: 'state_not_found', retryable: false })
+  })
+
+  test('setFeedMode is a no-op when unchanged; → gateway enters gateway mode', () => {
+    const app = mkApp({ feedMode: 'gateway' })
+    app.enterGatewayMode = vi.fn()
+    app.setFeedMode('gateway')                 // unchanged
+    expect(app.enterGatewayMode).not.toHaveBeenCalled()
+    const app2 = mkApp({ feedMode: 'file' })
+    app2.enterGatewayMode = vi.fn()
+    app2.setFeedMode('gateway')
+    expect(app2.enterGatewayMode).toHaveBeenCalled()
+  })
+
+  test('setFeedMode → file tears down the gateway and reloads the selected file', () => {
+    const app = mkApp({ feedMode: 'gateway', selectedDataFile: 'data_btc.json' })
+    app.teardownCorky = vi.fn()
+    app.onFileSelected = vi.fn()
+    app.setFeedMode('file')
+    expect(app.teardownCorky).toHaveBeenCalled()
+    expect(app.onFileSelected).toHaveBeenCalledWith('data_btc.json')
+  })
+
+  test('setFeedMode → file with no prior file auto-picks the first chart file', () => {
+    const app = mkApp({ feedMode: 'gateway', selectedDataFile: '', dataFiles: ['data_alerts_x.json', 'data_btc.json'] })
+    app.teardownCorky = vi.fn()
+    app.onFileSelected = vi.fn()
+    app.setFeedMode('file')
+    expect(app.onFileSelected).toHaveBeenCalledWith('data_btc.json')
+  })
+})
+
 describe('_corkyMem + _corkyUnsub + teardown', () => {
   test('_corkyMem normalizes malformed restored entries', () => {
     const app = mkApp()

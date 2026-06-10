@@ -83,6 +83,33 @@ describe('getIndicatorSettings snapshot', () => {
   })
 })
 
+describe('applyIndicatorSettings', () => {
+  test('offchart indicator: updates type + merges settings + persists to charts[tf]', () => {
+    const ctx = mkCtx()
+    ctx.indicatorSettingsData = { type: 'Range', settings: {} }
+    ctx.applyIndicatorSettings({
+      gridId: 1, indicatorIndex: 0, newType: 'Spline', newSettings: { color: '#0f0' },
+    })
+    const ind = ctx.chart.data.offchart[0]
+    expect(ind.type).toBe('Spline')
+    expect(ind.settings.color).toBe('#0f0')
+    expect(ind.settings.upper).toBe(70) // prior setting preserved (merge)
+    expect(ctx.charts['15m'].offchart[0].type).toBe('Spline')
+    expect(ctx.indicatorSettingsData.type).toBe('Spline')
+    expect(ctx.saveStateToStorage).toHaveBeenCalled()
+  })
+
+  test('index -1 (attached volume): merges onto the candle overlay + invalidates', () => {
+    const invalidate = vi.fn()
+    const ctx = mkCtx()
+    ctx.chart.data.chart = { settings: {}, data: [] }
+    ctx.chart.data.$cd = { invalidate }
+    ctx.applyIndicatorSettings({ indicatorIndex: -1, newSettings: { colorVolUp: '#abc' } })
+    expect(ctx.chart.data.chart.settings.colorVolUp).toBe('#abc')
+    expect(invalidate).toHaveBeenCalled()
+  })
+})
+
 describe('accordion + persistent visibility state', () => {
   test('toggleAccordion and persistent visibility round-trip', () => {
     const ctx = mkCtx()

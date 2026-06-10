@@ -86,6 +86,36 @@ describe('tool registration + drawing mode', () => {
   })
 })
 
+describe('order routing (submit / cancel)', () => {
+  function dcWithAgent() {
+    const dc = seedDc()
+    const calls = []
+    dc.orderAgent = { submit: (s) => calls.push(['submit', s.$uuid]), cancel: (s) => calls.push(['cancel', s.$uuid]) }
+    return { dc, calls }
+  }
+  test('submit-orders routes to the agent for the matching $uuid only', () => {
+    const { dc, calls } = dcWithAgent()
+    dc.on_custom_event('submit-orders', [0, 'OrderBox1', 'box-B'])
+    expect(calls).toEqual([['submit', 'box-B']])
+  })
+  test('cancel-orders routes to the agent', () => {
+    const { dc, calls } = dcWithAgent()
+    dc.on_custom_event('cancel-orders', [0, 'OrderBox0', 'box-A'])
+    expect(calls).toEqual([['cancel', 'box-A']])
+  })
+  test('no agent attached → silent no-op', () => {
+    const dc = seedDc()
+    expect(() => dc.on_custom_event('submit-orders', [0, 'x', 'box-A'])).not.toThrow()
+  })
+  test('scroll-lock toggles the flag', () => {
+    const dc = seedDc()
+    dc.on_custom_event('scroll-lock', [true])
+    expect(dc.data.scrollLock).toBe(true)
+    dc.on_custom_event('scroll-lock', [false])
+    expect(dc.data.scrollLock).toBe(false)
+  })
+})
+
 describe('change-settings contract', () => {
   test('merges into the addressed overlay by uuid and bumps the render revision', () => {
     const dc = seedDc()
