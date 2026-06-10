@@ -48,12 +48,16 @@ export default {
 
             this._dragOrder = null
             this._dragResize = null
-            this._moveDy = 0       // live price offset while the box body is dragged
-            this._moving = false
+            this._moveDy = 0       // legacy: order lines stay put now (move uses a ghost)
+            this._ghost = null     // {dt,dy} live data-coord offset of the move-preview
+            this._cursor = ''      // last DOM cursor WE set (so we only reset our own)
             this.mouse.on('mousedown', e => this.on_mousedown(e))
             this.mouse.on('mousemove', () => this.on_mousemove())
             this.mouse.on('mouseup', e => this.on_mouseup(e))
         },
+
+        // Don't leave a 'grab'/'grabbing' cursor stuck if the box unmounts mid-hover.
+        destroy() { this.set_cursor('') },
 
         // Live corner coords: prefer the Pin's OWN state (set synchronously by
         // Tool.drag_update / resize during a drag) over settings.c0/c1, which
@@ -85,12 +89,14 @@ export default {
         order_geometry(ctx, r) {
             const L = this.$props.layout
             const eye = { x: r.xL + 4, y: r.yT + 4, w: EYE, h: EYE }
+            // Cog (order config: total size + order count), right of the eye.
+            const cog = { x: r.xL + 4 + EYE + 4, y: r.yT + 4, w: EYE, h: EYE }
             // Status button — width measured to fit the label.
             const st = this.order_status()
             ctx.save(); ctx.font = this.font11
             const tw = Math.ceil(ctx.measureText(st.label).width)
             ctx.restore()
-            const submit = { x: r.xL + 4 + EYE + 4, y: r.yT + 4, w: tw + BTN_PADX * 2, h: BTN_H, st }
+            const submit = { x: cog.x + EYE + 4, y: r.yT + 4, w: tw + BTN_PADX * 2, h: BTN_H, st }
 
             // Resize handles: 4 corners + 4 edge midpoints. Ownership uses the
             // LIVE corners (corner()), the same source as r, so a flipped box
@@ -104,15 +110,26 @@ export default {
                 const cyB = cyT ^ 1
                 const mx = (r.xL + r.xR) / 2, my = (r.yT + r.yB) / 2
                 const hb = (cx, cy) => ({ x: cx - HND, y: cy - HND, w: HND * 2, h: HND * 2 })
+                // The top/bottom edge-mid handles sit on the same horizontal center
+                // as the order-row widgets, so the topmost/lowest order buries them.
+                // Shift them out of that lane (right, else left), clamped into the
+                // box; fall back to center on a box too narrow to clear the widget.
+                const wMax = Math.min(GRAB_W + MIN_MID + DEL_W,
+                    Math.max(GRAB_W + DEL_W + 8, r.xR - r.xL))
+                const midOff = wMax / 2 + HND + 6
+                let midX = mx + midOff
+                if (midX > r.xR - HND - 2) midX = mx - midOff
+                if (midX < r.xL + HND + 2) midX = mx
+                // `cursor` drives the hover/drag DOM cursor (directional resize).
                 resize = [
-                    { rect: hb(r.xL, r.yT), edits: [{ pin: cxL, axis: 't' }, { pin: cyT, axis: '$' }] },
-                    { rect: hb(r.xR, r.yT), edits: [{ pin: cxR, axis: 't' }, { pin: cyT, axis: '$' }] },
-                    { rect: hb(r.xL, r.yB), edits: [{ pin: cxL, axis: 't' }, { pin: cyB, axis: '$' }] },
-                    { rect: hb(r.xR, r.yB), edits: [{ pin: cxR, axis: 't' }, { pin: cyB, axis: '$' }] },
-                    { rect: hb(r.xL, my), edits: [{ pin: cxL, axis: 't' }] },
-                    { rect: hb(r.xR, my), edits: [{ pin: cxR, axis: 't' }] },
-                    { rect: hb(mx, r.yT), edits: [{ pin: cyT, axis: '$' }] },
-                    { rect: hb(mx, r.yB), edits: [{ pin: cyB, axis: '$' }] }
+                    { rect: hb(r.xL, r.yT), cursor: 'nwse-resize', edits: [{ pin: cxL, axis: 't' }, { pin: cyT, axis: '$' }] },
+                    { rect: hb(r.xR, r.yT), cursor: 'nesw-resize', edits: [{ pin: cxR, axis: 't' }, { pin: cyT, axis: '$' }] },
+                    { rect: hb(r.xL, r.yB), cursor: 'nesw-resize', edits: [{ pin: cxL, axis: 't' }, { pin: cyB, axis: '$' }] },
+                    { rect: hb(r.xR, r.yB), cursor: 'nwse-resize', edits: [{ pin: cxR, axis: 't' }, { pin: cyB, axis: '$' }] },
+                    { rect: hb(r.xL, my), cursor: 'ew-resize', edits: [{ pin: cxL, axis: 't' }] },
+                    { rect: hb(r.xR, my), cursor: 'ew-resize', edits: [{ pin: cxR, axis: 't' }] },
+                    { rect: hb(midX, r.yT), cursor: 'ns-resize', edits: [{ pin: cyT, axis: '$' }] },
+                    { rect: hb(midX, r.yB), cursor: 'ns-resize', edits: [{ pin: cyB, axis: '$' }] }
                 ]
             }
 
@@ -137,7 +154,7 @@ export default {
                     })
                 }
             }
-            return { eye, submit, rows, resize }
+            return { eye, cog, submit, rows, resize }
         },
 
         // Aggregate order status → button {label, color, submittable}. Some mixed
@@ -239,14 +256,41 @@ export default {
             this._geom = geom
             for (const row of geom.rows) this.draw_order(ctx, row, stroke)
             this.draw_eye(ctx, geom.eye, this.visible, stroke)
+            this.draw_cog(ctx, geom.cog, stroke)
+            this.draw_dist_curve(ctx, r, stroke)
             this.draw_submit(ctx, geom.submit)
             this.draw_summary(ctx, r)
 
+            this.draw_ghost(ctx, stroke)
             this.render_pins(ctx)
             // Resize handles only when the box is selected/hovered (like pins).
             if (this.selected || this.show_pins) {
                 this.draw_resize_handles(ctx, geom.resize, stroke)
             }
+        },
+
+        // Move-preview: a plain dashed rectangle at the drop destination while the
+        // box body is dragged. The real box + its order lines stay put (corner()
+        // reads the unmoved pins); the offset is applied on mouseup. Driven by the
+        // transient settings.$ghost = {dt,dy} data-coord offset, which also forces
+        // the per-frame repaint (overlays only redraw on a settings change).
+        draw_ghost(ctx, color) {
+            const g = this._ghost
+            if (!g || (!g.dt && !g.dy)) return
+            const c0 = this.corner(0), c1 = this.corner(1)
+            if (!c0 || !c1) return
+            const L = this.$props.layout
+            const x0 = L.t2screen(c0[0] + g.dt), x1 = L.t2screen(c1[0] + g.dt)
+            const y0 = L.$2screen(c0[1] + g.dy), y1 = L.$2screen(c1[1] + g.dy)
+            const xL = Math.min(x0, x1), xR = Math.max(x0, x1)
+            const yT = Math.min(y0, y1), yB = Math.max(y0, y1)
+            ctx.save()
+            ctx.strokeStyle = color
+            ctx.lineWidth = 1
+            ctx.setLineDash([5, 4])
+            ctx.strokeRect(xL + 0.5, yT + 0.5, xR - xL - 1, yB - yT - 1)
+            ctx.setLineDash([])
+            ctx.restore()
         },
 
         draw_resize_handles(ctx, handles, color) {
@@ -364,6 +408,74 @@ export default {
             ctx.restore()
         },
 
+        // Gear icon (order config). Same chrome style as the eye.
+        draw_cog(ctx, c, color) {
+            const cx = c.x + c.w / 2, cy = c.y + c.h / 2
+            const ro = c.w / 2 - 2.5  // outer (teeth) radius
+            const ri = ro - 2.5       // body radius
+            ctx.save()
+            ctx.strokeStyle = color
+            ctx.lineWidth = 1.2
+            ctx.beginPath()
+            ctx.arc(cx, cy, ri, 0, Math.PI * 2)
+            ctx.stroke()
+            for (let i = 0; i < 8; i++) {
+                const a = (i / 8) * Math.PI * 2
+                ctx.beginPath()
+                ctx.moveTo(cx + Math.cos(a) * ri, cy + Math.sin(a) * ri)
+                ctx.lineTo(cx + Math.cos(a) * (ro + 1), cy + Math.sin(a) * (ro + 1))
+                ctx.stroke()
+            }
+            ctx.beginPath()
+            ctx.arc(cx, cy, 1.6, 0, Math.PI * 2)
+            ctx.stroke()
+            ctx.restore()
+        },
+
+        // Faint connected curve along the RIGHT inside edge visualising the order
+        // SIZE distribution: each order contributes a point at its price line's y,
+        // pushed left of the right edge proportionally to its size (bigger order →
+        // deeper bulge). Read-only chrome — no hit-testing.
+        draw_dist_curve(ctx, r, color) {
+            if (!this.visible) return
+            const os = this.orders
+            if (!os || os.length < 2) return
+            const L = this.$props.layout
+            let maxSize = 0
+            for (const o of os) maxSize = Math.max(maxSize, Number(o.size) || 0)
+            if (!(maxSize > 0)) return
+            const W = Math.min(40, (r.xR - r.xL) * 0.25)
+            if (W < 6) return
+            const pts = os
+                .map(o => ({
+                    y: L.$2screen(Number(o.price)),
+                    x: r.xR - 4 - ((Number(o.size) || 0) / maxSize) * W,
+                }))
+                .sort((a, b) => a.y - b.y)
+            ctx.save()
+            ctx.globalAlpha = 0.35
+            ctx.strokeStyle = color
+            ctx.lineWidth = 1.2
+            ctx.beginPath()
+            ctx.moveTo(pts[0].x, pts[0].y)
+            // Smooth: quadratic through segment midpoints (classic spline trick).
+            for (let i = 1; i < pts.length - 1; i++) {
+                const mx = (pts[i].x + pts[i + 1].x) / 2
+                const my = (pts[i].y + pts[i + 1].y) / 2
+                ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my)
+            }
+            ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y)
+            ctx.stroke()
+            // A faint dot at each order's point anchors the curve to its line.
+            ctx.fillStyle = color
+            for (const p of pts) {
+                ctx.beginPath()
+                ctx.arc(p.x, p.y, 1.6, 0, Math.PI * 2)
+                ctx.fill()
+            }
+            ctx.restore()
+        },
+
         draw_eye(ctx, e, open, color) {
             ctx.save()
             ctx.strokeStyle = color
@@ -441,6 +553,21 @@ export default {
                 e.preventDefault()
                 return
             }
+            // Cog: open the Scaled Order modal pre-filled with this box's config
+            // (App listens for 'order-settings' on <trading-vue>).
+            if (g.cog && inRect(g.cog, mx, my)) {
+                const c0 = this.corner(0), c1 = this.corner(1)
+                this.custom_event('order-settings', {
+                    uuid: this.sett.$uuid,
+                    low: Math.min(c0[1], c1[1]),
+                    high: Math.max(c0[1], c1[1]),
+                    totalSize: this.sett.totalSize,
+                    qty: this.sett.qty || this.orders.length || 1,
+                    distribution: this.sett.distribution || 'flat',
+                })
+                e.preventDefault()
+                return
+            }
             // Per-order: delete (✕) wins over grab.
             for (const row of g.rows) {
                 if (inRect(row.del, mx, my)) {
@@ -453,6 +580,7 @@ export default {
                 if (inRect(row.grab, mx, my)) {
                     this._dragOrder = row.id
                     this.custom_event('scroll-lock', true)
+                    this.set_cursor('grabbing')
                     e.preventDefault()
                     return
                 }
@@ -464,6 +592,7 @@ export default {
                         this._dragResize = h.edits
                         if (!this.selected) this.custom_event('object-selected')
                         this.custom_event('scroll-lock', true)
+                        this.set_cursor(h.cursor)
                         e.preventDefault()
                         return
                     }
@@ -499,34 +628,104 @@ export default {
                 this.set_orders(o => o.id === this._dragOrder ? { ...o, price } : o)
                 return
             }
-            // Box-body MOVE (Tool drag active, no order/resize drag): translate the
-            // order lines vertically by the SAME dy the box moves (Tool.drag_update
-            // shifts the corner prices by cursor.y$ - drag.y$). Live offset only —
-            // baked into settings on mouseup; a move preserves relative spacing
-            // (no recompute, since a body drag doesn't fire pin 'settled').
-            if (this.drag) {
-                const y$ = this.$props.cursor.y$
-                if (y$ != null) { this._moveDy = y$ - this.drag.y$; this._moving = true }
+            // Box-body MOVE is handled in drag_update() (ghost preview); just keep
+            // the grabbing cursor while it's active.
+            if (this.drag) { this.set_cursor('grabbing'); return }
+            // Idle: reflect what's under the cursor — directional resize on a
+            // handle, 'grab' on the box boundary, default elsewhere.
+            this.update_cursor()
+        },
+
+        // Override Tool.drag_update: a body MOVE must NOT shift the pins (the box
+        // and its order lines stay put). Record a live data-coord offset and show a
+        // ghost; the move is applied on mouseup. Emitting settings.$ghost also
+        // drives the per-frame redraw (overlays repaint on a settings change, not
+        // on bare cursor moves), so the ghost follows the cursor fluidly.
+        drag_update() {
+            const c = this.$props.cursor
+            if (!this.drag || c.t == null || c.y$ == null) return
+            this._ghost = { dt: c.t - this.drag.t, dy: c.y$ - this.drag.y$ }
+            this.set_cursor('grabbing')
+            // settings.$ghost mirrors the offset purely to force the per-frame
+            // overlay repaint (overlays only redraw on a settings change); draw_ghost
+            // reads the synchronous instance field this._ghost.
+            this.custom_event('change-settings', { $ghost: this._ghost })
+        },
+
+        // Set the DOM cursor (body-level, mirroring GridResizer). Only ever resets
+        // a cursor WE set, so a non-hovered box can't clobber a hovered one.
+        set_cursor(c) {
+            if (typeof document === 'undefined') return
+            const cur = c || ''
+            if (cur === '' && !this._cursor) return
+            if (this._cursor === cur) return
+            this._cursor = cur
+            document.body.style.cursor = cur
+        },
+
+        // Idle-hover cursor: resize handle → directional resize; box boundary
+        // (not a handle/chrome) → 'grab'; otherwise clear.
+        update_cursor() {
+            const g = this._geom
+            if (!g) { this.set_cursor(''); return }
+            const mx = this.mouse.x, my = this.mouse.y
+            if (this.selected || this.show_pins) {
+                for (const h of (g.resize || [])) {
+                    if (inRect(h.rect, mx, my)) { this.set_cursor(h.cursor); return }
+                }
             }
+            if (inRect(g.eye, mx, my) || inRect(g.submit, mx, my) ||
+                (g.cog && inRect(g.cog, mx, my))) { this.set_cursor('pointer'); return }
+            for (const row of g.rows) {
+                if (inRect(row.widget, mx, my)) { this.set_cursor(''); return }
+            }
+            const r = this.box_rect()
+            if (r && this.on_boundary(r, mx, my)) { this.set_cursor('grab'); return }
+            this.set_cursor('')
+        },
+
+        // Within EDGE px of the box perimeter (any of the four edges).
+        on_boundary(r, x, y) {
+            const w = 5
+            const inX = x >= r.xL - w && x <= r.xR + w
+            const inY = y >= r.yT - w && y <= r.yB + w
+            const nearV = Math.abs(x - r.xL) <= w || Math.abs(x - r.xR) <= w
+            const nearH = Math.abs(y - r.yT) <= w || Math.abs(y - r.yB) <= w
+            return inX && inY && (nearV || nearH)
         },
 
         on_mouseup() {
             if (this._dragResize) {
                 this._dragResize = null
+                this.set_cursor('')
                 this.custom_event('scroll-lock', false)
                 this.recompute_orders()   // re-derive the distribution for the new range
                 return
             }
-            if (this._moving) {
-                const dy = this._moveDy
-                this._moving = false
-                this._moveDy = 0
-                if (dy) this.set_orders(o => ({ ...o, price: o.price + dy }))
+            // Commit a body MOVE: apply the ghost offset to the corners (t + $) and
+            // shift every order price by the same $-delta, then clear the preview.
+            // A move preserves the distribution (no recompute — pins never settled).
+            const g = this._ghost
+            if (this.drag || g) {
+                this._ghost = null
+                this.set_cursor('')
+                this.custom_event('scroll-lock', false)
+                if (g && (g.dt || g.dy)) {
+                    const c0 = [this.sett.c0[0] + g.dt, this.sett.c0[1] + g.dy]
+                    const c1 = [this.sett.c1[0] + g.dt, this.sett.c1[1] + g.dy]
+                    const orders = this.orders.map(o => ({ ...o, price: o.price + g.dy }))
+                    this.pins[0].update_from(c0, false)
+                    this.pins[1].update_from(c1, false)
+                    this.custom_event('change-settings', { c0, c1, orders, $ghost: null })
+                } else if (this.sett && this.sett.$ghost) {
+                    this.custom_event('change-settings', { $ghost: null })
+                }
                 return
             }
-            if (this._dragOrder == null) return
+            if (this._dragOrder == null) { this.set_cursor(''); return }
             const o = this.orders.find(x => x.id === this._dragOrder)
             this._dragOrder = null
+            this.set_cursor('')
             this.custom_event('scroll-lock', false)
             if (o) {
                 const prec = (this.$props.layout && this.$props.layout.prec) || 2
@@ -576,7 +775,9 @@ export default {
         fill_buy() { return this.sett.fillBuy || 'rgba(35,167,118,0.10)' },
         fill_sell() { return this.sett.fillSell || 'rgba(229,65,80,0.10)' },
         font11() { return '11px ' + (this.$props.font || '').split('px').pop() }
-    },
-    data() { return { _geom: null } }
+    }
+    // NOTE: no data() — `this._geom` (per-frame geometry scratch) is a plain
+    // instance field set in draw(); Vue 3 doesn't proxy _-prefixed data keys
+    // anyway, so declaring it in data() was both a lint error and a no-op.
 }
 </script>

@@ -137,6 +137,35 @@ describe('OrderBox overlay (P3)', () => {
     expect(ob._geom.rows.length).toBe(0)
   })
 
+  test('cog click emits order-settings with the box config (modal pre-fill)', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    dc.touchData(); await settle(6)
+    const got = []
+    const orig = ob.custom_event.bind(ob)
+    ob.custom_event = (e, ...a) => { if (e === 'order-settings') got.push(a[0]); return orig(e, ...a) }
+    expect(ob._geom.cog).toBeTruthy()
+    expect(ob._geom.cog.x).toBeGreaterThan(ob._geom.eye.x) // sits right of the eye
+    ob.mouse.x = ob._geom.cog.x + 2
+    ob.mouse.y = ob._geom.cog.y + 2
+    ob.on_mousedown(fakeEvent())
+    expect(got.length).toBe(1)
+    expect(got[0].uuid).toBe('orderbox-test')
+    expect(got[0].low).toBe(97)
+    expect(got[0].high).toBe(104)
+    expect(got[0].qty).toBe(3)             // falls back to orders.length
+    expect(got[0].distribution).toBe('flat')
+  })
+
+  test('distribution curve: a faint spline is drawn near the right edge', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    resetCounters()
+    dc.touchData(); await settle(6)
+    // the smoothing pass uses quadraticCurveTo (3 orders → 1 mid-segment)
+    expect(methodTotal('quadraticCurveTo')).toBeGreaterThan(0)
+  })
+
   test('dragging an order changes its price (persisted)', async () => {
     await mountWith(seedDc())
     const ob = orderBoxRenderer(wrapper)
@@ -306,31 +335,53 @@ describe('OrderBox overlay (P3)', () => {
     expect(after.xR).toBeGreaterThan(before.xR)
   })
 
-  // Order lines move vertically WITH the box during a body-move drag (live),
-  // and the shifted prices persist on drop (no recompute — spacing preserved).
-  test('box move shifts order lines live + persists on drop', async () => {
+  // A body-move shows a GHOST at the destination — the real box + its order lines
+  // stay put — and the offset is applied to corners + order prices on drop (no
+  // recompute, so spacing is preserved).
+  test('box move shows a ghost (box stays put) + commits on drop', async () => {
     await mountWith(seedDc())
     const ob = orderBoxRenderer(wrapper)
     dc.touchData(); await settle(6)
     const start = orders(dc).map(o => o.price)
     const yBefore = ob._geom.rows.map(r => r.y)
     const DY = -2 // move down in price (lower)
-    // Simulate a Tool box-body move: this.drag set + pins shifted by dy + cursor moved.
+    // Simulate a Tool box-body move: this.drag set + cursor moved by dy (dt = 0).
     ob.drag = { t: 0, y$: 100 }
+    ob.$props.cursor.t = 0
     ob.$props.cursor.y$ = 100 + DY
-    const s = dc.data.onchart[0].settings
-    ob.pins[0].update_from([s.c0[0], s.c0[1] + DY], false)
-    ob.pins[1].update_from([s.c1[0], s.c1[1] + DY], false)
-    ob.on_mousemove()
-    expect(ob._moveDy).toBe(DY)
-    dc.touchData(); await settle(2) // redraw with the live offset
+    ob.drag_update()                       // records the ghost offset + emits $ghost
+    expect(ob._ghost).toEqual({ dt: 0, dy: DY })
+    dc.touchData(); await settle(2)
+    // the ORIGINAL box + order lines DON'T move (only the ghost does)
     const yAfter = ob._geom.rows.map(r => r.y)
     for (let i = 0; i < yAfter.length; i++) {
-      expect(yAfter[i]).toBeGreaterThan(yBefore[i]) // lower price → larger screen y
+      expect(yAfter[i]).toBeCloseTo(yBefore[i], 6)
     }
     ob.on_mouseup(fakeEvent())
-    expect(orders(dc).map(o => o.price)).toEqual(start.map(p => p + DY)) // baked in
-    expect(ob._moveDy).toBe(0)
+    expect(orders(dc).map(o => o.price)).toEqual(start.map(p => p + DY)) // baked in on drop
+    expect(ob._ghost).toBe(null)
+  })
+
+  // Resize handles carry directional cursors, and the top/bottom edge-mid handles
+  // are offset out of the (horizontally centered) order-widget lane so the
+  // topmost/lowest order doesn't bury them.
+  test('resize handles have cursors; top/bottom-mid handles dodge the widget lane', async () => {
+    await mountWith(seedDc())
+    const ob = orderBoxRenderer(wrapper)
+    dc.touchData(); await settle(6)
+    const rs = ob._geom.resize
+    expect(rs.length).toBe(8)
+    for (const h of rs) expect(/-resize$/.test(h.cursor)).toBe(true) // every handle has one
+    const box = ob.box_rect()
+    const cx = (box.xL + box.xR) / 2
+    // the two vertical-only (top/bottom edge-mid) handles sit OFF center
+    const mids = rs.filter(h => h.edits.length === 1 && h.edits[0].axis === '$')
+    expect(mids.length).toBe(2)
+    for (const h of mids) {
+      const hx = h.rect.x + h.rect.w / 2
+      expect(Math.abs(hx - cx)).toBeGreaterThan(8)
+      expect(h.cursor).toBe('ns-resize')
+    }
   })
 
   // BUG 2: dragging a resize handle must change box_rect LIVE (not just settings)
