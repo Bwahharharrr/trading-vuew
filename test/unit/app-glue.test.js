@@ -405,11 +405,13 @@ describe('runtime-id targeting + ride-through retry', () => {
     expect(app._corkyRuntimeId('bitfinex', 'tETHUSD')).toBeUndefined()
   })
 
-  test('corkySelect echoes the state runtime_id as target_runtime_id', async () => {
+  test('corkySelect does NOT thread target_runtime_id into subscribe (self-threads from cache)', async () => {
     const feed = mkFeed()
     const app = mkApp({ corkyStates: STATES, corkyFeed: feed })
     await app.corkySelect({ venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1m', indicators: [] })
-    expect(feed.subscribe.mock.calls[0][0].target_runtime_id).toBe('public-market-main')
+    // subscribe_candles self-threads the runtime; forcing it onto the control
+    // path (target_runtime_id) breaks loads during a runtime restart.
+    expect(feed.subscribe.mock.calls[0][0].target_runtime_id).toBeUndefined()
   })
 
   test('onCorkyAddTimeframe patches with the owning runtime_id', async () => {
@@ -440,25 +442,37 @@ describe('runtime-id targeting + ride-through retry', () => {
     expect(app.corkyError).toEqual({ message: 'bad', retryable: false })
   })
 
-  test('after the fast attempts it keeps slow-retrying (never a dead error)', async () => {
+  test('after the fast attempts it surfaces a CLEAR error but keeps retrying in the background', async () => {
     vi.useFakeTimers()
     const feed = mkFeed({ subscribe: vi.fn(async () => { throw Object.assign(new Error('stale'), { retryable: true }) }) })
-    const app = mkApp({ corkyStates: STATES, corkyFeed: feed, _corkySelectRetries: 4 })
+    const app = mkApp({ corkyStates: STATES, corkyFeed: feed, _corkySelectRetries: 3 })
     await app.corkySelect({ venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1m', indicators: [] })
-    // persistent: still retrying, no surfaced error, slow-phase message
-    expect(app.corkyError).toBeNull()
-    expect(app.corkyProgress.phase).toBe('retrying')
-    expect(app.corkyProgress.message).toMatch(/retrying every 20s/i)
-    expect(app._corkySelectRetries).toBe(5)
+    // slow phase: visible actionable error (not an endless spinner), retry still armed
+    expect(app.corkyProgress).toBeNull()
+    expect(app.corkyError.retryable).toBe(true)
+    expect(app.corkyError.message).toMatch(/unavailable.*restarting/i)
+    expect(app._corkyRetryKeepSpinner).toBe(false)   // spinner off, error shown
+    expect(app._corkyRetryTimer).toBeTruthy()         // background retry scheduled
     app._corkyCancelSelectRetry()
     vi.useRealTimers()
   })
 
+  test('onCorkyRetry re-discovers AND re-selects the pending selection', async () => {
+    const feed = mkFeed()
+    const app = mkApp({ corkyStates: STATES, corkyFeed: feed, _corkyRetryOpts: { venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1m' } })
+    app.corkyDiscover = vi.fn(async () => STATES)
+    app.onCorkyRetry()
+    await Promise.resolve(); await Promise.resolve()
+    expect(app.corkyDiscover).toHaveBeenCalledWith('bitfinex')
+    expect(feed.subscribe).toHaveBeenCalled()
+  })
+
   test('_corkyCancelSelectRetry clears a pending retry + counter', () => {
-    const app = mkApp({ _corkySelectRetries: 2, _corkyRetryPending: true })
+    const app = mkApp({ _corkySelectRetries: 2, _corkyRetryKeepSpinner: true })
     app._corkyRetryTimer = setTimeout(() => {}, 9999)
     app._corkyCancelSelectRetry()
     expect(app._corkySelectRetries).toBe(0)
-    expect(app._corkyRetryPending).toBe(false)
+    expect(app._corkyRetryKeepSpinner).toBe(false)
+    expect(app._corkyRetryTimer).toBeNull()
   })
 })

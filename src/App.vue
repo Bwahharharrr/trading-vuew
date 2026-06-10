@@ -588,15 +588,17 @@ export default {
                 layers: mem.layers.slice(),
                 hiddenLayers: mem.hiddenLayers.slice(), // explicit [x]-closed layers stay closed
             }
-            // Target the runtime that OWNS this candle-state (from discovery).
-            // The gateway's documented preferred pattern: echo back the state's
-            // runtime_id as target_runtime_id rather than letting it default to
-            // its first-public-runtime fallback (which goes stale across runtime
-            // restarts → "missing or stale runtime control session").
-            const target_runtime_id = state && state.runtime_id || undefined
+            // NB: do NOT pass target_runtime_id to subscribe. Per the gateway
+            // author, subscribe_candles SELF-THREADS the runtime from its snapshot
+            // cache (data path) and was never misrouted; forcing target_runtime_id
+            // here pushes it onto the CONTROL path, which then needs a live runtime
+            // control session — exactly what's missing during a runtime restart,
+            // turning a recoverable load into an endless "Reconnecting…" loop.
+            // target_runtime_id is threaded only into patch/upsert (below), where
+            // the gateway really does fall back to a stale default.
             try {
                 this.corkyHandle = await this.corkyFeed.subscribe(
-                    { ...opts, views, enabled, target_runtime_id }, {
+                    { ...opts, views, enabled }, {
                     onStatus: (status) => {
                         this.corkyProgress = status
                         if (status && (status.phase === 'history-complete' ||
@@ -645,36 +647,46 @@ export default {
                 this.corkyError = mapped
                 this.corkyCurrent = null
             } finally {
-                if (!this._corkyRetryPending) this.corkyLoading = false
+                // Keep the spinner up only during the brief FAST retry window;
+                // once we surface a clear error (slow phase) the spinner goes off.
+                if (!this._corkyRetryKeepSpinner) this.corkyLoading = false
             }
         },
 
-        // Bounded backoff retry for a transient (retryable) select failure.
-        // Returns true if a retry was scheduled (caller should leave the spinner
-        // up and NOT surface the error). User-initiated selects reset the count.
+        // Retry a retryable select failure. Two phases:
+        //  • FAST (first few): keep the spinner with a "Reconnecting…" status —
+        //    covers a transient blip.
+        //  • SLOW (after): surface a CLEAR, actionable error (no ambiguous endless
+        //    spinner) AND keep a 20s background retry running, so a longer outage
+        //    (a restarted runtime not yet re-registering its control session)
+        //    still SELF-HEALS when it returns. Returns true if a retry was armed.
         _corkyScheduleSelectRetry(opts, mapped) {
             if (!mapped || !mapped.retryable) return false
+            this._corkyRetryOpts = opts   // for the panel's manual Retry button
             const n = this._corkySelectRetries || 0
             this._corkySelectRetries = n + 1
-            // Fast backoff for the first few attempts (a transient blip), then a
-            // STEADY slow retry that never gives up — so a longer outage (the
-            // gateway/runtime restarting and the runtime not yet re-registering
-            // its control session) SELF-HEALS when it returns, instead of leaving
-            // a dead chart. The user keeps a clear status and can switch feeds.
-            const FAST = 4
-            const delay = n < FAST ? Math.min(400 * Math.pow(2, n), 3200) : 20000
-            this.corkyError = null   // keep the spinner+status, not a dead error
-            this.corkyProgress = {
-                phase: 'retrying',
-                attempt: n + 1,
-                message: n < FAST
-                    ? 'Reconnecting to the gateway runtime…'
-                    : 'Gateway runtime unavailable — retrying every 20s (it may be restarting).',
+            const FAST = 3
+            const fast = n < FAST
+            const delay = fast ? Math.min(400 * Math.pow(2, n), 2400) : 20000
+            if (fast) {
+                this.corkyError = null
+                this.corkyProgress = {
+                    phase: 'retrying', attempt: n + 1,
+                    message: 'Reconnecting to the gateway runtime…',
+                }
+                this._corkyRetryKeepSpinner = true
+            } else {
+                const rid = this._corkyRuntimeId(opts.venue, opts.symbol) || 'public-market-main'
+                this.corkyProgress = null
+                this.corkyError = {
+                    message: `Gateway runtime "${rid}" is unavailable — it may be restarting. ` +
+                        `Retrying automatically; the chart loads as soon as it's back.`,
+                    retryable: true,
+                }
+                this._corkyRetryKeepSpinner = false
             }
-            this._corkyRetryPending = true
             clearTimeout(this._corkyRetryTimer)
             this._corkyRetryTimer = setTimeout(() => {
-                this._corkyRetryPending = false
                 // A restarted runtime may have a NEW runtime_id — re-discover first.
                 Promise.resolve(this.corkyDiscover(opts.venue))
                     .then(() => this.corkySelect(opts))
@@ -692,7 +704,7 @@ export default {
         _corkyCancelSelectRetry() {
             clearTimeout(this._corkyRetryTimer)
             this._corkyRetryTimer = null
-            this._corkyRetryPending = false
+            this._corkyRetryKeepSpinner = false
             this._corkySelectRetries = 0
         },
 
@@ -982,9 +994,17 @@ export default {
             await this.corkySelect(selectOpts)
         },
 
-        // Panel: retry after an error → re-run discovery.
+        // Panel: retry after an error. Re-discover AND re-select the pending /
+        // last selection (a bare re-discover left the chart blank after a runtime
+        // outage). Resets the ride-through counter so the fast phase runs again.
         onCorkyRetry() {
-            this.corkyDiscover()
+            const opts = this._corkyRetryOpts || this.corkyLast
+            this._corkyCancelSelectRetry()
+            if (opts && opts.venue && opts.symbol && opts.timeframe) {
+                Promise.resolve(this.corkyDiscover(opts.venue)).then(() => this.corkySelect(opts))
+            } else {
+                this.corkyDiscover()
+            }
         },
 
         // Drop the active subscription (if any) without closing the client.
