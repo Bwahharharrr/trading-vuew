@@ -119,3 +119,43 @@ describe('prepareChartData', () => {
     expect(out2.chart.tf).toBeUndefined() // 'default' tf is not stamped
   })
 })
+
+describe('buildOffchartData / applyViewOffchart', () => {
+  const persist = [
+    { name: 'MACD', type: 'Splines', data: [], settings: { display: true } },
+    { name: 'Hidden', type: 'Spline', data: [], settings: { display: false } },
+  ]
+
+  test('buildOffchartData keeps only visible persistent indicators', () => {
+    const ctx = mkCtx({ displayedView: '' })
+    delete ctx.applyViewOffchart
+    Object.assign(ctx, M)
+    const out = ctx.buildOffchartData(persist)
+    expect(out).toHaveLength(1)
+    expect(out[0].name).toBe('MACD')
+    expect(out[0]).not.toBe(persist[0]) // deep-copied
+  })
+
+  test('buildOffchartData appends view offchart when a view is active', () => {
+    const ctx = mkCtx({ displayedView: 'SCMR' })
+    Object.assign(ctx, M)
+    const viewData = { offchart: [{ name: 'SCMR osc', type: 'Histogram', data: [] }] }
+    const out = ctx.buildOffchartData(persist, viewData)
+    expect(out.map((x) => x.name)).toEqual(['MACD', 'SCMR osc'])
+  })
+
+  test('applyViewOffchart writes the combined offchart onto the live chart', () => {
+    const ctx = mkCtx({
+      displayedView: '', currentTimeframe: '1m',
+      charts: { '1m': { offchart: [{ name: 'Base', type: 'Spline', data: [] }] } },
+      persistentIndicatorsClipped: persist,
+      lastIndicatorSet: [],
+    })
+    Object.assign(ctx, M)
+    ctx.applyViewOffchart()
+    const names = ctx.chart.data.offchart.map((x) => x.name)
+    expect(names).toContain('MACD')   // visible persistent
+    expect(names).toContain('Base')   // base offchart merged (no view)
+    expect(names).not.toContain('Hidden')
+  })
+})

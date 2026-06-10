@@ -156,3 +156,51 @@ describe('onOrderBoxSettings + type chooser', () => {
     expect(ctx2.pendingBoxGeometry).toBeNull()
   })
 })
+
+describe('rectangle draw-mode state machine', () => {
+  test('toggleRectDrawMode flips the flag and clears state on exit', () => {
+    const ctx = mkCtx({ rectDrawMode: false })
+    ctx.toggleRectDrawMode()
+    expect(ctx.rectDrawMode).toBe(true)
+    ctx.isDrawing = true; ctx.rectStart = { x: 1, y: 1 }
+    ctx.toggleRectDrawMode() // exit
+    expect(ctx.rectDrawMode).toBe(false)
+    expect(ctx.isDrawing).toBe(false)
+    expect(ctx.rectStart).toBeNull()
+  })
+
+  test('onDrawStart / onDrawMove track the drag corners', () => {
+    const ctx = mkCtx()
+    ctx.onDrawStart({ clientX: 10, clientY: 20 })
+    expect(ctx.isDrawing).toBe(true)
+    expect(ctx.rectStart).toEqual({ x: 10, y: 20 })
+    ctx.onDrawMove({ clientX: 50, clientY: 60 })
+    expect(ctx.rectCurrent).toEqual({ x: 50, y: 60 })
+    // a move while not drawing is ignored
+    const ctx2 = mkCtx({ isDrawing: false, rectCurrent: null })
+    ctx2.onDrawMove({ clientX: 9, clientY: 9 })
+    expect(ctx2.rectCurrent).toBeNull()
+  })
+
+  test('onDrawEnd ignores a tiny (<5px) drag', () => {
+    const ctx = mkCtx({ isDrawing: true, rectStart: { x: 0, y: 0 }, rectCurrent: { x: 2, y: 2 } })
+    ctx.onDrawEnd({})
+    // too small → no order modal opened, no crash
+    expect(ctx.orderTypeModalOpen).toBeFalsy()
+  })
+
+  test('onDrawEnd is a no-op when not drawing', () => {
+    const ctx = mkCtx({ isDrawing: false })
+    expect(() => ctx.onDrawEnd({})).not.toThrow()
+  })
+
+  test('_drawCanvasEl falls back through the ref chain to a <canvas>', () => {
+    const ctx = mkCtx()
+    const canvas = { tagName: 'CANVAS' }
+    const chart = { $refs: { sec: [{ $refs: { grid: { $refs: { canvas } } } }] } }
+    expect(ctx._drawCanvasEl(chart)).toBe(canvas)
+    // fallback: querySelector on the chart element
+    const chart2 = { $refs: {}, $el: { querySelector: () => canvas } }
+    expect(ctx._drawCanvasEl(chart2)).toBe(canvas)
+  })
+})

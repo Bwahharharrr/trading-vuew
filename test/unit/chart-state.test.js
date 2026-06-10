@@ -126,3 +126,52 @@ describe('panel resize drag', () => {
     expect(ctx.saveStateToStorage).not.toHaveBeenCalled()
   })
 })
+
+describe('computeds + simple methods', () => {
+  const C = chartState.computed
+
+  test('colors palette + derived chart dimensions', () => {
+    const ctx = mkCtx()
+    // install sibling computeds as getters (chartHeight reads bottomPanelHeight)
+    for (const k of ['bottomPanelHeight', 'chartWidth', 'chartHeight'])
+      Object.defineProperty(ctx, k, { get: C[k], configurable: true })
+    expect(C.colors.call(ctx).back).toBe('#121827')
+    expect(ctx.bottomPanelHeight).toBe(44)
+    // chartWidth = width - rightPanelWidth; chartHeight = height - bottomPanelHeight
+    expect(ctx.chartWidth).toBe(ctx.width - ctx.rightPanelWidth)
+    expect(ctx.chartHeight).toBe(ctx.height - 44)
+  })
+
+  test('timeframes lists the loaded chart keys', () => {
+    const ctx = mkCtx({ charts: { '1m': {}, '15m': {} } })
+    expect(C.timeframes.call(ctx)).toEqual(['1m', '15m'])
+  })
+
+  test('data() initial state defaults', () => {
+    const d = chartState.data.call({})
+    expect(d.log_scale).toBe(true)
+    expect(d.selectedTimeframe).toBe(0)
+    expect(d.charts).toEqual({})
+  })
+
+  test('onResize syncs width/height from the window', () => {
+    const ctx = mkCtx()
+    window.innerWidth = 1234; window.innerHeight = 567
+    ctx.onResize()
+    expect(ctx.width).toBe(1234)
+    expect(ctx.height).toBe(567)
+  })
+
+  test('resetView delegates to the TradingVue ref', () => {
+    const ctx = mkCtx()
+    ctx.resetView()
+    expect(ctx.$refs.tradingVue.resetChart).toHaveBeenCalled()
+  })
+
+  test('log_scale watcher writes grid.logScale and persists', () => {
+    const ctx = mkCtx({ chart: { data: { chart: {} } } })
+    chartState.watch.log_scale.call(ctx, false)
+    expect(ctx.chart.data.chart.grid).toEqual({ logScale: false })
+    expect(ctx.saveStateToStorage).toHaveBeenCalled()
+  })
+})
