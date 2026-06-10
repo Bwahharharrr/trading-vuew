@@ -29,7 +29,9 @@
             v-bind="sidebar_props"
             v-bind:grid_id="grid_id"
             v-bind:rerender="rerender"
-            v-on:sidebar-transform="sidebar_transform">
+            v-on:sidebar-transform="sidebar_transform"
+            v-on:sidebar-click="sidebar_click"
+            v-on:sidebar-cursor="sidebar_cursor">
         </sidebar>
     </div>
 </template>
@@ -68,6 +70,24 @@ export default {
         },
         sidebar_transform(s) {
             this.$emit('sidebar-transform', s)
+        },
+        // Y-axis click (price-alarm placement): ride the existing custom-event
+        // chain (Section → Chart → TradingVue re-emits 'sidebar-click' to App).
+        sidebar_click(s) {
+            this.$emit('custom-event', { event: 'sidebar-click', args: [s] })
+        },
+        // Y-axis hover: keep the horizontal crosshair tracking on the chart.
+        // Route through the SAME cursor pipeline as grid mousemoves, then
+        // repaint the crosshair layer synchronously — grid.js only does that
+        // for its own mousemoves, and Grid.vue's redraw watcher keys on
+        // cursor.x, which a vertical slide along the axis never changes.
+        sidebar_cursor(c) {
+            this.cursor_changed(c) // same stamping/path as grid cursor events
+            const cur = this.$props.common && this.$props.common.cursor
+            if (cur && cur.locked) return
+            const gr = this.$refs.grid && this.$refs.grid.renderer &&
+                this.$refs.grid.renderer.renderer
+            if (gr && gr.hasDualCanvas) gr.updateDynamic()
         },
         emit_meta_props(d) {
             this.meta_props[d.layer_id] = d

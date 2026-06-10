@@ -12,7 +12,10 @@
                     :toolbar="true"
                     @open-indicator-settings="openIndicatorSettings"
                 @close-indicator="onCloseIndicator"
-                @order-settings="onOrderBoxSettings">
+                @order-settings="onOrderBoxSettings"
+                @sidebar-click="onSidebarClick"
+                @alarm-cleared="onAlarmCleared"
+                @alarm-moved="onAlarmMoved">
             </trading-vue>
 
             <!-- Left toolbar for drawing tools -->
@@ -82,6 +85,14 @@
             <div class="bottom-panel-section">
                 <button class="bottom-btn" @click="captureScreen" title="Screenshot the whole browser view and save it as a PNG">
                     📷 Capture
+                </button>
+            </div>
+
+            <div class="bottom-panel-section">
+                <button class="bottom-btn" :disabled="!priceAlarms.length"
+                    @click="clearAllAlarms"
+                    title="Remove every price alarm and silence any that are ringing">
+                    🔕 Clear Alarms<span v-if="priceAlarms.length"> ({{ priceAlarms.length }})</span>
                 </button>
             </div>
         </div>
@@ -268,6 +279,8 @@ import BuysAndSells from './components/overlays/BuysAndSells.js'
 import Balance from './components/overlays/Balance.js'
 import LineTracker from './components/overlays/LineTracker.js'
 import OrderBox from './components/overlays/OrderBox.vue'
+import PriceAlarms from './components/overlays/PriceAlarms.vue'
+import { AlarmSound, updateAlarms } from './helpers/alarm-sound.js'
 
 // Resolve the Corky chart-feed gateway WS URL (opt-in "Gateway" source).
 // Mirrors the file feed's two-mode buildWsUrl logic so it works from a REMOTE
@@ -310,7 +323,11 @@ export default {
             chart: new DataCube(),
             // markRaw: overlay component definitions must not be made reactive
             // (Vue warns + needless overhead) when held in component data.
-            overlays: [BuysAndSells, Balance, LineTracker, OrderBox].map(c => markRaw(c)),
+            overlays: [BuysAndSells, Balance, LineTracker, OrderBox, PriceAlarms].map(c => markRaw(c)),
+            // Price alarms (Y-axis click): App owns the list; the PriceAlarms
+            // overlay renders THIS array by reference (survives DataCube wipes
+            // because ensurePriceAlarmOverlay re-adds the overlay pointing at it).
+            priceAlarms: [],
             // Store DataCube class for mixin use
             DataCubeClass: DataCube,
 
@@ -362,6 +379,11 @@ export default {
                         transport: new StubOrderTransport(),
                         dataCube: dc
                     })
+                }
+                // A replaced DataCube (File-mode load/tf-switch) lost the alarm
+                // renderer — re-add it pointing at the same alarms array.
+                if (dc && this.priceAlarms && this.priceAlarms.length) {
+                    this.$nextTick(() => this.ensurePriceAlarmOverlay())
                 }
             }
         }
@@ -415,11 +437,17 @@ export default {
             // Gateway is the default source: connect + discover on mount.
             if (this.feedMode === 'gateway') this.enterGatewayMode()
         })
+
+        // Price-alarm trigger loop: cheap (reads one array tail), feed-agnostic.
+        this._alarmTimer = setInterval(() => this.checkPriceAlarms(), 500)
     },
     beforeUnmount() {
         window.removeEventListener('resize', this.onResize)
         // Don't leak the panel-resize document listeners / body cursor mid-drag.
         this.endPanelResize()
+        // Stop the alarm trigger loop and silence/release the audio backend.
+        if (this._alarmTimer) { clearInterval(this._alarmTimer); this._alarmTimer = null }
+        if (this._alarmSound) { this._alarmSound.destroy(); this._alarmSound = null }
         // Tear down the gateway feed if it was ever activated (no dangling
         // sockets/listeners on unmount).
         this.teardownCorky()
@@ -580,6 +608,9 @@ export default {
                                 if (this.$refs.tradingVue) {
                                     this.$refs.tradingVue.resetChart(true)
                                 }
+                                // The gateway load wiped onchart — restore the
+                                // price-alarm renderer (same alarms array).
+                                if (this.priceAlarms.length) this.ensurePriceAlarmOverlay()
                             })
                         }
                     },
@@ -692,6 +723,107 @@ export default {
             }
             this._syncHandleEnabled(mem)
             this.saveStateToStorage()
+        },
+
+        // ── Price alarms (Y-axis click → bell + repeating tone) ──────────────
+        _alarmSoundInst() {
+            if (!this._alarmSound) this._alarmSound = new AlarmSound()
+            return this._alarmSound
+        },
+        _lastClose() {
+            const d = this.chart && this.chart.data && this.chart.data.chart &&
+                this.chart.data.chart.data
+            if (!d || !d.length) return NaN
+            return Number(d[d.length - 1][4])
+        },
+        // Y-axis click on the PRICE pane: above the current price → green
+        // 'above' alarm, below → red 'below' alarm.
+        onSidebarClick(s) {
+            if (!s || s.grid_id !== 0 || !Number.isFinite(s.price)) return
+            const close = this._lastClose()
+            if (!Number.isFinite(close)) return
+            // User gesture: create/resume the AudioContext NOW so the later
+            // (non-gesture) trigger beeps are allowed to play.
+            this._alarmSoundInst().unlock()
+            const side = s.price >= close ? 'above' : 'below'
+            // ONE alarm per side: a repeat click on the same side MOVES that
+            // side's alarm to the new level (and silences it if it was ringing)
+            // instead of stacking a second one.
+            const existing = this.priceAlarms.find(a => a.side === side)
+            if (existing) {
+                existing.price = s.price
+                existing.triggered = false
+                this._alarmSoundInst().stop(existing.id)
+            } else {
+                this._alarmSeq = (this._alarmSeq || 0) + 1
+                this.priceAlarms.push({
+                    id: `alarm-${this._alarmSeq}`,
+                    price: s.price,
+                    side,
+                    triggered: false,
+                })
+            }
+            this.ensurePriceAlarmOverlay()
+            if (typeof this.chart.touchData === 'function') this.chart.touchData()
+        },
+        // (Re-)add the renderer overlay. The DataCube is wiped on every load /
+        // tf-switch, so this runs after each; settings.alarms is the SAME array
+        // as this.priceAlarms, so the alarms themselves survive.
+        ensurePriceAlarmOverlay() {
+            const dc = this.chart
+            if (!dc || !dc.data || typeof dc.add !== 'function') return
+            const on = dc.data.onchart || []
+            if (on.some(o => o && o.type === 'PriceAlarms')) return
+            dc.add('onchart', {
+                name: 'Price Alarms', type: 'PriceAlarms', grid: { id: 0 }, data: [],
+                settings: {
+                    $uuid: 'price-alarms', 'z-index': 150, legend: false,
+                    alarms: this.priceAlarms,
+                },
+            })
+        },
+        // Poll the last close (feed-agnostic — works for File AND Gateway):
+        // ring alarms whose level the price has reached, and silence + re-arm
+        // ringing alarms once price crosses BACK to the armed side.
+        checkPriceAlarms() {
+            if (!this.priceAlarms.length) return
+            const close = this._lastClose()
+            if (!Number.isFinite(close)) return
+            const changed = updateAlarms(this.priceAlarms, close, this._alarmSoundInst())
+            if (changed && typeof this.chart.touchData === 'function') this.chart.touchData()
+        },
+        // Bell clicked → remove that alarm and silence it.
+        onAlarmCleared({ id }) {
+            this._alarmSoundInst().stop(id)
+            const i = this.priceAlarms.findIndex(a => a.id === id)
+            if (i !== -1) this.priceAlarms.splice(i, 1)
+            if (typeof this.chart.touchData === 'function') this.chart.touchData()
+        },
+        // Bell dragged to a new level → re-arm there (side re-derived vs the
+        // current price) and stop a ringing tone.
+        onAlarmMoved({ id, price }) {
+            const a = this.priceAlarms.find(x => x.id === id)
+            if (!a) return
+            a.price = price
+            const close = this._lastClose()
+            if (Number.isFinite(close)) a.side = price >= close ? 'above' : 'below'
+            if (a.triggered) a.triggered = false
+            this._alarmSoundInst().stop(id)
+            // One alarm per side: if the drag crossed the price and another
+            // alarm already holds the new side, the DRAGGED alarm wins.
+            const dup = this.priceAlarms.find(x => x !== a && x.side === a.side)
+            if (dup) {
+                this._alarmSoundInst().stop(dup.id)
+                this.priceAlarms.splice(this.priceAlarms.indexOf(dup), 1)
+            }
+            if (typeof this.chart.touchData === 'function') this.chart.touchData()
+        },
+        // Bottom-panel 🔕: drop every alarm and silence all tones. splice — NOT
+        // reassignment — keeps the array reference the overlay renders.
+        clearAllAlarms() {
+            this._alarmSoundInst().stopAll()
+            this.priceAlarms.splice(0, this.priceAlarms.length)
+            if (this.chart && typeof this.chart.touchData === 'function') this.chart.touchData()
         },
 
         // Pane/legend [x] on a Corky-driven overlay: route through the Corky
@@ -889,6 +1021,16 @@ body {
     background: #1e222d;
     border-color: #35a776;
     color: #35a776;
+}
+
+.bottom-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+.bottom-btn:disabled:hover {
+    background: none;
+    border-color: #2a2e39;
+    color: inherit;
 }
 
 /* Right Panel */

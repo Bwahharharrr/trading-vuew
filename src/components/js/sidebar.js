@@ -22,8 +22,34 @@ export default class Sidebar {
 
         this.side = side
         this._destroyed = false
+        this.axis_cursor_listeners() // plain DOM — no gesture libs needed
         this.listeners()
 
+    }
+
+    // Hovering the axis labels keeps the HORIZONTAL crosshair tracking on the
+    // chart (price line + axis price box). x pins to the grid's right edge so
+    // the vertical line just hugs the seam. Section routes this to the same
+    // cursor pipeline as grid mousemoves (and repaints the crosshair layer —
+    // a vertical slide here never changes cursor.x, so Grid.vue's cursor.x
+    // redraw watcher alone would leave it frozen). Wired synchronously in the
+    // constructor: unlike the Hammer gestures, these are plain DOM events.
+    axis_cursor_listeners() {
+        const eventTarget = this.canvasDynamic || this.canvas
+        this._onAxisMove = (event) => {
+            if (Utils.is_mobile || !this.layout) return
+            this.comp.$emit('sidebar-cursor', {
+                grid_id: this.id,
+                x: this.layout.width - 1,
+                y: event.layerY + (this.layout.offset || 0),
+            })
+        }
+        this._onAxisOut = () => {
+            this.comp.$emit('sidebar-cursor', {})
+        }
+        eventTarget.addEventListener('mousemove', this._onAxisMove)
+        eventTarget.addEventListener('mouseout', this._onAxisOut)
+        this._axisCursorTarget = eventTarget
     }
 
     async listeners() {
@@ -49,6 +75,14 @@ export default class Sidebar {
             taps: 2,
             posThreshold: 50
         }))
+
+        // Single tap → price-alarm placement (App listens for 'sidebar-click').
+        // Must wait for the doubletap to FAIL, or the first tap of a
+        // double-tap-to-reset would also drop an alarm.
+        const singleTap = new Hammer.Tap({ event: 'singletap', taps: 1 })
+        mc.add(singleTap)
+        mc.get('doubletap').recognizeWith(singleTap)
+        singleTap.requireFailure(mc.get('doubletap'))
 
         mc.on('panstart', event => {
             if (this.$p.y_transform) {
@@ -100,6 +134,20 @@ export default class Sidebar {
             })
             this.zoom = 1.0
         })
+
+        mc.on('singletap', (event) => {
+            // Y-axis click → grid-local y → price. App decides what to do with
+            // it (price alarms on the main pane); other grids just report too.
+            const r = eventTarget.getBoundingClientRect
+                ? eventTarget.getBoundingClientRect() : { top: 0 }
+            const y = event.center.y - r.top
+            this.comp.$emit('sidebar-click', {
+                grid_id: this.id,
+                y,
+                price: this.layout.screen2$(y),
+            })
+        })
+
 
         // TODO: Do later for mobile version
 
@@ -484,6 +532,11 @@ export default class Sidebar {
         if (this.hm) this.hm.unwheel()
         if (this._throttledWheel) this._throttledWheel.cancel()
         if (this._throttledPanmove) this._throttledPanmove.cancel()
+        if (this._axisCursorTarget) {
+            this._axisCursorTarget.removeEventListener('mousemove', this._onAxisMove)
+            this._axisCursorTarget.removeEventListener('mouseout', this._onAxisOut)
+            this._axisCursorTarget = null
+        }
         this.canvasDynamic = null
     }
 
