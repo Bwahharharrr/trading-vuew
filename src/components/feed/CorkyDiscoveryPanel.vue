@@ -328,6 +328,7 @@ export default {
                 case 'history': return `Loading history (chunk ${p.chunk_index || 0})`
                 case 'history-complete': return 'Finalising…'
                 case 'live': return 'Live'
+                case 'retrying': return p.message || 'Reconnecting…'
                 default: return 'Loading…'
             }
         },

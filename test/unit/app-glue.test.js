@@ -440,11 +440,18 @@ describe('runtime-id targeting + ride-through retry', () => {
     expect(app.corkyError).toEqual({ message: 'bad', retryable: false })
   })
 
-  test('the retry gives up after 4 attempts and surfaces the error', async () => {
+  test('after the fast attempts it keeps slow-retrying (never a dead error)', async () => {
+    vi.useFakeTimers()
     const feed = mkFeed({ subscribe: vi.fn(async () => { throw Object.assign(new Error('stale'), { retryable: true }) }) })
     const app = mkApp({ corkyStates: STATES, corkyFeed: feed, _corkySelectRetries: 4 })
     await app.corkySelect({ venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1m', indicators: [] })
-    expect(app.corkyError).toEqual({ message: 'stale', retryable: true })
+    // persistent: still retrying, no surfaced error, slow-phase message
+    expect(app.corkyError).toBeNull()
+    expect(app.corkyProgress.phase).toBe('retrying')
+    expect(app.corkyProgress.message).toMatch(/retrying every 20s/i)
+    expect(app._corkySelectRetries).toBe(5)
+    app._corkyCancelSelectRetry()
+    vi.useRealTimers()
   })
 
   test('_corkyCancelSelectRetry clears a pending retry + counter', () => {

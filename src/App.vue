@@ -655,10 +655,22 @@ export default {
         _corkyScheduleSelectRetry(opts, mapped) {
             if (!mapped || !mapped.retryable) return false
             const n = this._corkySelectRetries || 0
-            if (n >= 4) return false   // exhausted → surface the error
             this._corkySelectRetries = n + 1
-            const delay = Math.min(400 * Math.pow(2, n), 4000)
-            this.corkyProgress = { phase: 'retrying', attempt: n + 1, message: mapped.message }
+            // Fast backoff for the first few attempts (a transient blip), then a
+            // STEADY slow retry that never gives up — so a longer outage (the
+            // gateway/runtime restarting and the runtime not yet re-registering
+            // its control session) SELF-HEALS when it returns, instead of leaving
+            // a dead chart. The user keeps a clear status and can switch feeds.
+            const FAST = 4
+            const delay = n < FAST ? Math.min(400 * Math.pow(2, n), 3200) : 20000
+            this.corkyError = null   // keep the spinner+status, not a dead error
+            this.corkyProgress = {
+                phase: 'retrying',
+                attempt: n + 1,
+                message: n < FAST
+                    ? 'Reconnecting to the gateway runtime…'
+                    : 'Gateway runtime unavailable — retrying every 20s (it may be restarting).',
+            }
             this._corkyRetryPending = true
             clearTimeout(this._corkyRetryTimer)
             this._corkyRetryTimer = setTimeout(() => {
