@@ -348,7 +348,9 @@ export class CorkyFeed extends FeedSource {
         const en = handle.enabled
         if (!en) return
         for (const k of (en.kinds || [])) {
-            if (k && k.kind) this.setIndicatorEnabled(handle, k.kind, true)
+            // Pass display_label as the unique instance so a tf-switch restores
+            // SCMR and SCMR(INV) to their OWN colouring (not the collapsed kind).
+            if (k && k.kind) this.setIndicatorEnabled(handle, k.kind, true, k.display_label || null)
         }
         for (const layerId of (en.layers || [])) {
             this.setLayerEnabled(handle, layerId, true)
@@ -372,10 +374,15 @@ export class CorkyFeed extends FeedSource {
      * @param {string} kind   - indicator kind (e.g. 'MACD'); matched against
      *                          settings.corkyKind.
      * @param {boolean} on    - enable (show) or disable (hide).
+     * @param {string} [instance] - the UNIQUE indicator instance = its
+     *   display_label (e.g. 'SCMR' vs 'SCMR(INV)'). `kindOf` collapses these two
+     *   to the same 'SCMR', which would let one's candle colouring overwrite the
+     *   other; pass the display_label so candle colour is keyed by the distinct
+     *   instance. Optional — omitted callers fall back to kind matching.
      * @returns {boolean} whether this kind actually has overlays in the loaded
      *   data (so the caller knows whether the toggle was meaningful).
      */
-    setIndicatorEnabled(handle, kind, on) {
+    setIndicatorEnabled(handle, kind, on, instance = null) {
         if (!handle || !handle.built) return false
         if (!handle.hiddenLayers) handle.hiddenLayers = new Set()
         const dc = this.dc
@@ -421,34 +428,50 @@ export class CorkyFeed extends FeedSource {
             handle.enabledKinds.delete(kind)
         }
 
-        // Apply / clear candle colouring for this kind (candle_color layers are
-        // not overlays — they stamp the candle colour slot, gated on enable so
-        // the candles-only default stays plain red/green).
-        const hadCandleColor = this._applyCandleColor(handle, kind, on)
+        // Apply / clear candle colouring for THIS instance (candle_color layers
+        // are not overlays — they stamp the candle colour slot, gated on enable so
+        // the candles-only default stays plain red/green). Keyed by the unique
+        // instance so SCMR and SCMR(INV) — which share kind 'SCMR' and the layer
+        // id 'scmr_candle_color' — don't collapse onto one another.
+        const hadCandleColor = this._applyCandleColor(handle, kind, on, instance)
         if (hadCandleColor) changed = true
 
         if (changed) { this._normalizeOffchartGrids(handle); dc.touchData() }
         return overlays.length > 0 || hadCandleColor
     }
 
-    // Stamp (on) / clear (off) the candle colour slot (index 6) for a kind's
+    // Stamp (on) / clear (off) the candle colour slot (index 6) for an indicator's
     // candle_color layers, using the build-time _candleColor metadata. Tracks
-    // built._candleColorActive so applyLiveUpdate only re-stamps enabled kinds.
-    // @returns {boolean} whether this kind had any candle_color layer.
-    _applyCandleColor(handle, kind, on) {
+    // built._candleColorActive (by UNIQUE instanceKey) so applyLiveUpdate only
+    // re-stamps enabled instances.
+    // @param {string} [instance] unique instance (display_label) to scope to;
+    //   without it, falls back to (collapsible) kind matching.
+    // @returns {boolean} whether this instance/kind had any candle_color layer.
+    _applyCandleColor(handle, kind, on, instance = null) {
         const built = handle && handle.built
         const cc = (built && built._candleColor) || []
+        // Select THIS indicator's candle_color entries by the UNIQUE instance
+        // (display_label) when given — kindOf collapses SCMR / SCMR(INV) to the
+        // same 'SCMR', so kind matching would pick BOTH and one would overwrite
+        // the other. Fall back to kind for callers that don't pass an instance.
         const kl = String(kind).toLowerCase()
-        const entries = cc.filter((e) => String(e.kind).toLowerCase() === kl)
+        let entries = instance != null
+            ? cc.filter((e) => e.instanceKey === instance)
+            : []
+        // Fall back to kind matching when the instance matched nothing (rows may
+        // key instances differently from display_label, e.g. 'sma:20' vs
+        // 'SMA(20)'). Safe: instances that DO match by key (SCMR/SCMR(INV))
+        // never reach this fallback, so the collapse can't come back.
+        if (!entries.length) entries = cc.filter((e) => String(e.kind).toLowerCase() === kl)
         if (!entries.length) return false
         const data = built.chart.data || []
         const active = built._candleColorActive || (built._candleColorActive = new Set())
-        // Update the active set FIRST, then recompute slot 6 from EVERY remaining
-        // active kind. Recomputing (rather than blanking only this kind's stamps)
-        // is what keeps a second active candle_color kind's colours intact when
-        // one of two is toggled off — the off branch used to wipe the overlap.
-        for (const e of entries) { if (on) active.add(e.kind); else active.delete(e.kind) }
-        const activeEntries = cc.filter((e) => active.has(e.kind))
+        // Update the active set (keyed by UNIQUE instanceKey) FIRST, then recompute
+        // slot 6 from EVERY remaining active instance. Recomputing (rather than
+        // blanking only this instance's stamps) keeps a second active candle_color
+        // instance's colours intact when one of two is toggled off.
+        for (const e of entries) { if (on) active.add(e.instanceKey); else active.delete(e.instanceKey) }
+        const activeEntries = cc.filter((e) => active.has(e.instanceKey))
         for (const c of data) {
             const ts = c[0]
             let color = null

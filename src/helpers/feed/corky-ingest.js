@@ -15,7 +15,7 @@
 
 import {
   indicatorPlacement, layerKindToOverlay, styleToSettings, candleColorOf, candleColorOpts,
-  signedSlopeColor
+  signedSlopeColor, candleColorPalette, paletteColorOf, paletteLabelOf
 } from './indicator-catalog.js'
 
 // ─────────────────────────────────────────────────────────── primitives ──
@@ -239,15 +239,23 @@ export function buildLayerOverlays(instanceKey, kind, outputsMap, view, paneReso
       // colour is applied only when the indicator is enabled (candles-only
       // default), so the feed stamps/clears slot 6 in setIndicatorEnabled. The
       // source field is kept for the live re-stamp (rowToOhlcv rebuilds the tuple).
-      const field = fields[0]
+      //
+      // Two resolution modes, chosen from the layer's own style (never hardcoded):
+      //  · PALETTE (SCMR/SCMR-INV): style.color_field names the output holding a
+      //    numeric type-id; color_{id}/label_{id} map it to a hex + name.
+      //  · THRESHOLD: numeric value → bull/bear/neutral ramp (legacy default).
+      const palette = candleColorPalette(layer.style)
+      const field = palette ? palette.colorField : fields[0]
       const s = outputsMap.get(field)
-      const opts = candleColorOpts(layer.style) // per-layer numeric thresholds
+      const opts = palette ? null : candleColorOpts(layer.style)
       const byTs = new Map()
+      const byTsLabel = (palette && palette.labelField) ? new Map() : null
       if (s) for (const [ts, rawVal] of s.raw) {
-        const c = candleColorOf(rawVal, opts)
-        if (c != null) byTs.set(ts, c)
+        const c = palette ? paletteColorOf(rawVal, palette) : candleColorOf(rawVal, opts)
+        if (c != null) byTs.set(ts, c) // null (warmup/unknown id) → uncoloured, no carry-over
+        if (byTsLabel) { const l = paletteLabelOf(rawVal, palette); if (l != null) byTsLabel.set(ts, l) }
       }
-      candleColor.push({ instanceKey, field, byTs, opts })
+      candleColor.push({ instanceKey, field, byTs, opts, palette, byTsLabel, layerId: layer.id })
       continue
     }
     const overlayType = layerKindToOverlay(layer.kind, fields.length)
@@ -543,14 +551,22 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
     for (let i = arr.length - 1; i >= 0; i--) { if (arr[i][0] === ts) { candle = arr[i]; break } }
     for (const cc of ccMeta) {
       const v = inds[cc.instanceKey] && inds[cc.instanceKey][cc.field]
-      if (v == null) continue
-      const color = candleColorOf(v, cc.opts)
-      if (color == null) continue
-      // ALWAYS keep byTs current (even while disabled) so enabling this kind
-      // later re-stamps these live bars (the line-504 contract). Only the
-      // candle[6] stamp is gated on the kind being currently active.
-      if (cc.byTs) cc.byTs.set(ts, color)
-      if (candle && ccActive && ccActive.has(cc.kind)) {
+      const color = (v == null) ? null
+        : (cc.palette ? paletteColorOf(v, cc.palette) : candleColorOf(v, cc.opts))
+      // ALWAYS keep byTs authoritative for THIS ts (even while disabled) so
+      // enabling this kind later re-stamps correctly. A null result (warmup /
+      // NaN / unknown id) must CLEAR any prior colour for this ts — never inherit
+      // a neighbour's or a stale colour. Only the candle[6] stamp is gated on the
+      // kind being currently active.
+      if (cc.byTs) { if (color != null) cc.byTs.set(ts, color); else cc.byTs.delete(ts) }
+      if (cc.byTsLabel) {
+        const l = (v == null || !cc.palette) ? null : paletteLabelOf(v, cc.palette)
+        if (l != null) cc.byTsLabel.set(ts, l); else cc.byTsLabel.delete(ts)
+      }
+      // Stamp only when THIS instance is active. Keyed by the unique instanceKey
+      // (display_label) — kindOf collapses SCMR / SCMR(INV) to the same kind, so
+      // keying the active-set by kind would let either drive both candles.
+      if (candle && color != null && ccActive && ccActive.has(cc.instanceKey)) {
         while (candle.length < 9) candle.push('')
         candle[6] = color
       }

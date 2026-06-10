@@ -178,6 +178,72 @@ export function candleColorOpts(style) {
 }
 
 /**
+ * Parse a `candle_color` layer's PALETTE from its `style` map (the SCMR /
+ * SCMR-INV form). A palette names the output that carries a numeric type-id
+ * (`style.color_field`) plus `color_{id}` / `label_{id}` entries. The value on
+ * the wire is the id (a decimal string), NOT a colour — the colour is looked up
+ * here. Returns null when `style` is not a palette (no `color_field`, or no
+ * `color_{id}` entries) so the caller can fall back to numeric-threshold mode.
+ * NOTHING is hardcoded — the palette is read entirely from `style`, and the
+ * caller re-reads it whenever a new view spec / state descriptor arrives.
+ *
+ * @param {Record<string,string>} [style]
+ * @returns {{ colorField:string, labelField:string|null,
+ *             colors:Record<string,string>, labels:Record<string,string> }|null}
+ */
+export function candleColorPalette(style) {
+  const s = style || {}
+  const colorField = s.color_field
+  if (!colorField) return null
+  const colors = {}; const labels = {}
+  let hasColor = false
+  for (const k in s) {
+    let m = /^color_(\d+)$/.exec(k)
+    if (m) { colors[m[1]] = s[k]; hasColor = true; continue }
+    m = /^label_(\d+)$/.exec(k)
+    if (m) labels[m[1]] = s[k]
+  }
+  if (!hasColor) return null
+  return { colorField, labelField: s.label_field || null, colors, labels }
+}
+
+/**
+ * Resolve a palette candle colour from a raw type-id value. The value is a
+ * decimal string / number; parse it, TRUNCATE to an integer id, and look up
+ * `color_{id}`. A missing / non-finite value (indicator warmup) OR an id with no
+ * `color_{id}` entry → null = default/uncoloured. Callers must NOT carry the
+ * previous candle's colour for a null result.
+ *
+ * @param {string|number|null|undefined} value
+ * @param {ReturnType<typeof candleColorPalette>} palette
+ * @returns {string|null}
+ */
+export function paletteColorOf(value, palette) {
+  if (!palette || value == null || value === '') return null
+  const n = Number(value)
+  if (!Number.isFinite(n)) return null
+  const c = palette.colors[String(Math.trunc(n))]
+  return c != null ? c : null
+}
+
+/**
+ * Resolve the palette LABEL (tooltip/legend text) for a raw type-id value via
+ * `label_{id}`. Names live ONLY in the style map — the row's name output is also
+ * a numeric id. Returns null when there's no value / no `label_{id}`.
+ *
+ * @param {string|number|null|undefined} value
+ * @param {ReturnType<typeof candleColorPalette>} palette
+ * @returns {string|null}
+ */
+export function paletteLabelOf(value, palette) {
+  if (!palette || value == null || value === '') return null
+  const n = Number(value)
+  if (!Number.isFinite(n)) return null
+  const l = palette.labels[String(Math.trunc(n))]
+  return l != null ? l : null
+}
+
+/**
  * Per-bar colour for a `signed_slope_histogram` layer (style.color_rule).
  * Picks one of four colours from the value sign and slope direction:
  *   value>=0 & slope>=0 → positive_rising_color
