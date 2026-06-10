@@ -107,7 +107,7 @@ export class CorkyFeed extends FeedSource {
      * @returns {Promise<object>} a handle (carries the subscription_id).
      */
     async subscribe(opts = {}, handlers = {}) {
-        const { venue, symbol, timeframe, indicators, range, views, enabled } = opts
+        const { venue, symbol, timeframe, indicators, range, views, enabled, target_runtime_id } = opts
         const onStatus = handlers.onStatus || (() => {})
         const onError = handlers.onError || (() => {})
 
@@ -137,6 +137,7 @@ export class CorkyFeed extends FeedSource {
                 venue, symbol, timeframe,
                 include_indicators: indicators != null ? true : undefined,
                 range,
+                target_runtime_id,   // re-targeted on reconnect re-issue (spread below)
             },
             onStatus, onError,     // retained so reconnect/exhaustion can report
             chunks: [],            // accumulated historical_chunk events
@@ -172,6 +173,7 @@ export class CorkyFeed extends FeedSource {
             const flow = this.client.subscribeCandles({
                 subscription_id,
                 venue, symbol, timeframe,
+                target_runtime_id,   // own the runtime from discovery (preferred pattern)
                 // The candle-state already MAINTAINS its indicator set (via
                 // upsert/patch). On subscribe we only flag include_indicators so
                 // the rows carry those indicators. We deliberately do NOT forward

@@ -588,8 +588,15 @@ export default {
                 layers: mem.layers.slice(),
                 hiddenLayers: mem.hiddenLayers.slice(), // explicit [x]-closed layers stay closed
             }
+            // Target the runtime that OWNS this candle-state (from discovery).
+            // The gateway's documented preferred pattern: echo back the state's
+            // runtime_id as target_runtime_id rather than letting it default to
+            // its first-public-runtime fallback (which goes stale across runtime
+            // restarts → "missing or stale runtime control session").
+            const target_runtime_id = state && state.runtime_id || undefined
             try {
-                this.corkyHandle = await this.corkyFeed.subscribe({ ...opts, views, enabled }, {
+                this.corkyHandle = await this.corkyFeed.subscribe(
+                    { ...opts, views, enabled, target_runtime_id }, {
                     onStatus: (status) => {
                         this.corkyProgress = status
                         if (status && (status.phase === 'history-complete' ||
@@ -621,22 +628,60 @@ export default {
                     },
                     onError: (err) => { this.corkyError = this._corkyErr(err) },
                 })
+                this._corkySelectRetries = 0   // a clean subscribe clears the ride-through counter
                 // Remember the selection so a reload / browser restart reopens it.
                 this.corkyLast = {
                     venue: opts.venue, symbol: opts.symbol, timeframe: opts.timeframe,
                 }
                 this.saveStateToStorage()
             } catch (err) {
-                this.corkyError = this._corkyErr(err)
+                const mapped = this._corkyErr(err)
+                // Ride through transient runtime restarts: a retryable control
+                // error (runtime_not_found / control_response_timeout /
+                // subscribe_timeout) re-discovers + re-selects with backoff a few
+                // times before surfacing, so a runtime redeploy self-heals.
+                if (this._corkyScheduleSelectRetry(opts, mapped)) return
+                this._corkySelectRetries = 0
+                this.corkyError = mapped
                 this.corkyCurrent = null
             } finally {
-                this.corkyLoading = false
+                if (!this._corkyRetryPending) this.corkyLoading = false
             }
+        },
+
+        // Bounded backoff retry for a transient (retryable) select failure.
+        // Returns true if a retry was scheduled (caller should leave the spinner
+        // up and NOT surface the error). User-initiated selects reset the count.
+        _corkyScheduleSelectRetry(opts, mapped) {
+            if (!mapped || !mapped.retryable) return false
+            const n = this._corkySelectRetries || 0
+            if (n >= 4) return false   // exhausted → surface the error
+            this._corkySelectRetries = n + 1
+            const delay = Math.min(400 * Math.pow(2, n), 4000)
+            this.corkyProgress = { phase: 'retrying', attempt: n + 1, message: mapped.message }
+            this._corkyRetryPending = true
+            clearTimeout(this._corkyRetryTimer)
+            this._corkyRetryTimer = setTimeout(() => {
+                this._corkyRetryPending = false
+                // A restarted runtime may have a NEW runtime_id — re-discover first.
+                Promise.resolve(this.corkyDiscover(opts.venue))
+                    .then(() => this.corkySelect(opts))
+            }, delay)
+            return true
         },
 
         // Panel: select a venue/symbol/timeframe (+ default indicators).
         onCorkySelect(opts) {
+            this._corkyCancelSelectRetry()   // a manual pick supersedes any pending retry
             this.corkySelect(opts)
+        },
+
+        // Cancel a pending ride-through retry and reset its counter.
+        _corkyCancelSelectRetry() {
+            clearTimeout(this._corkyRetryTimer)
+            this._corkyRetryTimer = null
+            this._corkyRetryPending = false
+            this._corkySelectRetries = 0
         },
 
         // Panel: add a timeframe → patch the candle-state, re-discover, then
@@ -644,8 +689,14 @@ export default {
         async onCorkyAddTimeframe(req) {
             // Stream the new tf CANDLES-ONLY (matching the chip-click select
             // path); the user toggles indicators on client-side afterwards.
+            // patch_candle_state falls back to "first public runtime for venue"
+            // when no target_runtime_id is given — stale across restarts — so
+            // target the runtime that owns this state (from discovery).
             await this._corkyPatchAndReselect(
-                { venue: req.venue, symbol: req.symbol, timeframes: [req.timeframe] },
+                {
+                    venue: req.venue, symbol: req.symbol, timeframes: [req.timeframe],
+                    target_runtime_id: this._corkyRuntimeId(req.venue, req.symbol),
+                },
                 { venue: req.venue, symbol: req.symbol, timeframe: req.timeframe, indicators: [] },
             )
         },
@@ -881,6 +932,16 @@ export default {
             return true
         },
 
+        // The runtime that owns a venue/symbol's candle-state, from the latest
+        // discovery (list_candle_states descriptors carry a required runtime_id).
+        // Echoed back as target_runtime_id on subscribe/patch so control requests
+        // route to the live runtime instead of the gateway's stale default.
+        _corkyRuntimeId(venue, symbol) {
+            const st = (this.corkyStates || []).find(
+                s => s && s.venue === venue && s.symbol === symbol)
+            return (st && st.runtime_id) || undefined
+        },
+
         // Per-(venue,symbol) enabled-state memory (lazily created; normalized so a
         // malformed/older restored entry can't break .kinds/.layers access).
         _corkyMem(venue, symbol) {
@@ -897,6 +958,7 @@ export default {
         // re-select so the newly-added tf/indicator actually streams.
         async _corkyPatchAndReselect(patch, selectOpts) {
             if (!this.corkyClient) return
+            this._corkyCancelSelectRetry()   // fresh user action
             this.corkyError = null
             try {
                 await this.corkyClient.patchCandleState(patch)
@@ -925,6 +987,7 @@ export default {
         // Full gateway teardown: unsubscribe + destroy the feed (which closes
         // the client). Leaves the DataCube intact for the File feed to reuse.
         teardownCorky() {
+            this._corkyCancelSelectRetry()   // don't let a pending retry fire post-teardown
             this._corkyUnsub()
             if (this.corkyFeed) {
                 try { this.corkyFeed.destroy() } catch (_) { /* already gone */ }
