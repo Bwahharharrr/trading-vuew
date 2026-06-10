@@ -30,6 +30,11 @@ export const KNOWN_ERROR_CODES = {
     control_response_timeout:   { retryable: true },
     control_receive_error:      { retryable: true },
     historical_query_failed:    { retryable: false },
+    // The gateway accepted the subscription but the runtime's CONTROL session
+    // (gateway↔runtime control channel) is missing/stale — the runtime is up in
+    // the catalog but can't serve the stream. Transient: it recovers when the
+    // runtime re-establishes its control channel, so retry (the chart self-heals).
+    runtime_control_rejected:   { retryable: true },
 }
 
 // Resolve whether an error is retryable. The wire `retryable` flag wins when

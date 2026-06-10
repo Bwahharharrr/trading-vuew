@@ -450,7 +450,8 @@ describe('runtime-id targeting + ride-through retry', () => {
     // slow phase: visible actionable error (not an endless spinner), retry still armed
     expect(app.corkyProgress).toBeNull()
     expect(app.corkyError.retryable).toBe(true)
-    expect(app.corkyError.message).toMatch(/unavailable.*restarting/i)
+    expect(app.corkyError.message).toMatch(/gateway\/runtime issue/i)
+    expect(app.corkyError.message).toContain('stale')   // surfaces the real reason
     expect(app._corkyRetryKeepSpinner).toBe(false)   // spinner off, error shown
     expect(app._corkyRetryTimer).toBeTruthy()         // background retry scheduled
     app._corkyCancelSelectRetry()

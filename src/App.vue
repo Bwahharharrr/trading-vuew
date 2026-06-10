@@ -678,9 +678,13 @@ export default {
             } else {
                 const rid = this._corkyRuntimeId(opts.venue, opts.symbol) || 'public-market-main'
                 this.corkyProgress = null
+                // Surface the gateway's ACTUAL reason — this is almost always a
+                // backend issue (the runtime's control session being rejected),
+                // not the chart. Keep retrying so it self-heals when it recovers.
+                const reason = (mapped && mapped.message) || 'runtime control session rejected'
                 this.corkyError = {
-                    message: `Gateway runtime "${rid}" is unavailable — it may be restarting. ` +
-                        `Retrying automatically; the chart loads as soon as it's back.`,
+                    message: `Gateway can't open the stream for runtime "${rid}" — retrying automatically. ` +
+                        `This is a gateway/runtime issue: ${reason}`,
                     retryable: true,
                 }
                 this._corkyRetryKeepSpinner = false

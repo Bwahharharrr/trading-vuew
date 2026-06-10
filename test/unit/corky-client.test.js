@@ -234,6 +234,9 @@ describe('CorkyClient — errors', () => {
         // wire flag wins over catalog
         expect(isRetryable('state_not_found', true)).toBe(true)
         expect(KNOWN_ERROR_CODES.historical_query_failed.retryable).toBe(false)
+        // runtime_control_rejected (gateway↔runtime control session down) is
+        // retryable so the chart self-heals when the control channel returns.
+        expect(isRetryable('runtime_control_rejected')).toBe(true)
     })
 })
 
