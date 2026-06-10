@@ -160,6 +160,56 @@ describe('CorkyFeed hub fixes', () => {
     expect(client.sent[client.sent.length - 1].subscription_id).toBe(id)
   })
 
+  test('reconnect-exhausted surfaces through every stream\'s onError', async () => {
+    const errs = []
+    const p = feed.subscribe({ venue: 'V', symbol: 'S', timeframe: '1m' },
+      { onError: (e) => errs.push(e) })
+    client.completeHistory(feed._activeSubId)
+    await p
+    client.fire('reconnect-exhausted', { retries: 6 })
+    expect(errs.length).toBe(1)
+    expect(errs[0].code).toBe('reconnect_exhausted')
+  })
+
+  test('destroy() detaches the lifecycle listeners — no resubscribe after teardown', async () => {
+    client.fire('open') // initial
+    const p = feed.subscribe({ venue: 'V', symbol: 'S', timeframe: '1m' }, {})
+    client.completeHistory(feed._activeSubId)
+    await p
+    feed.destroy()
+    const before = client.sent.filter(s => s.type === 'subscribe_candles').length
+    client.fire('open') // reconnect AFTER destroy
+    const after = client.sent.filter(s => s.type === 'subscribe_candles').length
+    expect(after).toBe(before) // destroyed feed must not resubscribe
+  })
+
+  test('a new subscribe SUPERSEDES an in-flight one but keeps a COMPLETED one', async () => {
+    const p1 = feed.subscribe({ venue: 'V', symbol: 'S', timeframe: '1m' }, {})
+    const id1 = feed._activeSubId
+    client.completeHistory(id1)
+    await p1 // completed
+    feed.subscribe({ venue: 'V', symbol: 'S', timeframe: '5m' }, {}) // in-flight
+    const id2 = feed._activeSubId
+    feed.subscribe({ venue: 'V', symbol: 'S', timeframe: '15m' }, {})
+    expect(feed._subs.has(id1)).toBe(true)   // completed sub kept (caller's to unsub)
+    expect(feed._subs.has(id2)).toBe(false)  // in-flight sub superseded
+  })
+
+  test('grid normalize PROMOTES the first sibling when a pane lost its anchor', () => {
+    // pane "macd": only the SIBLING is present and the built data has no anchor
+    // (e.g. a hidden-by-default anchor) — the sibling is promoted so it still
+    // renders in its own grid instead of silently vanishing.
+    const sib = {
+      name: 'lines', type: 'Spline', data: [], grid: { id: 9 },
+      settings: { corkyPaneName: 'macd', corkyPaneAnchor: false, corkyLayerId: 'lines' },
+    }
+    dc.data.offchart.push(sib)
+    const handle = { built: { offchart: [sib] }, addedOverlays: new Set(), enabledLayers: new Set() }
+    feed._normalizeOffchartGrids(handle)
+    expect(dc.data.offchart).toEqual([sib])
+    expect(sib.grid).toBeUndefined() // promoted to anchor — spawns its own grid
+  })
+
   test('grid normalize leaves untagged (non-corky) offchart data untouched', () => {
     // Foreign data using trading-vue's public grid:{id} pane-merge must NOT be
     // rewritten by the corky pane normalizer (it used to promote such overlays

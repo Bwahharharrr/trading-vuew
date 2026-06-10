@@ -37,7 +37,8 @@
     "eslint": "eslint --ext .js,.vue src",
     "size": "size-limit",
     "smoke:gateway": "node scripts/corky-gateway-smoke.mjs",
-    "smoke:browser": "node scripts/corky-browser-smoke.mjs"
+    "smoke:browser": "node scripts/corky-browser-smoke.mjs",
+    "coverage": "vitest run --coverage"
   },
   "size-limit": [
     {
@@ -93,6 +94,7 @@
     "@size-limit/file": "^11.2.0",
     "@types/node": "^25.9.1",
     "@vitejs/plugin-vue": "^6.0.7",
+    "@vitest/coverage-v8": "^4.1.8",
     "@vue/compiler-sfc": "^3.4.0",
     "@vue/test-utils": "^2.4.10",
     "eslint": "^7.21.0",
