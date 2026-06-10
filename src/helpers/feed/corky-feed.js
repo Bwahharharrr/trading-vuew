@@ -342,11 +342,17 @@ export class CorkyFeed extends FeedSource {
         return true
     }
 
-    // Re-apply handle.enabled = { kinds:[{kind}], layers:[layerId] } onto the
-    // freshly-built data (used after a tf-switch rebuild).
+    // Re-apply handle.enabled = { kinds:[{kind}], layers:[layerId],
+    // hiddenLayers:[layerId] } onto the freshly-built data (used after a
+    // tf-switch rebuild and on reload-restore).
     _reapplyEnabled(handle) {
         const en = handle.enabled
         if (!en) return
+        // Seed explicit hides FIRST so setIndicatorEnabled's autoVisible skips
+        // them — otherwise a reload/tf-switch resurrects a default-visible layer
+        // the user closed (e.g. the MACD bull-strength pane's [x]).
+        if (!handle.hiddenLayers) handle.hiddenLayers = new Set()
+        for (const id of (en.hiddenLayers || [])) handle.hiddenLayers.add(id)
         for (const k of (en.kinds || [])) {
             // Pass display_label as the unique instance so a tf-switch restores
             // SCMR and SCMR(INV) to their OWN colouring (not the collapsed kind).

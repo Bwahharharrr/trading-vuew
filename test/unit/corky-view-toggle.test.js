@@ -91,6 +91,26 @@ describe('view-layer visibility gating', () => {
     expect(dc.data.onchart).toHaveLength(0)
   })
 
+  test('reload: _reapplyEnabled seeds hiddenLayers so an [x]-closed default layer stays closed', () => {
+    // The user closed the default-visible 'main' layer via the pane [x] last
+    // session; mem persisted it. On reload the kind re-enables, but 'main' must
+    // NOT come back (pre-fix: autoVisible re-added every default-visible layer).
+    const h = handleWithViewOverlays()
+    h.hiddenLayers = new Set()
+    h.enabled = {
+      kinds: [{ display_label: 'SCMR', kind: 'SCMR' }],
+      layers: [],
+      hiddenLayers: ['main'],
+    }
+    feed._reapplyEnabled(h)
+    expect(h.hiddenLayers.has('main')).toBe(true)
+    expect(dc.data.onchart.map(o => o.settings.corkyLayerId)).toEqual([]) // main stayed hidden
+    // re-enabling the layer explicitly clears the hide
+    feed.setLayerEnabled(h, 'main', true)
+    expect(h.hiddenLayers.has('main')).toBe(false)
+    expect(dc.data.onchart.map(o => o.settings.corkyLayerId)).toEqual(['main'])
+  })
+
   test('candle_color: applied on enable, cleared on disable (not at build)', () => {
     const data = [[1000, 1, 2, 0, 1.5, 10], [2000, 1, 2, 0, 1.5, 10]]
     const built = { chart: { type: 'Candles', data }, onchart: [], offchart: [] }

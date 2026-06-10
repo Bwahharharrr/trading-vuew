@@ -160,6 +160,21 @@ describe('CorkyFeed hub fixes', () => {
     expect(client.sent[client.sent.length - 1].subscription_id).toBe(id)
   })
 
+  test('subscribe maps indicators:[] → include_indicators:true (boot-restore contract)', async () => {
+    // The boot auto-restore once passed NO indicators field → include_indicators
+    // was omitted → the gateway served candles WITHOUT indicator rows → the
+    // restored chart had no indicator data and every panel toggle was dead.
+    // App.corkySelect now normalizes to [], which must map to true here.
+    feed.subscribe({ venue: 'V', symbol: 'S', timeframe: '1m', indicators: [] }, {})
+    const sub = client.sent.find(s => s.type === 'subscribe_candles')
+    expect(sub.include_indicators).toBe(true)
+    // and an absent field stays undefined (the feed's contract — UI must opt in)
+    client.sent.length = 0
+    feed.subscribe({ venue: 'V', symbol: 'S', timeframe: '5m' }, {})
+    const sub2 = client.sent.find(s => s.type === 'subscribe_candles')
+    expect(sub2.include_indicators).toBeUndefined()
+  })
+
   test('PERF: onStatus({phase:live}) is emitted once across many ticks', async () => {
     const statuses = []
     const p = feed.subscribe({ venue: 'V', symbol: 'S', timeframe: '1m' }, { onStatus: (s) => statuses.push(s.phase) })

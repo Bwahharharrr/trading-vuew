@@ -16,6 +16,7 @@ function ctx(over) {
     persistentIndicatorVisibility: {},
     accordionExpandedViews: {},
     corkyEnabled: {},
+    corkyLast: null,
   }, over)
 }
 
@@ -35,4 +36,24 @@ test('missing corkyEnabled loads as undefined (App defaults to {})', () => {
   saveStateToStorage.call(ctx({})) // corkyEnabled = {}
   const loaded = loadStateFromStorage.call(ctx({}))
   expect(loaded.corkyEnabled).toEqual({})
+})
+
+test('hiddenLayers ([x]-closed default-visible layers) survive the round-trip', () => {
+  const mem = {
+    'BITFINEX|tBTCUSD': {
+      kinds: [{ display_label: 'MACD', kind: 'macd' }],
+      layers: ['hist', 'lines'],
+      hiddenLayers: ['bull'], // bull-strength pane closed via its [x]
+    },
+  }
+  saveStateToStorage.call(ctx({ corkyEnabled: mem }))
+  const loaded = loadStateFromStorage.call(ctx({}))
+  expect(loaded.corkyEnabled['BITFINEX|tBTCUSD'].hiddenLayers).toEqual(['bull'])
+})
+
+test('corkyLast (last venue/symbol/timeframe) survives the round-trip', () => {
+  const last = { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '15m' }
+  saveStateToStorage.call(ctx({ corkyLast: last }))
+  const loaded = loadStateFromStorage.call(ctx({}))
+  expect(loaded.corkyLast).toEqual(last)
 })

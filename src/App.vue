@@ -11,7 +11,8 @@
                     :chart-config="config"
                     :toolbar="true"
                     @open-indicator-settings="openIndicatorSettings"
-                @close-indicator="onCloseIndicator">
+                @close-indicator="onCloseIndicator"
+                @order-settings="onOrderBoxSettings">
             </trading-vue>
 
             <!-- Left toolbar for drawing tools -->
@@ -79,6 +80,13 @@
             </div>
         </div>
     </div>
+
+    <!-- Right-panel left-edge drag handle: resize the panel (width persisted).
+         Fixed-positioned at the boundary so the panel's internal scroll can't
+         move it. -->
+    <div class="panel-resizer"
+        :style="{ right: rightPanelWidth + 'px' }"
+        @mousedown="startPanelResize"></div>
 
     <!-- Right Panel -->
     <div class="right-panel" :style="{ width: rightPanelWidth + 'px', height: height + 'px' }">
@@ -226,10 +234,12 @@
         @close="onOrderTypeCancel">
     </order-type-modal>
 
-    <!-- Scaled Order modal (after choosing the 'scaled' type) -->
+    <!-- Scaled Order modal (after choosing the 'scaled' type, or via an existing
+         box's cog — then `initial` pre-fills the current qty/size/distribution) -->
     <order-distribution-modal
         v-if="orderModalOpen"
-        :geometry="pendingBoxGeometry"
+        :geometry="editingOrderBox ? editingOrderBox.geometry : pendingBoxGeometry"
+        :initial="editingOrderBox ? editingOrderBox.initial : null"
         @confirm="onOrderConfirm"
         @close="onOrderCancel">
     </order-distribution-modal>
@@ -315,8 +325,12 @@ export default {
             corkyCurrent: null,
             // Enabled indicators + hidden layers, persisted per venue|symbol so a
             // timeframe switch (which tears down the subscription) keeps them on.
-            // `${venue}|${symbol}` → { kinds:[{display_label,kind}], layers:[layerId] }
+            // `${venue}|${symbol}` → { kinds:[{display_label,kind}], layers:[layerId],
+            //                          hiddenLayers:[layerId] }
             corkyEnabled: {},
+            // Last selected stream { venue, symbol, timeframe } — persisted so a
+            // reload (or browser restart) reopens the chart you were looking at.
+            corkyLast: null,
             corkyLoading: false,
             corkyProgress: null,
             corkyError: null,
@@ -363,6 +377,11 @@ export default {
             this.accordionExpandedViews = savedState.accordionExpandedViews || {}
             this.corkyEnabled = (savedState.corkyEnabled && typeof savedState.corkyEnabled === 'object')
                 ? savedState.corkyEnabled : {}
+            this.corkyLast = (savedState.corkyLast && savedState.corkyLast.venue &&
+                savedState.corkyLast.symbol) ? savedState.corkyLast : null
+            if (Number.isFinite(Number(savedState.panelWidth))) {
+                this.panelWidth = Number(savedState.panelWidth)
+            }
         }
 
         // Bootstrap order (FILE mode only): ?file=<name> URL param wins (per-tab,
@@ -393,6 +412,8 @@ export default {
     },
     beforeUnmount() {
         window.removeEventListener('resize', this.onResize)
+        // Don't leak the panel-resize document listeners / body cursor mid-drag.
+        this.endPanelResize()
         // Tear down the gateway feed if it was ever activated (no dangling
         // sockets/listeners on unmount).
         this.teardownCorky()
@@ -450,7 +471,21 @@ export default {
                     dataCube: this.chart,
                 })
             }
-            this.corkyDiscover()
+            this.corkyDiscover().then((states) => {
+                // Reopen the last-viewed stream (persisted across reloads/browser
+                // restarts) if it still exists in the catalog. Falls back to the
+                // state's first timeframe when the remembered tf is gone.
+                const last = this.corkyLast
+                if (!last || this.corkyCurrent || this.corkyHandle) return
+                const st = (states || []).find(
+                    s => s && s.venue === last.venue && s.symbol === last.symbol)
+                if (!st) return
+                const tfs = st.available_timeframes || []
+                const timeframe = tfs.includes(last.timeframe) ? last.timeframe : tfs[0]
+                if (timeframe) {
+                    this.corkySelect({ venue: last.venue, symbol: last.symbol, timeframe })
+                }
+            })
         },
 
         // Discover the catalog → populate the reactive `corkyStates`.
@@ -473,6 +508,12 @@ export default {
         // one, then drive the DataCube from the gateway.
         async corkySelect(opts) {
             if (!this.corkyFeed) return
+            // Normalize: `indicators` must be AT LEAST [] — the feed maps a null/
+            // missing field to include_indicators:undefined, and the gateway then
+            // serves candles WITHOUT indicator rows. The boot-restore call hit
+            // exactly that: chart loaded, but no indicator data → _reapplyEnabled
+            // a no-op and every panel toggle dead (applied=false).
+            opts = { ...opts, indicators: opts.indicators || [] }
             // Single active stream: tear down the previous subscription first.
             await this._corkyUnsub()
             this.corkyLoading = true
@@ -503,7 +544,11 @@ export default {
                     views[ind.display_label] = { kind: ind.kind, view: ind.view }
                 }
             }
-            const enabled = { kinds: mem.kinds.slice(), layers: mem.layers.slice() }
+            const enabled = {
+                kinds: mem.kinds.slice(),
+                layers: mem.layers.slice(),
+                hiddenLayers: mem.hiddenLayers.slice(), // explicit [x]-closed layers stay closed
+            }
             try {
                 this.corkyHandle = await this.corkyFeed.subscribe({ ...opts, views, enabled }, {
                     onStatus: (status) => {
@@ -534,6 +579,11 @@ export default {
                     },
                     onError: (err) => { this.corkyError = this._corkyErr(err) },
                 })
+                // Remember the selection so a reload / browser restart reopens it.
+                this.corkyLast = {
+                    venue: opts.venue, symbol: opts.symbol, timeframe: opts.timeframe,
+                }
+                this.saveStateToStorage()
             } catch (err) {
                 this.corkyError = this._corkyErr(err)
                 this.corkyCurrent = null
@@ -568,8 +618,11 @@ export default {
             // Only reflect the toggle in the UI if the kind actually has overlays
             // in the loaded data (setIndicatorEnabled returns false otherwise),
             // so a no-op toggle can't leave a filled dot for an empty indicator.
+            // Pass display_label as the UNIQUE instance: kindOf collapses SCMR and
+            // SCMR(INV) to the same 'SCMR', so without it their candle colouring
+            // (same layer id scmr_candle_color) overwrites each other.
             const applied = this.corkyFeed.setIndicatorEnabled(
-                this.corkyHandle, req.kind, req.enabled)
+                this.corkyHandle, req.kind, req.enabled, req.display_label)
             if (!applied) return
 
             const cur = this.corkyCurrent
@@ -597,7 +650,8 @@ export default {
             this.saveStateToStorage()   // persist across reloads
         },
 
-        // Toggle a single hidden view layer (TL/TH/diagnostics) on/off.
+        // Toggle a single view layer on/off (TL/TH/diagnostics opt-in, or an
+        // explicit hide of a default-visible layer via the pane's [x]).
         onCorkyToggleLayer(req) {
             if (!this.corkyFeed || !this.corkyHandle) return
             const applied = this.corkyFeed.setLayerEnabled(
@@ -605,10 +659,57 @@ export default {
             if (!applied) return
             const cur = this.corkyCurrent
             if (cur) cur.layers = [...this.corkyHandle.enabledLayers]
-            // Persist for tf-switch + reload survival.
-            this._corkyMem(req.venue, req.symbol).layers =
-                [...this.corkyHandle.enabledLayers]
+            // Persist for tf-switch + reload survival: enabled layers AND explicit
+            // hides (so a default-visible layer closed via [x] stays closed after
+            // a reload — _reapplyEnabled seeds handle.hiddenLayers from this).
+            const mem = this._corkyMem(req.venue, req.symbol)
+            mem.layers = [...this.corkyHandle.enabledLayers]
+            const hi = mem.hiddenLayers.indexOf(req.layerId)
+            if (req.enabled) {
+                if (hi !== -1) mem.hiddenLayers.splice(hi, 1)
+            } else if (hi === -1) {
+                mem.hiddenLayers.push(req.layerId)
+            }
             this.saveStateToStorage()
+        },
+
+        // Pane/legend [x] on a Corky-driven overlay: route through the Corky
+        // toggle path so the discovery panel un-highlights AND the hide persists
+        // (the File-mode close just flips settings.display, leaving the panel
+        // green and the layer resurrected on reload). Returns true when handled.
+        closeCorkyIndicator(payload) {
+            if (this.feedMode !== 'gateway' || !this.corkyCurrent ||
+                !this.corkyHandle || !payload) return false
+            const d = this.chart && this.chart.data
+            const all = [...((d && d.onchart) || []), ...((d && d.offchart) || [])]
+            const ov = all.find(o => o && o.name === payload.name && o.settings &&
+                (o.settings.corkyLayerId || o.settings.corkyKind))
+            if (!ov) return false
+            const { venue, symbol, timeframe } = this.corkyCurrent
+            const s = ov.settings
+            if (s.corkyLayerId) {
+                // One view layer (e.g. the MACD bull-strength pane) → layer off.
+                this.onCorkyToggleLayer({
+                    venue, symbol, timeframe,
+                    layerId: s.corkyLayerId, enabled: false,
+                })
+            } else {
+                // Fallback (no-view) overlay → whole indicator off. The mem/panel
+                // are keyed by the DESCRIPTOR's display_label, so resolve it from
+                // discovery (fallback overlays carry no corkyInstance).
+                const st = (this.corkyStates || []).find(
+                    x => x && x.venue === venue && x.symbol === symbol)
+                const kl = String(s.corkyKind).toLowerCase()
+                const desc = ((st && st.indicators) || []).find(
+                    i => i && String(i.kind).toLowerCase() === kl)
+                this.onCorkyToggleIndicator({
+                    venue, symbol, timeframe,
+                    kind: s.corkyKind,
+                    display_label: (desc && desc.display_label) || s.corkyInstance || s.corkyKind,
+                    enabled: false,
+                })
+            }
+            return true
         },
 
         // Per-(venue,symbol) enabled-state memory (lazily created; normalized so a
@@ -616,9 +717,10 @@ export default {
         _corkyMem(venue, symbol) {
             const key = `${venue}|${symbol}`
             let m = this.corkyEnabled[key]
-            if (!m) { m = { kinds: [], layers: [] }; this.corkyEnabled[key] = m }
+            if (!m) { m = { kinds: [], layers: [], hiddenLayers: [] }; this.corkyEnabled[key] = m }
             if (!Array.isArray(m.kinds)) m.kinds = []
             if (!Array.isArray(m.layers)) m.layers = []
+            if (!Array.isArray(m.hiddenLayers)) m.hiddenLayers = []
             return m
         },
 
@@ -764,6 +866,21 @@ body {
     overflow-y: auto;
     overflow-x: hidden;
     box-sizing: border-box;
+}
+
+/* Drag handle on the right panel's left border: widen/narrow the panel.
+   Fixed at the boundary (style binds `right`), straddling the border line. */
+.panel-resizer {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    margin-right: -4px; /* straddle the border */
+    cursor: col-resize;
+    z-index: 1000;
+}
+.panel-resizer:hover {
+    background: rgba(53, 167, 118, 0.35);
 }
 
 .panel-section {

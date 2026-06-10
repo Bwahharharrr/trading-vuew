@@ -192,6 +192,11 @@ export default {
                 // Corky: enabled indicators + hidden view-layers per venue|symbol
                 // (survives reload as well as tf-switch).
                 corkyEnabled: this.corkyEnabled,
+                // Corky: last-viewed { venue, symbol, timeframe } — reopened on the
+                // next load (incl. after a full browser restart; localStorage).
+                corkyLast: this.corkyLast,
+                // Right-panel width (user-resizable via its left-edge handle).
+                panelWidth: this.panelWidth,
             }
             try {
                 sessionStorage.setItem(SESSION_STATE_KEY, JSON.stringify(tabState))

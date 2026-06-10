@@ -524,6 +524,17 @@ export default {
         filteredVenues() {
             this.closePickerIfNeeded()
         },
+        // Auto-expand the ACTIVE symbol's row (e.g. when a reload restores the
+        // last-viewed stream) so its timeframes + indicators are immediately
+        // visible without an extra click. Never collapses anything.
+        current: {
+            immediate: true,
+            handler(cur) {
+                if (cur && cur.venue && cur.symbol) {
+                    this.expandedSymbols.add(`${cur.venue}::${cur.symbol}`)
+                }
+            },
+        },
     },
 }
 </script>

@@ -223,6 +223,12 @@ export default {
         onCloseIndicator(payload) {
             const { name } = payload
 
+            // Gateway mode: a Corky-driven overlay's [x] must go through the Corky
+            // toggle path (deactivates it in the discovery panel + persists the
+            // hide), not the File-mode display flip below — which leaves the panel
+            // highlighted and the pane resurrected on reload.
+            if (this.closeCorkyIndicator && this.closeCorkyIndicator(payload)) return
+
             // Check if this is a persistent indicator
             const isPersistent = this.persistentIndicatorsClipped.some(ind => ind.name === name)
 
