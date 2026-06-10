@@ -137,6 +137,41 @@ describe('OrderBox overlay (P3)', () => {
     expect(ob._geom.rows.length).toBe(0)
   })
 
+  // Two boxes + Delete: the surviving box's Vue component is REUSED with the
+  // other overlay's settings. watch_uuid must fire (settingsDisplayKey includes
+  // $uuid) so the pins re-hydrate — otherwise the survivor renders at the
+  // DELETED box's coordinates (green box at the sell box's spot, orders culled,
+  // avg/spline floating where the box isn't).
+  test('deleting one of two boxes re-anchors the survivor (no stale pins)', async () => {
+    const dc2 = seedDc() // box A: orderbox-test @ prices 97..104
+    dc2.data.onchart.push({
+      name: 'Scaled Order B', type: 'OrderBox', grid: { id: 0 }, data: [],
+      settings: {
+        $uuid: 'orderbox-B', $selected: false, $state: 'finished',
+        'z-index': 100, legend: false,
+        c0: [T0 + 15 * TF, 90], c1: [T0 + 45 * TF, 95], // DISTINCT price band
+        side: 'sell', visible: true,
+        orders: [{ id: 'b-1', price: 92, size: 1, status: 'local' }]
+      }
+    })
+    await mountWith(dc2)
+    dc.touchData(); await settle(6)
+    // delete box A the way Delete does it (system Remove → dc.del(selected uuid))
+    dc.del('orderbox-test')
+    await settle(8)
+    const ob = orderBoxRenderer(wrapper)
+    expect(ob).toBeTruthy()
+    expect(ob.sett.$uuid).toBe('orderbox-B') // survivor's settings
+    // corner() (pin-first) must give box B's corners, not stale box-A pins
+    expect(ob.corner(0)[1]).toBe(90)
+    expect(ob.corner(1)[1]).toBe(95)
+    const r = ob.box_rect()
+    const L = ob.$props.layout
+    expect(Math.abs(r.yT - Math.min(L.$2screen(90), L.$2screen(95)))).toBeLessThan(1)
+    // and its orders are NOT culled out of the box
+    expect(ob._geom.rows.length).toBe(1)
+  })
+
   test('cog click emits order-settings with the box config (modal pre-fill)', async () => {
     await mountWith(seedDc())
     const ob = orderBoxRenderer(wrapper)

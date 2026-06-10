@@ -59,6 +59,20 @@ export default {
         // Don't leave a 'grab'/'grabbing' cursor stuck if the box unmounts mid-hover.
         destroy() { this.set_cursor('') },
 
+        // Identity change (this component was REUSED for a different OrderBox,
+        // e.g. after deleting a sibling): Tool re-hydrates the pins; also drop
+        // OUR transient interaction state so the new box doesn't inherit a
+        // ghost/drag/cursor from the old one.
+        watch_uuid(n, p) {
+            Tool.methods.watch_uuid.call(this, n, p)
+            if (n.$uuid !== p.$uuid) {
+                this._ghost = null
+                this._dragOrder = null
+                this._dragResize = null
+                this.set_cursor('')
+            }
+        },
+
         // Live corner coords: prefer the Pin's OWN state (set synchronously by
         // Tool.drag_update / resize during a drag) over settings.c0/c1, which
         // only refresh after an async re-render — otherwise the box lags the

@@ -129,8 +129,14 @@ export default {
         // Computed key for efficient display change detection
         settingsDisplayKey() {
             const s = this.$props.settings || {}
-            // Track display property and z-index which affect rendering
-            return `${s.display},${s['z-index']},${s.zIndex}`
+            // Track display property and z-index which affect rendering — and
+            // $uuid: when an overlay is deleted, Vue REUSES the surviving
+            // sibling's component with the other overlay's settings, and only
+            // this watcher triggers watch_uuid (Tool pin re-hydration). Without
+            // $uuid here the swap is invisible (same display/z-index) and the
+            // survivor keeps the DELETED overlay's pin coordinates — e.g. an
+            // OrderBox rendering at the removed box's position.
+            return `${s.$uuid},${s.display},${s['z-index']},${s.zIndex}`
         }
     },
     data() { return { uxs_count: 0, last_ux_id: null } },
