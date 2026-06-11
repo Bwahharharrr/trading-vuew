@@ -64,13 +64,22 @@ export default class ChartData {
 
     merge(query, data) {
         let objects = this.query(query)
+        // mergeTs CONSUMES the incoming array (splices it) and stores its point
+        // arrays by reference. With a multi-match query the first merge would
+        // eat the chunk (siblings get the stale remainder) and the matched
+        // overlays would share row references (an in-place tick update on one
+        // corrupts the others). Give each pivot its own row-level copy.
+        const multi = objects.length > 1 && Array.isArray(data)
         for (var obj of objects) {
             if (Array.isArray(obj.v)) {
                 if (!Array.isArray(data)) continue
+                const chunk = multi
+                    ? data.map(r => (Array.isArray(r) ? r.slice() : r))
+                    : data
                 if (obj.v[0] && obj.v[0].length >= 2) {
-                    mergeTs(obj, data)
+                    mergeTs(obj, chunk)
                 } else {
-                    mergeObjects(obj, data, [])
+                    mergeObjects(obj, chunk, [])
                 }
             } else if (typeof obj.v === 'object') {
                 mergeObjects(obj, data)

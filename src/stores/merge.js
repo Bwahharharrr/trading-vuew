@@ -49,8 +49,19 @@ export function tsOverlap(arr1, arr2, range) {
     let id21 = binarySearchGTE(arr2, t1)
     let id22 = binarySearchLTE(arr2, t2)
 
-    if (id11 === -1 || id12 === -1 || id11 > id12) { id11 = 0; id12 = -1 }
-    if (id21 === -1 || id22 === -1 || id21 > id22) { id21 = 0; id22 = -1 }
+    // No elements in the window: keep the GTE INSERTION index (array end when
+    // every element is earlier) with a zero length, so mergeTs's split
+    // (`splice(d1[0])`) happens AT THE GAP. The old reset to [0,-1] split at
+    // the front, and combine()'s "src inside dst" branch then dropped the
+    // merged data entirely — gap-fill chunks silently vanished.
+    if (id11 === -1 || id12 === -1 || id11 > id12) {
+        id11 = id11 === -1 ? arr1.length : id11
+        id12 = id11 - 1
+    }
+    if (id21 === -1 || id22 === -1 || id21 > id22) {
+        id21 = id21 === -1 ? arr2.length : id21
+        id22 = id21 - 1
+    }
 
     for (let i = id11; i <= id12 && i < arr1.length; i++) ts.set(arr1[i][0], arr1[i])
     for (let i = id21; i <= id22 && i < arr2.length; i++) ts.set(arr2[i][0], arr2[i])

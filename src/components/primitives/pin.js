@@ -42,7 +42,7 @@ export default class Pin {
         }
 
         if (this.state !== 'settled') {
-            this.comp.$emit('scroll-lock', true)
+            this.comp.custom_event('scroll-lock', true)
         }
     }
 
@@ -106,8 +106,14 @@ export default class Pin {
         //    this.t = this.layout.ti_map.i2t(this.t )
         //}
 
-        // Reset the settings attahed to the pin (position)
-        this.comp.$emit('change-settings', {
+        // Reset the settings attahed to the pin (position).
+        // NB: route via the overlay mixin's custom_event (NOT raw $emit) — it
+        // appends grid_id/layer_id/$uuid and re-emits as 'custom-event', the only
+        // path Grid wires to the DataCube. Bare $emits have had no listener since
+        // the Vue-3 migration removed overlay.js's `$emit = custom_event` patch,
+        // which silently broke pin position persistence, scroll-lock and
+        // object-selected for every pin-based tool (same fix as price.js).
+        this.comp.custom_event('change-settings', {
              [this.name]: [this.t, this.y$]
         })
     }
@@ -127,7 +133,7 @@ export default class Pin {
         //    this.t = this.layout.ti_map.i2t(this.t )
         //}
 
-        if (emit) this.comp.$emit('change-settings', {
+        if (emit) this.comp.custom_event('change-settings', {
              [this.name]: [this.t, this.y$]
         })
 
@@ -157,15 +163,15 @@ export default class Pin {
             case 'tracking':
                 this.state = 'settled'
                 if (this.on_settled) this.on_settled()
-                this.comp.$emit('scroll-lock', false)
+                this.comp.custom_event('scroll-lock', false)
                 break
             case 'settled':
                 if (this.hidden) return
                 if (this.hover()) {
                     this.state = 'dragging'
                     this.moved = false
-                    this.comp.$emit('scroll-lock', true)
-                    this.comp.$emit('object-selected')
+                    this.comp.custom_event('scroll-lock', true)
+                    this.comp.custom_event('object-selected')
                 }
                 break
         }
@@ -179,7 +185,7 @@ export default class Pin {
             case 'dragging':
                 this.state = 'settled'
                 if (this.on_settled) this.on_settled()
-                this.comp.$emit('scroll-lock', false)
+                this.comp.custom_event('scroll-lock', false)
                 break
         }
     }

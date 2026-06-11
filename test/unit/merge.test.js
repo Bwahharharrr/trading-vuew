@@ -45,3 +45,52 @@ describe('merge engine (framework-agnostic, no DataCube)', () => {
     expect(od).toEqual([[2, 22], [3, 33]]) // src wins in overlap
   })
 })
+
+describe('gap-fill merges (regression: data in a dst gap was silently dropped)', () => {
+  test('chunk inside a gap of dst is INSERTED, not dropped', () => {
+    const o = piv([[1, 'a'], [2, 'b'], [5, 'c'], [6, 'd']])
+    mergeTs(o, [[3, 'x'], [4, 'y']])
+    expect(o.p.v).toEqual([[1, 'a'], [2, 'b'], [3, 'x'], [4, 'y'], [5, 'c'], [6, 'd']])
+  })
+
+  test('chunk surrounding a small dst keeps the dst points', () => {
+    const o = piv([[3, 'a'], [4, 'b']])
+    mergeTs(o, [[1, 'p'], [2, 'q'], [5, 'r'], [6, 's']])
+    expect(o.p.v).toEqual([[1, 'p'], [2, 'q'], [3, 'a'], [4, 'b'], [5, 'r'], [6, 's']])
+  })
+
+  test('gap chunk PARTIALLY overlapping one dst point still merges new-wins', () => {
+    const o = piv([[1, 'a'], [2, 'b'], [5, 'c']])
+    mergeTs(o, [[2, 'B'], [3, 'x']])
+    expect(o.p.v).toEqual([[1, 'a'], [2, 'B'], [3, 'x'], [5, 'c']])
+  })
+
+  test('backfill scenario: post-disconnect gap healed by a chunk', () => {
+    // live left a hole 1003..1004; the backfill chunk covers it exactly
+    const o = piv([[1000, 1], [1001, 2], [1002, 3], [1005, 9], [1006, 10]])
+    mergeTs(o, [[1003, 7], [1004, 8]])
+    expect(o.p.v.map((r) => r[0])).toEqual([1000, 1001, 1002, 1003, 1004, 1005, 1006])
+  })
+})
+
+describe('multi-match merge isolation (regression: first match consumed the chunk)', () => {
+  test('each matched overlay receives the full chunk with independent rows', async () => {
+    const { default: DataCube } = await import('../../src/helpers/datacube.js')
+    const dc = new DataCube({
+      chart: { type: 'Candles', data: [[1000, 1, 2, 0, 1, 5]] },
+      onchart: [
+        { name: 'EMA, 9', type: 'EMA', data: [[1, 10], [2, 20]], settings: {} },
+        { name: 'EMA, 21', type: 'EMA', data: [[1, 10], [2, 20]], settings: {} },
+      ],
+      offchart: [],
+    }, { scripts: false, validation: 'off' })
+    dc.merge('EMA.data', [[2, 99], [3, 30]])
+    const a = dc.data.onchart[0].data
+    const b = dc.data.onchart[1].data
+    expect(a).toEqual([[1, 10], [2, 99], [3, 30]])
+    expect(b).toEqual([[1, 10], [2, 99], [3, 30]])     // sibling got the SAME update
+    expect(a[1]).not.toBe(b[1])                         // ...with independent rows
+    a[2][1] = 777
+    expect(b[2][1]).toBe(30)                            // no cross-overlay aliasing
+  })
+})

@@ -21,7 +21,9 @@ function mkComp(over = {}) {
     mouse: mkMouse(),
     state: 'creating',
     selected: false,
-    $emit: (e, p) => emits.push([e, p]),
+    // pins route through the overlay mixin's custom_event (raw $emit is dead
+    // in Vue 3) — record those, shaped [event, firstArg]
+    custom_event: (e, ...a) => emits.push([e, a[0]]),
     $props: {
       config: { PIN_RADIUS: 5.5 },
       colors: { back: '#fff', text: '#000' },
@@ -145,5 +147,27 @@ describe('Pin draw / lifecycle', () => {
     pin.re_init()
     expect(pin.t).toBe(77)
     expect(pin.y$).toBe(3)
+  })
+})
+
+describe('pin → DataCube wiring (regression: raw $emit was dead in Vue 3)', () => {
+  test('change-settings flows through the REAL overlay-mixin custom_event into the DC shape', async () => {
+    const { default: overlayMixin } = await import('../../src/mixins/overlay.js')
+    const received = []
+    // a comp using the REAL custom_event implementation
+    const comp = mkComp()
+    comp.grid_id = 0
+    comp.id = 3
+    comp.$props.settings = { $uuid: 'tool-1' }
+    comp.$emit = (ev, payload) => received.push([ev, payload])
+    comp.custom_event = overlayMixin.methods.custom_event.bind(comp)
+    const pin = new Pin(comp, 'p1')   // creating mode → update() emits
+    void pin
+    const ce = received.find((r) => r[0] === 'custom-event')
+    expect(ce).toBeTruthy()
+    expect(ce[1].event).toBe('change-settings')
+    // [settingsUpdate, grid_id, layer_id, $uuid] — the exact dc_events contract
+    expect(ce[1].args[0]).toEqual({ p1: [10, 20] })
+    expect(ce[1].args.slice(1)).toEqual([0, 3, 'tool-1'])
   })
 })
