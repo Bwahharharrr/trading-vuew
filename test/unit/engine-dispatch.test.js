@@ -114,3 +114,45 @@ describe('unknown / malformed messages', () => {
     t.destroy()
   })
 })
+
+describe('M6 — multi-candle update batches step EVERY bar', () => {
+  test('a 3-new-candle batch grows the price arrays by 3, not 1', async () => {
+    const t = mkT()
+    await boot(t, 10)
+    const lenBefore = t.se.close.filter((v) => v !== undefined).length
+    const base = 1000 + 9 * TF
+    await t.send({ type: 'update-data', data: { ohlcv: [base + TF, 1, 2, 0, 5, 1] } })
+    await t.send({ type: 'update-data', data: { ohlcv: [base + 2 * TF, 1, 2, 0, 6, 1] } })
+    // now a BATCH carrying two new candles at once
+    t.se.update([[base + 3 * TF, 1, 2, 0, 7, 1], [base + 4 * TF, 1, 2, 0, 8, 1]])
+    await tick(20)
+    const closes = t.se.close
+    // close[0] is the latest batch candle; the INTERMEDIATE one must be there too
+    expect(closes[0]).toBe(8)
+    expect(closes[1]).toBe(7)   // the old code skipped this bar entirely
+    void lenBefore
+    t.destroy()
+  })
+})
+
+describe('M12 — deepToRaw structured-clone safety', () => {
+  test('typed arrays, Map/Set and cycles survive the worker send', async () => {
+    const { default: WebWork } = await import('../../src/helpers/script_ww_api.js')
+    const ww = new WebWork({ sett: {} })
+    const rec = { messages: [], postMessage(m) { this.messages.push(m) } }
+    ww.worker = rec
+    const f64 = new Float64Array([1.5, 2.5])
+    const cyc = { a: 1 }; cyc.self = cyc
+    const m = new Map([['k', 1]])
+    ww.send({ type: 'update-data', data: { f64, cyc, m, s: new Set([1]) } })
+    const sent = rec.messages[0].data
+    expect(sent.f64).toBeInstanceOf(Float64Array)   // was string-keyed {} before
+    expect(Array.from(sent.f64)).toEqual([1.5, 2.5])
+    expect(sent.m).toBeInstanceOf(Map)
+    expect(sent.s.has(1)).toBe(true)
+    // the guard breaks recursion by handing the ORIGINAL (cyclic) object to
+    // postMessage's structured clone, which handles cycles natively
+    expect(sent.cyc.self.a).toBe(1)
+    expect(sent.cyc.self.self).toBe(sent.cyc.self)  // still cyclic, no blow-up
+  })
+})

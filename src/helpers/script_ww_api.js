@@ -11,13 +11,18 @@ import Utils from '../stuff/utils.js'
 import { toRaw, isReactive, isRef } from 'vue'
 
 // Deep unwrap Vue 3 reactive proxies for postMessage compatibility
-function deepToRaw(obj) {
+function deepToRaw(obj, seen) {
     if (obj === null || typeof obj !== 'object') {
         return obj
     }
 
-    // Keep structured-clone compatible built-ins untouched
-    if (obj instanceof Date || obj instanceof RegExp) {
+    // Keep structured-clone compatible built-ins untouched. Typed arrays /
+    // ArrayBuffers MUST pass through: the old for-in walk turned a
+    // Float64Array dataset into a string-keyed plain object (silently
+    // corrupting it), and Map/Set (no enumerable own props) became {}.
+    if (obj instanceof Date || obj instanceof RegExp ||
+        obj instanceof Map || obj instanceof Set ||
+        obj instanceof ArrayBuffer || ArrayBuffer.isView(obj)) {
         return obj
     }
 
@@ -26,14 +31,21 @@ function deepToRaw(obj) {
         obj = toRaw(obj)
     }
 
+    // Cycle guard: a self-referencing object used to recurse without bound.
+    // Returning the raw object lets postMessage's structured clone (which
+    // handles cycles natively) deal with it.
+    if (!seen) seen = new WeakSet()
+    if (seen.has(obj)) return obj
+    seen.add(obj)
+
     if (Array.isArray(obj)) {
-        return obj.map(item => deepToRaw(item))
+        return obj.map(item => deepToRaw(item, seen))
     }
 
     const result = {}
     for (const key in obj) {
         if (Object.prototype.hasOwnProperty.call(obj, key)) {
-            result[key] = deepToRaw(obj[key])
+            result[key] = deepToRaw(obj[key], seen)
         }
     }
     return result

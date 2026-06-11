@@ -1,6 +1,8 @@
 // Resamples candles
 
-import se from './script_engine.js'
+// scriptState, NOT the engine singleton: under SyncTransport the running
+// engine is a fresh instance and the singleton's state is dead/foreign.
+import se from './script_state.js'
 import Const from '../stuff/constants.js'
 
 const { DEF_LIMIT } = Const

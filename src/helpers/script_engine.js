@@ -93,6 +93,9 @@ export class ScriptEngine {
         scriptState.send = (...args) => this.send(...args)
         scriptState.std_inject = (...args) => this.std_inject(...args)
         scriptState.match_ds = (...args) => this.match_ds(...args)
+        // Bridge for symbol.js: the engine reads this.custom_main directly, so
+        // a scriptState-routed Sym registration must land on THIS instance.
+        scriptState.set_custom_main = (sym) => { this.custom_main = sym }
     }
 
     // === PERFORMANCE: Compute hash for computation-affecting settings ===
@@ -208,6 +211,17 @@ export class ScriptEngine {
         scriptState.data = this.data
         scriptState.shared = this.shared
         scriptState.mods = this.mods
+        // The sym/symstd/sampler helpers read these through scriptState (NOT
+        // the module singleton — under SyncTransport the running engine is a
+        // FRESH instance, and singleton reads hit an engine that never ran
+        // init_state: `m[0] in se.tss` threw and wedged the run).
+        scriptState.tss = this.tss
+        scriptState.std_plus = this.std_plus
+        scriptState.open = this.open
+        scriptState.high = this.high
+        scriptState.low = this.low
+        scriptState.close = this.close
+        scriptState.vol = this.vol
     }
 
     exec_all() {
@@ -224,6 +238,10 @@ export class ScriptEngine {
         this.exec_id = setTimeout(async () => {
 
             if (!this.init_state(Object.keys(this.map))) {
+                // Engine busy: remember the request — drain_queues re-runs it
+                // after the current run. (It used to be silently DROPPED: a
+                // range/tf change during a long run never applied.)
+                this._execAllPending = true
                 return
             }
             this.re_init_map()
@@ -236,8 +254,12 @@ export class ScriptEngine {
                 await this.run()
 
                 // === PERFORMANCE: Cache all script outputs ===
-                for (let id in this.map) {
-                    this._saveToCache(id)
+                // (not when the run was restarted mid-way — partial series
+                // under a valid hash would be served by display-only restores)
+                if (!this._aborted) {
+                    for (let id in this.map) {
+                        this._saveToCache(id)
+                    }
                 }
 
                 this.drain_queues()
@@ -267,15 +289,28 @@ export class ScriptEngine {
             // Check if this is a display-only change
             if (this._isDisplayOnlyChange(delta, id) && this._isCacheValid(id)) {
                 displayOnlyChanges.push(id)
+                // Display-only props (colors etc.) can apply immediately —
+                // nothing recomputes from them.
+                let props = this.map[id].src.props || {}
+                for (let k in props) {
+                    if (k in delta[id]) props[k].val = delta[id][k]
+                }
             } else {
                 needsReExec.push(id)
             }
+        }
 
-            // Apply the delta to props regardless
-            let props = this.map[id].src.props || {}
-            for (let k in props) {
-                if (k in delta[id]) {
-                    props[k].val = delta[id][k]
+        // Compute-affecting props are applied ONLY once we know the re-exec
+        // actually starts now. Applying them before queueing let a concurrent
+        // run finish on the OLD values and then _saveToCache hash the NEW
+        // props against the OLD data — a poisoned cache entry that display-
+        // only restores would later serve.
+        const applyComputeProps = () => {
+            for (let id of needsReExec) {
+                if (!this.map[id]) continue
+                let props = this.map[id].src.props || {}
+                for (let k in props) {
+                    if (k in delta[id]) props[k].val = delta[id][k]
                 }
             }
         }
@@ -296,21 +331,36 @@ export class ScriptEngine {
         }
 
         // === Continue with normal re-execution for computation-affecting changes ===
-        if (!this.init_state(needsReExec)) {
+        // A PARTIAL re-exec rebuilds the SHARED price arrays + tss for the
+        // whole engine (init_state), leaving every NON-selected script's box
+        // bound to the dead generation — their overlays then flatline on live
+        // ticks. When other scripts exist, re-exec the full map (display-only
+        // changes still short-circuit above, so this only costs on genuine
+        // compute changes — the same cost as the initial load).
+        const allIds = Object.keys(this.map)
+        const runSel = needsReExec.length && needsReExec.length < allIds.length
+            ? allIds
+            : needsReExec
+
+        if (!this.init_state(runSel)) {
             this.delta_queue.push(delta)
             return
         }
+        applyComputeProps()
 
-        for (let id of needsReExec) {
+        for (let id of runSel) {
             if (!this.map[id]) continue
             this.exec(this.map[id])
         }
 
-        await this.run(needsReExec)
+        await this.run(runSel)
 
         // === PERFORMANCE: Cache the results for future use ===
-        for (let id of needsReExec) {
-            this._saveToCache(id)
+        // (skip after an aborted run — partial outputs under a valid hash)
+        if (!this._aborted) {
+            for (let id of runSel) {
+                this._saveToCache(id)
+            }
         }
 
         this.drain_queues()
@@ -411,6 +461,10 @@ export class ScriptEngine {
             let unshift = false
             this.shared.event = 'update'
 
+            // Step EVERY candle in the batch, not just the last: a batch with
+            // 2+ new candles used to grow ohlcv by N while the engine's price
+            // arrays grew by ONE — all indicators permanently skipped the
+            // intermediate bars (agg batching / reconnect bursts deliver these).
             for (let candle of candles) {
                 if (candle[0] > last[0]) {
                     this.shared.onclose = true
@@ -418,20 +472,27 @@ export class ScriptEngine {
                     ohlcv.push(candle)
                     unshift = true
                     i++
+                    last = candle
+                    this.iter = i
+                    this.t = candle[0]
+                    this.syncState()
+                    this.step(candle, true)   // engine arrays gain THIS bar
+                    this.shared.onclose = false
+                    step(sel, true)           // envs step THIS bar
                 } else if (candle[0] < last[0]) {
                     continue
                 } else {
                     ohlcv[i] = candle
+                    last = candle
+                    this.iter = i
+                    this.t = candle[0]
+                    this.syncState()
+                    this.step(candle, false)  // in-place tick update
+                    this.shared.onclose = false
+                    step(sel, false)
                 }
             }
-
-            this.iter = i
-            this.t = ohlcv[i][0]
-            this.syncState()
-            this.step(ohlcv[i], unshift)
-
-            this.shared.onclose = false
-            step(sel, unshift)
+            void unshift
 
             this.limit()
             this.send_update()
@@ -446,9 +507,11 @@ export class ScriptEngine {
 
         let task = sel.join(',')
 
-        // Stop previous run only if the task is the same
+        // Stop previous run only if the task is the same. (Do NOT overwrite
+        // an already-armed restart with false — a different-task caller used
+        // to cancel a restart another caller legitimately requested.)
         if (this.running) {
-            this._restart = (task === this.task)
+            if (task === this.task) this._restart = true
             return false
         }
 
@@ -469,6 +532,7 @@ export class ScriptEngine {
         this.t = 0
         this.skip = false // skip the step
         this.running = true
+        this._aborted = false // set by restarted(); guards cache saves
         this.task = task
 
         this.syncState()
@@ -702,14 +766,23 @@ export class ScriptEngine {
     drain_queues() {
 
         // Check if there are any new scripts (recieved during
-        // the current run)
-        if (this.queue.length) {
+        // the current run), or an exec-all that arrived while busy
+        if (this.queue.length || this._execAllPending) {
+            this._execAllPending = false
             this.exec_all()
         }
-        // Check if there are any new settings deltas (...)
+        // Merge ALL queued settings deltas (last write per script+key wins).
+        // pop() used to apply only the LAST delta and silently drop the rest —
+        // change RSI then EMA during a long run and RSI kept stale data.
         else if (this.delta_queue.length) {
-            this.exec_sel(this.delta_queue.pop())
+            const merged = {}
+            for (const d of this.delta_queue) {
+                for (const id in d) {
+                    merged[id] = Object.assign(merged[id] || {}, d[id])
+                }
+            }
             this.delta_queue = []
+            this.exec_sel(merged)
         }
         else {
             while (this.update_queue.length) {
@@ -824,6 +897,7 @@ export class ScriptEngine {
         if (this._restart) {
             this._restart = false
             this.running = false
+            this._aborted = true // partial outputs must NOT be cached
             this.perf = 0
             //console.log('Restarted')
             return true
@@ -857,12 +931,19 @@ export class ScriptEngine {
     }
 
     make_mods_hooks(name) {
-        // PERF: Cache bound functions, only rebuild when mods keys change
+        // PERF: Cache bound functions, only rebuild when mods keys change.
+        // NB: the whole cache is INVALIDATED on a key change — run()/update()
+        // call this twice (pre_step then post_step); updating the key on the
+        // first call used to serve the second name from the STALE cache, so a
+        // freshly-uploaded module's post_step never ran.
         let modsKey = Object.keys(this.mods).join(',')
-        if (modsKey === this._hooksModsKey && this._hooksCache[name]) {
+        if (modsKey !== this._hooksModsKey) {
+            this._hooksCache = {}
+            this._hooksModsKey = modsKey
+        }
+        if (this._hooksCache[name]) {
             return this._hooksCache[name]
         }
-        this._hooksModsKey = modsKey
         let arr = []
         for (let id in this.mods) {
             if (this.mods[id][name]) {

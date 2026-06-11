@@ -2,7 +2,9 @@
 // and injects TSs / sampler bindings into the engine state. 22% → up.
 import { test, expect, describe, beforeEach } from 'vitest'
 import symstd from '../../src/helpers/symstd.js'
-import se from '../../src/helpers/script_engine.js'
+// symstd reads through scriptState (the engine syncs its per-run state
+// into it) — the singleton-engine import was the bug (M13).
+import se from '../../src/helpers/script_state.js'
 
 function setOHLC(o, h, l, c, v = 0) {
   se.open = [o]; se.high = [h]; se.low = [l]; se.close = [c]; se.vol = [v]

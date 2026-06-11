@@ -4,7 +4,8 @@
 
 import TS from './script_ts.js'
 import Sampler from './sampler.js'
-import se from './script_engine.js'
+// scriptState, NOT the engine singleton (see sampler.js note).
+import se from './script_state.js'
 import * as u from './script_utils.js'
 import ScriptStd from './script_std.js'
 

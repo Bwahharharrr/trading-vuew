@@ -2,7 +2,8 @@
 // Symbol (contains several samplers, e.g. high, low, close...)
 
 import * as u from './script_utils.js'
-import se from './script_engine.js'
+// scriptState, NOT the engine singleton (see sampler.js note).
+import se from './script_state.js'
 import TS from './script_ts.js'
 import Sampler from './sampler.js'
 
@@ -65,7 +66,10 @@ export default class Sym {
         if (this.main) {
             if (!this.tf) throw 'Main tf should be defined'
             if (!this.data || !this.data.length || !this.data[0]) throw 'Main symbol requires non-empty data'
-            se.custom_main = this
+            // route through the bridge so the registration lands on the
+            // ENGINE INSTANCE (the engine reads this.custom_main directly)
+            if (se.set_custom_main) se.set_custom_main(this)
+            else se.custom_main = this
             let t0 = this.data[0][0]
             se.t = t0 - t0 % this.tf
             this.update(null, se.t)

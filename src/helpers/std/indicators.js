@@ -369,7 +369,11 @@ export default {
         let pos = this.ts(undefined, id+'2', _tf)
         let maxMin = this.ts(undefined, id+'3', _tf)
         let acc = this.ts(undefined, id+'4', _tf)
-        let n = _tf ? out.__len__ - 1 : se.iter
+        // Aggregated-bar index for the tf variant: __len__ is only stamped by
+        // the index-tracker for offsets >= BUF_INC, which sar never produces —
+        // `__len__ - 1` was NaN and the tf form (sar15m(...)) never computed.
+        // out.length grows exactly once per closed sampler window.
+        let n = _tf ? out.length - 1 : se.iter
         let prev
         let outSet = false
 

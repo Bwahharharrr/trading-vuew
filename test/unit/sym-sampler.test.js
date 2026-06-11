@@ -4,7 +4,7 @@
 import { test, expect, describe, beforeEach } from 'vitest'
 import { Sym } from '../../src/helpers/symbol.js'
 import Sampler from '../../src/helpers/sampler.js'
-import se from '../../src/helpers/script_engine.js'
+import se from '../../src/helpers/script_state.js'
 import TS from '../../src/helpers/script_ts.js'
 
 const TF = 60_000
