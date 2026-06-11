@@ -111,6 +111,11 @@ export default class DCCore extends DCEvents {
             this.data['datasets'] = []
         }
 
+        // Always present: Dataset.watcher and the 'datasets.*' query path write
+        // through this map — initializing it only inside the loop below meant a
+        // cube constructed without datasets THREW on a later dc.add('datasets').
+        if (!this.dss) this.dss = {}
+
         // Init dataset proxies
         for (let ds of this.data.datasets) {
             if (!this.dss) this.dss = {}
@@ -182,13 +187,21 @@ export default class DCCore extends DCEvents {
                 range = range.slice()  // copy
                 range[0] = Math.floor(range[0])
                 range[1] = Math.floor(first)
-                let prom = this.loader(range, tf, d => {
-                    // Callback way
-                    this.chunk_loaded(d)
-                })
-                if (prom && prom.then) {
-                    // Promise way
-                    this.chunk_loaded(await prom)
+                try {
+                    let prom = this.loader(range, tf, d => {
+                        // Callback way
+                        this.chunk_loaded(d)
+                    })
+                    if (prom && prom.then) {
+                        // Promise way
+                        this.chunk_loaded(await prom)
+                    }
+                } catch (e) {
+                    // A failed loader (network blip) must NOT leave `loading`
+                    // stuck true — that permanently disabled lazy history until
+                    // a full reload.
+                    this.loading = false
+                    console.warn('DataCube loader failed:', e)
                 }
             }
         }
@@ -266,12 +279,16 @@ export default class DCCore extends DCEvents {
     // TODO: chart refine (from the exchange chart)
     update_candle(data) {
         let ohlcv = this.data.chart.data
-        if (!ohlcv.length) return false
         let last = ohlcv[ohlcv.length - 1]
         let candle = data['candle']
         let tf = this.tv.$refs.chart.interval_ms
-        let t_next = last[0] + tf
+        // Only the PARTIAL-candle path derives its timestamp from `last`; a
+        // full candle carries its own. The old blanket empty-guard silently
+        // dropped the first candle of an empty chart (feed connected before
+        // history) — the chart stayed blank forever.
+        if (!last && !(candle && candle.length >= 6)) return false
         let now = data.t || Utils.now()
+        let t_next = last ? last[0] + tf : now - now % tf
         let t = now >= t_next ? (now - now % tf) : last[0]
 
         // Update the entire candle
@@ -290,7 +307,9 @@ export default class DCCore extends DCEvents {
     update_tick(data) {
         let ohlcv = this.data.chart.data
         let last = ohlcv[ohlcv.length - 1]
-        if (!last && !ohlcv.length) return false
+        // No early return on empty: the `if (!last)` seed below EXISTS to
+        // bootstrap the first candle on an empty chart — the old guard made it
+        // unreachable and every tick before history loaded was discarded.
         let tick = data['price']
         let volume = data['volume'] || 0
         let tf = this.tv.$refs.chart.interval_ms

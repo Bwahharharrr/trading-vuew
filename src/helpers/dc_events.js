@@ -538,7 +538,11 @@ export default class DCEvents {
     // Get overlay by grid-layer id
     get_overlay(obj) {
         let id = obj.id || `g${obj.grid_id}_${obj.layer_id}`
-        let dcid = obj.uuid || this.gldc[id]
+        let dcid = obj.uuid || (this.gldc && this.gldc[id])
+        // A gldc miss used to query the literal string 'undefined', which
+        // (via the old includes(undefined) hole) returned an arbitrary
+        // uuid-less overlay — scripts then executed against the wrong one.
+        if (dcid == null) return undefined
         return this.get_one(`${dcid}`)
     }
 

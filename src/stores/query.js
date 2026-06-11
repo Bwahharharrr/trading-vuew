@@ -44,7 +44,11 @@ export function querySearch(data, query, tuple) {
         (x.id && x.id.includes(path)) ||
         x.name === query ||
         (x.name && x.name.includes(path)) ||
-        query.includes((x.settings || {}).$uuid)
+        // $uuid must EXIST: String.includes(undefined) matches the literal
+        // "undefined", so a stale id query ('undefined' from a gldc miss)
+        // matched every uuid-less overlay and returned an arbitrary one.
+        ((x.settings || {}).$uuid != null &&
+            query.includes(x.settings.$uuid))
     ))
 
     if (field) {

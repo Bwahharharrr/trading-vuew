@@ -195,3 +195,56 @@ describe('change-settings contract', () => {
     expect(dc.data.onchart[0].settings.color).toBe('#fff')
   })
 })
+
+describe('data-layer regressions (M2-M5)', () => {
+  test('M2: a stale gldc id returns undefined, never an arbitrary overlay', () => {
+    const dc = seedDc()
+    // uuid-less overlays must not match the literal "undefined" query
+    dc.data.onchart.forEach(ov => { delete ov.settings.$uuid })
+    const ov = dc.get_overlay({ grid_id: 9, layer_id: 'Nope99' }) // gldc miss
+    expect(ov).toBeUndefined()
+  })
+
+  test('M3: the first tick on an EMPTY chart bootstraps a candle', () => {
+    const dc = seedDc()
+    dc.data.chart.data.length = 0
+    dc.tv = { $refs: { chart: { interval_ms: 60000, cursor: {}, last_candle: null } } }
+    dc.agg = { push: () => {} }   // update_tick pushes to ohlcv itself
+    dc.update_overlays = () => {}
+    dc.update_tick({ price: 101.5, t: 1_600_000_030_000 })
+    expect(dc.data.chart.data).toHaveLength(1)     // was silently dropped
+    expect(dc.data.chart.data[0][4]).toBe(101.5)   // close = tick
+  })
+
+  test('M3: a FULL candle update on an empty chart is accepted', () => {
+    const dc = seedDc()
+    dc.data.chart.data.length = 0
+    dc.tv = { $refs: { chart: { interval_ms: 60000 } } }
+    const pushed = []
+    dc.agg = { push: (k, v) => pushed.push(v) }
+    dc.update_overlays = () => {}
+    dc.update_candle({ candle: [1_600_000_000_000, 1, 2, 0.5, 1.5, 9] })
+    expect(pushed).toHaveLength(1)                 // was return-false'd away
+    expect(pushed[0][0]).toBe(1_600_000_000_000)
+  })
+
+  test('M4: a later dataset add works on a cube constructed WITHOUT datasets', async () => {
+    const { default: Dataset } = await import('../../src/helpers/dataset.js')
+    const dc = seedDc()
+    dc.init_data()                                  // boot path (sans tv watchers)
+    dc.add('datasets', { id: 'trades', type: 'Trades', data: [] })
+    // the watcher used to throw: this.dss was only created when the cube was
+    // CONSTRUCTED with datasets
+    expect(() => Dataset.watcher.call(dc, dc.data.datasets, [])).not.toThrow()
+    expect(dc.dss.trades).toBeTruthy()
+  })
+
+  test('M5: a rejecting loader resets `loading` so lazy-history survives a blip', async () => {
+    const dc = seedDc()
+    dc.data.chart.data.push([2000, 1, 2, 0, 1, 5])
+    dc.onrange // exists
+    dc.loader = () => Promise.reject(new Error('network blip'))
+    await dc.range_changed([0, 1500], '1m')
+    expect(dc.loading).toBe(false)          // was stuck true forever
+  })
+})

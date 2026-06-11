@@ -296,7 +296,10 @@ export default {
     watch: {
         log_scale(value) {
             if (this.chart.data.chart) {
+                // MERGE — replacing the whole grid object clobbered any other
+                // grid settings the chart carried.
                 this.chart.data.chart.grid = {
+                    ...(this.chart.data.chart.grid || {}),
                     logScale: value
                 }
             }

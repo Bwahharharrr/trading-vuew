@@ -57,7 +57,11 @@
 
         <!-- Bottom Panel -->
         <div class="bottom-panel">
-            <div class="bottom-panel-section" v-if="Object.keys(charts).length > 1">
+            <!-- File-feed state only: in gateway mode the stale `charts` map kept
+                 these buttons alive, and clicking one replaced this.chart UNDER
+                 the CorkyFeed → the stream wrote into a detached cube. -->
+            <div class="bottom-panel-section"
+                 v-if="feedMode === 'file' && Object.keys(charts).length > 1">
                 <span class="bottom-label">Timeframe</span>
                 <div class="tf-buttons">
                     <button
@@ -378,6 +382,28 @@ export default {
                 if (old && old.orderAgent) {
                     try { old.orderAgent.destroy() } catch (_) { /* gone */ }
                     old.orderAgent = null
+                }
+                // Destroy the REPLACED cube: each one registered a settings
+                // $watch on the long-lived TradingVue root (dc_core.init_tvjs),
+                // and only TradingVue.beforeUnmount destroys the FINAL cube —
+                // every file/tf switch leaked a root watcher retaining the full
+                // old dataset and re-running the settings fingerprint forever.
+                if (old && old !== dc && typeof old.destroy === 'function') {
+                    try { old.destroy() } catch (_) { /* already gone */ }
+                }
+                // The Corky feed captured the cube at construction; re-point it
+                // so a chart replacement can't strand the gateway stream writing
+                // into a detached cube (see also the file-mode tf guard).
+                if (dc && this.corkyFeed) this.corkyFeed.dc = dc
+                // Apply the log-scale preference to EVERY cube. The chart-state
+                // watcher only fires on toggle, so the boot default, the restored
+                // value, and every file/tf-switch cube silently rendered linear
+                // while the checkbox showed checked.
+                if (dc && dc.data && dc.data.chart) {
+                    dc.data.chart.grid = {
+                        ...(dc.data.chart.grid || {}),
+                        logScale: this.log_scale,
+                    }
                 }
                 if (dc && !dc.orderAgent) {
                     dc.orderAgent = new OrderAgent({
