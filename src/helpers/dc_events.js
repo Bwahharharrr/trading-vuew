@@ -416,10 +416,14 @@ export default class DCEvents {
     submit_orders(args) {
         if (!this.orderAgent) return
         const uuid = args[args.length - 1]
-        for (const ov of (this.data.onchart || [])) {
-            if (ov.settings && ov.settings.$uuid === uuid) {
-                this.orderAgent.submit(ov.settings)
-                return
+        // tools built on an offchart pane land in data.offchart (build_tool's
+        // side selection) — scan both panes or their orders submit into the void
+        for (const side of ['onchart', 'offchart']) {
+            for (const ov of (this.data[side] || [])) {
+                if (ov.settings && ov.settings.$uuid === uuid) {
+                    this.orderAgent.submit(ov.settings)
+                    return
+                }
             }
         }
     }
@@ -429,10 +433,12 @@ export default class DCEvents {
     cancel_orders(args) {
         if (!this.orderAgent) return
         const uuid = args[args.length - 1]
-        for (const ov of (this.data.onchart || [])) {
-            if (ov.settings && ov.settings.$uuid === uuid) {
-                this.orderAgent.cancel(ov.settings)
-                return
+        for (const side of ['onchart', 'offchart']) {
+            for (const ov of (this.data[side] || [])) {
+                if (ov.settings && ov.settings.$uuid === uuid) {
+                    this.orderAgent.cancel(ov.settings)
+                    return
+                }
             }
         }
     }

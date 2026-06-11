@@ -115,7 +115,9 @@ export default {
         },
         rezoom_range(event) {
             let id = 'sb-' + event.grid_id
-            if (this.$refs[id]) {
+            // renderer is created deferred (layoutKey watcher) — a tl-mode
+            // wheel before that threw on .rezoom_range of null
+            if (this.$refs[id] && this.$refs[id].renderer) {
                 this.$refs[id].renderer.rezoom_range(
                     event.z, event.diff1, event.diff2
                 )

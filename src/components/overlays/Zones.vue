@@ -26,7 +26,11 @@ export default {
                 this._drawZone(ctx, layout, p[0], p[1], p[3], p[2], p[4])
             })
 
-            // Also draw from settings.zones (not filtered, for zones spanning ranges)
+            // Also draw from settings.zones (not filtered, for zones spanning ranges).
+        // NB: settings.zones uses a DIFFERENT element order than data —
+        // [x1, y1, x2, y2, color] — because ws-manager._wsHandleAlert converts
+        // on write (see its push: [z[0], z[1], z[3], z[2], z[4]]). Do not
+        // "align" these two paths without changing the producer too.
             const extra = this.sett.zones || []
             extra.forEach((p) => {
                 this._drawZone(ctx, layout, p[0], p[1], p[2], p[3], p[4])

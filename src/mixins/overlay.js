@@ -114,7 +114,15 @@ export default {
         // Optimized watcher: only trigger on display changes instead of deep watching all settings
         settingsDisplayKey(newKey, oldKey) {
             if (newKey === oldKey) return
-            if (this.watch_uuid) this.watch_uuid(this.$props.settings, {})
+            // Call watch_uuid ONLY when the uuid actually changed: passing the
+            // fake `{}` prev made EVERY display/z-index toggle look like an
+            // identity swap — re-initing pins mid-drag and wiping collisions.
+            // The key format is `${$uuid},${display},${z-index},${zIndex}`.
+            const prevUuid = oldKey != null ? String(oldKey).split(',')[0] : undefined
+            const newUuid = newKey != null ? String(newKey).split(',')[0] : undefined
+            if (this.watch_uuid && prevUuid !== newUuid) {
+                this.watch_uuid(this.$props.settings, { $uuid: prevUuid })
+            }
             this.$emit('show-grid-layer', {
                 id: this.$props.id,
                 display: 'display' in this.$props.settings ?

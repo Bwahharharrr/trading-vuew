@@ -186,15 +186,18 @@ export default class Grid {
             this.sim_mousedown(event)
         })
 
+        // Per-INSTANCE handlers: prototype methods are the same function for
+        // every Grid, so duplicate addEventListener was a no-op and the FIRST
+        // grid destroyed (closing one offchart pane) unhooked Safari pinch
+        // preventDefault for all remaining grids.
+        this._gesturestart = (event) => event.preventDefault()
+        this._gesturechange = (event) => event.preventDefault()
+        this._gestureend = (event) => event.preventDefault()
         let add = addEventListener
-        add("gesturestart", this.gesturestart)
-        add("gesturechange", this.gesturechange)
-        add("gestureend", this.gestureend)
+        add("gesturestart", this._gesturestart)
+        add("gesturechange", this._gesturechange)
+        add("gestureend", this._gestureend)
     }
-
-    gesturestart(event) { event.preventDefault() }
-    gesturechange(event) { event.preventDefault() }
-    gestureend(event) { event.preventDefault() }
 
     mousemove(event) {
         if (Utils.is_mobile) return
@@ -336,9 +339,9 @@ export default class Grid {
     destroy() {
         this._destroyed = true // stop a still-loading listeners() from wiring up
         let rm = removeEventListener
-        rm("gesturestart", this.gesturestart)
-        rm("gesturechange", this.gesturechange)
-        rm("gestureend", this.gestureend)
+        if (this._gesturestart) rm("gesturestart", this._gesturestart)
+        if (this._gesturechange) rm("gesturechange", this._gesturechange)
+        if (this._gestureend) rm("gestureend", this._gestureend)
         if (this.mc) this.mc.destroy()
         if (this.hm) this.hm.unwheel()
         // Cancel any pending throttled callbacks

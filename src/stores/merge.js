@@ -88,14 +88,16 @@ export function combine(dst, o, src) {
     if (src[0][0] >= dst[0][0] && last(src) <= last(dst)) {
         return Object.assign(dst, o)
     } else if (last(src) > last(dst)) {
-        if (o.length < 100000 && src.length < 100000) {
+        // Spread-push is capped on the COMBINED length: V8 throws past ~125k
+        // call arguments, so two ~90k series crashed instead of merging.
+        if (o.length + src.length < 60000) {
             dst.push(...o, ...src)
             return dst
         } else {
             return dst.concat(o, src)
         }
     } else if (src[0][0] < dst[0][0]) {
-        if (o.length < 100000 && src.length < 100000) {
+        if (o.length + dst.length < 60000) {
             src.push(...o, ...dst)
             return src
         } else {

@@ -155,6 +155,9 @@ export class CorkyClient {
 
     close() {
         this._closedByUser = true
+        // Drop queued-but-unsent frames NOW: their requests are failed below,
+        // and a close()→connect() cycle must not replay stale frames.
+        this._sendQueue = []
         if (this._reconnectTimer) {
             clearTimeout(this._reconnectTimer)
             this._reconnectTimer = null

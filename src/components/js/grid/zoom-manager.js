@@ -51,7 +51,11 @@ export default class ZoomManager {
 
         if (event.originalEvent.ctrlKey || tl) {
             let offset = event.originalEvent.offsetX
-            let diff1 = offset / (this.canvas.width - 1) * diff
+            // offsetX is CSS pixels; canvas.width is the DPR-scaled backing
+            // store (rect.width * dpr) — on dpr=2 the anchor landed at HALF the
+            // cursor's true position. Use the CSS width.
+            let w = Math.max(this.canvas.clientWidth || this.canvas.width, 2)
+            let diff1 = offset / (w - 1) * diff
             let diff2 = diff - diff1
             this.range[0] -= diff1
             this.range[1] += diff2
@@ -61,7 +65,7 @@ export default class ZoomManager {
 
         if (tl) {
             let offset = event.originalEvent.offsetY
-            let h = Math.max(this.canvas.height, 2)
+            let h = Math.max(this.canvas.clientHeight || this.canvas.height, 2)
             let diff1 = offset / (h - 1) * 2
             let diff2 = 2 - diff1
             let z = diff / (this.range[1] - this.range[0])

@@ -184,6 +184,7 @@ export default {
             if (st('local')) return { label: 'Submit', color: accent, submittable: true }
             if (any('pending')) return { label: 'Pending…', color: '#d0a000', submittable: this.has_submittable() }
             if (st('confirmed')) return { label: 'Confirmed', color: this.color_buy, submittable: false }
+            if (st('cancelled')) return { label: 'Cancelled', color: '#5b6472', submittable: true }
             if (st('rejected')) return { label: 'Rejected', color: this.color_sell, submittable: true }
             // TODO(backend): mixed terminal states need the real engine.
             if (any('rejected')) return { label: 'Partially Rejected', color: this.color_sell, submittable: true }

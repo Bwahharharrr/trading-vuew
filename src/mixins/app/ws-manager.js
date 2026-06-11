@@ -272,13 +272,21 @@ export default {
                 const onchart = this.chart.data.onchart
                 let zonesOv = onchart.find(o => o.type === 'Zones')
                 if (zonesOv) {
-                    // Append new zones
+                    // Append new zones (capped like liveAlerts/liveZones — a
+                    // long session otherwise grows the overlay + its per-frame
+                    // render cost without bound)
                     zonesOv.data.push(...msg.zones)
+                    if (zonesOv.data.length > MAX_LIVE) {
+                        zonesOv.data.splice(0, zonesOv.data.length - MAX_LIVE)
+                    }
                     // Also update settings.zones for zones that span beyond view
                     if (zonesOv.settings && zonesOv.settings.zones) {
                         // Convert TV data format [x1,y1,y2,x2,color] to settings format [x1,y1,x2,y2,color]
                         for (const z of msg.zones) {
                             zonesOv.settings.zones.push([z[0], z[1], z[3], z[2], z[4]])
+                        }
+                        if (zonesOv.settings.zones.length > MAX_LIVE) {
+                            zonesOv.settings.zones.splice(0, zonesOv.settings.zones.length - MAX_LIVE)
                         }
                     }
                 } else {
@@ -337,11 +345,18 @@ export default {
             const nz = msg.zones ? msg.zones.length : 0
             console.log(`[WS] Snapshot: ${nc} candles, ${na} alerts, ${nz} zones (stored, not applied)`)
 
-            // Store snapshot data — these will be used by incremental handlers
+            // Store snapshot data — these will be used by incremental handlers.
+            // The color arrays are documented as index-aligned to
+            // originalChartData[liveDataStartIdx + i] (push-paired in
+            // _wsHandleCandle). A snapshot replaces them with server arrays of
+            // arbitrary length, so the old boundary is meaningless — reset it,
+            // or _wsApplyLiveColors / the same-ts write path would stamp the
+            // snapshot colors onto the WRONG candles.
             this.liveScmrColors = msg.scmr_colors || []
             this.liveAlertColors = msg.alert_colors || []
             this.liveAlerts = msg.alerts || []
             this.liveZones = msg.zones || []
+            this.liveDataStartIdx = -1
 
             // Don't mutate chart data from snapshot — just store the state.
             // Incremental candle/alert messages will append new data as it arrives.

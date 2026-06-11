@@ -922,6 +922,12 @@ export default {
         ensurePriceAlarmOverlay() {
             const dc = this.chart
             if (!dc || !dc.data || typeof dc.add !== 'function') return
+            // Clear any stranded drag flag: if the previous overlay instance
+            // was destroyed MID-DRAG (gateway wipe / cube replacement), its
+            // mouseup never fired — the alarm then stayed $dragging forever
+            // (updateAlarms skips it: it never rings again) and scroll-lock
+            // stayed engaged.
+            for (const a of this.priceAlarms) { if (a && a.$dragging) a.$dragging = false }
             const on = dc.data.onchart || []
             if (on.some(o => o && o.type === 'PriceAlarms')) return
             dc.add('onchart', {

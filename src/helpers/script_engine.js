@@ -244,10 +244,19 @@ export class ScriptEngine {
                 this._execAllPending = true
                 return
             }
-            this.re_init_map()
+            try {
+                this.re_init_map()
 
-            while (this.queue.length) {
-                this.exec(this.queue.shift())
+                while (this.queue.length) {
+                    this.exec(this.queue.shift())
+                }
+            } catch (e) {
+                // A throw between init_state (running=true) and run() used to
+                // wedge the engine permanently: every future init_state then
+                // returned false and nothing ever executed again.
+                this.running = false
+                this._onScriptError('exec-all', 'init', e)
+                return
             }
 
             if (Object.keys(this.map).length) {
@@ -906,10 +915,20 @@ export class ScriptEngine {
     }
 
     remove_scripts(ids) {
+        const dead = new Set(ids)
         for (let id of ids) {
             delete this.map[id]
             this._outputCache.delete(id)
         }
+        // Purge the queues too: a script removed while its exec-script was
+        // still queued (the WAIT_EXEC window / a busy engine) was resurrected
+        // by the next exec_all and computed forever for a deleted overlay.
+        this.queue = this.queue.filter(s => !dead.has(s.uuid))
+        this.delta_queue = this.delta_queue.map(d => {
+            const copy = { ...d }
+            for (const id of dead) delete copy[id]
+            return copy
+        }).filter(d => Object.keys(d).length)
         this._updateTemplate = null  // Invalidate update template
         this.send_state()
     }
@@ -1028,8 +1047,13 @@ export class ScriptEngine {
             t: x.last_upd
         }))
         dss.sort((a, b) => a.t - b.t)
-        if (dss.length) {
-            delete this.data[dss[0].id]
+        // Never evict the MAIN dataset: ohlcv's last_upd is refreshed by
+        // neither update_all (skips 'ohlcv') nor se.update(), so it always
+        // sorted oldest and got deleted FIRST — exec_all/update then early-
+        // return on !this.data.ohlcv and every script goes dead.
+        let victim = dss.find(d => d.id !== 'ohlcv')
+        if (victim) {
+            delete this.data[victim.id]
         }
     }
 }

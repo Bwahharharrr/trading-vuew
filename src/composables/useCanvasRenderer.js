@@ -1,7 +1,7 @@
 // Composable for canvas-based rendering
 // Replaces canvas.js mixin with Vue 3 Composition API
 
-import { ref, watch, onMounted, onBeforeUnmount, nextTick, h } from 'vue'
+import { ref, onBeforeUnmount, getCurrentInstance, nextTick, h } from 'vue'
 import Utils from '../stuff/utils.js'
 
 /**
@@ -127,6 +127,12 @@ export function useCanvasRenderer(props, getRenderer) {
             rafId = null
         }
     }
+
+    // Self-wire the teardown when used inside a component setup() — the
+    // composable returned cleanup but never registered it, so consumers who
+    // forgot leaked a pending RAF firing renderer.update() after unmount.
+    // getCurrentInstance guard keeps direct (non-setup) usage working.
+    if (getCurrentInstance()) onBeforeUnmount(cleanup)
 
     return {
         canvasRef,

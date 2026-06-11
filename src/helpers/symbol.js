@@ -177,7 +177,9 @@ export default class Sym {
         } else if (this.fillgaps) {
             for (let k = 0; k < 5; k++) {
                 let tsn = OHLCV[k]
-                this[tsn][0] = this.close[1]
+                // gap candle: flat at the previous close — but volume is 0,
+                // not the previous close PRICE (k=4 is 'vol')
+                this[tsn][0] = tsn === 'vol' ? 0 : this.close[1]
             }
         }
     }

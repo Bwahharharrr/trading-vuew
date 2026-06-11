@@ -256,6 +256,9 @@ export default {
         let len = left + right + 1
         let top = src[right]
         for (var i = 0; i < len; i++) {
+            // warmup: missing history must not count as "confirmed lower" —
+            // a pivot can only be CONFIRMED against a full window (canonical na)
+            if (src[i] === undefined) return this.ts(NaN, id, src.__tf__)
             if (top <= src[i] && i !== right) {
                 return this.ts(NaN, id, src.__tf__)
             }
@@ -275,6 +278,7 @@ export default {
         let len = left + right + 1
         let bot = src[right]
         for (var i = 0; i < len; i++) {
+            if (src[i] === undefined) return this.ts(NaN, id, src.__tf__)
             if (bot >= src[i] && i !== right) {
                 return this.ts(NaN, id, src.__tf__)
             }

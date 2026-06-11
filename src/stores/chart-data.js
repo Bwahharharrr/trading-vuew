@@ -92,7 +92,11 @@ export default class ChartData {
         let objects = this.query(query)
         for (var obj of objects) {
             let i = typeof obj.i !== 'number' ? obj.i : obj.p.indexOf(obj.v)
-            if (i !== -1) obj.p.splice(i, 1)
+            // field queries (e.g. 'chart.data') pivot onto a plain object —
+            // a string index passed the old `!== -1` check and splice threw
+            if (typeof i === 'number' && i !== -1 && Array.isArray(obj.p)) {
+                obj.p.splice(i, 1)
+            }
         }
         this._ctx.updateIds()
     }

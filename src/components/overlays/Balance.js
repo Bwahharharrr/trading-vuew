@@ -21,8 +21,12 @@ export default {
             ctx.beginPath()
             ctx.lineWidth = 1
             ctx.strokeStyle = 'white'
-            ctx.moveTo(layout.t2screen(this.$props.data[0][0]), layout.$2screen(this.$props.data[0][1]))
-            let lastY = layout.$2screen(this.$props.data[0][1])
+            // anchor at the first NUMERIC point (i0 was computed exactly to
+            // skip a null prefix; anchoring at data[0] drew a phantom line
+            // from the 0-price level)
+            const a = this.data[i0] || this.data[0]
+            ctx.moveTo(layout.t2screen(a[0]), layout.$2screen(a[1]))
+            let lastY = layout.$2screen(a[1])
 
             for (var i = i0; i < this.data.length; i++) {
                 let p = this.data[i]

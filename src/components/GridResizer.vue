@@ -115,6 +115,13 @@ export default {
         }
     },
     beforeUnmount() {
+        // mid-drag unmount (layout rebuild removing a pane): restore the body
+        // overrides onMouseUp would have cleared — the page was stuck with a
+        // row-resize cursor and no text selection.
+        if (this.dragging) {
+            document.body.style.cursor = ''
+            document.body.style.userSelect = ''
+        }
         document.removeEventListener('mousemove', this.onMouseMove)
         document.removeEventListener('mouseup', this.onMouseUp)
         // PERFORMANCE: Cancel any pending RAF

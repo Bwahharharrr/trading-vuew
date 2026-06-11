@@ -58,7 +58,7 @@ export default {
                     value: pos
                 },
                 {
-                    value: values[2].toFixed(4),
+                    value: values[2] != null ? values[2].toFixed(4) : '',
                     color: this.$props.colors.text
                 }
             ].concat(values[3] ? [

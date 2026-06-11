@@ -85,8 +85,11 @@ function GridMaker(id, params, master_grid = null) {
                     self.$_lo = -1
                 }
                 if (!ls) {
-                    self.$_hi *= 1.05  // Expand if height range === 0
-                    self.$_lo *= 0.95
+                    // sign-aware expansion: multiplying a NEGATIVE constant by
+                    // 1.05/0.95 INVERTED hi/lo and rendered the pane upside-down
+                    const pad = Math.abs(self.$_hi) * 0.05 || 1
+                    self.$_hi += pad
+                    self.$_lo -= pad
                 } else {
                     log_scale.expand(self, height)
                 }

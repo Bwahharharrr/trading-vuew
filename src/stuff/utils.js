@@ -24,15 +24,18 @@ export default {
     // Start of the month
     month_start(t) {
         let date = new Date(t)
+        // UTC getters: mixing LOCAL getters with Date.UTC misclassified the
+        // first hours of a UTC month for viewers west of UTC (botbar month/
+        // year labels + highlights drifted by the machine timezone).
         return Date.UTC(
-            date.getFullYear(),
-            date.getMonth(), 1
+            date.getUTCFullYear(),
+            date.getUTCMonth(), 1
         )
     },
 
     // Start of the year
     year_start(t) {
-        return Date.UTC(new Date(t).getFullYear())
+        return Date.UTC(new Date(t).getUTCFullYear())
     },
 
     get_year(t) {

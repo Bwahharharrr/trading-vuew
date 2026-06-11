@@ -18,6 +18,10 @@ export default class Crosshair {
     draw(ctx) {
         // Update reference to the grid
         this.layout = this.$p.layout
+        // During a grid rebuild (tf switch / pane add-remove) the per-grid
+        // layout can be momentarily undefined; the synchronous dynamic path
+        // (Section's sidebar-cursor -> updateDynamic) has no error boundary.
+        if (!this.layout) return
 
         const cursor = this.comp.$props.cursor
         if (!this.visible && cursor.mode === 'explore') return

@@ -32,7 +32,9 @@ export default {
             return this.sett.lineWidths || []
         },
         clrx() {
-            let colors = this.sett.colors || []
+            // local COPY: pushing defaults into the user's (reactive, persisted)
+            // settings.colors array was a settings mutation inside a computed
+            let colors = (this.sett.colors || []).slice()
             let n = this.$props.num
             if (!colors.length) {
                 for (let i = 0; i < this.lines_num; i++) {
