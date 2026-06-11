@@ -140,6 +140,7 @@ export class CorkyFeed extends FeedSource {
                 target_runtime_id,   // re-targeted on reconnect re-issue (spread below)
             },
             onStatus, onError,     // retained so reconnect/exhaustion can report
+            subscribePending: true, // original subscribe() still awaiting (cleared in finally)
             chunks: [],            // accumulated historical_chunk events
             history_complete: false,
             liveAnnounced: false,  // onStatus({phase:'live'}) is emitted ONCE (perf)
@@ -209,9 +210,19 @@ export class CorkyFeed extends FeedSource {
             // error after the command was sent) the gateway may be alive-but-slow
             // and would otherwise stream a fan-out nobody consumes for the session.
             Promise.resolve(this.client.unsubscribe(subscription_id)).catch(() => {})
+            // SUPERSEDED subscribe (the user re-selected mid-load): its late
+            // failure — typically the 30s timeout of the abandoned stream — must
+            // stay QUIET. Reporting it would clobber the live selection's error
+            // state, and rethrowing a retryable error made App's retry scheduler
+            // re-select the ABANDONED symbol, silently reverting the user's pick.
+            if (subscription_id !== this._activeSubId) {
+                err.superseded = true
+                return null
+            }
             onError(err)
             throw err
         } finally {
+            handle.subscribePending = false
             if (timer) clearTimeout(timer)
         }
 
@@ -406,8 +417,12 @@ export class CorkyFeed extends FeedSource {
         // setLayerEnabled, and a layer turned off must not be resurrected by a
         // kind off→on cycle or a tf-switch reapply. Fallback overlays (no
         // corkyView) always add (legacy plot-every-output behaviour).
+        // Hidden check tolerates BOTH key forms: instance-scoped corkyKey
+        // ('SCMR(INV)#trade_lines', the form setLayerEnabled now writes) and the
+        // legacy bare layer id from older persisted sessions.
         const autoVisible = (ov) =>
             (!ov.settings.corkyView || ov.settings.corkyVisibleDefault !== false) &&
+            !(ov.settings.corkyKey && handle.hiddenLayers.has(ov.settings.corkyKey)) &&
             !(ov.settings.corkyLayerId && handle.hiddenLayers.has(ov.settings.corkyLayerId))
 
         let changed = false
@@ -418,7 +433,9 @@ export class CorkyFeed extends FeedSource {
                         !handle.addedOverlays.has(ov)) {
                         this._addOverlay(dc, pane, ov)
                         handle.addedOverlays.add(ov)
-                        if (ov.settings.corkyLayerId) handle.enabledLayers.add(ov.settings.corkyLayerId)
+                        if (ov.settings.corkyLayerId) {
+                            handle.enabledLayers.add(ov.settings.corkyKey || ov.settings.corkyLayerId)
+                        }
                         changed = true
                     }
                 }
@@ -429,7 +446,10 @@ export class CorkyFeed extends FeedSource {
                 if (handle.addedOverlays.has(ov)) {
                     this._removeOverlay(dc, ov)
                     handle.addedOverlays.delete(ov)
-                    if (ov.settings.corkyLayerId) handle.enabledLayers.delete(ov.settings.corkyLayerId)
+                    if (ov.settings.corkyLayerId) {
+                        handle.enabledLayers.delete(ov.settings.corkyKey || ov.settings.corkyLayerId)
+                        handle.enabledLayers.delete(ov.settings.corkyLayerId) // legacy form
+                    }
                     changed = true
                 }
             }
@@ -496,9 +516,26 @@ export class CorkyFeed extends FeedSource {
      * removes them by object identity (NOT dc.del — substring-id hazard).
      * @returns {boolean} whether any overlay matched the layer.
      */
-    setLayerEnabled(handle, layerId, on) {
+    setLayerEnabled(handle, layerId, on, instance = null) {
         if (!handle || !handle.built || !layerId) return false
         if (!handle.hiddenLayers) handle.hiddenLayers = new Set()
+        // Accept a SCOPED key ('SCMR(INV)#trade_lines') passed as layerId — the
+        // form the enabled/hidden sets persist — and split it back out.
+        if (instance == null && typeof layerId === 'string' && layerId.includes('#')) {
+            const i = layerId.indexOf('#')
+            instance = layerId.slice(0, i)
+            layerId = layerId.slice(i + 1)
+        }
+        // Match by layer id AND (when known) the indicator INSTANCE. Instances of
+        // the same kind share layer ids (SCMR and SCMR(INV) both declare
+        // 'scmr_candle_color', 'trade_lines', …) — an unscoped match toggled the
+        // sibling instance's layers too, and an unscoped hiddenLayers entry kept
+        // BOTH suppressed across tf-switch/reload.
+        const matches = (ov) => ov.settings &&
+            ov.settings.corkyLayerId === layerId &&
+            (instance == null || ov.settings.corkyInstance === instance)
+        // Track membership by the scoped key when the instance is known.
+        const key = instance != null ? `${instance}#${layerId}` : layerId
         const dc = this.dc
         const built = handle.built
         let changed = false
@@ -506,7 +543,7 @@ export class CorkyFeed extends FeedSource {
         if (on) {
             for (const pane of ['onchart', 'offchart']) {
                 for (const ov of built[pane]) {
-                    if (ov.settings && ov.settings.corkyLayerId === layerId) {
+                    if (matches(ov)) {
                         matched = true
                         if (!handle.addedOverlays.has(ov)) {
                             this._addOverlay(dc, pane, ov)
@@ -517,13 +554,15 @@ export class CorkyFeed extends FeedSource {
                 }
             }
             if (matched) {
-                handle.enabledLayers.add(layerId)
-                handle.hiddenLayers.delete(layerId) // re-shown: drop the explicit-hide memory
+                handle.enabledLayers.add(key)
+                // re-shown: drop the explicit-hide memory (scoped + legacy bare)
+                handle.hiddenLayers.delete(key)
+                handle.hiddenLayers.delete(layerId)
             }
         } else {
             for (const pane of ['onchart', 'offchart']) {
                 for (const ov of built[pane]) {
-                    if (ov.settings && ov.settings.corkyLayerId === layerId) {
+                    if (matches(ov)) {
                         matched = true
                         if (handle.addedOverlays.has(ov)) {
                             this._removeOverlay(dc, ov)
@@ -533,10 +572,11 @@ export class CorkyFeed extends FeedSource {
                     }
                 }
             }
+            handle.enabledLayers.delete(key)
             handle.enabledLayers.delete(layerId)
             // Remember an explicit hide so setIndicatorEnabled's autoVisible (and a
             // tf-switch reapply) doesn't bring this visible_by_default layer back.
-            if (matched) handle.hiddenLayers.add(layerId)
+            if (matched) handle.hiddenLayers.add(key)
         }
         if (changed) { this._normalizeOffchartGrids(handle); dc.touchData() }
         return matched
@@ -591,7 +631,9 @@ export class CorkyFeed extends FeedSource {
                 if (anchor && !present.has(anchor)) {
                     this._addOverlay(dc, 'offchart', anchor)
                     handle.addedOverlays.add(anchor)
-                    if (anchor.settings.corkyLayerId) handle.enabledLayers.add(anchor.settings.corkyLayerId)
+                    if (anchor.settings.corkyLayerId) {
+                        handle.enabledLayers.add(anchor.settings.corkyKey || anchor.settings.corkyLayerId)
+                    }
                 }
             }
         }
@@ -728,15 +770,41 @@ export class CorkyFeed extends FeedSource {
     _onClientOpen() {
         if (!this._everOpened) { this._everOpened = true; return }
         for (const handle of this._subs.values()) {
-            if (!handle.history_complete) continue // in-flight: its own flow handles it
-            handle.history_complete = false        // allow a fresh history rebuild
-            handle.chunks = []
-            handle.lastSeqBySub = {}
-            Promise.resolve(this.client.subscribeCandles({
-                subscription_id: handle.subscription_id,
-                ...handle.subscribeArgs,
-            })).catch((err) => { if (handle.onError) handle.onError(err) })
+            // Skip only handles whose ORIGINAL subscribe() is still awaiting —
+            // that flow handles its own failure (cleanup + onError + rethrow).
+            // The old `!history_complete` skip also matched handles whose
+            // PREVIOUS re-issue failed or was cut by another drop (re-issues
+            // reset history_complete to false first) — those were then skipped
+            // by every later reconnect too: a permanently wedged stream frozen
+            // at the last candle while claiming "Live".
+            if (handle.subscribePending) continue
+            this._reissue(handle)
         }
+    }
+
+    // Re-issue one stream's subscribe after a reconnect (the gateway has no
+    // session resume). Failure reports through onError but leaves the handle
+    // ELIGIBLE for the next reconnect's sweep; a hung re-issue is timed out for
+    // the same reason (the original subscribe's guard doesn't cover re-issues).
+    _reissue(handle) {
+        handle.history_complete = false        // allow a fresh history rebuild
+        handle.chunks = []
+        handle.lastSeqBySub = {}
+        const flow = Promise.resolve(this.client.subscribeCandles({
+            subscription_id: handle.subscription_id,
+            ...handle.subscribeArgs,
+        }))
+        const guarded = this.subscribeTimeoutMs > 0
+            ? Promise.race([flow, new Promise((_, reject) => {
+                setTimeout(() => {
+                    const e = new Error('reconnect re-subscribe timed out')
+                    e.code = 'subscribe_timeout'
+                    e.retryable = true
+                    reject(e)
+                }, this.subscribeTimeoutMs)
+            })])
+            : flow
+        guarded.catch((err) => { if (handle.onError) handle.onError(err) })
     }
 
     // Backoff gave up: the feed is dead. Surface it through every stream's onError
@@ -745,7 +813,10 @@ export class CorkyFeed extends FeedSource {
     _onReconnectExhausted(info) {
         const err = new Error('Corky feed disconnected: reconnect attempts exhausted')
         err.code = 'reconnect_exhausted'
-        err.retryable = false
+        // Retryable: the App's Retry paths now revive a dead client via
+        // client.connect() (which resets the backoff budget), so the panel must
+        // keep its Retry button instead of presenting a dead end.
+        err.retryable = true
         err.info = info
         for (const handle of this._subs.values()) {
             if (handle.onError) handle.onError(err)

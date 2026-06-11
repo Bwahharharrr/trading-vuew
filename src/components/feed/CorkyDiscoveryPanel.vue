@@ -427,7 +427,11 @@ export default {
         isLayerOn(row, ind, layer) {
             if (!this.isIndicatorOn(row, ind)) return false
             const chosen = this.current && this.current.layers
-            return Array.isArray(chosen) && chosen.includes(layer.id)
+            if (!Array.isArray(chosen)) return false
+            // enabled layers are tracked instance-scoped ('SCMR(INV)#trade_lines');
+            // tolerate the legacy bare layer-id form from older persisted state.
+            return chosen.includes(`${ind.display_label}#${layer.id}`) ||
+                chosen.includes(layer.id)
         },
         onToggleLayer(row, ind, layer) {
             this.$emit('toggle-layer', {

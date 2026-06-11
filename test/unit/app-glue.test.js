@@ -477,3 +477,38 @@ describe('runtime-id targeting + ride-through retry', () => {
     expect(app._corkyRetryTimer).toBeNull()
   })
 })
+
+describe('corkySelect staleness epoch (M27)', () => {
+  test('a superseded select resolving LATE cannot overwrite the live selection', async () => {
+    let resolveA
+    const feed = mkFeed({
+      subscribe: vi.fn()
+        .mockImplementationOnce(() => new Promise((res) => { resolveA = res })) // A hangs
+        .mockImplementationOnce(async () => ({ enabledLayers: new Set(), sub: 'B' })),
+    })
+    const app = mkApp({ corkyStates: [], corkyFeed: feed })
+    const pA = app.corkySelect({ venue: 'v', symbol: 'A', timeframe: '1m', indicators: [] })
+    await new Promise((r) => setTimeout(r, 0))   // let A reach its (hanging) subscribe
+    const pB = app.corkySelect({ venue: 'v', symbol: 'B', timeframe: '1m', indicators: [] })
+    await pB
+    expect(app.corkyLast.symbol).toBe('B')
+    const handleB = app.corkyHandle
+    resolveA({ enabledLayers: new Set(), sub: 'A' })  // A resolves late
+    await pA
+    expect(app.corkyHandle).toBe(handleB)             // not clobbered by stale A
+    expect(app.corkyLast.symbol).toBe('B')
+  })
+
+  test('teardown invalidates an in-flight select (no retry re-arm, no error)', async () => {
+    let rejectA
+    const feed = mkFeed({ subscribe: vi.fn(() => new Promise((_, rej) => { rejectA = rej })) })
+    const app = mkApp({ corkyStates: [], corkyFeed: feed })
+    const p = app.corkySelect({ venue: 'v', symbol: 'A', timeframe: '1m', indicators: [] })
+    await new Promise((r) => setTimeout(r, 0))   // let the select reach its subscribe
+    app.teardownCorky()
+    rejectA(Object.assign(new Error('conn lost'), { retryable: true }))
+    await p
+    expect(app._corkyRetryTimer).toBeFalsy()   // no post-teardown retry armed
+    expect(app.corkyError).toBeNull()
+  })
+})

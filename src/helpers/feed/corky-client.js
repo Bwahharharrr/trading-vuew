@@ -104,8 +104,34 @@ export class CorkyClient {
 
     connect() {
         this._closedByUser = false
+        // A fresh connect() is a fresh backoff budget: without this, an explicit
+        // reconnect after exhaustion would instantly re-exhaust on the first
+        // failure (and _reconnectPossible would keep rejecting sends).
+        this._retries = 0
+        // Cancel a pending backoff attempt so two sockets can't coexist; detach
+        // the old socket's handlers so its eventual onclose can't fail the new
+        // socket's pending requests.
+        if (this._reconnectTimer) {
+            clearTimeout(this._reconnectTimer)
+            this._reconnectTimer = null
+        }
+        if (this._socket) {
+            this._socket.onopen = null
+            this._socket.onmessage = null
+            this._socket.onerror = null
+            this._socket.onclose = null
+            try { this._socket.close() } catch (_) { /* already gone */ }
+        }
         this._open()
         return this
+    }
+
+    /** True when no socket is open/opening and no reconnect is pending —
+     *  i.e. only an explicit connect() can revive this client. */
+    isDead() {
+        if (this._reconnectTimer) return false
+        const s = this._socket
+        return !s || s.readyState === 2 /* CLOSING */ || s.readyState === 3 /* CLOSED */
     }
 
     _open() {
@@ -160,7 +186,12 @@ export class CorkyClient {
     // will flush it in onopen) or rejected outright.
     _reconnectPossible() {
         if (this._closedByUser || !this._backoffCfg) return false
-        return this._retries < this._backoffCfg.maxRetries
+        // A pending reconnect timer means an attempt IS still coming (even the
+        // final one — _scheduleReconnect increments _retries before arming the
+        // timer, so comparing the counter alone rejected sends during the last
+        // window that could have been queued and flushed on open).
+        return this._reconnectTimer != null ||
+            this._retries < this._backoffCfg.maxRetries
     }
 
     _scheduleReconnect() {
@@ -376,6 +407,13 @@ export class CorkyClient {
             try { pend.onEvent({ request_id, event }) } catch (_) { /* observer threw; ignore */ }
         }
         if (pend && pend.subscription_id != null && event.subscription_id === pend.subscription_id) {
+            this._fanOutSubscription(event.subscription_id, { request_id, event })
+        } else if (event.subscription_id != null) {
+            // Subscription-scoped events arriving AFTER the originating request
+            // settled (historical_complete deleted the pend) — most importantly
+            // a mid-stream `error` when the runtime dies while the socket stays
+            // up. Without this fan-out the stream died silently: the UI kept
+            // saying "Live" and the feed's error handler never fired.
             this._fanOutSubscription(event.subscription_id, { request_id, event })
         }
 

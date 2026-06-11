@@ -547,6 +547,13 @@ export default {
         // one, then drive the DataCube from the gateway.
         async corkySelect(opts) {
             if (!this.corkyFeed) return
+            // Staleness epoch: every select (and teardown) bumps it; anything
+            // after an await only applies if this call is still the latest.
+            // Without this, a superseded select resolving LATE could overwrite
+            // corkyHandle/corkyLast for the selection the user moved away from,
+            // and a teardown-raced failure could re-arm the retry post-unmount.
+            this._corkyGen = (this._corkyGen || 0) + 1
+            const gen = this._corkyGen
             // Normalize: `indicators` must be AT LEAST [] — the feed maps a null/
             // missing field to include_indicators:undefined, and the gateway then
             // serves candles WITHOUT indicator rows. The boot-restore call hit
@@ -555,6 +562,7 @@ export default {
             opts = { ...opts, indicators: opts.indicators || [] }
             // Single active stream: tear down the previous subscription first.
             await this._corkyUnsub()
+            if (gen !== this._corkyGen) return
             this.corkyLoading = true
             this.corkyError = null
             this.corkyProgress = null
@@ -579,9 +587,13 @@ export default {
                 s => s && s.venue === opts.venue && s.symbol === opts.symbol)
             const views = {}
             for (const ind of ((state && state.indicators) || [])) {
-                if (ind && ind.view && ind.display_label) {
-                    views[ind.display_label] = { kind: ind.kind, view: ind.view }
-                }
+                if (!(ind && ind.view && ind.display_label)) continue
+                // The catalog publishes the same indicator once PER TIMEFRAME and
+                // duplicate display_labels collapse last-write-wins — without the
+                // tf filter, another timeframe's view spec could drive rendering
+                // for the one actually subscribed (the panel dedupes the same way).
+                if (ind.timeframe != null && ind.timeframe !== opts.timeframe) continue
+                views[ind.display_label] = { kind: ind.kind, view: ind.view }
             }
             const enabled = {
                 kinds: mem.kinds.slice(),
@@ -597,9 +609,10 @@ export default {
             // target_runtime_id is threaded only into patch/upsert (below), where
             // the gateway really does fall back to a stale default.
             try {
-                this.corkyHandle = await this.corkyFeed.subscribe(
+                const handle = await this.corkyFeed.subscribe(
                     { ...opts, views, enabled }, {
                     onStatus: (status) => {
+                        if (gen !== this._corkyGen) return   // superseded stream
                         this.corkyProgress = status
                         if (status && (status.phase === 'history-complete' ||
                                        status.phase === 'live')) {
@@ -628,15 +641,24 @@ export default {
                             })
                         }
                     },
-                    onError: (err) => { this.corkyError = this._corkyErr(err) },
+                    onError: (err) => {
+                        if (gen !== this._corkyGen) return   // superseded stream
+                        this.corkyError = this._corkyErr(err)
+                    },
                 })
+                // A superseded select (the feed returns null) or a newer epoch
+                // must NOT touch the live selection's state.
+                if (gen !== this._corkyGen || !handle) return
+                this.corkyHandle = handle
                 this._corkySelectRetries = 0   // a clean subscribe clears the ride-through counter
+                this._corkyRetryOpts = null
                 // Remember the selection so a reload / browser restart reopens it.
                 this.corkyLast = {
                     venue: opts.venue, symbol: opts.symbol, timeframe: opts.timeframe,
                 }
                 this.saveStateToStorage()
             } catch (err) {
+                if (gen !== this._corkyGen) return   // stale failure: stay quiet
                 const mapped = this._corkyErr(err)
                 // Ride through transient runtime restarts: a retryable control
                 // error (runtime_not_found / control_response_timeout /
@@ -649,7 +671,9 @@ export default {
             } finally {
                 // Keep the spinner up only during the brief FAST retry window;
                 // once we surface a clear error (slow phase) the spinner goes off.
-                if (!this._corkyRetryKeepSpinner) this.corkyLoading = false
+                if (gen === this._corkyGen && !this._corkyRetryKeepSpinner) {
+                    this.corkyLoading = false
+                }
             }
         },
 
@@ -691,6 +715,14 @@ export default {
             }
             clearTimeout(this._corkyRetryTimer)
             this._corkyRetryTimer = setTimeout(() => {
+                // The client's bounded backoff gives up after ~16s; past that
+                // point NOTHING re-opens the socket unless we do it here — the
+                // 20s slow retry would otherwise spin against a dead socket
+                // forever. connect() resets the backoff budget.
+                if (this.corkyClient && this.corkyClient.isDead &&
+                    this.corkyClient.isDead()) {
+                    this.corkyClient.connect()
+                }
                 // A restarted runtime may have a NEW runtime_id — re-discover first.
                 Promise.resolve(this.corkyDiscover(opts.venue))
                     .then(() => this.corkySelect(opts))
@@ -710,6 +742,9 @@ export default {
             this._corkyRetryTimer = null
             this._corkyRetryKeepSpinner = false
             this._corkySelectRetries = 0
+            // Drop the remembered failed selection too — a later manual Retry
+            // must not navigate back to a symbol the user already moved off.
+            this._corkyRetryOpts = null
         },
 
         // Panel: add a timeframe → patch the candle-state, re-discover, then
@@ -789,21 +824,26 @@ export default {
         // explicit hide of a default-visible layer via the pane's [x]).
         onCorkyToggleLayer(req) {
             if (!this.corkyFeed || !this.corkyHandle) return
+            // Scope by INSTANCE (display_label): instances of the same kind share
+            // layer ids (SCMR / SCMR(INV)), so an unscoped toggle hit both.
             const applied = this.corkyFeed.setLayerEnabled(
-                this.corkyHandle, req.layerId, req.enabled)
+                this.corkyHandle, req.layerId, req.enabled, req.display_label || null)
             if (!applied) return
             const cur = this.corkyCurrent
             if (cur) cur.layers = [...this.corkyHandle.enabledLayers]
             // Persist for tf-switch + reload survival: enabled layers AND explicit
             // hides (so a default-visible layer closed via [x] stays closed after
             // a reload — _reapplyEnabled seeds handle.hiddenLayers from this).
+            // Hides are stored instance-scoped ('SCMR(INV)#trade_lines'); remove
+            // both forms on re-enable so legacy bare entries can't linger.
             const mem = this._corkyMem(req.venue, req.symbol)
             mem.layers = [...this.corkyHandle.enabledLayers]
-            const hi = mem.hiddenLayers.indexOf(req.layerId)
+            const key = req.display_label ? `${req.display_label}#${req.layerId}` : req.layerId
             if (req.enabled) {
-                if (hi !== -1) mem.hiddenLayers.splice(hi, 1)
-            } else if (hi === -1) {
-                mem.hiddenLayers.push(req.layerId)
+                mem.hiddenLayers = mem.hiddenLayers.filter(
+                    (h) => h !== key && h !== req.layerId)
+            } else if (!mem.hiddenLayers.includes(key)) {
+                mem.hiddenLayers.push(key)
             }
             this._syncHandleEnabled(mem)
             this.saveStateToStorage()
@@ -937,9 +977,12 @@ export default {
             const s = ov.settings
             if (s.corkyLayerId) {
                 // One view layer (e.g. the MACD bull-strength pane) → layer off.
+                // Scope to THIS overlay's instance so a shared layer id doesn't
+                // close the sibling instance's pane too.
                 this.onCorkyToggleLayer({
                     venue, symbol, timeframe,
                     layerId: s.corkyLayerId, enabled: false,
+                    display_label: s.corkyInstance || null,
                 })
             } else {
                 // Fallback (no-view) overlay → whole indicator off. The mem/panel
@@ -1004,6 +1047,12 @@ export default {
         onCorkyRetry() {
             const opts = this._corkyRetryOpts || this.corkyLast
             this._corkyCancelSelectRetry()
+            // Revive a dead client first (backoff exhaustion never reconnects
+            // by itself — without this, Retry was a no-op after a >16s outage).
+            if (this.corkyClient && this.corkyClient.isDead &&
+                this.corkyClient.isDead()) {
+                this.corkyClient.connect()
+            }
             if (opts && opts.venue && opts.symbol && opts.timeframe) {
                 Promise.resolve(this.corkyDiscover(opts.venue)).then(() => this.corkySelect(opts))
             } else {
@@ -1023,6 +1072,7 @@ export default {
         // Full gateway teardown: unsubscribe + destroy the feed (which closes
         // the client). Leaves the DataCube intact for the File feed to reuse.
         teardownCorky() {
+            this._corkyGen = (this._corkyGen || 0) + 1   // invalidate in-flight selects
             this._corkyCancelSelectRetry()   // don't let a pending retry fire post-teardown
             this._corkyUnsub()
             if (this.corkyFeed) {
