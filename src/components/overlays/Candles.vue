@@ -16,7 +16,17 @@ export default {
             return { author: 'C451', version: '1.2.1' }
         },
         init() {
-            this.price = new Price(this)
+            this._init_price()
+        },
+        // Create-ONCE: on a runtime add, Grid draws the overlay BEFORE init()
+        // runs (overlay.js mounted() emits new-grid-layer at line ~28; init()
+        // runs at ~49; Grid.new_layer renders synchronously) — draw() then hit
+        // the data() placeholder ({}.draw is not a function). Lazy-create from
+        // draw, and NEVER re-create: Price registers its sidebar shader on
+        // first draw, so replacing the instance would register a duplicate
+        // (the M29 PriceAlarms bug class).
+        _init_price() {
+            if (!(this.price && this.price.draw)) this.price = new Price(this)
         },
         draw(ctx) {
             const isMainChart = this.$props.sub === this.$props.data
@@ -48,7 +58,10 @@ export default {
                 drawCandle(ctx, cc[i], this)
             }
 
-            if (this.price_line) this.price.draw(ctx)
+            if (this.price_line) {
+                this._init_price()   // pre-init draw (runtime add) — see above
+                this.price.draw(ctx)
+            }
         },
         use_for() { return ['Candles'] },
 

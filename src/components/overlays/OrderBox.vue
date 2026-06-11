@@ -153,7 +153,9 @@ export default {
                     // _moveDy: live vertical translation while the box body is
                     // dragged (kept off settings to avoid prop lag; baked in on
                     // drop) so the order lines move WITH the box.
-                    const y = L.$2screen(o.price + this._moveDy)
+                    // `|| 0`: a pre-init draw (runtime add — Grid renders before init())
+            // sees _moveDy undefined → NaN row geometry for the first frame
+            const y = L.$2screen(o.price + (this._moveDy || 0))
                     if (y < r.yT - ROW_H || y > r.yB + ROW_H) continue
                     const want = GRAB_W + MIN_MID + DEL_W
                     const w = Math.min(want, Math.max(GRAB_W + DEL_W + 8, r.xR - r.xL))
@@ -212,7 +214,7 @@ export default {
             let totalSize = 0, wsum = 0, filledCount = 0, filledSize = 0
             for (const o of os) {
                 const sz = Number(o.size) || 0
-                const price = Number(o.price) + this._moveDy
+                const price = Number(o.price) + (this._moveDy || 0)
                 totalSize += sz
                 wsum += price * sz
                 if ((o.status || 'local') === 'confirmed') { filledCount++; filledSize += sz }

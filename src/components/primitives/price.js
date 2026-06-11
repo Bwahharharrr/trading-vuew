@@ -51,7 +51,15 @@ export default class Price {
         if (!this.shader) this.init_shader()
 
         let layout = this.comp.$props.layout
-        let last = this.comp.$props.last
+        // The guard above checks meta.last but the line is drawn from
+        // $props.last — the overlay DESCRIPTOR's field, which a runtime-added
+        // sub-candles overlay doesn't carry → last[4] threw on the first draw.
+        // Fall back to the overlay's own latest bar (the semantically right
+        // price line for a sub-series).
+        let data = this.comp.$props.data
+        let last = this.comp.$props.last ||
+            (data && data.length ? data[data.length - 1] : null)
+        if (!last) return
 
         let dir = last[4] >= last[1]
         let color = dir ? this.green() : this.red()
