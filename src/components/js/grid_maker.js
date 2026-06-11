@@ -132,11 +132,14 @@ function GridMaker(id, params, master_grid = null) {
         let min = Infinity
         let max = -Infinity
 
-        // Speed UP
+        // Speed UP. NB: two independent ifs — the old `else if` skipped the min
+        // update whenever the max branch hit, so a strictly-RISING window left
+        // min at Infinity and the precision scheme collapsed to 2 decimals
+        // (sub-cent assets rendered as "0.00" on the Y axis).
         for (let i = 0, n = data.length; i < n; i++) {
             let x = data[i]
             if (x[1] > max) max = x[1]
-            else if (x[1] < min) min = x[1]
+            if (x[1] < min) min = x[1]
         }
         // Get max lengths of integer and fractional parts
         [min, max].forEach(x => {

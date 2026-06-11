@@ -59,7 +59,14 @@ export default class Botbar {
         this._throttledWheel = Utils.rafThrottle((delta, event) => {
             this.mousezoom(-delta * 50, event)
         })
-        this.hm.wheel((event, delta) => this._throttledWheel(delta, event))
+        this.hm.wheel((event, delta) => {
+            // preventDefault must run SYNCHRONOUSLY in the wheel dispatch — the
+            // RAF-throttled handler fires a frame later, when it is a documented
+            // no-op (page scroll / browser ctrl-zoom were no longer blocked).
+            if (event.originalEvent) event.originalEvent.preventDefault()
+            if (event.preventDefault) event.preventDefault()
+            this._throttledWheel(delta, event)
+        })
 
         // X-axis drag-to-scale: a horizontal drag zooms the TIME range about
         // the anchor where the drag started (mirrors Sidebar's Y-axis pan).
@@ -70,8 +77,16 @@ export default class Botbar {
         }))
 
         mc.on('panstart', event => {
+            // Hammer's center.x is PAGE-space; the anchor math below divides by
+            // the CANVAS width, so convert to canvas-local coordinates (grid.js
+            // does the same via calc_offset). Without this, any chart not at
+            // page x=0 (the 57px toolbar alone guarantees that) anchored the
+            // zoom on the wrong bar and anchorFrac could exceed 1.
+            const rect = eventTarget.getBoundingClientRect
+                ? eventTarget.getBoundingClientRect() : { left: 0 }
             this.drug = {
-                x: event.center.x,
+                x: event.center.x - rect.left,
+                offX: rect.left,   // pandrag converts live events with the same offset
                 r: this.range.slice()
             }
         })
@@ -102,7 +117,9 @@ export default class Botbar {
         let span = r[1] - r[0]
 
         // Normalised drag distance: full half-width drag ~= one full zoom step.
-        let dx = event.center.x - this.drug.x
+        // (convert the live page-space center.x to the canvas-local basis the
+        // anchor was captured in)
+        let dx = (event.center.x - (this.drug.offX || 0)) - this.drug.x
         let k = dx / (width * 0.5)
         // Clamp the per-gesture factor so a fast drag can't invert the range.
         let factor = Utils.clamp(1 + k, 0.1, 10)
@@ -174,6 +191,14 @@ export default class Botbar {
     }
 
     update() {
+
+        // Re-resolve the layout EVERY update (like sidebar.js / grid-renderer):
+        // update_layout() REPLACES chartLayout with a new Layout object and
+        // re-points the grid + sidebar renderers — but never the botbar. The
+        // constructor-time snapshot went permanently stale after the first
+        // pan/zoom, so the time axis (xs positions, grid_0.ti_map, pandrag
+        // width) drew from a dead layout until something remounted us.
+        this.layout = this.comp.layoutOverride || this.$p.layout
 
         this.grid_0 = this.layout.grids[0]
 

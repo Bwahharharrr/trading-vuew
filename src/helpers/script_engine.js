@@ -573,7 +573,12 @@ export class ScriptEngine {
             const selLen = sel.length
             let lastProgress = 0
 
-            for (let i = start; i < ohlcvLen; i++) {
+            // NB: with a custom main symbol, make_ohlcv() APPENDS candles to
+            // `ohlcv` INSIDE this loop (that is the sym(data,{main:true})
+            // bootstrap) — the cached bound would stop after one iteration and
+            // the generated chart ended at 2 candles. Re-read the live length
+            // in that mode; keep the cached bound on the hot normal path.
+            for (let i = start; i < (hasCustomMain ? ohlcv.length : ohlcvLen); i++) {
 
                 if (i % YIELD_FREQUENCY === 0) {
                     await Utils.pause(0)
@@ -595,7 +600,9 @@ export class ScriptEngine {
                 scriptState.t = this.t
                 scriptState.iter = this.iter
                 this.step(candle)
-                this.shared.onclose = i !== lastIdx
+                this.shared.onclose = hasCustomMain
+                    ? i !== ohlcv.length - 1
+                    : i !== lastIdx
 
                 // PERF: Skip empty mod-hooks loops entirely
                 if (hasMods1) {

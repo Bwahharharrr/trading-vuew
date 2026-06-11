@@ -62,7 +62,14 @@ export default class Sidebar {
         this._throttledWheel = Utils.rafThrottle((delta, event) => {
             this.mousezoom(delta * 50, event)
         })
-        this.hm.wheel((event, delta) => this._throttledWheel(delta, event))
+        this.hm.wheel((event, delta) => {
+            // preventDefault must run SYNCHRONOUSLY in the wheel dispatch — the
+            // RAF-throttled handler fires a frame later, when it is a documented
+            // no-op (page scroll / browser ctrl-zoom were no longer blocked).
+            if (event.originalEvent) event.originalEvent.preventDefault()
+            if (event.preventDefault) event.preventDefault()
+            this._throttledWheel(delta, event)
+        })
 
         let mc = this.mc = new Hammer.Manager(eventTarget)
         mc.add(new Hammer.Pan({

@@ -70,7 +70,17 @@ export default class Grid {
         this._throttledWheel = Utils.rafThrottle((delta, event) => {
             this.zoomManager.mousezoom(-delta * 50, event)
         })
-        this.hm.wheel((event, delta) => this._throttledWheel(delta, event))
+        this.hm.wheel((event, delta) => {
+            // preventDefault must run SYNCHRONOUSLY in the wheel dispatch — the
+            // RAF-throttled handler fires a frame later, when it is a documented
+            // no-op (page scroll / browser ctrl-zoom were no longer blocked).
+            if (this.wmode !== 'pass' && event.originalEvent &&
+                !(this.wmode === 'click' && !this.$p.meta.activated)) {
+                event.originalEvent.preventDefault()
+                if (event.preventDefault) event.preventDefault()
+            }
+            this._throttledWheel(delta, event)
+        })
 
         let mc = this.mc = new Hammer.Manager(this.canvasDynamic || this.canvas)
         let T = Utils.is_mobile ? 10 : 0
