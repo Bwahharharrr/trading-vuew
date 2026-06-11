@@ -86,3 +86,22 @@ describe('defineOverlay / defineTool (Phase 4.1)', () => {
     expect(ctx.settings.color).toBe('#fff')        // live prop wins
   })
 })
+
+describe('M31 — tool() returns a fresh descriptor (preset merges must not pollute the config)', () => {
+  test('mutating one call result leaves the next call pristine', async () => {
+    const { defineTool } = await import('../../src/api/defineTool.js')
+    const Tool = defineTool({
+      name: 'PT', type: 'PT', icon: 'i.png',
+      settings: { color: '#f00' },
+      mods: { Extended: { settings: { ray: true } } },
+      draw() {},
+    })
+    const a = Tool.methods.tool()
+    // register_tools-style preset merge mutates the returned descriptor
+    Object.assign(a.settings, { color: '#0f0', preset: 1 })
+    a.mods.Extended.settings.polluted = true
+    const b = Tool.methods.tool()
+    expect(b.settings).toEqual({ color: '#f00' })          // author config intact
+    expect(b.mods.Extended.settings).toEqual({ ray: true })
+  })
+})

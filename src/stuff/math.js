@@ -7,7 +7,8 @@ export default {
     // p1 = point, (p2, p3) = line
     point2line(p1, p2, p3) {
 
-        let { area, base } = this.tri(p1, p2, p3)
+        let { area, base, degenerate } = this.tri(p1, p2, p3)
+        if (degenerate !== undefined) return degenerate
         return Math.abs(this.tri_h(area, base))
     },
 
@@ -15,7 +16,8 @@ export default {
     // p1 = point, (p2, p3) = segment
     point2seg(p1, p2, p3) {
 
-        let { area, base } = this.tri(p1, p2, p3)
+        let { area, base, degenerate } = this.tri(p1, p2, p3)
+        if (degenerate !== undefined) return degenerate
         // Vector projection
         let proj = this.dot_prod(p1, p2, p3) / base
         // Distance from left pin
@@ -31,7 +33,8 @@ export default {
     // p1 = point, (p2, p3) = ray
     point2ray(p1, p2, p3) {
 
-        let { area, base } = this.tri(p1, p2, p3)
+        let { area, base, degenerate } = this.tri(p1, p2, p3)
+        if (degenerate !== undefined) return degenerate
         // Vector projection
         let proj = this.dot_prod(p1, p2, p3) / base
         // Distance from left pin
@@ -46,8 +49,17 @@ export default {
         let dx = p3[0] - p2[0]
         let dy = p3[1] - p2[1]
         let base = Math.sqrt(dx * dx + dy * dy)
-        // Degenerate line (p2 === p3): avoid /0 → NaN/Infinity
-        if (base === 0) return { area, base: 1 }
+        // Degenerate segment (p2 === p3): area is exactly 0, so the old
+        // `base: 1` fallback made every point2line/seg/ray return distance 0 —
+        // a zero-length tool (double-click line, zero-width RangeTool) then
+        // collision-matched the ENTIRE canvas and swallowed every mousedown.
+        // Report the true point-to-point distance instead (degenerate flag lets
+        // the callers' projection math know h already IS the answer).
+        if (base === 0) {
+            let ddx = p1[0] - p2[0]
+            let ddy = p1[1] - p2[1]
+            return { area: 0, base: 1, degenerate: Math.sqrt(ddx * ddx + ddy * ddy) }
+        }
         return { area, base }
     },
 

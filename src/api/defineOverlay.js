@@ -101,7 +101,25 @@ export function defineOverlay(def) {
     if (def.dataColors) methods.data_colors = function () { return def.dataColors.call(this, this.$ctx()) }
     if (def.yRange) methods.y_range = function () { return def.yRange.call(this, this.$ctx()) }
     if (def.calc) methods.calc = def.calc
-    if (def.tool) methods.tool = function () { return def.tool }
+    // Fresh copy per call (legacy tools build a literal each time): Grid's
+    // register_tools shallow-copies the descriptor but MERGES presets into
+    // descriptor.settings / mods[*].settings in place — a shared singleton let
+    // chart presets permanently pollute the author's config and leak across
+    // chart instances / re-inits.
+    if (def.tool) methods.tool = function () {
+        const t = def.tool
+        const copy = { ...t, data: (t.data || []).slice(), settings: { ...(t.settings || {}) } }
+        if (t.mods) {
+            copy.mods = {}
+            for (const k in t.mods) {
+                copy.mods[k] = { ...t.mods[k] }
+                if (t.mods[k] && t.mods[k].settings) {
+                    copy.mods[k].settings = { ...t.mods[k].settings }
+                }
+            }
+        }
+        return copy
+    }
     if (def.init) methods.init = def.init
     if (def.destroy) methods.destroy = def.destroy
 

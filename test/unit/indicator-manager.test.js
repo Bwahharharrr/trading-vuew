@@ -15,7 +15,9 @@ function mkCtx(over = {}) {
   ]
   const ctx = {
     chart: { data: { chart: { data: [] }, onchart: [], offchart } },
-    charts: { '15m': { offchart: [{ settings: {} }, { settings: {} }] } },
+    // tf-source entries carry NAMES (the mirror writes resolve by name now —
+    // the positional write was the M25 wrong-indicator bug)
+    charts: { '15m': { offchart: [{ name: 'RSI', settings: {} }, { name: 'OBV', settings: {} }] } },
     currentTimeframe: '15m',
     indicatorVisibility: {},
     persistentIndicatorVisibility: {},
@@ -119,5 +121,21 @@ describe('accordion + persistent visibility state', () => {
     expect(ctx.persistentIndicatorVisibility.Alerts).toBe(false)
     expect(ctx.clipPersistentIndicators).toHaveBeenCalled()
     expect(ctx.applyCurrentColoring).toHaveBeenCalled()
+  })
+})
+
+describe('M25 — mirror writes resolve by NAME (combined-index offset bug)', () => {
+  test('with a persistent indicator prefixed, toggling hits the RIGHT source entry', () => {
+    const ctx = mkCtx()
+    // live combined array: [Persistent, RSI, MACD] — indexes shifted by 1
+    ctx.chart.data.offchart = [
+      { name: 'Persist', type: 'Spline', data: [], settings: {} },
+      { name: 'RSI', type: 'Range', data: [], settings: { upper: 70 } },
+      { name: 'MACD', type: 'Splines', data: [], settings: {} },
+    ]
+    ctx.toggleIndicatorVisibility(1)   // RSI in the combined array
+    // the OLD positional write would have hidden charts['15m'].offchart[1] (OBV)
+    expect(ctx.charts['15m'].offchart[0].settings.display).toBe(false) // RSI ✓
+    expect(ctx.charts['15m'].offchart[1].settings.display).toBeUndefined() // OBV untouched
   })
 })

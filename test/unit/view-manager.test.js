@@ -159,3 +159,26 @@ describe('buildOffchartData / applyViewOffchart', () => {
     expect(names).not.toContain('Hidden')
   })
 })
+
+describe('M26 — restored visibility prefs survive the first applyViewOffchart', () => {
+  test('empty lastIndicatorSet + restored prefs applies them instead of wiping', () => {
+    const ctx = mkCtx({
+      displayedView: '', currentTimeframe: '1m',
+      charts: { '1m': { offchart: [
+        { name: 'RSI', type: 'Range', data: [], settings: {} },
+        { name: 'OBV', type: 'Spline', data: [], settings: {} },
+      ] } },
+      persistentIndicatorsClipped: [],
+      lastIndicatorSet: [],                       // fresh session
+      indicatorVisibility: { RSI: false, OBV: true },  // restored from storage
+    })
+    Object.assign(ctx, M)
+    ctx.applyViewOffchart()
+    const byName = Object.fromEntries(ctx.chart.data.offchart.map(o => [o.name, o.settings.display]))
+    expect(byName.RSI).toBe(false)   // restored pref applied
+    expect(byName.OBV).toBe(true)
+    // prefs NOT wiped to first-visible-only defaults
+    expect(ctx.indicatorVisibility).toEqual({ RSI: false, OBV: true })
+    expect(ctx.lastIndicatorSet).toEqual(['RSI', 'OBV'])  // seeded for next time
+  })
+})

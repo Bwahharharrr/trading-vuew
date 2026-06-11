@@ -598,6 +598,11 @@ export default {
             }
             for (const row of g.rows) {
                 if (inRect(row.grab, mx, my)) {
+                    // Live orders can't be locally re-priced (the engine-side
+                    // order wouldn't follow; status would lie). Cancel first.
+                    const ord = this.orders.find(o => o.id === row.id)
+                    const ost = (ord && ord.status) || 'local'
+                    if (ost !== 'local' && ost !== 'rejected') { e.preventDefault(); return }
                     this._dragOrder = row.id
                     this.custom_event('scroll-lock', true)
                     this.set_cursor('grabbing')
@@ -767,6 +772,15 @@ export default {
         },
 
         delete_order(id) {
+            // A LIVE order (pending/confirmed) must not vanish locally — the
+            // engine-side order would be orphaned with no cancel sent. Route a
+            // cancel request instead and let the agent's confirmation remove it.
+            const target = this.orders.find(o => o.id === id)
+            const st = (target && target.status) || 'local'
+            if (st === 'pending' || st === 'confirmed' || st === 'cancelling') {
+                this.custom_event('cancel-orders')
+                return
+            }
             // Splice by object identity (NOT id-substring) to avoid ord-1/ord-10
             // collisions; emit a NEW array + force a repaint (no cursor move).
             const next = this.orders.filter(o => o.id !== id)
@@ -777,6 +791,11 @@ export default {
         // live corners (pin state) so it's correct even if the settings prop
         // hasn't re-propagated yet.
         recompute_orders() {
+            // Same guard as the cog: regenerating replaces every order with a
+            // fresh status:'local' set, silently ORPHANING engine-side
+            // (pending/confirmed) orders — resize and corner-pin settles used
+            // to bypass this.
+            if (this.has_live_orders()) return
             const c0 = this.corner(0), c1 = this.corner(1)
             if (!c0 || !c1) return
             const low = Math.min(c0[1], c1[1])

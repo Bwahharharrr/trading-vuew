@@ -150,11 +150,22 @@ export default {
             // Get current indicator names
             const currentIndicatorNames = combinedOffchart.map(ind => ind.name)
 
-            // Check if indicator set matches saved preferences
-            const sameSet = this.lastIndicatorSet.length === currentIndicatorNames.length &&
-                this.lastIndicatorSet.every(name => currentIndicatorNames.includes(name))
+            // Check if indicator set matches saved preferences.
+            // FIRST application after a reload: lastIndicatorSet starts empty
+            // (it is session state, not persisted), which used to read as
+            // "different set" and WIPE the restored indicatorVisibility with
+            // first-visible-only defaults — saved preferences never survived a
+            // reload. An empty lastIndicatorSet with restored preferences
+            // covering the current names is treated as the same set.
+            const restoredCoversSet = this.lastIndicatorSet.length === 0 &&
+                Object.keys(this.indicatorVisibility).length > 0 &&
+                currentIndicatorNames.some(n => n in this.indicatorVisibility)
+            const sameSet = restoredCoversSet || (
+                this.lastIndicatorSet.length === currentIndicatorNames.length &&
+                this.lastIndicatorSet.every(name => currentIndicatorNames.includes(name)))
 
             if (sameSet && currentIndicatorNames.length > 0) {
+                if (restoredCoversSet) this.lastIndicatorSet = [...currentIndicatorNames]
                 // Same indicator set - apply saved visibility preferences (skip persistent indicators)
                 for (let i = 0; i < combinedOffchart.length; i++) {
                     const name = combinedOffchart[i].name

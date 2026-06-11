@@ -197,12 +197,16 @@ export default {
             const newSettings = Object.assign({}, currentSettings, { display: newDisplay })
             this.chart.data.offchart[index].settings = newSettings
 
-            // Also update in the original charts data to persist across timeframe changes
+            // Also update in the original charts data to persist across timeframe
+            // changes. Resolve by NAME: `index` addresses the COMBINED offchart
+            // (visible persistent indicators are prefixed by applyViewOffchart),
+            // while tfData.offchart is the raw file array — the positional write
+            // used to land on the WRONG indicator whenever any persistent
+            // indicator (or an active view) shifted the offsets.
             if (this.currentTimeframe && this.charts[this.currentTimeframe]) {
                 const tfData = this.charts[this.currentTimeframe]
-                if (tfData.offchart && tfData.offchart[index]) {
-                    tfData.offchart[index].settings = newSettings
-                }
+                const src = (tfData.offchart || []).find(o => o && o.name === indicatorName)
+                if (src) src.settings = newSettings
             }
 
             // Performance: Use targeted refresh instead of full chart reset
@@ -281,12 +285,16 @@ export default {
                 const mergedSettings = Object.assign({}, currentSettings, newSettings)
                 this.chart.data.offchart[indicatorIndex].settings = mergedSettings
 
-                // Also update in the original charts data to persist across timeframe changes
+                // Also update in the original charts data — by NAME, not the
+                // combined-array index (see toggleIndicatorVisibility).
                 if (this.currentTimeframe && this.charts[this.currentTimeframe]) {
                     const tfData = this.charts[this.currentTimeframe]
-                    if (tfData.offchart && tfData.offchart[indicatorIndex]) {
-                        tfData.offchart[indicatorIndex].type = newType
-                        tfData.offchart[indicatorIndex].settings = mergedSettings
+                    const liveName = this.chart.data.offchart[indicatorIndex] &&
+                        this.chart.data.offchart[indicatorIndex].name
+                    const src = (tfData.offchart || []).find(o => o && o.name === liveName)
+                    if (src) {
+                        src.type = newType
+                        src.settings = mergedSettings
                     }
                 }
 

@@ -32,7 +32,12 @@ export default {
         init() {
             this._drag = null
             this._geo = null
-            this._axisShader = false
+            // Lazy-registration latch for the sidebar shader. Do NOT reset it
+            // here: on a runtime add, Grid draws the overlay BEFORE init() runs
+            // (new-grid-layer → renderer.update() is synchronous), so the first
+            // draw had already registered the shader — resetting the flag made
+            // the next draw register a DUPLICATE (alarm bars painted twice).
+            this._axisShader = this._axisShader || false
             this.mouse.on('mousedown', e => this.on_mousedown(e))
             this.mouse.on('mousemove', () => this.on_mousemove())
             this.mouse.on('mouseup', e => this.on_mouseup(e))
