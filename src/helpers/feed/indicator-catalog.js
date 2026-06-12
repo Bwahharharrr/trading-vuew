@@ -274,13 +274,72 @@ export function bullBearColorOf(bullVal, bearVal, bb) {
   const missing = (v) => v == null || v === ''
   if (missing(bullVal) && missing(bearVal)) return null
   const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
-  const b = num(bullVal)
-  const r = num(bearVal)
-  if (b > 0 && r > 0) return bb.bothColor
-  if (b > 0) return bb.bullColor
-  if (r > 0) return bb.bearColor
+  // Protocol: detection flags are SET at >= 0.5 (they are 0/1 booleans on the
+  // wire, but can arrive as floats while a bar is forming).
+  const b = num(bullVal) >= 0.5
+  const r = num(bearVal) >= 0.5
+  if (b && r) return bb.bothColor
+  if (b) return bb.bullColor
+  if (r) return bb.bearColor
   // Data present but neither detected → neutral grey (see candleColorBullBear)
   return bb.neutralColor
+}
+
+/** Detection-flag truthiness per protocol: numeric value >= 0.5 is SET. */
+export function detectionSet(v) {
+  const n = Number(v)
+  return Number.isFinite(n) && n >= 0.5
+}
+
+/** `#RRGGBB` (or `#RGB`) + alpha 0..1 → `rgba(r,g,b,a)`. Pass-through else. */
+export function hexToRgba(hex, alpha) {
+  const m = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(String(hex || ''))
+  if (!m) return hex
+  let h = m[1]
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('')
+  const r = parseInt(h.slice(0, 2), 16)
+  const g = parseInt(h.slice(2, 4), 16)
+  const b = parseInt(h.slice(4, 6), 16)
+  const a = Math.max(0, Math.min(1, Number(alpha)))
+  return `rgba(${r},${g},${b},${Number.isFinite(a) ? a : 1})`
+}
+
+/**
+ * Parse a `box` layer's DETECTION-ZONE rule from its style
+ * (box_rule == "detection_zone_until_close_breaks", the CRUP form).
+ * One box per detection candle: span = that candle's low..high, left edge =
+ * that candle's CLOSE time; a bull box dies when a later candle CLOSES
+ * strictly below its bottom, a bear box on a close strictly above its top.
+ * Everything style-driven; field names fall back to the protocol convention.
+ *
+ * Server-truth companion fields (per side): `{side}_box_count` (boxes covering
+ * the bar) and `{side}_box_top` / `{side}_box_bottom` (envelope; 0-count ⇒ no
+ * boxes, not a price level) — used for seed boxes when history starts inside
+ * a box whose anchor is left of the loaded window.
+ *
+ * @param {Record<string,string>} [style]
+ * @returns {object|null}
+ */
+export function detectionBoxRule(style) {
+  const s = style || {}
+  if (s.box_rule !== 'detection_zone_until_close_breaks') return null
+  const opacity = (() => {
+    const n = Number(s.fill_opacity)
+    return Number.isFinite(n) && n > 0 && n <= 1 ? n : 0.15
+  })()
+  return {
+    bullField: s.bull_field || 'bull_detected_now',
+    bearField: s.bear_field || 'bear_detected_now',
+    bullFill: s.bull_fill_color || s.bull_color || CANDLE_COLOR_ENUM.bull,
+    bearFill: s.bear_fill_color || s.bear_color || CANDLE_COLOR_ENUM.bear,
+    fillOpacity: opacity,
+    // seed-box alpha is count-multiplied but capped so a deep stack of
+    // off-window anchors can't render an opaque slab
+    seedAlphaCap: 0.6,
+    countFields: { bull: 'bull_box_count', bear: 'bear_box_count' },
+    topFields: { bull: 'bull_box_top', bear: 'bear_box_top' },
+    bottomFields: { bull: 'bull_box_bottom', bear: 'bear_box_bottom' },
+  }
 }
 
 /**

@@ -16,7 +16,8 @@
 import {
   indicatorPlacement, layerKindToOverlay, styleToSettings, candleColorOf, candleColorOpts,
   signedSlopeColor, candleColorPalette, paletteColorOf, paletteLabelOf,
-  candleColorBullBear, bullBearColorOf
+  candleColorBullBear, bullBearColorOf,
+  detectionBoxRule, detectionSet, hexToRgba
 } from './indicator-catalog.js'
 
 // ─────────────────────────────────────────────────────────── primitives ──
@@ -228,13 +229,145 @@ function buildSignedSlopeHistogram(layer, fields, outputsMap) {
   return { data, raw, valueField, slopeField, colors }
 }
 
+// ── detection-zone boxes (box_rule: detection_zone_until_close_breaks) ─────
+//
+// One box per detection candle: vertical span = that candle's low..high; LEFT
+// edge = that candle's CLOSE time (bar T+1's open — the detection candle is
+// never inside its own box). A bull box dies when a later candle CLOSES
+// strictly below its bottom; a bear box on a close strictly above its top.
+// Wicks through the level do NOT invalidate; the invalidating candle is still
+// covered (right edge at its close time). No invalidating close → extend to
+// the live edge. Each box renders as its OWN translucent rect (no merging) so
+// k overlapping boxes read k× stronger.
+//
+// Server truth: `{side}_box_count` / `{side}_box_top` / `{side}_box_bottom`
+// accompany every bar. If the FIRST loaded bar has count > 0, the anchors are
+// left of the window — a SEED rect is rendered from the envelope with
+// opacity×count (capped) until real anchors load.
+
+const MAX_DETECTION_BOXES = 2048 // mirror the indicator's bounded history
+
+export function buildDetectionBoxes(rule, outputsMap, ohlcv) {
+  // tf from candle spacing (boxes are bar-quantised; left/right edges are
+  // close times = ts + tf)
+  let tf = Infinity
+  for (let i = 1; i < ohlcv.length; i++) {
+    const d = ohlcv[i][0] - ohlcv[i - 1][0]
+    if (d > 0 && d < tf) tf = d
+  }
+  if (!Number.isFinite(tf)) tf = 0
+
+  const rawOf = (f) => {
+    const ser = f ? outputsMap.get(f) : null
+    return ser ? new Map(ser.raw) : new Map()
+  }
+  const bullRaw = rawOf(rule.bullField)
+  const bearRaw = rawOf(rule.bearField)
+  const boxes = []
+
+  // SEED boxes: history starts inside boxes anchored left of the window.
+  if (ohlcv.length) {
+    const t0 = ohlcv[0][0]
+    for (const side of ['bull', 'bear']) {
+      const count = Number(rawOf(rule.countFields[side]).get(t0))
+      if (!(Number.isFinite(count) && count >= 1)) continue
+      const top = Number(rawOf(rule.topFields[side]).get(t0))
+      const bottom = Number(rawOf(rule.bottomFields[side]).get(t0))
+      if (!(Number.isFinite(top) && Number.isFinite(bottom) && top > bottom)) continue
+      boxes.push({
+        side, top, bottom, t0, t1: t0, alive: true,
+        seed: true, seedCount: count,
+      })
+    }
+  }
+
+  for (let i = 0; i < ohlcv.length; i++) {
+    const bar = ohlcv[i]
+    const ts = bar[0]
+    const closeTime = ts + tf
+    // 1) coverage + invalidation for boxes anchored at EARLIER bars
+    //    (a box opened at bar T's close is first evaluated against T+1)
+    for (const b of boxes) {
+      if (!b.alive || b.t0 > ts) continue
+      b.t1 = closeTime // covered through this bar — even when it invalidates
+      if (b.side === 'bull' && bar[4] < b.bottom) b.alive = false
+      else if (b.side === 'bear' && bar[4] > b.top) b.alive = false
+    }
+    // 2) detections ON this bar anchor new boxes at its close time
+    if (detectionSet(bullRaw.get(ts))) {
+      boxes.push({ side: 'bull', top: bar[2], bottom: bar[3], t0: closeTime, t1: closeTime, alive: true })
+    }
+    if (detectionSet(bearRaw.get(ts))) {
+      boxes.push({ side: 'bear', top: bar[2], bottom: bar[3], t0: closeTime, t1: closeTime, alive: true })
+    }
+  }
+  if (boxes.length > MAX_DETECTION_BOXES) boxes.splice(0, boxes.length - MAX_DETECTION_BOXES)
+  return { boxes, tf, lastTs: ohlcv.length ? ohlcv[ohlcv.length - 1][0] : null }
+}
+
+/** Zones settings-format rows ([x1, y1, x2, y2, rgba]) — one row per box. */
+export function detectionBoxRows(boxes, rule) {
+  return boxes.map((b) => [
+    b.t0, b.top, b.t1, b.bottom,
+    hexToRgba(
+      b.side === 'bull' ? rule.bullFill : rule.bearFill,
+      b.seed
+        ? Math.min(rule.fillOpacity * b.seedCount, rule.seedAlphaCap)
+        : rule.fillOpacity),
+  ])
+}
+
+/** Boxes covering the bar at `ts` (a bar is covered when the box spans its
+ *  whole open..close) — must equal the server's `{side}_box_count`. */
+export function detectionBoxCountAt(boxes, ts, tf, side = null) {
+  return boxes.filter((b) =>
+    (!side || b.side === side) && b.t0 <= ts && b.t1 >= ts + tf).length
+}
+
 // Build overlays for ONE indicator instance from its view.layers. Returns
 // { onchart, offchart, candleColorByTs }. candle_color/marker produce no overlay
 // (candle_color stamps the candle colour slot; raw values stay in the pivot).
-export function buildLayerOverlays(instanceKey, kind, outputsMap, view, paneResolver) {
-  const onchart = []; const offchart = []; const candleColor = []
+export function buildLayerOverlays(instanceKey, kind, outputsMap, view, paneResolver, ohlcv = null) {
+  const onchart = []; const offchart = []; const candleColor = []; const detectionBoxes = []
   for (const layer of view.layers) {
     const fields = (layer.fields && layer.fields.length) ? layer.fields : [...outputsMap.keys()]
+    // box layers with the detection-zone rule: STATEFUL reconstruction over the
+    // candles (the generic box→Zones mapping below can't express lifetimes).
+    if (layer.kind === 'box') {
+      const boxRule = detectionBoxRule(layer.style)
+      if (boxRule) {
+        const builtBoxes = buildDetectionBoxes(boxRule, outputsMap, ohlcv || [])
+        const visible = layer.visible_by_default !== false
+        const overlay = {
+          name: layer.label || layer.id,
+          type: 'Zones',
+          data: [],   // long-lived rects live in settings.zones (index-0 time
+                      // filtering would clip boxes anchored left of the view)
+          settings: {
+            corkyKey: instanceKey + '#' + layer.id,
+            corkyKind: kind,
+            corkyInstance: instanceKey,
+            corkyLayerId: layer.id,
+            corkyView: true,
+            corkyVisibleDefault: visible,
+            display: visible,
+            legend: false,
+            'z-index': -1,   // behind the candles
+            zones: detectionBoxRows(builtBoxes.boxes, boxRule),
+          },
+          raw: [],
+        }
+        onchart.push(overlay)   // price surface
+        detectionBoxes.push({
+          instanceKey, layerId: layer.id, rule: boxRule,
+          boxes: builtBoxes.boxes, tf: builtBoxes.tf,
+          evaluatedThrough: builtBoxes.lastTs,
+          lastLiveTs: null, lastVals: null,
+          overlay,
+        })
+        continue
+      }
+    }
     if (layer.kind === 'candle_color') {
       // Compute the per-ts colours but DO NOT stamp the candles here — candle
       // colour is applied only when the indicator is enabled (candles-only
@@ -334,7 +467,7 @@ export function buildLayerOverlays(instanceKey, kind, outputsMap, view, paneReso
       onchart.push(overlay)
     }
   }
-  return { onchart, offchart, candleColor }
+  return { onchart, offchart, candleColor, detectionBoxes }
 }
 
 export function buildChartData(rows, opts = {}) {
@@ -366,15 +499,17 @@ export function buildChartData(rows, opts = {}) {
   // 1) view-driven instances → per-layer overlays + candle-colour metadata.
   const paneResolver = makePaneResolver()
   const candleColor = [] // [{ kind, instanceKey, field, byTs }] — applied on enable
+  const detectionBoxes = [] // stateful box-layer reconstructions (live-extended)
   const viewInstances = new Set()
   for (const [instanceKey, g] of byInstance) {
     const view = viewOf(instanceKey, g.kind)
     if (!view) continue
     viewInstances.add(instanceKey)
-    const built = buildLayerOverlays(instanceKey, g.kind, g.outputs, view, paneResolver)
+    const built = buildLayerOverlays(instanceKey, g.kind, g.outputs, view, paneResolver, ohlcv)
     for (const ov of built.onchart) onchart.push(ov)
     for (const ov of built.offchart) offchart.push(ov)
     for (const e of built.candleColor) candleColor.push({ kind: g.kind, ...e })
+    for (const e of built.detectionBoxes) detectionBoxes.push({ kind: g.kind, ...e })
   }
 
   // 2) fallback (no/empty view) → plot every output (BYTE-IDENTICAL to legacy).
@@ -426,6 +561,12 @@ export function buildChartData(rows, opts = {}) {
   })
   Object.defineProperty(result, '_candleColorActive', {
     value: new Set(), enumerable: false, configurable: true, writable: true
+  })
+  // Stateful box-layer reconstructions (detection zones). applyLiveUpdate
+  // extends/anchors/kills boxes per the rule and regenerates the overlay's
+  // settings.zones rows in place.
+  Object.defineProperty(result, '_detectionBoxes', {
+    value: detectionBoxes, enumerable: false, configurable: true, writable: true
   })
   return result
 }
@@ -607,6 +748,60 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
         while (candle.length < 9) candle.push('')
         candle[6] = color
       }
+    }
+  }
+
+  // detection-zone boxes: the rule is re-evaluated ONLY on bar close. A new ts
+  // means the previous bar's close is final — kill boxes it broke, anchor new
+  // boxes from its (settled) detection flags. The FORMING bar only extends the
+  // live edge provisionally; a provisional close below/above a level must
+  // never retract or kill a box.
+  const dbMeta = chartDataObj._detectionBoxes
+  if (dbMeta && dbMeta.length) {
+    const arr = chartDataObj.chart.data
+    for (const db of dbMeta) {
+      const vals = inds[db.instanceKey]
+      const tf = db.tf || 0
+      // NEW BAR → the bar at db.lastLiveTs just closed. Guard on
+      // evaluatedThrough: the build walk already consumed the last HISTORY
+      // bar's close (idempotence across the history→live seam).
+      if (db.lastLiveTs != null && ts > db.lastLiveTs &&
+          (db.evaluatedThrough == null || db.lastLiveTs > db.evaluatedThrough)) {
+        let prev = null
+        for (let i = arr.length - 1; i >= 0; i--) {
+          if (arr[i][0] === db.lastLiveTs) { prev = arr[i]; break }
+        }
+        if (prev) {
+          const closeTime = db.lastLiveTs + tf
+          for (const b of db.boxes) {
+            if (!b.alive || b.t0 > db.lastLiveTs) continue
+            b.t1 = closeTime // the invalidating candle is still covered
+            if (b.side === 'bull' && prev[4] < b.bottom) b.alive = false
+            else if (b.side === 'bear' && prev[4] > b.top) b.alive = false
+          }
+          const lv = db.lastVals || {}
+          if (detectionSet(lv.bull)) {
+            db.boxes.push({ side: 'bull', top: prev[2], bottom: prev[3], t0: closeTime, t1: closeTime, alive: true })
+          }
+          if (detectionSet(lv.bear)) {
+            db.boxes.push({ side: 'bear', top: prev[2], bottom: prev[3], t0: closeTime, t1: closeTime, alive: true })
+          }
+          if (db.boxes.length > 2048) db.boxes.splice(0, db.boxes.length - 2048)
+        }
+        db.evaluatedThrough = db.lastLiveTs
+      }
+      // FORMING bar: alive boxes extend to the live edge (provisional only)
+      for (const b of db.boxes) {
+        if (b.alive && b.t0 <= ts) b.t1 = ts + tf
+      }
+      db.lastLiveTs = ts
+      // settle-on-close: remember the latest intrabar flag values — they are
+      // the bar's FINAL values when the next bar arrives
+      if (vals) {
+        db.lastVals = { bull: vals[db.rule.bullField], bear: vals[db.rule.bearField] }
+      }
+      // regenerate the overlay rows in place (bounded by the anchor cap)
+      db.overlay.settings.zones = detectionBoxRows(db.boxes, db.rule)
     }
   }
 
