@@ -38,6 +38,7 @@ describe('rule parse + resolve (style-driven, nothing hardcoded)', () => {
     expect(bb).toEqual({
       bullField: 'bull_detected_now', bearField: 'bear_detected_now',
       bullColor: '#00e676', bearColor: '#d64545', bothColor: '#d97706',
+      neutralColor: '#7f8694',   // catalog grey; style.neutral_color overrides
     })
     // not this rule → null so the caller falls through to palette/threshold
     expect(candleColorBullBear({ color_field: 'x', color_1: '#fff' })).toBeNull()
@@ -56,9 +57,19 @@ describe('rule parse + resolve (style-driven, nothing hardcoded)', () => {
     expect(bullBearColorOf('1', '1', bb)).toBe('#d97706')
   })
 
-  test('neither → null (candle keeps its default colouring)', () => {
-    expect(bullBearColorOf('0', '0', bb)).toBeNull()
+  test('neither detected (data present) → NEUTRAL GREY; warmup → default', () => {
+    // with the rule active, undetected candles paint grey so default-coloured
+    // candles cannot read as false signals
+    expect(bullBearColorOf('0', '0', bb)).toBe('#7f8694')
+    expect(bullBearColorOf('0', undefined, bb)).toBe('#7f8694') // one field present
+    // BOTH fields missing = warmup/no data → default colouring, never guess
     expect(bullBearColorOf(null, undefined, bb)).toBeNull()
+    expect(bullBearColorOf('', '', bb)).toBeNull()
+  })
+
+  test('style.neutral_color overrides the grey', () => {
+    const custom = candleColorBullBear({ ...CRUP_LAYER.style, neutral_color: '#333333' })
+    expect(bullBearColorOf('0', '0', custom)).toBe('#333333')
   })
 
   test('string-typed wire values: "1.0", floats, junk, missing', () => {
@@ -67,6 +78,7 @@ describe('rule parse + resolve (style-driven, nothing hardcoded)', () => {
     expect(bullBearColorOf('0.5', '0', bb)).toBe('#00e676')   // >0 counts
     expect(bullBearColorOf('abc', '1', bb)).toBe('#d64545')   // unparseable → 0
     expect(bullBearColorOf(undefined, '1', bb)).toBe('#d64545') // missing → 0
+    expect(bullBearColorOf('abc', '0', bb)).toBe('#7f8694')   // junk both-zero → grey
   })
 })
 
@@ -78,7 +90,7 @@ const TRUTH = [
   [1781074800000, '1', '0', '#00e676'],   // Jun 10 07:00 — bull → green
   [1781096400000, '1', '0', '#00e676'],   // Jun 10 13:00 — bull → green
   [1781136000000, '1', '0', '#00e676'],   // Jun 11 00:00 — bull → green
-  [1781139600000, '0', '0', null],        // neither → untouched
+  [1781139600000, '0', '0', '#7f8694'],   // neither → neutral grey
 ]
 
 function rows() {
@@ -99,12 +111,18 @@ describe('build: historical CRUP colours (acceptance ground truth)', () => {
     expect(cc[0].bullBear).toBeTruthy()
     expect(cc[0].layerId).toBe('crup_mtf_candle_color')
     for (const [ts, , , expected] of TRUTH) {
-      if (expected === null) {
-        expect(cc[0].byTs.has(ts)).toBe(false)
-      } else {
-        expect(cc[0].byTs.get(ts)).toBe(expected)
-      }
+      expect(cc[0].byTs.get(ts)).toBe(expected)
     }
+  })
+
+  test('warmup candles (no CRUP data) stay uncoloured', () => {
+    const warm = [{
+      timeframe: '1h',
+      candle: { timestamp_ms: 1780930800000, open: '10', high: '12', low: '9', close: '11', volume: '5' },
+      indicators: { CRUP: {} },   // instance present, no outputs yet
+    }, ...rows()]
+    const built = buildChartData(warm, { views: views() })
+    expect(built._candleColor[0].byTs.has(1780930800000)).toBe(false)
   })
 })
 
@@ -131,12 +149,29 @@ describe('live: CRUP colours on live_update', () => {
     expect(built._candleColor[0].byTs.get(nextTs)).toBe('#d64545')
   })
 
-  test('a neither-detected live candle clears any prior colour (no carry-over)', () => {
+  test('a withdrawn detection live-updates to neutral grey (not stale red)', () => {
     const built = buildChartData(rows(), { views: views() })
     built._candleColorActive = new Set([built._candleColor[0].instanceKey])
     const nextTs = 1781143200000
     applyLiveUpdate(built, liveRow(nextTs, '0', '1', 1), {})    // red first
     applyLiveUpdate(built, liveRow(nextTs, '0', '0', 2), {})    // detection withdrawn
+    expect(built._candleColor[0].byTs.get(nextTs)).toBe('#7f8694')
+  })
+
+  test('a live candle with NO indicator data clears the colour (warmup)', () => {
+    const built = buildChartData(rows(), { views: views() })
+    built._candleColorActive = new Set([built._candleColor[0].instanceKey])
+    const nextTs = 1781143200000
+    applyLiveUpdate(built, liveRow(nextTs, '0', '1', 1), {})    // red first
+    const bare = {
+      subscription_id: 's', sequence: 2,
+      row: {
+        timeframe: '1h',
+        candle: { timestamp_ms: nextTs, open: '10', high: '12', low: '9', close: '11', volume: '5' },
+        indicators: { CRUP: {} },
+      },
+    }
+    applyLiveUpdate(built, bare, {})
     expect(built._candleColor[0].byTs.has(nextTs)).toBe(false)
   })
 })

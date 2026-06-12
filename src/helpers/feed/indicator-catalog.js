@@ -246,6 +246,11 @@ export function candleColorBullBear(style) {
     bullColor: s.bull_color || s.color_up || CANDLE_COLOR_ENUM.bull,
     bearColor: s.bear_color || s.color_down || CANDLE_COLOR_ENUM.bear,
     bothColor: s.both_color || s.bull_color || CANDLE_COLOR_ENUM.bull,
+    // While the rule is ACTIVE, undetected candles paint neutral grey rather
+    // than keeping the chart's default green/red — otherwise default-coloured
+    // candles read as (false) signals next to the rule's bull/bear paint.
+    // Style-overridable; warmup (no data at all) still leaves the default.
+    neutralColor: s.neutral_color || CANDLE_COLOR_ENUM.neutral,
   }
 }
 
@@ -254,7 +259,8 @@ export function candleColorBullBear(style) {
  * ("1", "0", "1.0") — parse both sides identically; missing / unparseable
  * counts as no-detection (0). Semantics:
  *   bull>0 && bear>0 → bothColor · bull>0 → bullColor · bear>0 → bearColor
- *   neither → null (leave the candle's default colouring untouched).
+ *   neither (data present) → neutralColor (grey) · both fields MISSING → null
+ *   (warmup: leave the candle's default colouring untouched).
  *
  * @param {string|number|null|undefined} bullVal
  * @param {string|number|null|undefined} bearVal
@@ -263,13 +269,18 @@ export function candleColorBullBear(style) {
  */
 export function bullBearColorOf(bullVal, bearVal, bb) {
   if (!bb) return null
+  // BOTH fields absent → indicator warmup / no data for this candle: leave the
+  // chart's default colouring (null), never guess.
+  const missing = (v) => v == null || v === ''
+  if (missing(bullVal) && missing(bearVal)) return null
   const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
   const b = num(bullVal)
   const r = num(bearVal)
   if (b > 0 && r > 0) return bb.bothColor
   if (b > 0) return bb.bullColor
   if (r > 0) return bb.bearColor
-  return null
+  // Data present but neither detected → neutral grey (see candleColorBullBear)
+  return bb.neutralColor
 }
 
 /**
