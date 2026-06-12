@@ -227,6 +227,52 @@ export function paletteColorOf(value, palette) {
 }
 
 /**
+ * Parse a `candle_color` layer's BULL/BEAR DETECTION rule from its `style`
+ * (the CRUP form: `color_rule == "bull_bear_detection"`). TWO boolean-ish
+ * fields drive the colour; everything is read from the style map — no
+ * hardcoded field names or colours.
+ *
+ * @param {Record<string,string>} [style]
+ * @returns {{ bullField:string|null, bearField:string|null,
+ *             bullColor:string, bearColor:string, bothColor:string }|null}
+ */
+export function candleColorBullBear(style) {
+  const s = style || {}
+  if (s.color_rule !== 'bull_bear_detection') return null
+  if (!s.bull_field && !s.bear_field) return null
+  return {
+    bullField: s.bull_field || null,
+    bearField: s.bear_field || null,
+    bullColor: s.bull_color || s.color_up || CANDLE_COLOR_ENUM.bull,
+    bearColor: s.bear_color || s.color_down || CANDLE_COLOR_ENUM.bear,
+    bothColor: s.both_color || s.bull_color || CANDLE_COLOR_ENUM.bull,
+  }
+}
+
+/**
+ * Resolve the bull/bear-detection candle colour. Wire values are STRINGS
+ * ("1", "0", "1.0") — parse both sides identically; missing / unparseable
+ * counts as no-detection (0). Semantics:
+ *   bull>0 && bear>0 → bothColor · bull>0 → bullColor · bear>0 → bearColor
+ *   neither → null (leave the candle's default colouring untouched).
+ *
+ * @param {string|number|null|undefined} bullVal
+ * @param {string|number|null|undefined} bearVal
+ * @param {ReturnType<typeof candleColorBullBear>} bb
+ * @returns {string|null}
+ */
+export function bullBearColorOf(bullVal, bearVal, bb) {
+  if (!bb) return null
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
+  const b = num(bullVal)
+  const r = num(bearVal)
+  if (b > 0 && r > 0) return bb.bothColor
+  if (b > 0) return bb.bullColor
+  if (r > 0) return bb.bearColor
+  return null
+}
+
+/**
  * Resolve the palette LABEL (tooltip/legend text) for a raw type-id value via
  * `label_{id}`. Names live ONLY in the style map — the row's name output is also
  * a numeric id. Returns null when there's no value / no `label_{id}`.

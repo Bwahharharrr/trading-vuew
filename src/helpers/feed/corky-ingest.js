@@ -15,7 +15,8 @@
 
 import {
   indicatorPlacement, layerKindToOverlay, styleToSettings, candleColorOf, candleColorOpts,
-  signedSlopeColor, candleColorPalette, paletteColorOf, paletteLabelOf
+  signedSlopeColor, candleColorPalette, paletteColorOf, paletteLabelOf,
+  candleColorBullBear, bullBearColorOf
 } from './indicator-catalog.js'
 
 // ─────────────────────────────────────────────────────────── primitives ──
@@ -241,9 +242,33 @@ export function buildLayerOverlays(instanceKey, kind, outputsMap, view, paneReso
       // source field is kept for the live re-stamp (rowToOhlcv rebuilds the tuple).
       //
       // Two resolution modes, chosen from the layer's own style (never hardcoded):
+      //  · BULL/BEAR DETECTION (CRUP): style.{bull_field,bear_field} are two
+      //    boolean-ish outputs; both>0 → both_color, bull>0 → bull_color,
+      //    bear>0 → bear_color, neither → untouched. TWO fields per candle —
+      //    the single-field modes below can't express it (the old fallthrough
+      //    read only fields[0], so bear candles were never painted red).
       //  · PALETTE (SCMR/SCMR-INV): style.color_field names the output holding a
       //    numeric type-id; color_{id}/label_{id} map it to a hex + name.
       //  · THRESHOLD: numeric value → bull/bear/neutral ramp (legacy default).
+      const bullBear = candleColorBullBear(layer.style)
+      if (bullBear) {
+        const sb = bullBear.bullField ? outputsMap.get(bullBear.bullField) : null
+        const sr = bullBear.bearField ? outputsMap.get(bullBear.bearField) : null
+        const bullByTs = new Map(sb ? sb.raw : [])
+        const bearByTs = new Map(sr ? sr.raw : [])
+        const byTs = new Map()
+        const allTs = new Set([...bullByTs.keys(), ...bearByTs.keys()])
+        for (const ts of allTs) {
+          const c = bullBearColorOf(bullByTs.get(ts), bearByTs.get(ts), bullBear)
+          if (c != null) byTs.set(ts, c) // neither-detected → uncoloured
+        }
+        candleColor.push({
+          instanceKey, field: bullBear.bullField || bullBear.bearField,
+          byTs, opts: null, palette: null, byTsLabel: null,
+          bullBear, layerId: layer.id,
+        })
+        continue
+      }
       const palette = candleColorPalette(layer.style)
       const field = palette ? palette.colorField : fields[0]
       const s = outputsMap.get(field)
@@ -550,9 +575,21 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
     const arr = chartDataObj.chart.data
     for (let i = arr.length - 1; i >= 0; i--) { if (arr[i][0] === ts) { candle = arr[i]; break } }
     for (const cc of ccMeta) {
-      const v = inds[cc.instanceKey] && inds[cc.instanceKey][cc.field]
-      const color = (v == null) ? null
-        : (cc.palette ? paletteColorOf(v, cc.palette) : candleColorOf(v, cc.opts))
+      const vals = inds[cc.instanceKey]
+      let v, color
+      if (cc.bullBear) {
+        // TWO-field rule (CRUP): read bull_field + bear_field from the live
+        // values map; missing/unparseable count as no-detection.
+        const bv = vals ? vals[cc.bullBear.bullField] : null
+        const rv = vals ? vals[cc.bullBear.bearField] : null
+        v = (bv != null || rv != null) ? (bv != null ? bv : rv) : null
+        color = (bv == null && rv == null) ? null
+          : bullBearColorOf(bv, rv, cc.bullBear)
+      } else {
+        v = vals && vals[cc.field]
+        color = (v == null) ? null
+          : (cc.palette ? paletteColorOf(v, cc.palette) : candleColorOf(v, cc.opts))
+      }
       // ALWAYS keep byTs authoritative for THIS ts (even while disabled) so
       // enabling this kind later re-stamps correctly. A null result (warmup /
       // NaN / unknown id) must CLEAR any prior colour for this ts — never inherit
