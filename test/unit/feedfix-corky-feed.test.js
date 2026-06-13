@@ -65,15 +65,18 @@ describe('CorkyFeed hub fixes', () => {
     expect(ov.settings.display).toBe(true) // would be false → never drawn, without the fix
   })
 
-  test('F2: enabling only a pane SIBLING pulls in its anchor and fixes grid.id', () => {
+  test('F2: enabling only a pane SIBLING renders it standalone — NOT its anchor line', () => {
     const anchor = { name: 'hist', type: 'Histogram', data: [], raw: [], settings: { corkyKind: 'MACD', corkyLayerId: 'hist', corkyView: true, corkyVisibleDefault: true, corkyPaneName: 'macd', corkyPaneAnchor: true } }
     const sibling = { name: 'lines', type: 'Spline', data: [], raw: [], grid: { id: 999 }, settings: { corkyKind: 'MACD', corkyLayerId: 'lines', corkyView: true, corkyVisibleDefault: true, corkyPaneName: 'macd', corkyPaneAnchor: false } }
     const h = makeHandle({ chart: { type: 'Candles', data: [] }, onchart: [], offchart: [anchor, sibling] })
     feed.setLayerEnabled(h, 'lines', true) // sibling only
-    // anchor was pulled in, anchors-first, sibling grid.id renumbered to pane index 1
-    expect(dc.data.offchart).toEqual([anchor, sibling])
-    expect(anchor.grid).toBeUndefined()       // anchor spawns the grid → no grid.id
-    expect(sibling.grid).toEqual({ id: 1 })   // matches anchor at offchart[0]
+    // The present sibling is PROMOTED to the pane anchor (grid.id stripped so it
+    // spawns its own grid). The anchor LINE is NOT resurrected — force-adding it
+    // coupled sibling toggles to the anchor and made the anchor un-deselectable
+    // (the CRUP bullcount / bull_box_nested_count bug; see crup-layer-toggle).
+    expect(dc.data.offchart).toEqual([sibling])
+    expect(sibling.grid).toBeUndefined()      // promoted: spawns the grid itself
+    expect(dc.data.offchart).not.toContain(anchor)
   })
 
   test('F2: two panes toggled get distinct, position-correct grid ids', () => {

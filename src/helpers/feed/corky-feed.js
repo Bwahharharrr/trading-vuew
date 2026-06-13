@@ -612,34 +612,18 @@ export class CorkyFeed extends FeedSource {
         // untagged data exactly as the caller arranged it.
         if (!arr.some((o) => o && o.settings && o.settings.corkyPaneName != null)) return
 
-        // 1. Every pane with a sibling present needs its anchor present too — else
-        //    the positional anchor lookup resolves the wrong overlay (or none).
-        if (handle && handle.built && handle.built.offchart) {
-            const present = new Set(arr)
-            const haveAnchor = new Set()
-            const needAnchor = new Set()
-            for (const ov of arr) {
-                const s = ov.settings
-                if (!s || s.corkyPaneName == null) continue
-                if (s.corkyPaneAnchor) haveAnchor.add(s.corkyPaneName)
-                else needAnchor.add(s.corkyPaneName)
-            }
-            for (const name of needAnchor) {
-                if (haveAnchor.has(name)) continue
-                const anchor = handle.built.offchart.find(o =>
-                    o.settings && o.settings.corkyPaneName === name && o.settings.corkyPaneAnchor)
-                if (anchor && !present.has(anchor)) {
-                    this._addOverlay(dc, 'offchart', anchor)
-                    handle.addedOverlays.add(anchor)
-                    if (anchor.settings.corkyLayerId) {
-                        handle.enabledLayers.add(anchor.settings.corkyKey || anchor.settings.corkyLayerId)
-                    }
-                }
-            }
-        }
+        // NB: we do NOT force the pane's BUILD-TIME anchor to be present. When a
+        // multi-line pane's anchor LINE is hidden but a sibling remains, step 2
+        // below PROMOTES a present sibling to anchor (strips its grid.id), so the
+        // grid still renders without resurrecting the user-hidden line. The old
+        // "re-add the missing anchor" pass coupled sibling toggles to the anchor:
+        // enabling a sibling (e.g. CRUP bull_box_nested_count) re-added the hidden
+        // anchor line (bullcount) AND re-flagged it enabled, and every attempt to
+        // hide the anchor was instantly undone (normalize re-added it while a
+        // sibling was present) — the anchor became un-deselectable.
         if (!arr.length) { if (typeof dc.update_ids === 'function') dc.update_ids(); return }
 
-        // 2. Group by pane (first-appearance order). Overlays without a pane tag
+        // 1. Group by pane (first-appearance order). Overlays without a pane tag
         //    are standalone single-overlay panes (each its own anchor) so non-corky
         //    offchart overlays keep working.
         const order = []
@@ -656,9 +640,13 @@ export class CorkyFeed extends FeedSource {
             else rec.sibs.push(ov)
         }
 
-        // 3. Rebuild: anchors first (pane order), then siblings with grid.id set to
-        //    the pane's 1-based offchart-grid index. A pane that somehow has no
-        //    anchor promotes its first sibling so it still renders.
+        // 2. Rebuild: anchors first (pane order), then siblings with grid.id set to
+        //    the pane's 1-based offchart-grid index. A pane whose build-time anchor
+        //    line is hidden (or any pane with no anchor present) promotes its first
+        //    present sibling — so the grid renders without resurrecting a hidden
+        //    line. When the original anchor is later re-enabled it reclaims the
+        //    anchor slot (it carries corkyPaneAnchor) and the promoted sibling
+        //    goes back to a grid.id.
         const anchors = []; const sibs = []
         let gid = 0
         for (const key of order) {
