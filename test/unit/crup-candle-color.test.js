@@ -158,7 +158,12 @@ describe('live: CRUP colours on live_update', () => {
     expect(built._candleColor[0].byTs.get(nextTs)).toBe('#7f8694')
   })
 
-  test('a live candle with NO indicator data clears the colour (warmup)', () => {
+  // THE live-only bug: a fields-LESS refinement tick (price/volume update that
+  // omits the CRUP outputs, or an empty `CRUP: {}` warmup echo) used to recompute
+  // colour=null and clear a previously-detected candle — colour vanished live but
+  // a refresh (build path, reads the settled row) brought it back. A tick without
+  // the colour field(s) carries NO new colour information → it must PRESERVE.
+  test('a fields-less live tick PRESERVES the prior colour (does not clear)', () => {
     const built = buildChartData(rows(), { views: views() })
     built._candleColorActive = new Set([built._candleColor[0].instanceKey])
     const nextTs = 1781143200000
@@ -167,12 +172,35 @@ describe('live: CRUP colours on live_update', () => {
       subscription_id: 's', sequence: 2,
       row: {
         timeframe: '1h',
-        candle: { timestamp_ms: nextTs, open: '10', high: '12', low: '9', close: '11', volume: '5' },
-        indicators: { CRUP: {} },
+        candle: { timestamp_ms: nextTs, open: '10', high: '12', low: '9', close: '12', volume: '6' },
+        indicators: { CRUP: {} },   // refinement: NO colour fields this tick
       },
     }
     applyLiveUpdate(built, bare, {})
-    expect(built._candleColor[0].byTs.has(nextTs)).toBe(false)
+    expect(built._candleColor[0].byTs.get(nextTs)).toBe('#d64545')   // still red
+    const candle = built.chart.data.find((c) => c[0] === nextTs)
+    expect(candle[6]).toBe('#d64545')                                // slot-6 preserved
+    expect(candle[4]).toBe(12)                                       // close refined
+  })
+
+  // The CRUP outputs missing ENTIRELY from the row (no `CRUP` key at all) is the
+  // same no-information case → preserve.
+  test('a live tick with no CRUP key at all PRESERVES the prior colour', () => {
+    const built = buildChartData(rows(), { views: views() })
+    built._candleColorActive = new Set([built._candleColor[0].instanceKey])
+    const nextTs = 1781143200000
+    applyLiveUpdate(built, liveRow(nextTs, '1', '0', 1), {})    // green first
+    applyLiveUpdate(built, {
+      subscription_id: 's', sequence: 2,
+      row: {
+        timeframe: '1h',
+        candle: { timestamp_ms: nextTs, open: '10', high: '13', low: '9', close: '13', volume: '7' },
+        indicators: {},   // no CRUP at all
+      },
+    }, {})
+    expect(built._candleColor[0].byTs.get(nextTs)).toBe('#00e676')   // still green
+    const candle = built.chart.data.find((c) => c[0] === nextTs)
+    expect(candle[6]).toBe('#00e676')
   })
 })
 

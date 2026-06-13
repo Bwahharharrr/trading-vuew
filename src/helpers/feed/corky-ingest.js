@@ -717,36 +717,42 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
     for (let i = arr.length - 1; i >= 0; i--) { if (arr[i][0] === ts) { candle = arr[i]; break } }
     for (const cc of ccMeta) {
       const vals = inds[cc.instanceKey]
-      let v, color
+      // Does THIS update actually carry the colour field(s)? A live tick that is
+      // a pure price/volume refinement (or warmup with no outputs) omits them —
+      // and rowToOhlcv just wiped slot 6, so we must NOT recompute a null colour
+      // and clear it: that blanked previously-detected candles (the live-only
+      // "colour disappears, refresh brings it back" bug). Only an update that
+      // PROVIDES the field(s) is authoritative; otherwise preserve byTs.
+      let hasFields, v, color
       if (cc.bullBear) {
-        // TWO-field rule (CRUP): read bull_field + bear_field from the live
-        // values map; missing/unparseable count as no-detection.
+        hasFields = !!vals &&
+          (cc.bullBear.bullField in vals || cc.bullBear.bearField in vals)
         const bv = vals ? vals[cc.bullBear.bullField] : null
         const rv = vals ? vals[cc.bullBear.bearField] : null
-        v = (bv != null || rv != null) ? (bv != null ? bv : rv) : null
-        color = (bv == null && rv == null) ? null
-          : bullBearColorOf(bv, rv, cc.bullBear)
+        v = (bv != null) ? bv : rv
+        color = bullBearColorOf(bv, rv, cc.bullBear)
       } else {
-        v = vals && vals[cc.field]
+        hasFields = !!vals && (cc.field in vals)
+        v = vals ? vals[cc.field] : null
         color = (v == null) ? null
           : (cc.palette ? paletteColorOf(v, cc.palette) : candleColorOf(v, cc.opts))
       }
-      // ALWAYS keep byTs authoritative for THIS ts (even while disabled) so
-      // enabling this kind later re-stamps correctly. A null result (warmup /
-      // NaN / unknown id) must CLEAR any prior colour for this ts — never inherit
-      // a neighbour's or a stale colour. Only the candle[6] stamp is gated on the
-      // kind being currently active.
-      if (cc.byTs) { if (color != null) cc.byTs.set(ts, color); else cc.byTs.delete(ts) }
-      if (cc.byTsLabel) {
-        const l = (v == null || !cc.palette) ? null : paletteLabelOf(v, cc.palette)
-        if (l != null) cc.byTsLabel.set(ts, l); else cc.byTsLabel.delete(ts)
+      // byTs is authoritative — updated ONLY when this tick provides the
+      // field(s). A null result WITH fields present (genuine clear / warmup)
+      // removes the entry; a fields-LESS tick leaves the prior colour intact.
+      if (hasFields) {
+        if (cc.byTs) { if (color != null) cc.byTs.set(ts, color); else cc.byTs.delete(ts) }
+        if (cc.byTsLabel) {
+          const l = (v == null || !cc.palette) ? null : paletteLabelOf(v, cc.palette)
+          if (l != null) cc.byTsLabel.set(ts, l); else cc.byTsLabel.delete(ts)
+        }
       }
-      // Stamp only when THIS instance is active. Keyed by the unique instanceKey
-      // (display_label) — kindOf collapses SCMR / SCMR(INV) to the same kind, so
-      // keying the active-set by kind would let either drive both candles.
-      if (candle && color != null && ccActive && ccActive.has(cc.instanceKey)) {
-        while (candle.length < 9) candle.push('')
-        candle[6] = color
+      // Re-stamp slot 6 (rowToOhlcv wiped it) from the AUTHORITATIVE byTs — so a
+      // fields-less refinement can't blank a detected candle, and a genuine clear
+      // (entry removed above) leaves it uncoloured. Active instances only.
+      if (candle && ccActive && ccActive.has(cc.instanceKey)) {
+        const stamp = cc.byTs ? cc.byTs.get(ts) : (color != null ? color : null)
+        if (stamp != null) { while (candle.length < 9) candle.push(''); candle[6] = stamp }
       }
     }
   }
