@@ -292,6 +292,15 @@
         @confirm="onOrderConfirm"
         @close="onOrderCancel">
     </order-distribution-modal>
+
+    <!-- Selected-position audit drawer (opened on a positions-dock row click) -->
+    <position-audit-drawer
+        :open="auditOpen"
+        :audit="auditData"
+        :loading="auditLoading"
+        :error="auditError"
+        :target="auditTarget"
+        @close="closeAudit" />
 </div>
 </template>
 
@@ -305,6 +314,7 @@ import { OrderAgent } from './helpers/orders/order-agent.js'
 import { StubOrderTransport } from './helpers/orders/stub-order-transport.js'
 import CorkyDiscoveryPanel from './components/feed/CorkyDiscoveryPanel.vue'
 import CorkyPositionsPanel from './components/feed/CorkyPositionsPanel.vue'
+import PositionAuditDrawer from './components/feed/PositionAuditDrawer.vue'
 import DataCube from '../src/helpers/datacube.js'
 import { CorkyClient } from '../src/helpers/feed/corky-client.js'
 import { CorkyFeed } from '../src/helpers/feed/corky-feed.js'
@@ -352,7 +362,8 @@ export default {
         OrderDistributionModal,
         OrderTypeModal,
         CorkyDiscoveryPanel,
-        CorkyPositionsPanel
+        CorkyPositionsPanel,
+        PositionAuditDrawer
     },
     data() {
         return {
@@ -406,6 +417,13 @@ export default {
             positionsError: null,
             positionsHistoryCursor: null,  // opaque next_cursor (null = exhausted)
             positionsHistoryTotal: 0,
+
+            // ── Selected-position audit drawer ──
+            auditOpen: false,
+            auditData: null,               // parsed audit bundle (kept on error)
+            auditLoading: false,
+            auditError: null,
+            auditTarget: null,             // { venue, account_id, symbol, position_id }
         }
     },
     computed: {
@@ -1317,6 +1335,70 @@ export default {
             const current = this.corkyCurrent && this.corkyCurrent.timeframe
             const timeframe = pickTimeframe(current, tfs, { fallback: '1h' }) || current || '1h'
             this.corkySelect({ venue, symbol, timeframe })
+            // …and open the audit drawer for the selected position (rich detail).
+            this.openAudit(pos)
+        },
+
+        // ── Selected-position audit drawer ────────────────────────────────────
+
+        openAudit(pos) {
+            if (!pos || pos.position_id == null) return
+            this.auditTarget = {
+                venue: pos.venue, account_id: pos.account_id,
+                symbol: pos.symbol, position_id: pos.position_id,
+            }
+            this.auditData = null   // fresh target → drop the previous bundle
+            this.auditOpen = true
+            this._loadAudit()
+        },
+
+        async _loadAudit() {
+            if (!this.positionsFeed || !this.auditTarget) return
+            this.auditLoading = true
+            this.auditError = null
+            try {
+                // One-shot first so the drawer fills immediately…
+                const audit = await this.positionsFeed.getAudit({ ...this.auditTarget })
+                this.auditData = audit
+                // …then go live while the drawer stays open (best-effort).
+                this._startAuditStream()
+            } catch (err) {
+                // Retryable unavailability (auth_position_audit_unavailable) keeps
+                // whatever bundle we already had; just surface the message.
+                this.auditError = this._positionsErrText(err)
+            } finally {
+                this.auditLoading = false
+            }
+        },
+
+        _startAuditStream() {
+            if (!this.positionsFeed || !this.auditTarget) return
+            if (!this.positionsFeed.streamingSupported) return
+            this._stopAuditStream()
+            this._auditSubHandle = this.positionsFeed.subscribeAudit(
+                { subscription_id: 'corky-position-audit', ...this.auditTarget }, {
+                    onData: (audit) => { if (audit) { this.auditData = audit; this.auditError = null } },
+                    onError: (err) => {
+                        if (!(err && err.code === 'stateful_websocket_required')) {
+                            this.auditError = this._positionsErrText(err)
+                        }
+                    },
+                })
+        },
+
+        _stopAuditStream() {
+            if (this._auditSubHandle && this.positionsFeed) {
+                try { this.positionsFeed.unsubscribe(this._auditSubHandle) } catch (_) { /* gone */ }
+            }
+            this._auditSubHandle = null
+        },
+
+        closeAudit() {
+            this.auditOpen = false
+            this._stopAuditStream()
+            this.auditTarget = null
+            this.auditData = null
+            this.auditError = null
         },
 
         // Top-edge drag to resize the dock body (mirrors startPanelResize).
@@ -1344,6 +1426,7 @@ export default {
             this._corkyCancelSelectRetry()   // don't let a pending retry fire post-teardown
             this._corkyUnsub()
             this._positionsStopOpenStream()
+            this._stopAuditStream()
             if (this._positionsPoll) { clearInterval(this._positionsPoll); this._positionsPoll = null }
             if (this.corkyFeed) {
                 try { this.corkyFeed.destroy() } catch (_) { /* already gone */ }
@@ -1366,6 +1449,10 @@ export default {
             this.positionsError = null
             this.positionsHistoryCursor = null
             this.positionsHistoryTotal = 0
+            this.auditOpen = false
+            this.auditData = null
+            this.auditTarget = null
+            this.auditError = null
         },
 
         // Normalise an error into the { message, retryable } shape the panel
