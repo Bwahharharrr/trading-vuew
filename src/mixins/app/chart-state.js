@@ -15,10 +15,10 @@ export default {
             // handle; persisted (saveStateToStorage). Default a bit wider than
             // the old fixed RIGHTBAR=250.
             panelWidth: 300,
-            // Bottom positions dock (gateway mode only). A thin tab/header bar is
-            // always shown so the user can expand it; the body height is
+            // Bottom positions dock (gateway mode only). Expanded by default; a
+            // thin tab/header bar stays shown when collapsed. The body height is
             // user-resizable via the dock's top-edge drag handle. Both persisted.
-            positionsDockOpen: false,
+            positionsDockOpen: true,
             positionsDockHeight: 240,
             config: {
                 DEFAULT_LEN: 200,

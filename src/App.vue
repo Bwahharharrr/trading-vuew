@@ -55,29 +55,6 @@
             </div>
         </div>
 
-        <!-- Positions dock (gateway mode): Open / Historical tabs under the chart -->
-        <corky-positions-panel
-            v-if="feedMode === 'gateway'"
-            :height="bottomDockHeight"
-            :open="positionsDockOpen"
-            :active-tab="positionsActiveTab"
-            :open-positions="openPositions"
-            :historical-positions="historicalPositions"
-            :accounts="positionsAccounts"
-            :active-account="positionsActiveAccount"
-            :loading="positionsLoading"
-            :error="positionsError"
-            :history-has-more="positionsHistoryCursor != null"
-            :history-total="positionsHistoryTotal"
-            :current-symbol-key="positionsCurrentSymbolKey"
-            @update:open="togglePositionsDock"
-            @update:active-tab="setPositionsTab"
-            @update:active-account="setPositionsAccount"
-            @select-position="onPositionSelect"
-            @load-more="loadHistoryPage(false)"
-            @refresh="refreshPositions"
-            @resize-start="startPositionsDockResize" />
-
         <!-- Bottom Panel -->
         <div class="bottom-panel">
             <!-- File-feed state only: in gateway mode the stale `charts` map kept
@@ -123,6 +100,30 @@
                 </button>
             </div>
         </div>
+
+        <!-- Positions dock (gateway mode): pinned to the very bottom, BELOW the
+             chart-controls bar (log scale / reset / capture). Open / Historical. -->
+        <corky-positions-panel
+            v-if="feedMode === 'gateway'"
+            :height="bottomDockHeight"
+            :open="positionsDockOpen"
+            :active-tab="positionsActiveTab"
+            :open-positions="openPositions"
+            :historical-positions="historicalPositions"
+            :accounts="positionsAccounts"
+            :active-account="positionsActiveAccount"
+            :loading="positionsLoading"
+            :error="positionsError"
+            :history-has-more="positionsHistoryCursor != null"
+            :history-total="positionsHistoryTotal"
+            :current-symbol-key="positionsCurrentSymbolKey"
+            @update:open="togglePositionsDock"
+            @update:active-tab="setPositionsTab"
+            @update:active-account="setPositionsAccount"
+            @select-position="onPositionSelect"
+            @load-more="loadHistoryPage(false)"
+            @refresh="refreshPositions"
+            @resize-start="startPositionsDockResize" />
     </div>
 
     <!-- Right-panel left-edge drag handle: resize the panel (width persisted).

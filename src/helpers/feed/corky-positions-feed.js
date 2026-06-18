@@ -161,7 +161,13 @@ export class CorkyPositionsFeed {
     handle.closed = true
     if (handle.unFanout) { handle.unFanout(); handle.unFanout = null }
     this._subs.delete(handle.subscription_id)
-    try { this.client.unsubscribe(handle.subscription_id) } catch (_) { /* best-effort */ }
+    // Best-effort: swallow BOTH a synchronous throw and the request promise's
+    // rejection (e.g. `client closed` when tearing down / switching feeds) so it
+    // never surfaces as an unhandled rejection.
+    try {
+      const p = this.client.unsubscribe(handle.subscription_id)
+      if (p && typeof p.catch === 'function') p.catch(() => { /* closing anyway */ })
+    } catch (_) { /* best-effort */ }
   }
 
   // Reconnect: the gateway has no session resume, so re-issue every active
