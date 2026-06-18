@@ -1208,16 +1208,17 @@ export default {
                 const out = await this.positionsFeed.listOpen({ include_historical: false })
                 this._applyOpenPositions(out)
                 this._positionsSyncStreams()
-                // Restored open on the Historical tab → load the first page now that
-                // the account list is known (history is per-account).
-                if (this.positionsDockOpen && this.positionsActiveTab === 'historical') {
-                    this._ensureHistoryLoaded()
-                }
             } catch (err) {
                 this.positionsError = this._positionsErrText(err)
             } finally {
                 this.positionsLoading = false
             }
+            // Eagerly load the first history page (once) so the Historical tab's
+            // count shows on startup without opening the tab. Needs an account
+            // (derived above from the open snapshot); guarded against re-loading.
+            // Silent: a history error here must not banner the visible Open tab —
+            // clicking Historical later does a normal load that surfaces errors.
+            if (this.positionsActiveAccount) this._ensureHistoryLoaded({ silent: true })
         },
 
         _applyOpenPositions(out) {
@@ -1315,14 +1316,14 @@ export default {
             if (this.positionsActiveTab === 'historical') this.loadHistoryPage(true)
         },
 
-        _ensureHistoryLoaded() {
-            if (!this.historicalPositions.length && !this.positionsLoading) this.loadHistoryPage(true)
+        _ensureHistoryLoaded(opts = {}) {
+            if (!this.historicalPositions.length && !this.positionsLoading) this.loadHistoryPage(true, opts)
         },
 
-        async loadHistoryPage(reset = false) {
+        async loadHistoryPage(reset = false, { silent = false } = {}) {
             if (!this.positionsFeed) return
             const acct = this.positionsActiveAccount
-            if (!acct) { this.positionsError = 'Select an account to view history'; return }
+            if (!acct) { if (!silent) this.positionsError = 'Select an account to view history'; return }
             if (reset) {
                 this.historicalPositions = []
                 this.positionsHistoryCursor = null
@@ -1339,7 +1340,7 @@ export default {
                 this.positionsHistoryCursor = out.next_cursor
                 this.positionsHistoryTotal = out.total_count
             } catch (err) {
-                this.positionsError = this._positionsErrText(err)
+                if (!silent) this.positionsError = this._positionsErrText(err)
             } finally {
                 this.positionsLoading = false
             }
