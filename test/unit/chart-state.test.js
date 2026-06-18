@@ -132,14 +132,31 @@ describe('computeds + simple methods', () => {
 
   test('colors palette + derived chart dimensions', () => {
     const ctx = mkCtx()
-    // install sibling computeds as getters (chartHeight reads bottomPanelHeight)
-    for (const k of ['bottomPanelHeight', 'chartWidth', 'chartHeight'])
+    // install sibling computeds as getters (chartHeight reads bottomPanelHeight
+    // and bottomDockHeight)
+    for (const k of ['bottomPanelHeight', 'bottomDockHeight', 'chartWidth', 'chartHeight'])
       Object.defineProperty(ctx, k, { get: C[k], configurable: true })
     expect(C.colors.call(ctx).back).toBe('#121827')
     expect(ctx.bottomPanelHeight).toBe(44)
-    // chartWidth = width - rightPanelWidth; chartHeight = height - bottomPanelHeight
+    // file mode → no positions dock, so it steals no height
+    expect(ctx.bottomDockHeight).toBe(0)
+    // chartWidth = width - rightPanelWidth; chartHeight = height - bottomPanel - dock
     expect(ctx.chartWidth).toBe(ctx.width - ctx.rightPanelWidth)
     expect(ctx.chartHeight).toBe(ctx.height - 44)
+  })
+
+  test('bottomDockHeight: gateway-mode header-only collapsed, header+body open', () => {
+    const ctx = mkCtx({ feedMode: 'gateway', positionsDockOpen: false, positionsDockHeight: 240 })
+    Object.defineProperty(ctx, 'bottomDockHeight', { get: C.bottomDockHeight, configurable: true })
+    Object.defineProperty(ctx, 'chartHeight', { get: C.chartHeight, configurable: true })
+    Object.defineProperty(ctx, 'bottomPanelHeight', { get: C.bottomPanelHeight, configurable: true })
+    expect(ctx.bottomDockHeight).toBe(34)               // collapsed = header bar only
+    ctx.positionsDockOpen = true
+    expect(ctx.bottomDockHeight).toBe(34 + 240)         // open = header + body
+    expect(ctx.chartHeight).toBe(ctx.height - 44 - (34 + 240))
+    // body is clamped to <= 60% of viewport height
+    ctx.positionsDockHeight = 100000
+    expect(ctx.bottomDockHeight).toBe(34 + Math.floor(ctx.height * 0.6))
   })
 
   test('timeframes lists the loaded chart keys', () => {

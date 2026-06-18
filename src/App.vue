@@ -55,6 +55,29 @@
             </div>
         </div>
 
+        <!-- Positions dock (gateway mode): Open / Historical tabs under the chart -->
+        <corky-positions-panel
+            v-if="feedMode === 'gateway'"
+            :height="bottomDockHeight"
+            :open="positionsDockOpen"
+            :active-tab="positionsActiveTab"
+            :open-positions="openPositions"
+            :historical-positions="historicalPositions"
+            :accounts="positionsAccounts"
+            :active-account="positionsActiveAccount"
+            :loading="positionsLoading"
+            :error="positionsError"
+            :history-has-more="positionsHistoryCursor != null"
+            :history-total="positionsHistoryTotal"
+            :current-symbol-key="positionsCurrentSymbolKey"
+            @update:open="togglePositionsDock"
+            @update:active-tab="setPositionsTab"
+            @update:active-account="setPositionsAccount"
+            @select-position="onPositionSelect"
+            @load-more="loadHistoryPage(false)"
+            @refresh="refreshPositions"
+            @resize-start="startPositionsDockResize" />
+
         <!-- Bottom Panel -->
         <div class="bottom-panel">
             <!-- File-feed state only: in gateway mode the stale `charts` map kept
@@ -281,9 +304,12 @@ import OrderTypeModal from './components/OrderTypeModal.vue'
 import { OrderAgent } from './helpers/orders/order-agent.js'
 import { StubOrderTransport } from './helpers/orders/stub-order-transport.js'
 import CorkyDiscoveryPanel from './components/feed/CorkyDiscoveryPanel.vue'
+import CorkyPositionsPanel from './components/feed/CorkyPositionsPanel.vue'
 import DataCube from '../src/helpers/datacube.js'
 import { CorkyClient } from '../src/helpers/feed/corky-client.js'
 import { CorkyFeed } from '../src/helpers/feed/corky-feed.js'
+import { CorkyPositionsFeed } from '../src/helpers/feed/corky-positions-feed.js'
+import { pickTimeframe } from '../src/helpers/feed/pick-timeframe.js'
 import BuysAndSells from './components/overlays/BuysAndSells.js'
 import Balance from './components/overlays/Balance.js'
 import LineTracker from './components/overlays/LineTracker.js'
@@ -325,7 +351,8 @@ export default {
         IndicatorSettings,
         OrderDistributionModal,
         OrderTypeModal,
-        CorkyDiscoveryPanel
+        CorkyDiscoveryPanel,
+        CorkyPositionsPanel
     },
     data() {
         return {
@@ -367,7 +394,27 @@ export default {
             corkyProgress: null,
             corkyError: null,
             corkyHandle: null,   // active subscription handle (single stream)
+
+            // ── Auth positions (bottom dock) ──
+            positionsFeed: null,           // CorkyPositionsFeed over corkyClient
+            openPositions: [],             // current/open position rows
+            historicalPositions: [],       // closed/historical rows (paged)
+            positionsAccounts: [],         // [{ venue, account_id }] derived from rows
+            positionsActiveAccount: null,  // { venue, account_id } for history/audit
+            positionsActiveTab: 'open',    // 'open' | 'historical'
+            positionsLoading: false,
+            positionsError: null,
+            positionsHistoryCursor: null,  // opaque next_cursor (null = exhausted)
+            positionsHistoryTotal: 0,
         }
+    },
+    computed: {
+        // `venue|symbol` (lowercased) of the charted stream — lets the dock
+        // highlight the row whose ticker is currently shown.
+        positionsCurrentSymbolKey() {
+            if (!this.corkyCurrent) return ''
+            return `${String(this.corkyCurrent.venue).toLowerCase()}|${String(this.corkyCurrent.symbol).toLowerCase()}`
+        },
     },
     watch: {
         // `this.chart` is REPLACED on every data/timeframe load (chart-state /
@@ -535,7 +582,13 @@ export default {
                     client: this.corkyClient,
                     dataCube: this.chart,
                 })
+                // Positions ride the SAME socket; they are not chart data so they
+                // get their own feed (no DataCube), surfaced in the bottom dock.
+                this.positionsFeed = new CorkyPositionsFeed({ client: this.corkyClient })
             }
+            // Load the open-positions snapshot up front so the dock's tab badge is
+            // populated even before the user expands it.
+            this.refreshPositions()
             this.corkyDiscover().then((states) => {
                 // Reopen the last-viewed stream (persisted across reloads/browser
                 // restarts) if it still exists in the catalog. Falls back to the
@@ -1103,20 +1156,216 @@ export default {
 
         // Full gateway teardown: unsubscribe + destroy the feed (which closes
         // the client). Leaves the DataCube intact for the File feed to reuse.
+        // ── Auth positions (bottom dock) ──────────────────────────────────────
+
+        // One-shot refresh of the open-positions snapshot + account list. Also
+        // (re)syncs the live stream so an expanded Open tab goes live.
+        async refreshPositions() {
+            if (!this.positionsFeed) return
+            this.positionsLoading = true
+            this.positionsError = null
+            try {
+                const out = await this.positionsFeed.listOpen({ include_historical: false })
+                this._applyOpenPositions(out)
+                this._positionsSyncStreams()
+            } catch (err) {
+                this.positionsError = this._positionsErrText(err)
+            } finally {
+                this.positionsLoading = false
+            }
+        },
+
+        _applyOpenPositions(out) {
+            this.openPositions = (out && out.current) || []
+            this._positionsDeriveAccounts((out && out.positions) || [])
+        },
+
+        // Build the account picker from whatever accounts the rows reference; keep
+        // the active account if it still appears, else default to the first.
+        _positionsDeriveAccounts(rows) {
+            const seen = new Map()
+            for (const p of rows) {
+                if (!p || !p.account_id) continue
+                const key = `${String(p.venue).toLowerCase()}|${p.account_id}`
+                if (!seen.has(key)) seen.set(key, { venue: p.venue, account_id: p.account_id })
+            }
+            this.positionsAccounts = Array.from(seen.values())
+            if (this.positionsActiveAccount) {
+                const k = `${String(this.positionsActiveAccount.venue).toLowerCase()}|${this.positionsActiveAccount.account_id}`
+                if (seen.has(k)) return
+            }
+            this.positionsActiveAccount = this.positionsAccounts[0] || null
+        },
+
+        _positionsErrText(err) {
+            if (!err) return 'Positions unavailable'
+            return err.message || err.code || String(err)
+        },
+
+        // Start/stop the open-positions stream so it runs ONLY while the Open tab
+        // is visible (dock open). Falls back to polling if streaming is refused.
+        _positionsSyncStreams() {
+            const wantOpen = this.feedMode === 'gateway' && this.positionsDockOpen &&
+                this.positionsActiveTab === 'open' && !!this.positionsFeed
+            if (wantOpen) this._positionsStartOpenStream()
+            else this._positionsStopOpenStream()
+        },
+
+        _positionsStartOpenStream() {
+            if (!this.positionsFeed || this._openSubHandle) return
+            if (!this.positionsFeed.streamingSupported) { this._positionsStartPoll(); return }
+            this._openSubHandle = this.positionsFeed.subscribeOpen(
+                { subscription_id: 'corky-positions-open', include_historical: false }, {
+                    onData: (out) => { this._applyOpenPositions(out); this.positionsError = null },
+                    onError: (err) => {
+                        if (err && err.code === 'stateful_websocket_required') {
+                            // streaming unsupported on this socket → poll the snapshot
+                            this._openSubHandle = null
+                            this._positionsStartPoll()
+                        } else {
+                            this.positionsError = this._positionsErrText(err)
+                        }
+                    },
+                })
+        },
+
+        _positionsStopOpenStream() {
+            if (this._openSubHandle && this.positionsFeed) {
+                try { this.positionsFeed.unsubscribe(this._openSubHandle) } catch (_) { /* gone */ }
+            }
+            this._openSubHandle = null
+            if (this._positionsPoll) { clearInterval(this._positionsPoll); this._positionsPoll = null }
+        },
+
+        _positionsStartPoll() {
+            if (this._positionsPoll) return
+            this._positionsPoll = setInterval(() => {
+                if (!this.positionsFeed) return
+                this.positionsFeed.listOpen({ include_historical: false })
+                    .then((out) => { this._applyOpenPositions(out); this.positionsError = null })
+                    .catch(() => { /* keep last good */ })
+            }, 5000)
+        },
+
+        togglePositionsDock(open) {
+            this.positionsDockOpen = open
+            if (open && this.positionsActiveTab === 'historical') this._ensureHistoryLoaded()
+            this._positionsSyncStreams()
+            this.saveStateToStorage()
+        },
+
+        setPositionsTab(tab) {
+            this.positionsActiveTab = tab
+            if (tab === 'historical') this._ensureHistoryLoaded()
+            this._positionsSyncStreams()
+            this.saveStateToStorage()
+        },
+
+        setPositionsAccount(acct) {
+            this.positionsActiveAccount = acct
+            // History is per-account — reset and reload for the new account.
+            this.historicalPositions = []
+            this.positionsHistoryCursor = null
+            this.positionsHistoryTotal = 0
+            if (this.positionsActiveTab === 'historical') this.loadHistoryPage(true)
+        },
+
+        _ensureHistoryLoaded() {
+            if (!this.historicalPositions.length && !this.positionsLoading) this.loadHistoryPage(true)
+        },
+
+        async loadHistoryPage(reset = false) {
+            if (!this.positionsFeed) return
+            const acct = this.positionsActiveAccount
+            if (!acct) { this.positionsError = 'Select an account to view history'; return }
+            if (reset) {
+                this.historicalPositions = []
+                this.positionsHistoryCursor = null
+                this.positionsHistoryTotal = 0
+            }
+            this.positionsLoading = true
+            this.positionsError = null
+            try {
+                const out = await this.positionsFeed.listHistory({
+                    venue: acct.venue, account_id: acct.account_id,
+                    cursor: this.positionsHistoryCursor || undefined,
+                })
+                this.historicalPositions = this.historicalPositions.concat(out.positions || [])
+                this.positionsHistoryCursor = out.next_cursor
+                this.positionsHistoryTotal = out.total_count
+            } catch (err) {
+                this.positionsError = this._positionsErrText(err)
+            } finally {
+                this.positionsLoading = false
+            }
+        },
+
+        // Click a position row → switch the chart to that position's ticker,
+        // keeping the current timeframe if the target offers it, else 1h, else the
+        // lowest available (pickTimeframe). Discovers the venue first if unknown.
+        async onPositionSelect(pos) {
+            if (!pos || !pos.symbol) return
+            const { venue, symbol } = pos
+            let state = (this.corkyStates || []).find(
+                (s) => s && s.venue === venue && s.symbol === symbol)
+            if (!state) {
+                try { await this.corkyDiscover(venue) } catch (_) { /* surfaced below if select fails */ }
+                state = (this.corkyStates || []).find(
+                    (s) => s && s.venue === venue && s.symbol === symbol)
+            }
+            const tfs = (state && state.available_timeframes) || []
+            const current = this.corkyCurrent && this.corkyCurrent.timeframe
+            const timeframe = pickTimeframe(current, tfs, { fallback: '1h' }) || current || '1h'
+            this.corkySelect({ venue, symbol, timeframe })
+        },
+
+        // Top-edge drag to resize the dock body (mirrors startPanelResize).
+        startPositionsDockResize(ev) {
+            const startY = ev.clientY
+            const startH = this.positionsDockHeight
+            this._onDockResizeMove = (e) => {
+                const dy = startY - e.clientY   // drag up → taller
+                const maxBody = Math.max(120, Math.floor(this.height * 0.6))
+                this.positionsDockHeight = Math.min(maxBody, Math.max(120, startH + dy))
+            }
+            this._onDockResizeEnd = () => {
+                document.removeEventListener('mousemove', this._onDockResizeMove)
+                document.removeEventListener('mouseup', this._onDockResizeEnd)
+                document.body.style.cursor = ''
+                this.saveStateToStorage()
+            }
+            document.addEventListener('mousemove', this._onDockResizeMove)
+            document.addEventListener('mouseup', this._onDockResizeEnd)
+            document.body.style.cursor = 'ns-resize'
+        },
+
         teardownCorky() {
             this._corkyGen = (this._corkyGen || 0) + 1   // invalidate in-flight selects
             this._corkyCancelSelectRetry()   // don't let a pending retry fire post-teardown
             this._corkyUnsub()
+            this._positionsStopOpenStream()
+            if (this._positionsPoll) { clearInterval(this._positionsPoll); this._positionsPoll = null }
             if (this.corkyFeed) {
                 try { this.corkyFeed.destroy() } catch (_) { /* already gone */ }
             }
+            if (this.positionsFeed) {
+                try { this.positionsFeed.destroy() } catch (_) { /* already gone */ }
+            }
             this.corkyFeed = null
+            this.positionsFeed = null
             this.corkyClient = null
             this.corkyStates = []
             this.corkyCurrent = null
             this.corkyProgress = null
             this.corkyError = null
             this.corkyLoading = false
+            this.openPositions = []
+            this.historicalPositions = []
+            this.positionsAccounts = []
+            this.positionsActiveAccount = null
+            this.positionsError = null
+            this.positionsHistoryCursor = null
+            this.positionsHistoryTotal = 0
         },
 
         // Normalise an error into the { message, retryable } shape the panel

@@ -15,6 +15,11 @@ export default {
             // handle; persisted (saveStateToStorage). Default a bit wider than
             // the old fixed RIGHTBAR=250.
             panelWidth: 300,
+            // Bottom positions dock (gateway mode only). A thin tab/header bar is
+            // always shown so the user can expand it; the body height is
+            // user-resizable via the dock's top-edge drag handle. Both persisted.
+            positionsDockOpen: false,
+            positionsDockHeight: 240,
             config: {
                 DEFAULT_LEN: 200,
                 TB_BORDER: 5,
@@ -47,10 +52,22 @@ export default {
             return this.width - this.rightPanelWidth
         },
         chartHeight() {
-            return this.height - this.bottomPanelHeight
+            return this.height - this.bottomPanelHeight - this.bottomDockHeight
         },
         bottomPanelHeight() {
             return 44
+        },
+        // Vertical space the positions dock steals from the chart. Gateway mode
+        // only; the header bar is always present (collapsed = header only), and an
+        // open dock adds its resizable body. Clamped so it can't crowd out the
+        // chart on short viewports.
+        bottomDockHeight() {
+            if (this.feedMode !== 'gateway') return 0
+            const HEADER = 34
+            if (!this.positionsDockOpen) return HEADER
+            const maxBody = Math.max(120, Math.floor(this.height * 0.6))
+            const body = Math.min(maxBody, Math.max(120, Number(this.positionsDockHeight) || 240))
+            return HEADER + body
         },
         timeframes() {
             return Object.keys(this.charts)
