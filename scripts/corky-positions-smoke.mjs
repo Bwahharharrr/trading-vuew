@@ -31,6 +31,7 @@ const URL = urlArg || process.env.CORKY_URL || 'ws://127.0.0.1:7070'
 const flag = (name, def) => { const i = argv.indexOf(name); return i !== -1 && argv[i + 1] ? argv[i + 1] : def }
 const VENUE = flag('--venue', 'BITFINEX')
 const ACCOUNT = flag('--account', 'paper-a')
+const EXPLICIT_ACCOUNT = argv.includes('--account')   // else auto-derive from rows
 const SYMBOL = flag('--symbol', null)        // optional filter
 const LIVE_WAIT_S = Number(flag('--live-wait', '10'))
 const DO_SUBSCRIBE = !argv.includes('--no-subscribe')
@@ -95,10 +96,14 @@ async function main() {
     feed.unsubscribe(handle)
   }
 
-  // 3) HISTORY — first cursor page for the account.
+  // 3) HISTORY — first cursor page for the account. Auto-derive the account from
+  // the snapshot rows (history is per-account; the live account isn't known a
+  // priori) unless --account was given explicitly.
+  const histRow = snap.positions.find((p) => p.account_id)
+  const ACCT = EXPLICIT_ACCOUNT ? ACCOUNT : ((histRow && histRow.account_id) || ACCOUNT)
   try {
-    const page = await feed.listHistory({ venue: VENUE, account_id: ACCOUNT })
-    log(`\n● list_auth_position_history (${VENUE}/${ACCOUNT}): ` +
+    const page = await feed.listHistory({ venue: VENUE, account_id: ACCT })
+    log(`\n● list_auth_position_history (${VENUE}/${ACCT}): ` +
         `${page.positions.length} row(s), total=${page.total_count}, next_cursor=${page.next_cursor ?? 'null'}`)
     for (const p of page.positions.slice(0, 5)) log(rowLine(p))
   } catch (e) {
