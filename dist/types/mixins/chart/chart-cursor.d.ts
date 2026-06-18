@@ -8,6 +8,7 @@ declare namespace _default {
     function data(): {
         cursor: {
             x: null;
+            xr: null;
             y: null;
             t: null;
             y$: null;

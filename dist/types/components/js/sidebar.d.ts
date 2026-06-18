@@ -11,6 +11,10 @@ export default class Sidebar {
     layout: any;
     side: string;
     _destroyed: boolean;
+    axis_cursor_listeners(): void;
+    _onAxisMove: ((event: any) => void) | undefined;
+    _onAxisOut: (() => void) | undefined;
+    _axisCursorTarget: any;
     listeners(): Promise<void>;
     hm: any;
     _throttledWheel: {

@@ -20,7 +20,7 @@ export type RuntimeControlStatus = 'Accepted' | 'Rejected' | 'Applied' | 'Failed
 /** Detailed outcome of a state-control command (`StateControlOutcome`). */
 export type StateControlOutcome = 'applied_hot' | 'accepted_pending' | 'requires_restart' | 'noop' | 'rejected' | 'failed';
 /** Catalog of error codes the gateway may emit. */
-export type KnownErrorCode = 'unsupported_schema_version' | 'invalid_request_json' | 'state_not_found' | 'runtime_not_found' | 'invalid_control_command' | 'control_response_timeout' | 'control_receive_error' | 'historical_query_failed';
+export type KnownErrorCode = 'unsupported_schema_version' | 'invalid_request_json' | 'state_not_found' | 'runtime_not_found' | 'invalid_control_command' | 'control_response_timeout' | 'control_receive_error' | 'historical_query_failed' | 'auth_position_history_unavailable' | 'auth_position_audit_unavailable' | 'stateful_websocket_required';
 /**
  * An error code on the wire: a {@link KnownErrorCode} or any future string the
  * gateway may introduce.
@@ -107,6 +107,31 @@ export interface ChartTimeframeRange {
     stale_reason?: string | null;
     preview?: CandlePreview;
 }
+/** Indicator view layer kind (chart-feed v1). */
+export type IndicatorViewLayerKind = 'line' | 'histogram' | 'band' | 'candle_color' | 'box' | 'marker' | 'diagnostic';
+/** Where a view layer renders. */
+export interface IndicatorViewTarget {
+    surface?: 'price' | 'pane';
+    pane?: string | null;
+}
+/** One default-render layer of an indicator's view. */
+export interface IndicatorViewLayerSpec {
+    id: string;
+    label: string;
+    kind: IndicatorViewLayerKind;
+    target?: IndicatorViewTarget;
+    /** Output names to read from the indicator values map. Default = all outputs. */
+    fields?: string[];
+    /** Client rendering hints (free-form). */
+    style?: Record<string, string>;
+    /** Initial visibility; hidden layers stay available for user opt-in. */
+    visible_by_default?: boolean;
+}
+/** Default rendering intent for an indicator (chart-feed `view`). */
+export interface IndicatorViewSpec {
+    version?: number;
+    layers?: IndicatorViewLayerSpec[];
+}
 /** Indicator descriptor advertised in discovery (`ChartIndicatorDescriptor`). */
 export interface ChartIndicatorDescriptor {
     kind: string;
@@ -123,6 +148,8 @@ export interface ChartIndicatorDescriptor {
     outputs?: string[];
     /** Latest output values keyed by output name. Defaults to `{}`. */
     values?: Record<string, DecimalString>;
+    /** Default rendering intent (preferred over plotting every output). */
+    view?: IndicatorViewSpec;
 }
 /** A maintained candle state (`ChartCandleStateDescriptor`). */
 export interface ChartCandleStateDescriptor {
@@ -145,6 +172,111 @@ export interface ChartCandleStateDescriptor {
     buffer_target: number;
     ranges?: ChartTimeframeRange[];
     indicators?: ChartIndicatorDescriptor[];
+}
+/**
+ * Origin of a position row: `current` = open position from the authenticated
+ * positions feed; `historical` = closed position from the positions-history store.
+ */
+export type ChartAuthPositionSource = 'current' | 'historical';
+/** A private-account position row (`ChartAuthPosition`). */
+export interface ChartAuthPosition {
+    runtime_id: string;
+    account_id: string;
+    venue: string;
+    source: ChartAuthPositionSource;
+    symbol: string;
+    /** Stable integer id; required for {@link GetAuthPositionAuditCommand}. */
+    position_id: number;
+    status: string;
+    side: string;
+    amount: DecimalString;
+    base_price: DecimalString;
+    pl?: DecimalString | null;
+    pl_perc?: DecimalString | null;
+    liquidation_price?: DecimalString | null;
+    leverage?: DecimalString | null;
+    collateral?: DecimalString | null;
+    collateral_min?: DecimalString | null;
+    opened_at_ms?: TimestampMs | null;
+    closed_at_ms?: TimestampMs | null;
+    updated_at_ms?: TimestampMs | null;
+}
+/** Completeness of a reconstructed position audit (`summary.status`). */
+export type ChartAuthPositionAuditStatus = 'complete' | 'degraded' | 'incomplete' | 'missing';
+/** The position identity/window inside an audit bundle. */
+export interface ChartAuthPositionAuditPosition {
+    source?: ChartAuthPositionSource | null;
+    status: string;
+    side: string;
+    amount: DecimalString;
+    base_price: DecimalString;
+    opened_at_ms?: TimestampMs | null;
+    closed_at_ms?: TimestampMs | null;
+    updated_at_ms?: TimestampMs | null;
+}
+/** Reconciliation summary for an audit bundle. */
+export interface ChartAuthPositionAuditSummary {
+    status: ChartAuthPositionAuditStatus;
+    order_count: number;
+    trade_count: number;
+    trade_amount_sum: DecimalString;
+    expected_position_amount: DecimalString;
+    amount_delta: DecimalString;
+    /** Fees keyed by currency. Defaults to `{}`. */
+    fees_by_currency?: Record<string, DecimalString>;
+    /** Defaults to `[]`. */
+    order_ids?: number[];
+    /** Defaults to `[]`. */
+    trade_ids?: number[];
+    /** Human-readable reasons when not `complete`. Defaults to `[]`. */
+    reasons?: string[];
+}
+/** A linked order row in an audit bundle. */
+export interface ChartAuthPositionAuditOrder {
+    order_id: number;
+    client_order_id: number;
+    symbol: string;
+    created_at_ms?: TimestampMs | null;
+    updated_at_ms?: TimestampMs | null;
+    amount?: DecimalString | null;
+    amount_original?: DecimalString | null;
+    order_type: string;
+    status?: string | null;
+    price?: DecimalString | null;
+    price_avg?: DecimalString | null;
+    /** Provenance, e.g. `"rest:orders_hist"`. */
+    source: string;
+}
+/** A linked trade row in an audit bundle. */
+export interface ChartAuthPositionAuditTrade {
+    trade_id: number;
+    order_id: number;
+    client_order_id?: number | null;
+    symbol: string;
+    execution_timestamp_ms: TimestampMs;
+    amount: DecimalString;
+    price: DecimalString;
+    order_type: string;
+    order_price: DecimalString;
+    maker: boolean;
+    fee?: DecimalString | null;
+    fee_currency?: string | null;
+    /** Provenance, e.g. `"rest:trades_hist"`. */
+    source: string;
+}
+/** The persisted audit bundle for one position (`ChartAuthPositionAudit`). */
+export interface ChartAuthPositionAudit {
+    venue: string;
+    account_id: string;
+    symbol: string;
+    position_id: number;
+    position: ChartAuthPositionAuditPosition;
+    summary: ChartAuthPositionAuditSummary;
+    /** Defaults to `[]` (or omitted when `include_orders=false`). */
+    orders?: ChartAuthPositionAuditOrder[];
+    /** Defaults to `[]` (or omitted when `include_trades=false`). */
+    trades?: ChartAuthPositionAuditTrade[];
+    updated_at_ms?: TimestampMs | null;
 }
 /**
  * Spec for an indicator a client wants the runtime to maintain
@@ -211,8 +343,75 @@ export interface PatchCandleStateCommand {
     indicators?: PublicIndicatorSpec[] | null;
     buffer?: number | null;
 }
+/**
+ * One-shot snapshot of private-account positions. All filters optional; venue
+ * and symbol match ASCII case-insensitively. Responds with `auth_positions`.
+ */
+export interface ListAuthPositionsCommand {
+    type: 'list_auth_positions';
+    venue?: string | null;
+    account_id?: string | null;
+    symbol?: string | null;
+    /** Include closed/historical rows alongside open ones. Defaults to `false`. */
+    include_historical?: boolean;
+}
+/**
+ * Stream private-account positions: each `auth_positions_update` is a FULL
+ * replacement set for the subscription (not a patch). Apply by `sequence`.
+ */
+export interface SubscribeAuthPositionsCommand {
+    type: 'subscribe_auth_positions';
+    subscription_id: string;
+    venue?: string | null;
+    account_id?: string | null;
+    symbol?: string | null;
+    /** Defaults to `false`. */
+    include_historical?: boolean;
+}
+/**
+ * Paged closed-position history. `cursor` is opaque — pass `next_cursor` back
+ * unchanged for the next page. Responds with `auth_position_history`.
+ */
+export interface ListAuthPositionHistoryCommand {
+    type: 'list_auth_position_history';
+    venue: string;
+    account_id: string;
+    symbol?: string | null;
+    /** Page size. Defaults to `100`. */
+    limit?: number;
+    /** Opaque page cursor; omit for the first page. */
+    cursor?: string | null;
+}
+/** One-shot audit bundle for a selected position. Responds with `auth_position_audit`. */
+export interface GetAuthPositionAuditCommand {
+    type: 'get_auth_position_audit';
+    venue: string;
+    account_id: string;
+    symbol: string;
+    position_id: number;
+    /** Defaults to `true`. */
+    include_orders?: boolean;
+    /** Defaults to `true`. */
+    include_trades?: boolean;
+}
+/**
+ * Stream the audit bundle for a selected position: each
+ * `auth_position_audit_update` replaces the displayed bundle. Apply by `sequence`.
+ */
+export interface SubscribeAuthPositionAuditCommand {
+    type: 'subscribe_auth_position_audit';
+    subscription_id: string;
+    venue: string;
+    account_id: string;
+    symbol: string;
+    position_id: number;
+    /** Defaults to `true`. */
+    include_orders?: boolean;
+    /** Defaults to `true`. */
+    include_trades?: boolean;
+}
 /** Discriminated union of client commands (`ChartClientCommand`). */
-export type ChartClientCommand = ListCandleStatesCommand | SubscribeCandlesCommand | UnsubscribeCommand | UpsertCandleStateCommand | PatchCandleStateCommand;
+export type ChartClientCommand = ListCandleStatesCommand | SubscribeCandlesCommand | UnsubscribeCommand | UpsertCandleStateCommand | PatchCandleStateCommand | ListAuthPositionsCommand | SubscribeAuthPositionsCommand | ListAuthPositionHistoryCommand | GetAuthPositionAuditCommand | SubscribeAuthPositionAuditCommand;
 /** Discriminant of {@link ChartClientCommand}. */
 export type ChartClientCommandType = ChartClientCommand['type'];
 /** The envelope every client → gateway message is wrapped in. */
@@ -298,8 +497,46 @@ export interface ErrorEvent {
     message: string;
     retryable: boolean;
 }
+/** Response to `list_auth_positions`: a full snapshot of position rows. */
+export interface AuthPositionsEvent {
+    type: 'auth_positions';
+    positions: ChartAuthPosition[];
+}
+/**
+ * Streamed position set for a `subscribe_auth_positions`. Each event is a FULL
+ * replacement; apply per `subscription_id` by increasing `sequence`.
+ */
+export interface AuthPositionsUpdateEvent {
+    type: 'auth_positions_update';
+    subscription_id: string;
+    sequence: number;
+    positions: ChartAuthPosition[];
+}
+/** A page of closed-position history (`list_auth_position_history`). */
+export interface AuthPositionHistoryEvent {
+    type: 'auth_position_history';
+    positions: ChartAuthPosition[];
+    /** Opaque cursor for the next page; null when exhausted. */
+    next_cursor?: string | null;
+    total_count: number;
+}
+/** Response to `get_auth_position_audit`. */
+export interface AuthPositionAuditEvent {
+    type: 'auth_position_audit';
+    audit: ChartAuthPositionAudit;
+}
+/**
+ * Streamed audit bundle for a `subscribe_auth_position_audit`. Each event
+ * replaces the displayed bundle; apply per `subscription_id` by `sequence`.
+ */
+export interface AuthPositionAuditUpdateEvent {
+    type: 'auth_position_audit_update';
+    subscription_id: string;
+    sequence: number;
+    audit: ChartAuthPositionAudit;
+}
 /** Discriminated union of gateway event payloads (`ChartFeedEventKind`). */
-export type ChartFeedEventKind = CandleStatesEvent | SubscriptionAcceptedEvent | HistoricalAckEvent | HistoricalProgressEvent | HistoricalChunkEvent | HistoricalCompleteEvent | LiveUpdateEvent | ControlAckEvent | ErrorEvent;
+export type ChartFeedEventKind = CandleStatesEvent | SubscriptionAcceptedEvent | HistoricalAckEvent | HistoricalProgressEvent | HistoricalChunkEvent | HistoricalCompleteEvent | LiveUpdateEvent | ControlAckEvent | ErrorEvent | AuthPositionsEvent | AuthPositionsUpdateEvent | AuthPositionHistoryEvent | AuthPositionAuditEvent | AuthPositionAuditUpdateEvent;
 /** Discriminant of {@link ChartFeedEventKind}. */
 export type ChartFeedEventType = ChartFeedEventKind['type'];
 /** The envelope every gateway → client message is wrapped in. */

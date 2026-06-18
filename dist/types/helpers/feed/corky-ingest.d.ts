@@ -32,34 +32,323 @@ export function pivotIndicators(rows: import("../../types/corky-feed").ChartCand
     data: [number, number][];
     raw: [number, string][];
 }>;
-/**
- * Build a trading-vue chart-data object from a set of rows.
- *
- * @param {import('../../types/corky-feed').ChartCandleRow[]} rows
- * @param {{ timeframe?: string }} [opts]
- * @returns {{
- *   chart: { type:'Candles', data:[number,number,number,number,number,number][] },
- *   onchart: Array<{ name:string, type:string, data:[number,number][] }>,
- *   offchart: Array<{ name:string, type:string, data:[number,number][] }>
- * }}
- */
-export function buildChartData(rows: import("../../types/corky-feed").ChartCandleRow[], opts?: {
-    timeframe?: string;
-}): {
+export function buildDetectionBoxes(rule: any, outputsMap: any, ohlcv: any): {
+    boxes: ({
+        side: string;
+        top: number;
+        bottom: number;
+        t0: any;
+        t1: any;
+        alive: boolean;
+        seed: boolean;
+        seedCount: number;
+    } | {
+        side: string;
+        top: any;
+        bottom: any;
+        t0: any;
+        t1: any;
+        alive: boolean;
+        seed?: undefined;
+        seedCount?: undefined;
+    })[];
+    tf: number;
+    lastTs: any;
+};
+/** Zones settings-format rows ([x1, y1, x2, y2, rgba]) — one row per box. */
+export function detectionBoxRows(boxes: any, rule: any): any;
+/** Boxes covering the bar at `ts` (a bar is covered when the box spans its
+ *  whole open..close) — must equal the server's `{side}_box_count`. */
+export function detectionBoxCountAt(boxes: any, ts: any, tf: any, side?: null): any;
+export function buildLayerOverlays(instanceKey: any, kind: any, outputsMap: any, view: any, paneResolver: any, ohlcv?: null): {
+    onchart: ({
+        name: any;
+        type: string;
+        data: never[];
+        settings: {
+            corkyKey: string;
+            corkyKind: any;
+            corkyInstance: any;
+            corkyLayerId: any;
+            corkyView: boolean;
+            corkyVisibleDefault: boolean;
+            display: boolean;
+            legend: boolean;
+            'z-index': number;
+            zones: any;
+        };
+        raw: never[];
+    } | {
+        name: any;
+        type: string;
+        data: any;
+        settings: object & ({
+            corkyKey: string;
+            corkyKind: any;
+            corkyInstance: any;
+            corkyLayerId: any;
+            corkyView: boolean;
+            corkyVisibleDefault: boolean;
+            display: boolean;
+        } & ({
+            corkyColorRule: string;
+            valueField: any;
+            slopeField: any;
+            ssColors: {
+                positive_rising_color: any;
+                positive_falling_color: any;
+                negative_falling_color: any;
+                negative_rising_color: any;
+            };
+            dataIndex: number;
+            colorIndex: number;
+            zeroLine: boolean;
+            corkyFields: any[];
+        } | {
+            corkyFields: any;
+            corkyColorRule?: undefined;
+            valueField?: undefined;
+            slopeField?: undefined;
+            ssColors?: undefined;
+            dataIndex?: undefined;
+            colorIndex?: undefined;
+            zeroLine?: undefined;
+        }));
+        raw: any;
+    })[];
+    offchart: {
+        name: any;
+        type: string;
+        data: any;
+        settings: object & ({
+            corkyKey: string;
+            corkyKind: any;
+            corkyInstance: any;
+            corkyLayerId: any;
+            corkyView: boolean;
+            corkyVisibleDefault: boolean;
+            display: boolean;
+        } & ({
+            corkyColorRule: string;
+            valueField: any;
+            slopeField: any;
+            ssColors: {
+                positive_rising_color: any;
+                positive_falling_color: any;
+                negative_falling_color: any;
+                negative_rising_color: any;
+            };
+            dataIndex: number;
+            colorIndex: number;
+            zeroLine: boolean;
+            corkyFields: any[];
+        } | {
+            corkyFields: any;
+            corkyColorRule?: undefined;
+            valueField?: undefined;
+            slopeField?: undefined;
+            ssColors?: undefined;
+            dataIndex?: undefined;
+            colorIndex?: undefined;
+            zeroLine?: undefined;
+        }));
+        raw: any;
+    }[];
+    candleColor: ({
+        instanceKey: any;
+        field: string | null;
+        byTs: Map<any, any>;
+        opts: null;
+        palette: null;
+        byTsLabel: null;
+        bullBear: {
+            bullField: string | null;
+            bearField: string | null;
+            bullColor: string;
+            bearColor: string;
+            bothColor: string;
+        };
+        layerId: any;
+    } | {
+        instanceKey: any;
+        field: any;
+        byTs: Map<any, any>;
+        opts: object | null;
+        palette: {
+            colorField: string;
+            labelField: string | null;
+            colors: Record<string, string>;
+            labels: Record<string, string>;
+        } | null;
+        byTsLabel: Map<any, any> | null;
+        layerId: any;
+        bullBear?: undefined;
+    })[];
+    detectionBoxes: {
+        instanceKey: any;
+        layerId: any;
+        rule: object;
+        boxes: ({
+            side: string;
+            top: number;
+            bottom: number;
+            t0: any;
+            t1: any;
+            alive: boolean;
+            seed: boolean;
+            seedCount: number;
+        } | {
+            side: string;
+            top: any;
+            bottom: any;
+            t0: any;
+            t1: any;
+            alive: boolean;
+            seed?: undefined;
+            seedCount?: undefined;
+        })[];
+        tf: number;
+        evaluatedThrough: any;
+        lastLiveTs: null;
+        lastVals: null;
+        overlay: {
+            name: any;
+            type: string;
+            data: never[];
+            settings: {
+                corkyKey: string;
+                corkyKind: any;
+                corkyInstance: any;
+                corkyLayerId: any;
+                corkyView: boolean;
+                corkyVisibleDefault: boolean;
+                display: boolean;
+                legend: boolean;
+                'z-index': number;
+                zones: any;
+            };
+            raw: never[];
+        };
+    }[];
+};
+export function buildChartData(rows: any, opts?: {}): {
     chart: {
-        type: "Candles";
-        data: [number, number, number, number, number, number][];
+        type: string;
+        data: any;
     };
-    onchart: Array<{
+    onchart: ({
+        name: any;
+        type: string;
+        data: never[];
+        settings: {
+            corkyKey: string;
+            corkyKind: any;
+            corkyInstance: any;
+            corkyLayerId: any;
+            corkyView: boolean;
+            corkyVisibleDefault: boolean;
+            display: boolean;
+            legend: boolean;
+            'z-index': number;
+            zones: any;
+        };
+        raw: never[];
+    } | {
+        name: any;
+        type: string;
+        data: any;
+        settings: object & ({
+            corkyKey: string;
+            corkyKind: any;
+            corkyInstance: any;
+            corkyLayerId: any;
+            corkyView: boolean;
+            corkyVisibleDefault: boolean;
+            display: boolean;
+        } & ({
+            corkyColorRule: string;
+            valueField: any;
+            slopeField: any;
+            ssColors: {
+                positive_rising_color: any;
+                positive_falling_color: any;
+                negative_falling_color: any;
+                negative_rising_color: any;
+            };
+            dataIndex: number;
+            colorIndex: number;
+            zeroLine: boolean;
+            corkyFields: any[];
+        } | {
+            corkyFields: any;
+            corkyColorRule?: undefined;
+            valueField?: undefined;
+            slopeField?: undefined;
+            ssColors?: undefined;
+            dataIndex?: undefined;
+            colorIndex?: undefined;
+            zeroLine?: undefined;
+        }));
+        raw: any;
+    } | {
         name: string;
         type: string;
         data: [number, number][];
-    }>;
-    offchart: Array<{
+        settings: {
+            corkyKey: string;
+            corkyKind: any;
+            corkyOutput: string;
+        };
+        raw: [number, string][];
+    })[];
+    offchart: ({
+        name: any;
+        type: string;
+        data: any;
+        settings: object & ({
+            corkyKey: string;
+            corkyKind: any;
+            corkyInstance: any;
+            corkyLayerId: any;
+            corkyView: boolean;
+            corkyVisibleDefault: boolean;
+            display: boolean;
+        } & ({
+            corkyColorRule: string;
+            valueField: any;
+            slopeField: any;
+            ssColors: {
+                positive_rising_color: any;
+                positive_falling_color: any;
+                negative_falling_color: any;
+                negative_rising_color: any;
+            };
+            dataIndex: number;
+            colorIndex: number;
+            zeroLine: boolean;
+            corkyFields: any[];
+        } | {
+            corkyFields: any;
+            corkyColorRule?: undefined;
+            valueField?: undefined;
+            slopeField?: undefined;
+            ssColors?: undefined;
+            dataIndex?: undefined;
+            colorIndex?: undefined;
+            zeroLine?: undefined;
+        }));
+        raw: any;
+    } | {
         name: string;
         type: string;
         data: [number, number][];
-    }>;
+        settings: {
+            corkyKey: string;
+            corkyKind: any;
+            corkyOutput: string;
+        };
+        raw: [number, string][];
+    })[];
 };
 /**
  * Flatten historical_chunk events into one ordered, deduped row list.

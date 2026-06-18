@@ -13388,10 +13388,10 @@ ${codeFrame}` : message);
 		},
 		month_start(t) {
 			let date = new Date(t);
-			return Date.UTC(date.getFullYear(), date.getMonth(), 1);
+			return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
 		},
 		year_start(t) {
-			return Date.UTC(new Date(t).getFullYear());
+			return Date.UTC(new Date(t).getUTCFullYear());
 		},
 		get_year(t) {
 			if (!t) return void 0;
@@ -13721,6 +13721,7 @@ ${codeFrame}` : message);
 				}
 				if (grid.id !== e.grid_id) continue;
 				this.cursor.x = grid.t2screen(this.cursor.t);
+				this.cursor.xr = e.x;
 				this.cursor.y = c.y;
 				this.cursor.y$ = c.y$;
 			}
@@ -13874,13 +13875,13 @@ ${codeFrame}` : message);
 			let diff = delta * k * this.data.length;
 			let tl = this.$p.config?.ZOOM_MODE === "tl";
 			if (event.originalEvent.ctrlKey || tl) {
-				let diff1 = event.originalEvent.offsetX / (this.canvas.width - 1) * diff;
+				let diff1 = event.originalEvent.offsetX / (Math.max(this.canvas.clientWidth || this.canvas.width, 2) - 1) * diff;
 				let diff2 = diff - diff1;
 				this.range[0] -= diff1;
 				this.range[1] += diff2;
 			} else this.range[0] -= diff;
 			if (tl) {
-				let diff1 = event.originalEvent.offsetY / (Math.max(this.canvas.height, 2) - 1) * 2;
+				let diff1 = event.originalEvent.offsetY / (Math.max(this.canvas.clientHeight || this.canvas.height, 2) - 1) * 2;
 				let diff2 = 2 - diff1;
 				let z = diff / (this.range[1] - this.range[0]);
 				this.comp.$emit("rezoom-range", {
@@ -13951,11 +13952,13 @@ ${codeFrame}` : message);
 	//#region src/stuff/math.js
 	var math_default = {
 		point2line(p1, p2, p3) {
-			let { area, base } = this.tri(p1, p2, p3);
+			let { area, base, degenerate } = this.tri(p1, p2, p3);
+			if (degenerate !== void 0) return degenerate;
 			return Math.abs(this.tri_h(area, base));
 		},
 		point2seg(p1, p2, p3) {
-			let { area, base } = this.tri(p1, p2, p3);
+			let { area, base, degenerate } = this.tri(p1, p2, p3);
+			if (degenerate !== void 0) return degenerate;
 			let proj = this.dot_prod(p1, p2, p3) / base;
 			let l1 = Math.max(-proj, 0);
 			let l2 = Math.max(proj - base, 0);
@@ -13963,7 +13966,8 @@ ${codeFrame}` : message);
 			return Math.max(h, l1, l2);
 		},
 		point2ray(p1, p2, p3) {
-			let { area, base } = this.tri(p1, p2, p3);
+			let { area, base, degenerate } = this.tri(p1, p2, p3);
+			if (degenerate !== void 0) return degenerate;
 			let proj = this.dot_prod(p1, p2, p3) / base;
 			let l1 = Math.max(-proj, 0);
 			let h = Math.abs(this.tri_h(area, base));
@@ -13974,10 +13978,15 @@ ${codeFrame}` : message);
 			let dx = p3[0] - p2[0];
 			let dy = p3[1] - p2[1];
 			let base = Math.sqrt(dx * dx + dy * dy);
-			if (base === 0) return {
-				area,
-				base: 1
-			};
+			if (base === 0) {
+				let ddx = p1[0] - p2[0];
+				let ddy = p1[1] - p2[1];
+				return {
+					area: 0,
+					base: 1,
+					degenerate: Math.sqrt(ddx * ddx + ddy * ddy)
+				};
+			}
 			return {
 				area,
 				base
@@ -16655,7 +16664,13 @@ pointers: 1 },
 			this._throttledWheel = utils_default.rafThrottle((delta, event) => {
 				this.zoomManager.mousezoom(-delta * 50, event);
 			});
-			this.hm.wheel((event, delta) => this._throttledWheel(delta, event));
+			this.hm.wheel((event, delta) => {
+				if (this.wmode !== "pass" && event.originalEvent && !(this.wmode === "click" && !this.$p.meta.activated)) {
+					event.originalEvent.preventDefault();
+					if (event.preventDefault) event.preventDefault();
+				}
+				this._throttledWheel(delta, event);
+			});
 			let mc = this.mc = new Hammer.Manager(this.canvasDynamic || this.canvas);
 			let T = utils_default.is_mobile ? 10 : 0;
 			mc.add(new Hammer.Pan({ threshold: T }));
@@ -16736,19 +16751,13 @@ pointers: 1 },
 				this._pressTimeout = setTimeout(() => this.update());
 				this.sim_mousedown(event);
 			});
+			this._gesturestart = (event) => event.preventDefault();
+			this._gesturechange = (event) => event.preventDefault();
+			this._gestureend = (event) => event.preventDefault();
 			let add = addEventListener;
-			add("gesturestart", this.gesturestart);
-			add("gesturechange", this.gesturechange);
-			add("gestureend", this.gestureend);
-		}
-		gesturestart(event) {
-			event.preventDefault();
-		}
-		gesturechange(event) {
-			event.preventDefault();
-		}
-		gestureend(event) {
-			event.preventDefault();
+			add("gesturestart", this._gesturestart);
+			add("gesturechange", this._gesturechange);
+			add("gestureend", this._gestureend);
 		}
 		mousemove(event) {
 			if (utils_default.is_mobile) return;
@@ -16760,12 +16769,14 @@ pointers: 1 },
 			});
 			this.calc_offset();
 			this.renderer.propagate("mousemove", event);
+			if (this.renderer.hasDualCanvas && !this.comp.$props.cursor?.locked) this.renderer.updateDynamic();
 		}
 		mouseout(event) {
 			if (utils_default.is_mobile) return;
 			if (!this.renderer) return;
 			this.comp.$emit("cursor-changed", {});
 			this.renderer.propagate("mouseout", event);
+			if (this.renderer.hasDualCanvas) this.renderer.updateDynamic();
 		}
 		mouseup(event) {
 			this.drug = null;
@@ -16844,6 +16855,9 @@ pointers: 1 },
 		update() {
 			this.renderer.update();
 		}
+		markStaticDirty() {
+			this.renderer.markStaticDirty();
+		}
 		propagate(name, event) {
 			this.renderer.propagate(name, event);
 		}
@@ -16859,9 +16873,9 @@ pointers: 1 },
 		destroy() {
 			this._destroyed = true;
 			let rm = removeEventListener;
-			rm("gesturestart", this.gesturestart);
-			rm("gesturechange", this.gesturechange);
-			rm("gestureend", this.gestureend);
+			if (this._gesturestart) rm("gesturestart", this._gesturestart);
+			if (this._gesturechange) rm("gesturechange", this._gesturechange);
+			if (this._gestureend) rm("gestureend", this._gestureend);
 			if (this.mc) this.mc.destroy();
 			if (this.hm) this.hm.unwheel();
 			if (this._throttledWheel) this._throttledWheel.cancel();
@@ -17028,9 +17042,10 @@ pointers: 1 },
 		}
 		draw(ctx) {
 			this.layout = this.$p.layout;
+			if (!this.layout) return;
 			const cursor = this.comp.$props.cursor;
 			if (!this.visible && cursor.mode === "explore") return;
-			this.x = this.$p.cursor.x;
+			this.x = this.$p.cursor.xr != null ? this.$p.cursor.xr : this.$p.cursor.x;
 			this.y = this.$p.cursor.y;
 			ctx.save();
 			ctx.strokeStyle = this.$p.colors.cross;
@@ -17059,7 +17074,7 @@ pointers: 1 },
 	};
 	//#endregion
 	//#region src/components/Crosshair.vue
-	var _sfc_main$35 = {
+	var _sfc_main$36 = {
 		name: "Crosshair",
 		props: [
 			"cursor",
@@ -17105,7 +17120,7 @@ pointers: 1 },
 	//#endregion
 	//#region src/components/KeyboardListener.vue
 	var uid_counter = 0;
-	var _sfc_main$34 = {
+	var _sfc_main$35 = {
 		name: "KeyboardListener",
 		render() {
 			return h("span");
@@ -17143,7 +17158,7 @@ pointers: 1 },
 	};
 	//#endregion
 	//#region src/components/UxWrapper.vue
-	var _sfc_main$33 = {
+	var _sfc_main$34 = {
 		name: "UxWrapper",
 		props: [
 			"ux",
@@ -17362,7 +17377,7 @@ pointers: 1 },
 	}
 	//#endregion
 	//#region src/components/UxLayer.vue
-	var _sfc_main$32 = {
+	var _sfc_main$33 = {
 		name: "UxLayer",
 		props: [
 			"tv_id",
@@ -17372,7 +17387,7 @@ pointers: 1 },
 			"colors",
 			"config"
 		],
-		components: { UxWrapper: /* @__PURE__ */ _plugin_vue_export_helper_default(_sfc_main$33, [["render", _sfc_render$14]]) },
+		components: { UxWrapper: /* @__PURE__ */ _plugin_vue_export_helper_default(_sfc_main$34, [["render", _sfc_render$14]]) },
 		created() {},
 		mounted() {},
 		beforeUnmount() {},
@@ -17414,7 +17429,7 @@ pointers: 1 },
 			]);
 		}), 128))], 6);
 	}
-	var UxLayer_default = /*#__PURE__*/ _plugin_vue_export_helper_default(_sfc_main$32, [["render", _sfc_render$13]]);
+	var UxLayer_default = /*#__PURE__*/ _plugin_vue_export_helper_default(_sfc_main$33, [["render", _sfc_render$13]]);
 	//#endregion
 	//#region src/stuff/mouse.js
 	var Mouse = class {
@@ -17523,7 +17538,7 @@ pointers: 1 },
 			},
 			custom_event(event, ...args) {
 				if (event.split(":")[0] === "hook") return;
-				if (event === "change-settings" || event === "object-selected" || event === "new-shader" || event === "new-interface" || event === "remove-tool") {
+				if (event === "change-settings" || event === "object-selected" || event === "new-shader" || event === "new-interface" || event === "remove-tool" || event === "submit-orders" || event === "cancel-orders") {
 					args.push(this.grid_id, this.id);
 					if (this.$props.settings.$uuid) args.push(this.$props.settings.$uuid);
 				}
@@ -17548,7 +17563,9 @@ pointers: 1 },
 		},
 		watch: { settingsDisplayKey(newKey, oldKey) {
 			if (newKey === oldKey) return;
-			if (this.watch_uuid) this.watch_uuid(this.$props.settings, {});
+			const prevUuid = oldKey != null ? String(oldKey).split(",")[0] : void 0;
+			const newUuid = newKey != null ? String(newKey).split(",")[0] : void 0;
+			if (this.watch_uuid && prevUuid !== newUuid) this.watch_uuid(this.$props.settings, { $uuid: prevUuid });
 			this.$emit("show-grid-layer", {
 				id: this.$props.id,
 				display: "display" in this.$props.settings ? this.$props.settings["display"] : true
@@ -17560,7 +17577,7 @@ pointers: 1 },
 			},
 			settingsDisplayKey() {
 				const s = this.$props.settings || {};
-				return `${s.display},${s["z-index"]},${s.zIndex}`;
+				return `${s.$uuid},${s.display},${s["z-index"]},${s.zIndex}`;
 			}
 		},
 		data() {
@@ -17724,7 +17741,7 @@ pointers: 1 },
 	} };
 	//#endregion
 	//#region src/components/overlays/Spline.vue
-	var _sfc_main$31 = {
+	var _sfc_main$32 = {
 		name: "Spline",
 		mixins: [overlay_default, canvas_drawing_default],
 		methods: {
@@ -17769,7 +17786,7 @@ pointers: 1 },
 	};
 	//#endregion
 	//#region src/components/overlays/Splines.vue
-	var _sfc_main$30 = {
+	var _sfc_main$31 = {
 		name: "Splines",
 		mixins: [overlay_default, canvas_drawing_default],
 		methods: {
@@ -17803,7 +17820,7 @@ pointers: 1 },
 				return this.sett.lineWidths || [];
 			},
 			clrx() {
-				let colors = this.sett.colors || [];
+				let colors = (this.sett.colors || []).slice();
 				let n = this.$props.num;
 				if (!colors.length) for (let i = 0; i < this.lines_num; i++) colors.push(constants_default.OVERLAY_COLORS[(n + i) % 5]);
 				return colors;
@@ -17819,7 +17836,7 @@ pointers: 1 },
 	};
 	//#endregion
 	//#region src/components/overlays/Range.vue
-	var _sfc_main$29 = {
+	var _sfc_main$30 = {
 		name: "Range",
 		mixins: [overlay_default],
 		methods: {
@@ -17883,7 +17900,7 @@ pointers: 1 },
 	};
 	//#endregion
 	//#region src/components/overlays/Trades.vue
-	var _sfc_main$28 = {
+	var _sfc_main$29 = {
 		name: "Trades",
 		mixins: [overlay_default],
 		methods: {
@@ -17931,7 +17948,7 @@ pointers: 1 },
 					default: pos = "Unknown";
 				}
 				return [{ value: pos }, {
-					value: values[2].toFixed(4),
+					value: values[2] != null ? values[2].toFixed(4) : "",
 					color: this.$props.colors.text
 				}].concat(values[3] ? [{ value: values[3] }] : []);
 			}
@@ -17962,7 +17979,7 @@ pointers: 1 },
 	};
 	//#endregion
 	//#region src/components/overlays/Channel.vue
-	var _sfc_main$27 = {
+	var _sfc_main$28 = {
 		name: "Channel",
 		mixins: [overlay_default, canvas_drawing_default],
 		methods: {
@@ -18022,7 +18039,7 @@ pointers: 1 },
 	};
 	//#endregion
 	//#region src/components/overlays/Segment.vue
-	var _sfc_main$26 = {
+	var _sfc_main$27 = {
 		name: "Segment",
 		mixins: [overlay_default, canvas_drawing_default],
 		methods: {
@@ -18121,6 +18138,8 @@ pointers: 1 },
 		let volscale = self.volscale || $p.config.VOLSCALE;
 		let vs = maxv > 0 ? volscale * layout.height / maxv : 0;
 		let x1, x2, mid, prev = void 0;
+		let off = $p.grid_id > 0 && typeof layout.$2screen === "function";
+		let y0base = off ? layout.$2screen(0) : void 0;
 		let [interval2, ratio] = new_interval(layout, $p, sub);
 		let px_step2 = layout.px_step * ratio;
 		let splitter = px_step2 > 5 ? 1 : 0;
@@ -18135,7 +18154,9 @@ pointers: 1 },
 				x2,
 				h: p[self._i1] * vs,
 				green: self._i2(p),
-				raw: p
+				raw: p,
+				y0: off ? y0base : void 0,
+				yTop: off ? layout.$2screen(p[self._i1]) : void 0
 			});
 			prev = x2 + splitter;
 		}
@@ -18234,7 +18255,7 @@ pointers: 1 },
 			let config = this.comp.$props.config;
 			let comp = this.comp;
 			let last_bar = () => this.last_bar();
-			this.comp.$emit("new-shader", {
+			this.comp.custom_event("new-shader", {
 				target: "sidebar",
 				draw: (ctx) => {
 					let bar = last_bar();
@@ -18258,7 +18279,9 @@ pointers: 1 },
 			if (!this.comp.$props.meta.last) return;
 			if (!this.shader) this.init_shader();
 			let layout = this.comp.$props.layout;
-			let last = this.comp.$props.last;
+			let data = this.comp.$props.data;
+			let last = this.comp.$props.last || (data && data.length ? data[data.length - 1] : null);
+			if (!last) return;
 			let dir = last[4] >= last[1];
 			let color = dir ? this.green() : this.red();
 			let y = layout.$2screen(last[4]) + (dir ? 1 : 0);
@@ -18292,7 +18315,7 @@ pointers: 1 },
 	};
 	//#endregion
 	//#region src/components/overlays/Candles.vue
-	var _sfc_main$25 = {
+	var _sfc_main$26 = {
 		name: "Candles",
 		mixins: [overlay_default],
 		methods: {
@@ -18303,7 +18326,10 @@ pointers: 1 },
 				};
 			},
 			init() {
-				this.price = new Price(this);
+				this._init_price();
+			},
+			_init_price() {
+				if (!(this.price && this.price.draw)) this.price = new Price(this);
 			},
 			draw(ctx) {
 				const isMainChart = this.$props.sub === this.$props.data;
@@ -18320,7 +18346,10 @@ pointers: 1 },
 				}
 				let cc = cnv.candles;
 				for (let i = 0, n = cc.length; i < n; i++) drawCandle(ctx, cc[i], this);
-				if (this.price_line) this.price.draw(ctx);
+				if (this.price_line) {
+					this._init_price();
+					this.price.draw(ctx);
+				}
 			},
 			use_for() {
 				return ["Candles"];
@@ -18379,19 +18408,31 @@ pointers: 1 },
 			this.draw(data);
 		}
 		draw(data) {
-			let y0 = this.$p.layout.height;
 			let w = data.x2 - data.x1;
-			let h = Math.floor(data.h);
 			const fillStyle = data.green ? this.style.colorVolUp || "#23a77642" : this.style.colorVolDw || "#e5415042";
 			this.ctx.fillStyle = fillStyle;
+			if (data.yTop != null && data.y0 != null) {
+				let top = Math.min(data.yTop, data.y0);
+				let h = Math.max(1, Math.abs(data.y0 - data.yTop));
+				this.ctx.fillRect(Math.floor(data.x1), Math.floor(top), Math.floor(w), Math.floor(h));
+				return;
+			}
+			let y0 = this.$p.layout.height;
+			let h = Math.floor(data.h);
 			this.ctx.fillRect(Math.floor(data.x1), Math.floor(y0 - h - .5), Math.floor(w), Math.floor(h + 1));
 		}
 	};
 	//#endregion
+	//#region src/stuff/volume.js
+	var VOLUME_LEGEND_FLAG = "$volumeLegend";
+	var VOLUME_SOLID_UP = "#23a776";
+	var VOLUME_SOLID_DW = "#e54150";
+	var VOLUME_LINE_STYLES = ["Spline", "StepLine"];
+	//#endregion
 	//#region src/components/overlays/Volume.vue
-	var _sfc_main$24 = {
+	var _sfc_main$25 = {
 		name: "Volume",
-		mixins: [overlay_default],
+		mixins: [overlay_default, canvas_drawing_default],
 		methods: {
 			meta_info() {
 				return {
@@ -18400,7 +18441,25 @@ pointers: 1 },
 				};
 			},
 			draw(ctx) {
-				for (var v of layout_vol(this)) new VolbarExt(this, ctx, v);
+				const style = this.sett.style;
+				if (VOLUME_LINE_STYLES.includes(style)) {
+					this.draw_line(ctx, style);
+					return;
+				}
+				for (let v of layout_vol(this)) new VolbarExt(this, ctx, v);
+			},
+			draw_line(ctx, style) {
+				const sub = this.$props.sub;
+				const dim = sub && sub[0] ? sub[0].length : 0;
+				this._i1 = dim < 6 ? 1 : 5;
+				this._i2 = dim < 6 ? ((p) => p[2]) : ((p) => p[4] >= p[1]);
+				ctx.lineJoin = "round";
+				ctx.lineWidth = this.sett.lineWidth || 1;
+				ctx.strokeStyle = this.colorVolUp;
+				ctx.beginPath();
+				if (style === "StepLine") this.drawStepLine(ctx, sub, this._i1);
+				else this.drawDataLine(ctx, sub, this._i1);
+				ctx.stroke();
 			},
 			use_for() {
 				return ["Volume"];
@@ -18413,18 +18472,27 @@ pointers: 1 },
 				}];
 			},
 			y_range(hi, lo) {
-				if (this._i1 === 5) {
-					let sub = this.$props.sub;
-					return [utils_default.maxAtIndex(sub, this._i1), utils_default.minAtIndex(sub, this._i1)];
-				} else return [hi, lo];
+				const sub = this.$props.sub;
+				const dim = sub && sub[0] ? sub[0].length : 0;
+				const i1 = dim < 6 ? 1 : 5;
+				if (this.$props.grid_id > 0 && dim > 0) {
+					const headroom = this.volscale || 1;
+					return [
+						utils_default.maxAtIndex(sub, i1) / headroom,
+						0,
+						false
+					];
+				}
+				if (i1 === 5) return [utils_default.maxAtIndex(sub, i1), utils_default.minAtIndex(sub, i1)];
+				return [hi, lo];
 			}
 		},
 		computed: {
 			colorVolUp() {
-				return this.sett.colorVolUp || this.$props.colors.volUp;
+				return this.sett.colorVolUp || this.sett.colorUp || this.$props.colors.volUp;
 			},
 			colorVolDw() {
-				return this.sett.colorVolDw || this.$props.colors.volDw;
+				return this.sett.colorVolDw || this.sett.colorDown || this.$props.colors.volDw;
 			},
 			colorVolUpLegend() {
 				return this.sett.colorVolUpLegend || this.$props.colors.candleUp;
@@ -18442,7 +18510,7 @@ pointers: 1 },
 	};
 	//#endregion
 	//#region src/components/overlays/Splitters.vue
-	var _sfc_main$23 = {
+	var _sfc_main$24 = {
 		name: "Splitters",
 		mixins: [overlay_default],
 		methods: {
@@ -18552,6 +18620,12 @@ pointers: 1 },
 	//#endregion
 	//#region src/mixins/tool.js
 	var tool_default = {
+		beforeUnmount() {
+			if (this._win_mouseup) {
+				window.removeEventListener("mouseup", this._win_mouseup);
+				this._win_mouseup = null;
+			}
+		},
 		methods: {
 			init_tool() {
 				this.collisions = [];
@@ -18577,6 +18651,10 @@ pointers: 1 },
 				this.keys = new Keys(this);
 				this.keys.on("Delete", this.remove_tool);
 				this.keys.on("Backspace", this.remove_tool);
+				this._win_mouseup = (e) => {
+					if (this.mouse.pressed || this.drag) this.mouse.emit("mouseup", e);
+				};
+				window.addEventListener("mouseup", this._win_mouseup);
 				this.show_pins = false;
 				this.drag = null;
 			},
@@ -18671,7 +18749,7 @@ pointers: 1 },
 				this.state = "settled";
 				this.update_from(comp.$props.settings[name]);
 			} else this.update();
-			if (this.state !== "settled") this.comp.$emit("scroll-lock", true);
+			if (this.state !== "settled") this.comp.custom_event("scroll-lock", true);
 		}
 		re_init() {
 			this.update_from(this.comp.$props.settings[this.name]);
@@ -18716,7 +18794,7 @@ pointers: 1 },
 			this.y = this.comp.$props.cursor.y;
 			this.t = this.comp.$props.cursor.t;
 			this.x = this.comp.$props.cursor.x;
-			this.comp.$emit("change-settings", { [this.name]: [this.t, this.y$] });
+			this.comp.custom_event("change-settings", { [this.name]: [this.t, this.y$] });
 		}
 		update_from(data, emit = false) {
 			if (!data) return;
@@ -18725,7 +18803,7 @@ pointers: 1 },
 			this.y = this.layout.$2screen(this.y$);
 			this.t = data[0];
 			this.x = this.layout.t2screen(this.t);
-			if (emit) this.comp.$emit("change-settings", { [this.name]: [this.t, this.y$] });
+			if (emit) this.comp.custom_event("change-settings", { [this.name]: [this.t, this.y$] });
 		}
 		rec_position() {
 			this.t1 = this.t;
@@ -18746,15 +18824,15 @@ pointers: 1 },
 				case "tracking":
 					this.state = "settled";
 					if (this.on_settled) this.on_settled();
-					this.comp.$emit("scroll-lock", false);
+					this.comp.custom_event("scroll-lock", false);
 					break;
 				case "settled":
 					if (this.hidden) return;
 					if (this.hover()) {
 						this.state = "dragging";
 						this.moved = false;
-						this.comp.$emit("scroll-lock", true);
-						this.comp.$emit("object-selected");
+						this.comp.custom_event("scroll-lock", true);
+						this.comp.custom_event("object-selected");
 					}
 					break;
 			}
@@ -18765,7 +18843,7 @@ pointers: 1 },
 				case "dragging":
 					this.state = "settled";
 					if (this.on_settled) this.on_settled();
-					this.comp.$emit("scroll-lock", false);
+					this.comp.custom_event("scroll-lock", false);
 					break;
 			}
 		}
@@ -18855,7 +18933,7 @@ pointers: 1 },
 	};
 	//#endregion
 	//#region src/components/overlays/LineTool.vue
-	var _sfc_main$22 = {
+	var _sfc_main$23 = {
 		name: "LineTool",
 		mixins: [overlay_default, tool_default],
 		methods: {
@@ -18931,7 +19009,7 @@ pointers: 1 },
 	};
 	//#endregion
 	//#region src/components/overlays/RangeTool.vue
-	var _sfc_main$21 = {
+	var _sfc_main$22 = {
 		name: "RangeTool",
 		mixins: [overlay_default, tool_default],
 		methods: {
@@ -19181,7 +19259,7 @@ pointers: 1 },
 	};
 	//#endregion
 	//#region src/components/overlays/StepLine.vue
-	var _sfc_main$20 = {
+	var _sfc_main$21 = {
 		name: "StepLine",
 		mixins: [overlay_default, canvas_drawing_default],
 		methods: {
@@ -19248,17 +19326,28 @@ pointers: 1 },
 				const baseline = this.baseline;
 				if (data.length < 1) return;
 				const barWidth = Math.max(1, layout.px_step * this.bar_width_ratio);
+				const ci = this.sett.colorIndex;
 				for (var k = 0, n = data.length; k < n; k++) {
 					let p = data[k];
 					if (p[i] == null) continue;
 					let x = layout.t2screen(p[0]);
 					let y = layout.$2screen(p[i]);
 					let y0 = layout.$2screen(baseline);
-					ctx.fillStyle = p[i] >= baseline ? this.colorUp : this.colorDown;
+					let isPositive = p[i] >= baseline;
+					ctx.fillStyle = ci != null && p[ci] ? p[ci] : isPositive ? this.colorUp : this.colorDown;
 					let barX = x - barWidth / 2;
 					let barY = Math.min(y, y0);
 					let barHeight = Math.abs(y - y0) || 1;
 					ctx.fillRect(barX, barY, barWidth, barHeight);
+				}
+				if (this.sett.zeroLine) {
+					const yz = Math.round(layout.$2screen(baseline)) + .5;
+					ctx.strokeStyle = this.sett.zeroLineColor || "rgba(255,255,255,0.25)";
+					ctx.lineWidth = 1;
+					ctx.beginPath();
+					ctx.moveTo(0, yz);
+					ctx.lineTo(layout.width, yz);
+					ctx.stroke();
 				}
 			},
 			data_colors() {
@@ -19305,7 +19394,7 @@ pointers: 1 },
 	};
 	//#endregion
 	//#region src/components/overlays/Histogram.vue
-	var _sfc_main$19 = {
+	var _sfc_main$20 = {
 		name: "Histogram",
 		mixins: [overlay_default, bar_chart_base_default],
 		methods: { use_for() {
@@ -19322,7 +19411,7 @@ pointers: 1 },
 	};
 	//#endregion
 	//#region src/components/overlays/Bar.vue
-	var _sfc_main$18 = {
+	var _sfc_main$19 = {
 		name: "Bar",
 		mixins: [overlay_default, bar_chart_base_default],
 		methods: { use_for() {
@@ -19339,7 +19428,7 @@ pointers: 1 },
 	};
 	//#endregion
 	//#region src/components/overlays/Zones.vue
-	var _sfc_main$17 = {
+	var _sfc_main$18 = {
 		name: "Zones",
 		mixins: [overlay_default],
 		methods: {
@@ -19384,6 +19473,118 @@ pointers: 1 },
 		} },
 		data() {
 			return {};
+		}
+	};
+	//#endregion
+	//#region src/components/overlays/Markers.vue
+	var _sfc_main$17 = {
+		name: "Markers",
+		mixins: [overlay_default],
+		methods: {
+			meta_info() {
+				return {
+					author: "TVJS",
+					version: "1.0.0",
+					desc: "Point markers (view.layers kind=marker)"
+				};
+			},
+			draw(ctx) {
+				const layout = this.$props.layout;
+				const data = this.$props.data;
+				if (!data || !data.length) return;
+				const r = this.marker_size;
+				ctx.lineWidth = this.line_width;
+				ctx.strokeStyle = this.stroke;
+				ctx.font = this.new_font;
+				ctx.textAlign = "center";
+				for (let k = 0, n = data.length; k < n; k++) {
+					const p = data[k];
+					const yv = p[1];
+					if (yv == null || !Number.isFinite(Number(yv))) continue;
+					const x = layout.t2screen(p[0]);
+					const y = layout.$2screen(Number(yv));
+					ctx.fillStyle = this.color;
+					this.draw_marker(ctx, x, y, r);
+					const label = p.length > 2 ? p[2] : null;
+					if (this.show_label && label != null && label !== "") {
+						ctx.fillStyle = this.label_color;
+						ctx.fillText(String(label), x, y - r - 4);
+					}
+				}
+			},
+			draw_marker(ctx, x, y, r) {
+				ctx.beginPath();
+				switch (this.shape) {
+					case "triangle-up":
+						ctx.moveTo(x, y - r);
+						ctx.lineTo(x + r, y + r);
+						ctx.lineTo(x - r, y + r);
+						ctx.closePath();
+						break;
+					case "triangle-down":
+						ctx.moveTo(x, y + r);
+						ctx.lineTo(x + r, y - r);
+						ctx.lineTo(x - r, y - r);
+						ctx.closePath();
+						break;
+					case "square":
+						ctx.rect(x - r, y - r, r * 2, r * 2);
+						break;
+					case "diamond":
+						ctx.moveTo(x, y - r);
+						ctx.lineTo(x + r, y);
+						ctx.lineTo(x, y + r);
+						ctx.lineTo(x - r, y);
+						ctx.closePath();
+						break;
+					default: ctx.arc(x, y, r, 0, Math.PI * 2, true);
+				}
+				ctx.fill();
+				if (this.line_width > 0) ctx.stroke();
+			},
+			use_for() {
+				return ["Markers"];
+			},
+			legend(values) {
+				const out = [];
+				if (values[1] != null && Number.isFinite(Number(values[1]))) out.push({
+					value: Number(values[1]).toFixed(4),
+					color: this.color
+				});
+				if (values.length > 2 && values[2] != null && values[2] !== "") out.push({ value: String(values[2]) });
+				return out;
+			}
+		},
+		computed: {
+			default_font() {
+				return "11px " + this.$props.font.split("px").pop();
+			},
+			color() {
+				return this.sett.color || "#42b3f4";
+			},
+			stroke() {
+				return this.sett.markerStroke || this.sett.color || "#1b2331";
+			},
+			marker_size() {
+				const s = this.sett;
+				const v = s.markerSize != null ? s.markerSize : s.style && s.style.marker_size;
+				return Number(v) || 5;
+			},
+			line_width() {
+				return this.sett.lineWidth != null ? Number(this.sett.lineWidth) : 1;
+			},
+			shape() {
+				return this.sett.shape || this.sett.style && this.sett.style.shape || "circle";
+			},
+			show_label() {
+				return this.sett.showLabel !== false;
+			},
+			label_color() {
+				return this.sett.labelColor || this.$props.colors && this.$props.colors.text || "#999";
+			},
+			new_font() {
+				return this.sett.font || this.default_font;
+			}
 		}
 	};
 	//#endregion
@@ -19476,8 +19677,8 @@ pointers: 1 },
 		],
 		mixins: [canvas_default, uxlist_default],
 		components: {
-			Crosshair: _sfc_main$35,
-			KeyboardListener: _sfc_main$34
+			Crosshair: _sfc_main$36,
+			KeyboardListener: _sfc_main$35
 		},
 		created() {
 			this.layer_events = {
@@ -19514,6 +19715,7 @@ pointers: 1 },
 				}
 			};
 			this._list = [
+				_sfc_main$32,
 				_sfc_main$31,
 				_sfc_main$30,
 				_sfc_main$29,
@@ -19590,7 +19792,7 @@ pointers: 1 },
 				},
 				style: { backgroundColor: this.$props.colors.back },
 				hs: [
-					h(_sfc_main$35, {
+					h(_sfc_main$36, {
 						...this.common_props(),
 						"onNewGridLayer": this.layer_events["new-grid-layer"],
 						"onDeleteGridLayer": this.layer_events["delete-grid-layer"],
@@ -19599,7 +19801,7 @@ pointers: 1 },
 						"onLayerMetaProps": this.layer_events["layer-meta-props"],
 						"onCustomEvent": this.layer_events["custom-event"]
 					}),
-					h(_sfc_main$34, {
+					h(_sfc_main$35, {
 						"onRegisterKbListener": this.keyboard_events["register-kb-listener"],
 						"onRemoveKbListener": this.keyboard_events["remove-kb-listener"],
 						onKeyup: this.keyboard_events["keyup"],
@@ -19796,6 +19998,7 @@ pointers: 1 },
 				nextTick(() => this.redraw());
 			},
 			"cursor.x": function(newX) {
+				if (this.renderer && this.renderer.hasDualCanvas) return;
 				if (this._cursorRafPending) return;
 				this._cursorRafPending = true;
 				requestAnimationFrame(() => {
@@ -19842,6 +20045,7 @@ pointers: 1 },
 			dataKey(newKey, oldKey) {
 				if (!newKey || newKey === oldKey) return;
 				this.renderKey++;
+				if (this.renderer) this.renderer.markStaticDirty();
 				nextTick(() => this.redraw());
 			},
 			yTransformKey(newKey, oldKey) {
@@ -19876,7 +20080,25 @@ pointers: 1 },
 			this.layout = this.$p.layout?.grids?.[this.id];
 			this.side = side;
 			this._destroyed = false;
+			this.axis_cursor_listeners();
 			this.listeners();
+		}
+		axis_cursor_listeners() {
+			const eventTarget = this.canvasDynamic || this.canvas;
+			this._onAxisMove = (event) => {
+				if (utils_default.is_mobile || !this.layout) return;
+				this.comp.$emit("sidebar-cursor", {
+					grid_id: this.id,
+					x: this.layout.width - 1,
+					y: event.layerY + (this.layout.offset || 0)
+				});
+			};
+			this._onAxisOut = () => {
+				this.comp.$emit("sidebar-cursor", {});
+			};
+			eventTarget.addEventListener("mousemove", this._onAxisMove);
+			eventTarget.addEventListener("mouseout", this._onAxisOut);
+			this._axisCursorTarget = eventTarget;
 		}
 		async listeners() {
 			const { Hammer, Hamster } = await loadGestures();
@@ -19886,7 +20108,11 @@ pointers: 1 },
 			this._throttledWheel = utils_default.rafThrottle((delta, event) => {
 				this.mousezoom(delta * 50, event);
 			});
-			this.hm.wheel((event, delta) => this._throttledWheel(delta, event));
+			this.hm.wheel((event, delta) => {
+				if (event.originalEvent) event.originalEvent.preventDefault();
+				if (event.preventDefault) event.preventDefault();
+				this._throttledWheel(delta, event);
+			});
 			let mc = this.mc = new Hammer.Manager(eventTarget);
 			mc.add(new Hammer.Pan({
 				direction: Hammer.DIRECTION_VERTICAL,
@@ -19897,6 +20123,13 @@ pointers: 1 },
 				taps: 2,
 				posThreshold: 50
 			}));
+			const singleTap = new Hammer.Tap({
+				event: "singletap",
+				taps: 1
+			});
+			mc.add(singleTap);
+			mc.get("doubletap").recognizeWith(singleTap);
+			singleTap.requireFailure(mc.get("doubletap"));
 			mc.on("panstart", (event) => {
 				if (this.$p.y_transform) this.zoom = this.$p.y_transform.zoom;
 				else this.zoom = 1;
@@ -19936,6 +20169,15 @@ pointers: 1 },
 					auto: true
 				});
 				this.zoom = 1;
+			});
+			mc.on("singletap", (event) => {
+				const r = eventTarget.getBoundingClientRect ? eventTarget.getBoundingClientRect() : { top: 0 };
+				const y = event.center.y - r.top;
+				this.comp.$emit("sidebar-click", {
+					grid_id: this.id,
+					y,
+					price: this.layout.screen2$(y)
+				});
 			});
 		}
 		update() {
@@ -20002,14 +20244,17 @@ pointers: 1 },
 			this._lastPanelY = this.$p.cursor.y;
 		}
 		updatePanelOnly() {
+			if (!this.layout) return;
 			if (!this.$p.cursor.y || !this.$p.cursor.y$) {
 				if (this._lastPanelY !== void 0) {
 					this._clearPanel(this._lastPanelY);
 					this._lastPanelY = void 0;
+					this.apply_shaders();
 				}
 				return;
 			}
 			if (this._lastPanelY !== void 0 && this._lastPanelY !== this.$p.cursor.y) this._clearPanel(this._lastPanelY);
+			this.apply_shaders();
 			this.panel();
 			this._lastPanelY = this.$p.cursor.y;
 		}
@@ -20042,11 +20287,15 @@ pointers: 1 },
 			ctx.strokeStyle = this.$p.colors.scale;
 			ctx.beginPath();
 			let stroked = false;
+			const fsMatch = /(\d+(?:\.\d+)?)px/.exec(ctx.font || "");
+			const fontPx = fsMatch ? parseFloat(fsMatch[1]) : 11;
+			const ascent = fontPx * .8 + 1;
+			const descent = fontPx * .25 + 1;
 			for (let i = 0; i < points.length; i++) {
 				const p = points[i];
 				if (p[0] > layoutHeight) continue;
 				const labelY = p[0] + 4;
-				if (labelY < top - PANHEIGHT || labelY > bottom + 4) continue;
+				if (labelY - ascent > bottom || labelY + descent < top) continue;
 				const ty = p[0] - .5;
 				ctx.moveTo(x1Base, ty);
 				ctx.lineTo(x1Base + x2Offset, ty);
@@ -20179,6 +20428,11 @@ pointers: 1 },
 			if (this.hm) this.hm.unwheel();
 			if (this._throttledWheel) this._throttledWheel.cancel();
 			if (this._throttledPanmove) this._throttledPanmove.cancel();
+			if (this._axisCursorTarget) {
+				this._axisCursorTarget.removeEventListener("mousemove", this._onAxisMove);
+				this._axisCursorTarget.removeEventListener("mouseout", this._onAxisOut);
+				this._axisCursorTarget = null;
+			}
 			this.canvasDynamic = null;
 		}
 		mousemove() {}
@@ -20309,6 +20563,9 @@ pointers: 1 },
 					if (this.renderer && this.renderer.updatePanelOnly) this.renderer.updatePanelOnly();
 					else this.redraw();
 				});
+			},
+			shaders() {
+				nextTick(() => this.redraw());
 			},
 			rerender() {
 				nextTick(() => this.redraw());
@@ -20607,7 +20864,8 @@ pointers: 1 },
 				this.$emit("close-indicator", {
 					name: indicator.name,
 					index: indicator.index,
-					gridId: this.$props.grid_id
+					gridId: this.$props.grid_id,
+					settings: indicator.settings
 				});
 			},
 			openVolumeSettings() {
@@ -20628,6 +20886,16 @@ pointers: 1 },
 					overlay: "Volume",
 					grid: 0,
 					detach: !this.volume_detached
+				});
+			},
+			isDetachedVolume(ind) {
+				return ind.type === "Volume" && ind.settings && ind.settings["$volumeLegend"];
+			},
+			reattachVolume() {
+				this.$emit("legend-button-click", {
+					button: "volume-detach",
+					overlay: "Volume",
+					grid: this.$props.grid_id
 				});
 			}
 		}
@@ -20659,11 +20927,11 @@ pointers: 1 },
 	var _hoisted_12 = ["onClick"];
 	var _hoisted_13 = ["onClick"];
 	var _hoisted_14 = {
-		key: 2,
+		key: 3,
 		class: "t-vue-ivalues"
 	};
 	var _hoisted_15 = {
-		key: 3,
+		key: 4,
 		class: "t-vue-unknown"
 	};
 	function _sfc_render$9(_ctx, _cache, $props, $setup, $data, $options) {
@@ -20673,7 +20941,7 @@ pointers: 1 },
 			key: 0,
 			class: "trading-vue-legend",
 			style: normalizeStyle($options.calc_style),
-			onDblclick: _cache[2] || (_cache[2] = (...args) => $options.on_dblclick && $options.on_dblclick(...args))
+			onDblclick: _cache[3] || (_cache[3] = (...args) => $options.on_dblclick && $options.on_dblclick(...args))
 		}, [
 			$props.grid_id === 0 ? (openBlock(), createElementBlock("div", {
 				key: 0,
@@ -20685,15 +20953,15 @@ pointers: 1 },
 					style: normalizeStyle({ color: $props.common?.colors?.title })
 				}, toDisplayString($props.common.title_txt), 5),
 				$options.show_values ? (openBlock(), createElementBlock("span", _hoisted_1$3, [
-					_cache[3] || (_cache[3] = createTextVNode(" O", -1)),
+					_cache[4] || (_cache[4] = createTextVNode(" O", -1)),
 					createBaseVNode("span", _hoisted_2$1, toDisplayString($options.ohlcv[0]), 1),
-					_cache[4] || (_cache[4] = createTextVNode(" H", -1)),
+					_cache[5] || (_cache[5] = createTextVNode(" H", -1)),
 					createBaseVNode("span", _hoisted_3, toDisplayString($options.ohlcv[1]), 1),
-					_cache[5] || (_cache[5] = createTextVNode(" L", -1)),
+					_cache[6] || (_cache[6] = createTextVNode(" L", -1)),
 					createBaseVNode("span", _hoisted_4, toDisplayString($options.ohlcv[2]), 1),
-					_cache[6] || (_cache[6] = createTextVNode(" C", -1)),
+					_cache[7] || (_cache[7] = createTextVNode(" C", -1)),
 					createBaseVNode("span", _hoisted_5, toDisplayString($options.ohlcv[3]), 1),
-					_cache[7] || (_cache[7] = createTextVNode(" V", -1)),
+					_cache[8] || (_cache[8] = createTextVNode(" V", -1)),
 					createBaseVNode("span", _hoisted_6, toDisplayString($options.ohlcv[4]), 1)
 				])) : createCommentVNode("", true),
 				!$options.show_values ? (openBlock(), createElementBlock("span", {
@@ -20702,14 +20970,14 @@ pointers: 1 },
 					style: normalizeStyle({ color: $props.common?.colors?.text })
 				}, toDisplayString(($props.common.meta.last || [])[4]), 5)) : createCommentVNode("", true)
 			], 4)) : createCommentVNode("", true),
-			$props.grid_id === 0 && $options.show_volume_row ? (openBlock(), createElementBlock("div", _hoisted_7, [
-				_cache[11] || (_cache[11] = createBaseVNode("span", { class: "t-vue-iname" }, "Volume", -1)),
+			$props.grid_id === 0 && $options.show_volume_row && !$options.volume_detached ? (openBlock(), createElementBlock("div", _hoisted_7, [
+				_cache[12] || (_cache[12] = createBaseVNode("span", { class: "t-vue-iname" }, "Volume", -1)),
 				createBaseVNode("button", {
 					class: "t-vue-settings-btn",
 					onClick: _cache[0] || (_cache[0] = withModifiers((...args) => $options.openVolumeSettings && $options.openVolumeSettings(...args), ["stop"])),
 					title: "Volume settings",
 					"aria-label": "Volume settings"
-				}, [..._cache[8] || (_cache[8] = [createBaseVNode("svg", {
+				}, [..._cache[9] || (_cache[9] = [createBaseVNode("svg", {
 					viewBox: "0 0 24 24",
 					width: "14",
 					height: "14"
@@ -20722,10 +20990,10 @@ pointers: 1 },
 					onClick: _cache[1] || (_cache[1] = withModifiers((...args) => $options.toggleVolumeDetach && $options.toggleVolumeDetach(...args), ["stop"])),
 					title: $options.volume_detached ? "Attach volume to candles" : "Detach volume to its own pane",
 					"aria-label": $options.volume_detached ? "Attach volume to candles" : "Detach volume to its own pane"
-				}, [!$options.volume_detached ? (openBlock(), createElementBlock("svg", _hoisted_9, [..._cache[9] || (_cache[9] = [createBaseVNode("path", {
+				}, [!$options.volume_detached ? (openBlock(), createElementBlock("svg", _hoisted_9, [..._cache[10] || (_cache[10] = [createBaseVNode("path", {
 					fill: "currentColor",
 					d: "M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"
-				}, null, -1)])])) : (openBlock(), createElementBlock("svg", _hoisted_10, [..._cache[10] || (_cache[10] = [createBaseVNode("path", {
+				}, null, -1)])])) : (openBlock(), createElementBlock("svg", _hoisted_10, [..._cache[11] || (_cache[11] = [createBaseVNode("path", {
 					fill: "currentColor",
 					d: "M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"
 				}, null, -1)])]))], 8, _hoisted_8),
@@ -20752,12 +21020,26 @@ pointers: 1 },
 					key: ind.id
 				}, [
 					createBaseVNode("span", _hoisted_11, toDisplayString(ind.name), 1),
-					$props.grid_id > 0 ? (openBlock(), createElementBlock("button", {
+					$props.grid_id > 0 && $options.isDetachedVolume(ind) ? (openBlock(), createElementBlock("button", {
 						key: 0,
+						class: "t-vue-detach-btn",
+						onClick: _cache[2] || (_cache[2] = withModifiers((...args) => $options.reattachVolume && $options.reattachVolume(...args), ["stop"])),
+						title: "Attach volume to candles",
+						"aria-label": "Attach volume to candles"
+					}, [..._cache[13] || (_cache[13] = [createBaseVNode("svg", {
+						viewBox: "0 0 24 24",
+						width: "14",
+						height: "14"
+					}, [createBaseVNode("path", {
+						fill: "currentColor",
+						d: "M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"
+					})], -1)])])) : createCommentVNode("", true),
+					$props.grid_id > 0 ? (openBlock(), createElementBlock("button", {
+						key: 1,
 						class: "t-vue-settings-btn",
 						onClick: withModifiers(($event) => $options.openSettings(ind), ["stop"]),
 						title: "Settings"
-					}, [..._cache[12] || (_cache[12] = [createBaseVNode("svg", {
+					}, [..._cache[14] || (_cache[14] = [createBaseVNode("svg", {
 						viewBox: "0 0 24 24",
 						width: "14",
 						height: "14"
@@ -20765,12 +21047,12 @@ pointers: 1 },
 						fill: "currentColor",
 						d: "M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"
 					})], -1)])], 8, _hoisted_12)) : createCommentVNode("", true),
-					$props.grid_id > 0 ? (openBlock(), createElementBlock("button", {
-						key: 1,
+					$props.grid_id > 0 && !$options.isDetachedVolume(ind) ? (openBlock(), createElementBlock("button", {
+						key: 2,
 						class: "t-vue-close-btn",
 						onClick: withModifiers(($event) => $options.closeIndicator(ind), ["stop"]),
 						title: "Remove indicator"
-					}, [..._cache[13] || (_cache[13] = [createBaseVNode("svg", {
+					}, [..._cache[15] || (_cache[15] = [createBaseVNode("svg", {
 						viewBox: "0 0 24 24",
 						width: "14",
 						height: "14"
@@ -20880,6 +21162,19 @@ pointers: 1 },
 			sidebar_transform(s) {
 				this.$emit("sidebar-transform", s);
 			},
+			sidebar_click(s) {
+				this.$emit("custom-event", {
+					event: "sidebar-click",
+					args: [s]
+				});
+			},
+			sidebar_cursor(c) {
+				this.cursor_changed(c);
+				const cur = this.$props.common && this.$props.common.cursor;
+				if (cur && cur.locked) return;
+				const gr = this.$refs.grid && this.$refs.grid.renderer && this.$refs.grid.renderer.renderer;
+				if (gr && gr.hasDualCanvas) gr.updateDynamic();
+			},
 			emit_meta_props(d) {
 				this.meta_props[d.layer_id] = d;
 				this.$emit("layer-meta-props", d);
@@ -20905,7 +21200,7 @@ pointers: 1 },
 			},
 			rezoom_range(event) {
 				let id = "sb-" + event.grid_id;
-				if (this.$refs[id]) this.$refs[id].renderer.rezoom_range(event.z, event.diff1, event.diff2);
+				if (this.$refs[id] && this.$refs[id].renderer) this.$refs[id].renderer.rezoom_range(event.z, event.diff1, event.diff2);
 			},
 			open_indicator_settings(indicatorInfo) {
 				this.$emit("custom-event", {
@@ -21013,6 +21308,9 @@ pointers: 1 },
 			},
 			"common.data.length": function(newLen, oldLen) {
 				if (newLen !== oldLen) this.rerender++;
+			},
+			"common.dataVersion": function(newV, oldV) {
+				if (newV !== oldV) this.rerender++;
 			}
 		},
 		data() {
@@ -21078,11 +21376,15 @@ pointers: 1 },
 			createVNode(_component_sidebar, mergeProps({ ref: "sb-" + $props.grid_id }, $options.sidebar_props, {
 				grid_id: $props.grid_id,
 				rerender: $data.rerender,
-				onSidebarTransform: $options.sidebar_transform
+				onSidebarTransform: $options.sidebar_transform,
+				onSidebarClick: $options.sidebar_click,
+				onSidebarCursor: $options.sidebar_cursor
 			}), null, 16, [
 				"grid_id",
 				"rerender",
-				"onSidebarTransform"
+				"onSidebarTransform",
+				"onSidebarClick",
+				"onSidebarCursor"
 			])
 		]);
 	}
@@ -21127,15 +21429,21 @@ pointers: 1 },
 			this._throttledWheel = utils_default.rafThrottle((delta, event) => {
 				this.mousezoom(-delta * 50, event);
 			});
-			this.hm.wheel((event, delta) => this._throttledWheel(delta, event));
+			this.hm.wheel((event, delta) => {
+				if (event.originalEvent) event.originalEvent.preventDefault();
+				if (event.preventDefault) event.preventDefault();
+				this._throttledWheel(delta, event);
+			});
 			let mc = this.mc = new Hammer.Manager(eventTarget);
 			mc.add(new Hammer.Pan({
 				direction: Hammer.DIRECTION_HORIZONTAL,
 				threshold: 0
 			}));
 			mc.on("panstart", (event) => {
+				const rect = eventTarget.getBoundingClientRect ? eventTarget.getBoundingClientRect() : { left: 0 };
 				this.drug = {
-					x: event.center.x,
+					x: event.center.x - rect.left,
+					offX: rect.left,
 					r: this.range.slice()
 				};
 			});
@@ -21153,7 +21461,7 @@ pointers: 1 },
 			if (!this.$p.interval) return;
 			let r = this.drug.r;
 			let span = r[1] - r[0];
-			let k = (event.center.x - this.drug.x) / (width * .5);
+			let k = (event.center.x - (this.drug.offX || 0) - this.drug.x) / (width * .5);
 			let factor = utils_default.clamp(1 + k, .1, 10);
 			let anchorFrac = this.drug.x / width;
 			let anchorT = r[0] + span * anchorFrac;
@@ -21191,6 +21499,7 @@ pointers: 1 },
 			this.canvasDynamic = null;
 		}
 		update() {
+			this.layout = this.comp.layoutOverride || this.$p.layout;
 			this.grid_0 = this.layout.grids[0];
 			const width = this.layout.botbar.width;
 			const height = this.layout.botbar.height;
@@ -21240,7 +21549,7 @@ pointers: 1 },
 			let lbl = this.format_cursor_x();
 			this.ctx.fillStyle = this.$p.colors.panel;
 			let panwidth = Math.floor(this.measureTextCached(lbl + "    "));
-			let cursor = this.$p.cursor.x;
+			let cursor = this.$p.cursor.xr != null ? this.$p.cursor.xr : this.$p.cursor.x;
 			let x = Math.floor(cursor - panwidth * .5);
 			let y = -.5;
 			let panheight = this.$p.config?.PANHEIGHT || 22;
@@ -21535,6 +21844,10 @@ pointers: 1 },
 			}
 		},
 		beforeUnmount() {
+			if (this.dragging) {
+				document.body.style.cursor = "";
+				document.body.style.userSelect = "";
+			}
 			document.removeEventListener("mousemove", this.onMouseMove);
 			document.removeEventListener("mouseup", this.onMouseUp);
 			if (this._rafId !== null) {
@@ -21764,8 +22077,9 @@ pointers: 1 },
 						self.$_lo = -1;
 					}
 					if (!ls) {
-						self.$_hi *= 1.05;
-						self.$_lo *= .95;
+						const pad = Math.abs(self.$_hi) * .05 || 1;
+						self.$_hi += pad;
+						self.$_lo -= pad;
 					} else log_scale_default.expand(self, height);
 				}
 			}
@@ -21792,7 +22106,7 @@ pointers: 1 },
 			for (let i = 0, n = data.length; i < n; i++) {
 				let x = data[i];
 				if (x[1] > max) max = x[1];
-				else if (x[1] < min) min = x[1];
+				if (x[1] < min) min = x[1];
 			}
 			[min, max].forEach((x) => {
 				let str = x != null ? x.toString() : "";
@@ -22127,7 +22441,9 @@ pointers: 1 },
 			self.candles = [];
 			self.volume = [];
 			if (!sub.length || self.A === void 0 || self.B === void 0 || self.px_step === void 0) return;
-			const cacheKey = `${range[0]},${range[1]},${sub.length},${interval},${$p.height},${self.A.toFixed(6)},${self.B.toFixed(6)},${self.px_step.toFixed(4)}`;
+			const lb = sub[sub.length - 1];
+			const lbKey = lb ? `${lb[1]},${lb[2]},${lb[3]},${lb[4]},${lb[5]},${lb[6]}` : "";
+			const cacheKey = `${range[0]},${range[1]},${sub.length},${interval},${$p.height},${self.A.toFixed(6)},${self.B.toFixed(6)},${self.px_step.toFixed(4)},${lbKey}`;
 			if (layoutCache.key === cacheKey && layoutCache.candles && layoutCache.volume) {
 				self.candles = layoutCache.candles;
 				self.volume = layoutCache.volume;
@@ -22347,483 +22663,7 @@ pointers: 1 },
 		}
 	};
 	//#endregion
-	//#region src/mixins/chart/chart-range.js
-	var chart_range_default = {
-		methods: {
-			range_changed(r) {
-				r = this.clamp_range(r);
-				let sub = this.subset(r);
-				utils_default.overwrite(this.range, r);
-				utils_default.overwrite(this.sub, sub);
-				this.update_layout();
-				this.$emit("range-changed", r);
-				if (this.$props.ib) this.save_data_t();
-			},
-			clamp_range(r) {
-				const ohlcv = this.ohlcv;
-				if (!ohlcv || ohlcv.length < 1) return r;
-				let t1 = r[0], t2 = r[1];
-				if (!Number.isFinite(t1) || !Number.isFinite(t2) || t1 > t2) return r;
-				const first = this.$props.ib ? 0 : ohlcv[0][0];
-				const last = this.$props.ib ? ohlcv.length - 1 : ohlcv[ohlcv.length - 1][0];
-				const span = t2 - t1;
-				if (t2 < first) {
-					t1 = first - span + this.interval;
-					t2 = t1 + span;
-				} else if (t1 > last) {
-					t2 = last + span - this.interval;
-					t1 = t2 - span;
-				}
-				return [t1, t2];
-			},
-			goto(t) {
-				const dt = this.range[1] - this.range[0];
-				this.range_changed([t - dt, t]);
-			},
-			setRange(t1, t2) {
-				this.range_changed([t1, t2]);
-			},
-			calc_interval() {
-				let tf = utils_default.parse_tf(this.forced_tf);
-				if (this.ohlcv.length < 2 && !tf) return;
-				this.interval_ms = tf || utils_default.detect_interval(this.ohlcv);
-				this.interval = this.$props.ib ? 1 : this.interval_ms;
-				utils_default.warn(() => this.$props.ib && !this.chart.tf, constants_default.IB_TF_WARN, constants_default.SECOND);
-			},
-			set_ytransform(s) {
-				let existing = this.y_transforms[s.grid_id] || {};
-				let obj = Object.assign({}, existing, s);
-				if (obj.range) obj.range = [...obj.range];
-				this.y_transforms[s.grid_id] = obj;
-				this.update_layout();
-			},
-			default_range() {
-				const dl = this.$props.config.DEFAULT_LEN;
-				const ml = this.$props.config.MINIMUM_LEN + .5;
-				const l = this.ohlcv.length - 1;
-				if (this.ohlcv.length < 2) return;
-				let s, d;
-				if (this.ohlcv.length <= dl) {
-					s = 0;
-					d = ml;
-				} else {
-					s = l - dl;
-					d = .5;
-				}
-				if (!this.$props.ib) utils_default.overwrite(this.range, [this.ohlcv[s][0] - this.interval * d, this.ohlcv[l][0] + this.interval * ml]);
-				else utils_default.overwrite(this.range, [s - this.interval * d, l + this.interval * ml]);
-			},
-			subset(range = this.range) {
-				let [res, index] = this.filter(this.ohlcv, range[0] - this.interval, range[1]);
-				this.ti_map = new TI();
-				if (res) {
-					this.sub_start = index;
-					this.ti_map.init(this, res);
-					if (!this.$props.ib) return res || [];
-					return this.ti_map.sub_i;
-				}
-				return [];
-			},
-			init_range() {
-				this.calc_interval();
-				this.default_range();
-			},
-			update_layout(clac_tf, forceResize = false) {
-				if (clac_tf) this.calc_interval();
-				if (this.range[0] === void 0 || this.range[1] === void 0) if (this.ohlcv && this.ohlcv.length >= 2) {
-					this.init_range();
-					const sub = this.subset();
-					utils_default.overwrite(this.sub, sub);
-				} else return;
-				const rangeArr = [this.range[0], this.range[1]];
-				const subArr = Array.from(this.sub);
-				const layoutParams = {
-					chart: this.chart,
-					sub: subArr,
-					offsub: this.offsub,
-					interval: this.interval,
-					range: rangeArr,
-					ctx: this.ctx,
-					layers_meta: this.layers_meta,
-					ti_map: this.ti_map,
-					$props: this.$props,
-					y_transforms: this.y_transforms,
-					customGridHeights: this.customGridHeights,
-					minimizedGrids: this.minimizedGrids
-				};
-				this.chartLayout = markRaw(new Layout(layoutParams));
-				this.rerender++;
-				const layout = this.chartLayout;
-				if (forceResize) {
-					if (this.$refs.sec) this.$refs.sec.forEach((section, i) => {
-						const grid = section && section.$refs.grid;
-						const sidebar = section && section.$refs["sb-" + i];
-						if (grid && grid.resize_from_layout) grid.resize_from_layout(layout);
-						if (sidebar && sidebar.resize_from_layout) sidebar.resize_from_layout(layout);
-						if (section && section.updateLegendPosition) section.updateLegendPosition(layout);
-					});
-				} else if (this.$refs.sec) this.$refs.sec.forEach((section, i) => {
-					const grid = section && section.$refs.grid;
-					const sidebar = section && section.$refs["sb-" + i];
-					if (grid) {
-						if (grid.layoutOverride) grid.layoutOverride = null;
-						if (grid.renderer) grid.renderer.layout = layout.grids[i];
-					}
-					if (sidebar) {
-						if (sidebar.layoutOverride) sidebar.layoutOverride = null;
-						if (sidebar.renderer) sidebar.renderer.layout = layout.grids[i];
-					}
-					if (section && section.clearLayoutOverride) section.clearLayoutOverride();
-				});
-				if (this._hook_update) this.ce("?chart-update", this.chartLayout);
-			},
-			common_props() {
-				return {
-					title_txt: this.chart.name || this.$props.title_txt,
-					layout: this.chartLayout,
-					sub: this.sub,
-					range: this.range,
-					interval: this.interval,
-					cursor: this.cursor,
-					colors: this.$props.colors,
-					font: this.$props.font,
-					y_ts: this.y_transforms,
-					tv_id: this.$props.tv_id,
-					config: this.$props.config,
-					buttons: this.$props.buttons,
-					meta: this.meta,
-					skin: this.$props.skin,
-					dataVersion: this.$props.data?.$cd?.revision?.() ?? 0
-				};
-			},
-			overlay_subset(source, side) {
-				return source.map((d, i) => {
-					let res = utils_default.fast_filter(d.data, this.ti_map.i2t_mode(this.range[0] - this.interval, d.indexSrc), this.ti_map.i2t_mode(this.range[1], d.indexSrc));
-					return {
-						type: d.type,
-						name: utils_default.format_name(d),
-						data: this.ti_map.parse(res[0] || [], d.indexSrc || "map"),
-						settings: d.settings || this.settings_ov,
-						grid: d.grid || {},
-						tf: utils_default.parse_tf(d.tf),
-						i0: res[1],
-						loading: d.loading,
-						last: (this.last_values[side] || [])[i]
-					};
-				});
-			},
-			update_last_values() {
-				this.last_candle = this.ohlcv ? this.ohlcv[this.ohlcv.length - 1] : void 0;
-				this.last_values = {
-					onchart: [],
-					offchart: []
-				};
-				this.onchart.forEach((x, i) => {
-					let d = x.data || [];
-					this.last_values.onchart[i] = d[d.length - 1];
-				});
-				this.offchart.forEach((x, i) => {
-					let d = x.data || [];
-					this.last_values.offchart[i] = d[d.length - 1];
-				});
-			}
-		},
-		data() {
-			return {
-				sub: [],
-				range: [],
-				interval: 0,
-				interval_ms: 0,
-				y_transforms: {},
-				sub_start: void 0,
-				last_candle: [],
-				last_values: {},
-				rerender: 0,
-				chartLayout: null
-			};
-		},
-		computed: {
-			dimensions() {
-				return `${this.width}x${this.height}`;
-			},
-			dataHashKey() {
-				const data = this.$props.data;
-				if (!data) return "";
-				const ohlcv = data.ohlcv || data.chart?.data || [];
-				const ohlcvLen = ohlcv.length;
-				return `${ohlcvLen},${ohlcv[0]?.[0] ?? ""},${ohlcv[ohlcvLen - 1]?.[0] ?? ""},${ohlcv[ohlcvLen - 1]?.[4] ?? ""},${data.scrollLock ? "1" : "0"},${data.$cd?.revision?.() ?? 0}`;
-			}
-		},
-		watch: {
-			dimensions() {
-				this.update_layout();
-				if (this._hook_resize) this.ce("?chart-resize");
-			},
-			ib(nw) {
-				if (!nw) {
-					let t1 = this.ti_map.i2t(this.range[0]);
-					let t2 = this.ti_map.i2t(this.range[1]);
-					utils_default.overwrite(this.range, [t1, t2]);
-					this.interval = this.interval_ms;
-				} else {
-					this.init_range();
-					utils_default.overwrite(this.range, this.range);
-					this.interval = 1;
-				}
-				let sub = this.subset();
-				utils_default.overwrite(this.sub, sub);
-				this.update_layout();
-			},
-			timezone() {
-				this.update_layout();
-			},
-			colors() {
-				utils_default.overwrite(this.range, this.range);
-			},
-			forced_tf(n, p) {
-				this.calc_interval();
-				this.update_layout(true);
-				this.ce("exec-all-scripts");
-			},
-			dataHashKey(newKey, oldKey) {
-				if (!newKey || newKey === oldKey) return;
-				const n = this.$props.data;
-				if (!this.sub.length) this.init_range();
-				const sub = this.subset();
-				if (this.sub.length || sub.length) utils_default.overwrite(this.sub, sub);
-				let nw = this.data_changed();
-				this.update_layout(nw);
-				utils_default.overwrite(this.range, this.range);
-				this.cursor.scroll_lock = !!n.scrollLock;
-				if (n.scrollLock && this.cursor.locked) this.cursor.locked = false;
-				if (this._hook_data) this.ce("?chart-data", nw);
-				this.update_last_values();
-				this.rerender++;
-			}
-		}
-	};
-	//#endregion
-	//#region src/mixins/chart/chart-resize.js
-	var chart_resize_default = {
-		methods: {
-			on_resize_grids(e) {
-				this.isResizing = true;
-				this.customGridHeights[e.gridAbove] = e.heightAbove;
-				this.customGridHeights[e.gridBelow] = e.heightBelow;
-				this._throttledResizeUpdate();
-			},
-			_throttledResizeUpdate() {
-				if (this._resizeThrottleRAF) return;
-				this._resizeThrottleRAF = requestAnimationFrame(() => {
-					this._resizeThrottleRAF = null;
-					this.update_layout(false, true);
-				});
-			},
-			on_resize_complete() {
-				this.chartLayout.grids.forEach((g, i) => {
-					if (!this.minimizedGrids[i]) this.savedGridHeights[i] = g.height;
-				});
-				this.isResizing = false;
-			},
-			on_toggle_minimize(gridId) {
-				const isMinimized = this.minimizedGrids[gridId];
-				if (isMinimized) {
-					this.minimizedGrids[gridId] = false;
-					if (this.savedGridHeights[gridId]) this.customGridHeights[gridId] = this.savedGridHeights[gridId];
-					else delete this.customGridHeights[gridId];
-				} else {
-					const currentHeight = this.chartLayout.grids[gridId]?.height;
-					if (currentHeight) this.savedGridHeights[gridId] = currentHeight;
-					this.minimizedGrids[gridId] = true;
-				}
-				this.redistribute_heights(gridId, isMinimized);
-				this.update_layout(false, true);
-			},
-			redistribute_heights(changedGridId, wasMinimized) {
-				const grids = this.chartLayout.grids;
-				const MINIMIZED_HEIGHT = 28;
-				const MIN_MAIN_CHART_HEIGHT = 100;
-				const MIN_OFFCHART_HEIGHT = 50;
-				if (wasMinimized) {
-					const restoreHeight = this.savedGridHeights[changedGridId] || 150;
-					let remainingDelta = restoreHeight - MINIMIZED_HEIGHT;
-					const mainChartHeight = this.customGridHeights[0] || grids[0]?.height || 100;
-					const mainAvailable = Math.max(0, mainChartHeight - MIN_MAIN_CHART_HEIGHT);
-					const takeFromMain = Math.min(remainingDelta, mainAvailable);
-					if (takeFromMain > 0) {
-						this.customGridHeights[0] = mainChartHeight - takeFromMain;
-						remainingDelta -= takeFromMain;
-					}
-					if (remainingDelta > 0) for (let i = changedGridId - 1; i >= 1; i--) {
-						if (this.minimizedGrids[i]) continue;
-						const gridHeight = this.customGridHeights[i] || grids[i]?.height || 100;
-						const available = Math.max(0, gridHeight - MIN_OFFCHART_HEIGHT);
-						const takeAmount = Math.min(remainingDelta, available);
-						if (takeAmount > 0) {
-							this.customGridHeights[i] = gridHeight - takeAmount;
-							remainingDelta -= takeAmount;
-						}
-						if (remainingDelta <= 0) break;
-					}
-					const actualHeight = restoreHeight - remainingDelta;
-					if (actualHeight > MINIMIZED_HEIGHT) this.customGridHeights[changedGridId] = actualHeight;
-				} else {
-					const gridAboveId = changedGridId - 1;
-					if (gridAboveId < 0) return;
-					let targetGridId = gridAboveId;
-					if (this.minimizedGrids[gridAboveId]) {
-						for (let i = gridAboveId; i >= 0; i--) if (!this.minimizedGrids[i]) {
-							targetGridId = i;
-							break;
-						}
-					}
-					const targetHeight = this.customGridHeights[targetGridId] || grids[targetGridId]?.height || 100;
-					const heightDelta = (this.savedGridHeights[changedGridId] || 150) - MINIMIZED_HEIGHT;
-					this.customGridHeights[targetGridId] = targetHeight + heightDelta;
-				}
-			},
-			minimize_all_offcharts() {
-				const grids = this.chartLayout.grids;
-				const MINIMIZED_HEIGHT = 28;
-				let hasExpandedOffchart = false;
-				for (let i = 1; i < grids.length; i++) if (!this.minimizedGrids[i]) {
-					hasExpandedOffchart = true;
-					break;
-				}
-				if (hasExpandedOffchart) {
-					let totalHeightGained = 0;
-					for (let i = 1; i < grids.length; i++) if (!this.minimizedGrids[i]) {
-						const currentHeight = this.customGridHeights[i] || grids[i]?.height;
-						if (currentHeight) {
-							this.savedGridHeights[i] = currentHeight;
-							totalHeightGained += currentHeight - MINIMIZED_HEIGHT;
-						}
-						this.minimizedGrids[i] = true;
-					}
-					const mainHeight = this.customGridHeights[0] || grids[0]?.height || 100;
-					this.customGridHeights[0] = mainHeight + totalHeightGained;
-				} else {
-					let totalHeightNeeded = 0;
-					for (let i = 1; i < grids.length; i++) {
-						const restoreHeight = this.savedGridHeights[i] || 150;
-						totalHeightNeeded += restoreHeight - MINIMIZED_HEIGHT;
-					}
-					const mainHeight = this.customGridHeights[0] || grids[0]?.height || 100;
-					const available = Math.max(0, mainHeight - 100);
-					const takeFromMain = Math.min(totalHeightNeeded, available);
-					if (takeFromMain > 0) this.customGridHeights[0] = mainHeight - takeFromMain;
-					const ratio = takeFromMain / totalHeightNeeded;
-					for (let i = 1; i < grids.length; i++) {
-						this.minimizedGrids[i] = false;
-						const actualHeight = MINIMIZED_HEIGHT + ((this.savedGridHeights[i] || 150) - MINIMIZED_HEIGHT) * (ratio < 1 ? ratio : 1);
-						this.customGridHeights[i] = actualHeight;
-					}
-				}
-				this.update_layout(false, true);
-			}
-		},
-		data() {
-			return {
-				customGridHeights: {},
-				minimizedGrids: {},
-				savedGridHeights: {},
-				isResizing: false
-			};
-		},
-		beforeUnmount() {
-			if (this._resizeThrottleRAF) {
-				cancelAnimationFrame(this._resizeThrottleRAF);
-				this._resizeThrottleRAF = null;
-			}
-		}
-	};
-	//#endregion
-	//#region src/mixins/chart/chart-cursor.js
-	var chart_cursor_default = {
-		methods: {
-			cursor_changed(e) {
-				if (e.mode) this.cursor.mode = e.mode;
-				if (this.cursor.mode !== "explore" && this.updater) this.updater.sync(e);
-				if (this._hook_xchanged) this.ce("?x-changed", e);
-			},
-			cursor_locked(state) {
-				if (this.cursor.scroll_lock && state) return;
-				this.cursor.locked = state;
-				if (this._hook_xlocked) this.ce("?x-locked", state);
-			},
-			register_kb(event) {
-				if (!this.$refs.keyboard) return;
-				this.$refs.keyboard.register(event);
-			},
-			remove_kb(event) {
-				if (!this.$refs.keyboard) return;
-				this.$refs.keyboard.remove(event);
-			}
-		},
-		data() {
-			return { cursor: {
-				x: null,
-				y: null,
-				t: null,
-				y$: null,
-				grid_id: null,
-				locked: false,
-				values: {},
-				scroll_lock: false,
-				mode: utils_default.xmode()
-			} };
-		}
-	};
-	//#endregion
-	//#region src/mixins/chart/chart-events.js
-	var chart_events_default = {
-		methods: {
-			emit_custom_event(d) {
-				this.on_shader_event(d, "botbar");
-				this.$emit("custom-event", d);
-				if (d.event === "remove-layer-meta") this.remove_meta_props(...d.args);
-				if (d.event === "grid-dblclick") this.on_toggle_minimize(d.args[0]);
-				if (d.event === "minimize-all-offcharts") this.minimize_all_offcharts();
-				if (d.event === "open-indicator-settings") this.$emit("open-indicator-settings", d.args[0]);
-			},
-			layer_meta_props(d) {
-				if (!(d.grid_id in this.layers_meta)) this.layers_meta[d.grid_id] = {};
-				this.layers_meta[d.grid_id][d.layer_id] = d;
-				this.update_layout();
-			},
-			remove_meta_props(grid_id, layer_id) {
-				if (grid_id in this.layers_meta) delete this.layers_meta[grid_id][layer_id];
-			},
-			legend_button_click(event) {
-				if (event && event.overlay === "Volume") {
-					if (event.button === "volume-detach") {
-						this.toggleVolumeDetach();
-						return;
-					}
-					if (event.button === "display") {
-						this.setVolumeShown(!this.volumeShown);
-						return;
-					}
-				}
-				this.$emit("legend-button-click", event);
-			},
-			ce(event, ...args) {
-				this.emit_custom_event({
-					event,
-					args
-				});
-			},
-			hooks(...list) {
-				list.forEach((x) => this[`_hook_${x}`] = true);
-			}
-		},
-		data() {
-			return { layers_meta: {} };
-		}
-	};
-	//#endregion
 	//#region src/components/Chart.vue
-	var VOLUME_LEGEND_FLAG = "$volumeLegend";
 	var _sfc_main$6 = {
 		name: "Chart",
 		props: [
@@ -22845,10 +22685,479 @@ pointers: 1 },
 		mixins: [
 			shaders_default,
 			datatrack_default,
-			chart_range_default,
-			chart_resize_default,
-			chart_cursor_default,
-			chart_events_default
+			{
+				methods: {
+					range_changed(r) {
+						r = this.clamp_range(r);
+						let sub = this.subset(r);
+						utils_default.overwrite(this.range, r);
+						utils_default.overwrite(this.sub, sub);
+						this.update_layout();
+						this.$emit("range-changed", r);
+						if (this.$props.ib) this.save_data_t();
+					},
+					clamp_range(r) {
+						const ohlcv = this.ohlcv;
+						if (!ohlcv || ohlcv.length < 1) return r;
+						let t1 = r[0], t2 = r[1];
+						if (!Number.isFinite(t1) || !Number.isFinite(t2) || t1 > t2) return r;
+						const first = this.$props.ib ? 0 : ohlcv[0][0];
+						const last = this.$props.ib ? ohlcv.length - 1 : ohlcv[ohlcv.length - 1][0];
+						const span = t2 - t1;
+						if (t2 < first) {
+							t1 = first - span + this.interval;
+							t2 = t1 + span;
+						} else if (t1 > last) {
+							t2 = last + span - this.interval;
+							t1 = t2 - span;
+						}
+						return [t1, t2];
+					},
+					goto(t) {
+						const dt = this.range[1] - this.range[0];
+						this.range_changed([t - dt, t]);
+					},
+					setRange(t1, t2) {
+						this.range_changed([t1, t2]);
+					},
+					calc_interval() {
+						let tf = utils_default.parse_tf(this.forced_tf);
+						if (this.ohlcv.length < 2 && !tf) return;
+						this.interval_ms = tf || utils_default.detect_interval(this.ohlcv);
+						this.interval = this.$props.ib ? 1 : this.interval_ms;
+						utils_default.warn(() => this.$props.ib && !this.chart.tf, constants_default.IB_TF_WARN, constants_default.SECOND);
+					},
+					set_ytransform(s) {
+						let existing = this.y_transforms[s.grid_id] || {};
+						let obj = Object.assign({}, existing, s);
+						if (obj.range) obj.range = [...obj.range];
+						this.y_transforms[s.grid_id] = obj;
+						this.update_layout();
+					},
+					default_range() {
+						const dl = this.$props.config.DEFAULT_LEN;
+						const ml = this.$props.config.MINIMUM_LEN + .5;
+						const l = this.ohlcv.length - 1;
+						if (this.ohlcv.length < 2) return;
+						let s, d;
+						if (this.ohlcv.length <= dl) {
+							s = 0;
+							d = ml;
+						} else {
+							s = l - dl;
+							d = .5;
+						}
+						if (!this.$props.ib) utils_default.overwrite(this.range, [this.ohlcv[s][0] - this.interval * d, this.ohlcv[l][0] + this.interval * ml]);
+						else utils_default.overwrite(this.range, [s - this.interval * d, l + this.interval * ml]);
+					},
+					subset(range = this.range) {
+						let [res, index] = this.filter(this.ohlcv, range[0] - this.interval, range[1]);
+						this.ti_map = new TI();
+						if (res) {
+							this.sub_start = index;
+							this.ti_map.init(this, res);
+							if (!this.$props.ib) return res || [];
+							return this.ti_map.sub_i;
+						}
+						return [];
+					},
+					init_range() {
+						this.calc_interval();
+						this.default_range();
+					},
+					update_layout(clac_tf, forceResize = false) {
+						if (clac_tf) this.calc_interval();
+						if (this.range[0] === void 0 || this.range[1] === void 0) if (this.ohlcv && this.ohlcv.length >= 2) {
+							this.init_range();
+							const sub = this.subset();
+							utils_default.overwrite(this.sub, sub);
+						} else return;
+						const rangeArr = [this.range[0], this.range[1]];
+						const subArr = Array.from(this.sub);
+						const layoutParams = {
+							chart: this.chart,
+							sub: subArr,
+							offsub: this.offsub,
+							interval: this.interval,
+							range: rangeArr,
+							ctx: this.ctx,
+							layers_meta: this.layers_meta,
+							ti_map: this.ti_map,
+							$props: this.$props,
+							y_transforms: this.y_transforms,
+							customGridHeights: this.customGridHeights,
+							minimizedGrids: this.minimizedGrids
+						};
+						this.chartLayout = markRaw(new Layout(layoutParams));
+						this.rerender++;
+						const layout = this.chartLayout;
+						if (forceResize) {
+							if (this.$refs.sec) this.$refs.sec.forEach((section, i) => {
+								const grid = section && section.$refs.grid;
+								const sidebar = section && section.$refs["sb-" + i];
+								if (grid && grid.resize_from_layout) grid.resize_from_layout(layout);
+								if (sidebar && sidebar.resize_from_layout) sidebar.resize_from_layout(layout);
+								if (section && section.updateLegendPosition) section.updateLegendPosition(layout);
+							});
+						} else if (this.$refs.sec) this.$refs.sec.forEach((section, i) => {
+							const grid = section && section.$refs.grid;
+							const sidebar = section && section.$refs["sb-" + i];
+							if (grid) {
+								if (grid.layoutOverride) grid.layoutOverride = null;
+								if (grid.renderer) grid.renderer.layout = layout.grids[i];
+							}
+							if (sidebar) {
+								if (sidebar.layoutOverride) sidebar.layoutOverride = null;
+								if (sidebar.renderer) sidebar.renderer.layout = layout.grids[i];
+							}
+							if (section && section.clearLayoutOverride) section.clearLayoutOverride();
+						});
+						if (this._hook_update) this.ce("?chart-update", this.chartLayout);
+					},
+					common_props() {
+						return {
+							title_txt: this.chart.name || this.$props.title_txt,
+							layout: this.chartLayout,
+							sub: this.sub,
+							range: this.range,
+							interval: this.interval,
+							cursor: this.cursor,
+							colors: this.$props.colors,
+							font: this.$props.font,
+							y_ts: this.y_transforms,
+							tv_id: this.$props.tv_id,
+							config: this.$props.config,
+							buttons: this.$props.buttons,
+							meta: this.meta,
+							skin: this.$props.skin,
+							dataVersion: this.$props.data?.$cd?.revision?.() ?? 0
+						};
+					},
+					overlay_subset(source, side) {
+						return source.map((d, i) => {
+							let res = utils_default.fast_filter(d.data, this.ti_map.i2t_mode(this.range[0] - this.interval, d.indexSrc), this.ti_map.i2t_mode(this.range[1], d.indexSrc));
+							return {
+								type: d.type,
+								name: utils_default.format_name(d),
+								data: this.ti_map.parse(res[0] || [], d.indexSrc || "map"),
+								settings: d.settings || this.settings_ov,
+								grid: d.grid || {},
+								tf: utils_default.parse_tf(d.tf),
+								i0: res[1],
+								loading: d.loading,
+								last: (this.last_values[side] || [])[i]
+							};
+						});
+					},
+					update_last_values() {
+						this.last_candle = this.ohlcv ? this.ohlcv[this.ohlcv.length - 1] : void 0;
+						this.last_values = {
+							onchart: [],
+							offchart: []
+						};
+						this.onchart.forEach((x, i) => {
+							let d = x.data || [];
+							this.last_values.onchart[i] = d[d.length - 1];
+						});
+						this.offchart.forEach((x, i) => {
+							let d = x.data || [];
+							this.last_values.offchart[i] = d[d.length - 1];
+						});
+					}
+				},
+				data() {
+					return {
+						sub: [],
+						range: [],
+						interval: 0,
+						interval_ms: 0,
+						y_transforms: {},
+						sub_start: void 0,
+						last_candle: [],
+						last_values: {},
+						rerender: 0,
+						chartLayout: null
+					};
+				},
+				computed: {
+					dimensions() {
+						return `${this.width}x${this.height}`;
+					},
+					dataHashKey() {
+						const data = this.$props.data;
+						if (!data) return "";
+						const ohlcv = data.ohlcv || data.chart?.data || [];
+						const ohlcvLen = ohlcv.length;
+						return `${ohlcvLen},${ohlcv[0]?.[0] ?? ""},${ohlcv[ohlcvLen - 1]?.[0] ?? ""},${ohlcv[ohlcvLen - 1]?.[4] ?? ""},${data.scrollLock ? "1" : "0"},${data.$cd?.revision?.() ?? 0}`;
+					}
+				},
+				watch: {
+					dimensions() {
+						this.update_layout();
+						if (this._hook_resize) this.ce("?chart-resize");
+					},
+					ib(nw) {
+						if (!nw) {
+							let t1 = this.ti_map.i2t(this.range[0]);
+							let t2 = this.ti_map.i2t(this.range[1]);
+							utils_default.overwrite(this.range, [t1, t2]);
+							this.interval = this.interval_ms;
+						} else {
+							this.init_range();
+							utils_default.overwrite(this.range, this.range);
+							this.interval = 1;
+						}
+						let sub = this.subset();
+						utils_default.overwrite(this.sub, sub);
+						this.update_layout();
+					},
+					timezone() {
+						this.update_layout();
+					},
+					colors() {
+						utils_default.overwrite(this.range, this.range);
+					},
+					forced_tf(n, p) {
+						this.calc_interval();
+						this.update_layout(true);
+						this.ce("exec-all-scripts");
+					},
+					dataHashKey(newKey, oldKey) {
+						if (!newKey || newKey === oldKey) return;
+						const n = this.$props.data;
+						if (!this.sub.length) this.init_range();
+						const sub = this.subset();
+						if (this.sub.length || sub.length) utils_default.overwrite(this.sub, sub);
+						let nw = this.data_changed();
+						this.update_layout(nw);
+						utils_default.overwrite(this.range, this.range);
+						this.cursor.scroll_lock = !!n.scrollLock;
+						if (n.scrollLock && this.cursor.locked) this.cursor.locked = false;
+						if (this._hook_data) this.ce("?chart-data", nw);
+						this.update_last_values();
+						this.rerender++;
+					}
+				}
+			},
+			{
+				methods: {
+					on_resize_grids(e) {
+						this.isResizing = true;
+						this.customGridHeights[e.gridAbove] = e.heightAbove;
+						this.customGridHeights[e.gridBelow] = e.heightBelow;
+						this._throttledResizeUpdate();
+					},
+					_throttledResizeUpdate() {
+						if (this._resizeThrottleRAF) return;
+						this._resizeThrottleRAF = requestAnimationFrame(() => {
+							this._resizeThrottleRAF = null;
+							this.update_layout(false, true);
+						});
+					},
+					on_resize_complete() {
+						this.chartLayout.grids.forEach((g, i) => {
+							if (!this.minimizedGrids[i]) this.savedGridHeights[i] = g.height;
+						});
+						this.isResizing = false;
+					},
+					on_toggle_minimize(gridId) {
+						const isMinimized = this.minimizedGrids[gridId];
+						if (isMinimized) {
+							this.minimizedGrids[gridId] = false;
+							if (this.savedGridHeights[gridId]) this.customGridHeights[gridId] = this.savedGridHeights[gridId];
+							else delete this.customGridHeights[gridId];
+						} else {
+							const currentHeight = this.chartLayout.grids[gridId]?.height;
+							if (currentHeight) this.savedGridHeights[gridId] = currentHeight;
+							this.minimizedGrids[gridId] = true;
+						}
+						this.redistribute_heights(gridId, isMinimized);
+						this.update_layout(false, true);
+					},
+					redistribute_heights(changedGridId, wasMinimized) {
+						const grids = this.chartLayout.grids;
+						const MINIMIZED_HEIGHT = 28;
+						const MIN_MAIN_CHART_HEIGHT = 100;
+						const MIN_OFFCHART_HEIGHT = 50;
+						if (wasMinimized) {
+							const restoreHeight = this.savedGridHeights[changedGridId] || 150;
+							let remainingDelta = restoreHeight - MINIMIZED_HEIGHT;
+							const mainChartHeight = this.customGridHeights[0] || grids[0]?.height || 100;
+							const mainAvailable = Math.max(0, mainChartHeight - MIN_MAIN_CHART_HEIGHT);
+							const takeFromMain = Math.min(remainingDelta, mainAvailable);
+							if (takeFromMain > 0) {
+								this.customGridHeights[0] = mainChartHeight - takeFromMain;
+								remainingDelta -= takeFromMain;
+							}
+							if (remainingDelta > 0) for (let i = changedGridId - 1; i >= 1; i--) {
+								if (this.minimizedGrids[i]) continue;
+								const gridHeight = this.customGridHeights[i] || grids[i]?.height || 100;
+								const available = Math.max(0, gridHeight - MIN_OFFCHART_HEIGHT);
+								const takeAmount = Math.min(remainingDelta, available);
+								if (takeAmount > 0) {
+									this.customGridHeights[i] = gridHeight - takeAmount;
+									remainingDelta -= takeAmount;
+								}
+								if (remainingDelta <= 0) break;
+							}
+							const actualHeight = restoreHeight - remainingDelta;
+							if (actualHeight > MINIMIZED_HEIGHT) this.customGridHeights[changedGridId] = actualHeight;
+						} else {
+							const gridAboveId = changedGridId - 1;
+							if (gridAboveId < 0) return;
+							let targetGridId = gridAboveId;
+							if (this.minimizedGrids[gridAboveId]) {
+								for (let i = gridAboveId; i >= 0; i--) if (!this.minimizedGrids[i]) {
+									targetGridId = i;
+									break;
+								}
+							}
+							const targetHeight = this.customGridHeights[targetGridId] || grids[targetGridId]?.height || 100;
+							const heightDelta = (this.savedGridHeights[changedGridId] || 150) - MINIMIZED_HEIGHT;
+							this.customGridHeights[targetGridId] = targetHeight + heightDelta;
+						}
+					},
+					minimize_all_offcharts() {
+						const grids = this.chartLayout.grids;
+						const MINIMIZED_HEIGHT = 28;
+						let hasExpandedOffchart = false;
+						for (let i = 1; i < grids.length; i++) if (!this.minimizedGrids[i]) {
+							hasExpandedOffchart = true;
+							break;
+						}
+						if (hasExpandedOffchart) {
+							let totalHeightGained = 0;
+							for (let i = 1; i < grids.length; i++) if (!this.minimizedGrids[i]) {
+								const currentHeight = this.customGridHeights[i] || grids[i]?.height;
+								if (currentHeight) {
+									this.savedGridHeights[i] = currentHeight;
+									totalHeightGained += currentHeight - MINIMIZED_HEIGHT;
+								}
+								this.minimizedGrids[i] = true;
+							}
+							const mainHeight = this.customGridHeights[0] || grids[0]?.height || 100;
+							this.customGridHeights[0] = mainHeight + totalHeightGained;
+						} else {
+							let totalHeightNeeded = 0;
+							for (let i = 1; i < grids.length; i++) {
+								const restoreHeight = this.savedGridHeights[i] || 150;
+								totalHeightNeeded += restoreHeight - MINIMIZED_HEIGHT;
+							}
+							const mainHeight = this.customGridHeights[0] || grids[0]?.height || 100;
+							const available = Math.max(0, mainHeight - 100);
+							const takeFromMain = Math.min(totalHeightNeeded, available);
+							if (takeFromMain > 0) this.customGridHeights[0] = mainHeight - takeFromMain;
+							const ratio = takeFromMain / totalHeightNeeded;
+							for (let i = 1; i < grids.length; i++) {
+								this.minimizedGrids[i] = false;
+								const actualHeight = MINIMIZED_HEIGHT + ((this.savedGridHeights[i] || 150) - MINIMIZED_HEIGHT) * (ratio < 1 ? ratio : 1);
+								this.customGridHeights[i] = actualHeight;
+							}
+						}
+						this.update_layout(false, true);
+					}
+				},
+				data() {
+					return {
+						customGridHeights: {},
+						minimizedGrids: {},
+						savedGridHeights: {},
+						isResizing: false
+					};
+				},
+				beforeUnmount() {
+					if (this._resizeThrottleRAF) {
+						cancelAnimationFrame(this._resizeThrottleRAF);
+						this._resizeThrottleRAF = null;
+					}
+				}
+			},
+			{
+				methods: {
+					cursor_changed(e) {
+						if (e.mode) this.cursor.mode = e.mode;
+						if (this.cursor.mode !== "explore" && this.updater) this.updater.sync(e);
+						if (this._hook_xchanged) this.ce("?x-changed", e);
+					},
+					cursor_locked(state) {
+						if (this.cursor.scroll_lock && state) return;
+						this.cursor.locked = state;
+						if (this._hook_xlocked) this.ce("?x-locked", state);
+					},
+					register_kb(event) {
+						if (this.$refs.keyboard) {
+							this.$refs.keyboard.register(event);
+							return;
+						}
+						this.$nextTick(() => {
+							if (this.$refs.keyboard) this.$refs.keyboard.register(event);
+						});
+					},
+					remove_kb(event) {
+						if (!this.$refs.keyboard) return;
+						this.$refs.keyboard.remove(event);
+					}
+				},
+				data() {
+					return { cursor: {
+						x: null,
+						xr: null,
+						y: null,
+						t: null,
+						y$: null,
+						grid_id: null,
+						locked: false,
+						values: {},
+						scroll_lock: false,
+						mode: utils_default.xmode()
+					} };
+				}
+			},
+			{
+				methods: {
+					emit_custom_event(d) {
+						this.on_shader_event(d, "botbar");
+						this.$emit("custom-event", d);
+						if (d.event === "remove-layer-meta") this.remove_meta_props(...d.args);
+						if (d.event === "grid-dblclick") this.on_toggle_minimize(d.args[0]);
+						if (d.event === "minimize-all-offcharts") this.minimize_all_offcharts();
+						if (d.event === "open-indicator-settings") this.$emit("open-indicator-settings", d.args[0]);
+					},
+					layer_meta_props(d) {
+						if (!(d.grid_id in this.layers_meta)) this.layers_meta[d.grid_id] = {};
+						this.layers_meta[d.grid_id][d.layer_id] = d;
+						this.update_layout();
+					},
+					remove_meta_props(grid_id, layer_id) {
+						if (grid_id in this.layers_meta) delete this.layers_meta[grid_id][layer_id];
+					},
+					legend_button_click(event) {
+						if (event && event.overlay === "Volume") {
+							if (event.button === "volume-detach") {
+								this.toggleVolumeDetach();
+								return;
+							}
+							if (event.button === "display") {
+								this.setVolumeShown(!this.volumeShown);
+								return;
+							}
+						}
+						this.$emit("legend-button-click", event);
+					},
+					ce(event, ...args) {
+						this.emit_custom_event({
+							event,
+							args
+						});
+					},
+					hooks(...list) {
+						list.forEach((x) => this[`_hook_${x}`] = true);
+					}
+				},
+				data() {
+					return { layers_meta: {} };
+				}
+			}
 		],
 		components: {
 			GridSection: Section_default,
@@ -22923,7 +23232,12 @@ pointers: 1 },
 					type: "Volume",
 					name: "Volume",
 					data: data.chart.data,
-					settings: { [VOLUME_LEGEND_FLAG]: true }
+					settings: {
+						[VOLUME_LEGEND_FLAG]: true,
+						style: "Bar",
+						colorVolUp: VOLUME_SOLID_UP,
+						colorVolDw: VOLUME_SOLID_DW
+					}
 				});
 				this.setVolumeShown(false);
 				this.refreshOffchartOverlays();
@@ -24185,7 +24499,7 @@ pointers: 1 },
 	var TradingVue_default = /*#__PURE__*/ _plugin_vue_export_helper_default(_sfc_main, [["render", _sfc_render]]);
 	//#endregion
 	//#region src/helpers/script_ww.js?worker&inline
-	var jsContent = "//#region \\0rolldown/runtime.js\nvar __create = Object.create;\nvar __defProp = Object.defineProperty;\nvar __getOwnPropDesc = Object.getOwnPropertyDescriptor;\nvar __getOwnPropNames = Object.getOwnPropertyNames;\nvar __getProtoOf = Object.getPrototypeOf;\nvar __hasOwnProp = Object.prototype.hasOwnProperty;\nvar __commonJSMin = (cb, mod) => () => (mod || (cb((mod = { exports: {} }).exports, mod), cb = null), mod.exports);\nvar __copyProps = (to, from, except, desc) => {\n	if (from && typeof from === \"object\" || typeof from === \"function\") for (var keys = __getOwnPropNames(from), i = 0, n = keys.length, key; i < n; i++) {\n		key = keys[i];\n		if (!__hasOwnProp.call(to, key) && key !== except) __defProp(to, key, {\n			get: ((k) => from[k]).bind(null, key),\n			enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable\n		});\n	}\n	return to;\n};\nvar __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(isNodeMode || !mod || !mod.__esModule ? __defProp(target, \"default\", {\n	value: mod,\n	enumerable: true\n}) : target, mod));\n//#endregion\n//#region src/helpers/script_state.js\nconst state = {\n	t: 0,\n	tf: 0,\n	iter: 0,\n	data: {},\n	shared: {},\n	mods: {},\n	send: null,\n	std_inject: null,\n	match_ds: null\n};\n//#endregion\n//#region src/stuff/constants.js\nconst DEF_LIMIT$3 = 5;\nconst BUF_INC$2 = 5;\nconst FDEFS$1 = /(function |)([$A-Z_][0-9A-Z_$\\.]*)[\\s]*?\\((.*?)\\)/gim;\nconst FDEFS1$1 = /(function |)([$A-Z_][0-9A-Z_$\\.]*)[\\s]*?\\((.*?\\s*)\\)/im;\nconst FDEFS2$1 = /(function |)([$A-Z_][0-9A-Z_$\\.]*)[\\s]*?\\((.*\\s*)\\)/gims;\nconst SBRACKETS$1 = /([$A-Z_][0-9A-Z_$\\.]*)[\\s]*?\\[([^\"^\\[^\\]]+?)\\]/gim;\nconst TFSTR$1 = /(\\d+)(\\w*)/gm;\nconst SECOND = 1e3;\nconst MINUTE = SECOND * 60;\nconst MINUTE3 = MINUTE * 3;\nconst MINUTE5 = MINUTE * 5;\nconst MINUTE15 = MINUTE * 15;\nconst MINUTE30 = MINUTE * 30;\nconst HOUR = MINUTE * 60;\nconst HOUR4 = HOUR * 4;\nconst HOUR12 = HOUR * 12;\nconst DAY = HOUR * 24;\nconst WEEK = DAY * 7;\nconst MONTH = WEEK * 4;\nconst YEAR = DAY * 365;\nconst MONTHMAP = [\n	\"Jan\",\n	\"Feb\",\n	\"Mar\",\n	\"Apr\",\n	\"May\",\n	\"Jun\",\n	\"Jul\",\n	\"Aug\",\n	\"Sep\",\n	\"Oct\",\n	\"Nov\",\n	\"Dec\"\n];\nconst TIMESCALES = [\n	MINUTE,\n	MINUTE * 2,\n	MINUTE5,\n	MINUTE * 10,\n	MINUTE15,\n	MINUTE30,\n	HOUR,\n	HOUR * 1.5,\n	HOUR * 3,\n	HOUR * 6,\n	HOUR * 12,\n	DAY,\n	DAY * 2,\n	DAY * 3,\n	DAY * 5,\n	DAY * 7,\n	DAY * 10,\n	DAY * 15,\n	MONTH,\n	MONTH * 2,\n	MONTH * 3,\n	MONTH * 4,\n	MONTH * 6,\n	YEAR,\n	YEAR * 2,\n	YEAR * 3,\n	YEAR * 5,\n	YEAR * 10\n];\nconst $SCALES = [\n	.05,\n	.1,\n	.2,\n	.25,\n	.5,\n	.8,\n	1,\n	2,\n	5\n];\nconst OVERLAY_COLORS = [\n	\"#42b28a\",\n	\"#5691ce\",\n	\"#612ff9\",\n	\"#d50b90\",\n	\"#ff2316\"\n];\nconst ChartConfig = {\n	SBMIN: 60,\n	SBMAX: Infinity,\n	TOOLBAR: 57,\n	RIGHTBAR: 250,\n	TB_ICON: 25,\n	TB_ITEM_M: 6,\n	TB_ICON_BRI: 1,\n	TB_ICON_HOLD: 420,\n	TB_BORDER: 1,\n	TB_B_STYLE: \"dotted\",\n	TOOL_COLL: 7,\n	EXPAND: .15,\n	CANDLEW: .6,\n	GRIDX: 100,\n	GRIDY: 47,\n	BOTBAR: 28,\n	PANHEIGHT: 22,\n	DEFAULT_LEN: 50,\n	MINIMUM_LEN: 5,\n	MIN_ZOOM: 25,\n	MAX_ZOOM: 1e3,\n	VOLSCALE: .15,\n	UX_OPACITY: .9,\n	ZOOM_MODE: \"tv\",\n	L_BTN_SIZE: 21,\n	L_BTN_MARGIN: \"-6px 0 -6px 0\",\n	SCROLL_WHEEL: \"prevent\"\n};\nChartConfig.FONT = `11px -apple-system,BlinkMacSystemFont,\n    Segoe UI,Roboto,Oxygen,Ubuntu,Cantarell,\n    Fira Sans,Droid Sans,Helvetica Neue,\n    sans-serif`;\nvar constants_default = {\n	DEF_LIMIT: DEF_LIMIT$3,\n	BUF_INC: BUF_INC$2,\n	FDEFS: FDEFS$1,\n	FDEFS1: FDEFS1$1,\n	FDEFS2: FDEFS2$1,\n	SBRACKETS: SBRACKETS$1,\n	TFSTR: TFSTR$1,\n	SECOND,\n	MINUTE,\n	MINUTE5,\n	MINUTE15,\n	MINUTE30,\n	HOUR,\n	HOUR4,\n	DAY,\n	WEEK,\n	MONTH,\n	YEAR,\n	MONTHMAP,\n	TIMESCALES,\n	$SCALES,\n	ChartConfig,\n	map_unit: {\n		\"1s\": SECOND,\n		\"5s\": SECOND * 5,\n		\"10s\": SECOND * 10,\n		\"20s\": SECOND * 20,\n		\"30s\": SECOND * 30,\n		\"1m\": MINUTE,\n		\"3m\": MINUTE3,\n		\"5m\": MINUTE5,\n		\"15m\": MINUTE15,\n		\"30m\": MINUTE30,\n		\"1H\": HOUR,\n		\"2H\": HOUR * 2,\n		\"3H\": HOUR * 3,\n		\"4H\": HOUR4,\n		\"6H\": HOUR * 6,\n		\"8H\": HOUR * 8,\n		\"12H\": HOUR12,\n		\"1h\": HOUR,\n		\"2h\": HOUR * 2,\n		\"3h\": HOUR * 3,\n		\"4h\": HOUR4,\n		\"6h\": HOUR * 6,\n		\"8h\": HOUR * 8,\n		\"12h\": HOUR12,\n		\"1D\": DAY,\n		\"1d\": DAY,\n		\"1W\": WEEK,\n		\"1w\": WEEK,\n		\"1M\": MONTH,\n		\"1Y\": YEAR\n	},\n	IB_TF_WARN: \"When using IB mode you should specify timeframe ('tf' filed in 'chart' object),otherwise you can get an unexpected behaviour\",\n	OVERLAY_COLORS\n};\n//#endregion\n//#region src/helpers/script_utils.js\nconst { BUF_INC: BUF_INC$1, FDEFS, SBRACKETS, TFSTR } = constants_default;\nlet tf_cache = {};\nfunction f_args(src) {\n	FDEFS.lastIndex = 0;\n	let m = FDEFS.exec(src);\n	if (m) {\n		m[1].trim();\n		m[2].trim();\n		return m[3].trim().split(\",\").map((x) => x.trim());\n	}\n	return [];\n}\nfunction f_body(src) {\n	return src.slice(src.indexOf(\"{\") + 1, src.lastIndexOf(\"}\"));\n}\nfunction wrap_idxs(src, pre = \"\") {\n	SBRACKETS.lastIndex = 0;\n	let changed = false;\n	let m;\n	do {\n		m = SBRACKETS.exec(src);\n		if (m) {\n			let vname = m[1].trim();\n			let vindex = m[2].trim();\n			if (vindex === \"0\" || parseInt(vindex) < BUF_INC$1) continue;\n			switch (vname) {\n				case \"let\":\n				case \"var\":\n				case \"return\": continue;\n			}\n			let wrap = `${vname}[${pre}_i(${vindex}, ${vname})]`;\n			src = src.replace(m[0], wrap);\n			changed = true;\n		}\n	} while (m);\n	return changed ? src : src;\n}\nfunction make_module_lib(mod) {\n	let lib = {};\n	for (let k in mod) {\n		if (k === \"main\" || k === \"id\") continue;\n		let a = f_args(mod[k]);\n		lib[k] = new Function(a, f_body(mod[k]));\n	}\n	return lib;\n}\nfunction get_raw_src(f) {\n	if (typeof f === \"string\") return f;\n	let src = f.toString();\n	return src.slice(src.indexOf(\"{\") + 1, src.lastIndexOf(\"}\"));\n}\nfunction tf_from_pair(num, pf) {\n	let mult = 1;\n	switch (pf) {\n		case \"s\":\n			mult = constants_default.SECOND;\n			break;\n		case \"m\":\n			mult = constants_default.MINUTE;\n			break;\n		case \"H\":\n			mult = constants_default.HOUR;\n			break;\n		case \"D\":\n			mult = constants_default.DAY;\n			break;\n		case \"W\":\n			mult = constants_default.WEEK;\n			break;\n		case \"M\":\n			mult = constants_default.MONTH;\n			break;\n		case \"Y\":\n			mult = constants_default.YEAR;\n			break;\n	}\n	return parseInt(num) * mult;\n}\nfunction tf_from_str(str) {\n	if (typeof str === \"number\") return str;\n	if (tf_cache[str]) return tf_cache[str];\n	TFSTR.lastIndex = 0;\n	let m = TFSTR.exec(str);\n	if (m) {\n		tf_cache[str] = tf_from_pair(m[1], m[2]);\n		return tf_cache[str];\n	}\n}\nfunction get_fn_id(pre, id) {\n	return pre + \"-\" + id.split(\"<-\").pop();\n}\nfunction ovf(obj, f) {\n	let nw = {};\n	for (let id in obj) {\n		nw[id] = {};\n		for (let k in obj[id]) {\n			if (k === \"data\") continue;\n			nw[id][k] = obj[id][k];\n		}\n		nw[id].data = f(obj[id].data);\n	}\n	return nw;\n}\nfunction nextt(data, t, ti = 0) {\n	let i0 = 0;\n	let iN = data.length - 1;\n	let mid;\n	while (i0 <= iN) {\n		mid = Math.floor((i0 + iN) / 2);\n		if (data[mid][ti] === t) return mid;\n		else if (data[mid][ti] < t) i0 = mid + 1;\n		else iN = mid - 1;\n	}\n	return t < data[mid][ti] ? mid : mid + 1;\n}\nlet _dssSizeCache = {\n	key: \"\",\n	bytes: 0\n};\nfunction size_of_dss(data) {\n	let keyParts = [];\n	for (let id in data) if (data[id].data) keyParts.push(id + \":\" + data[id].data.length);\n	let key = keyParts.join(\",\");\n	if (key === _dssSizeCache.key) return _dssSizeCache.bytes;\n	let bytes = 0;\n	for (let id in data) if (data[id].data && data[id].data[0]) {\n		let s0 = size_of(data[id].data[0]);\n		bytes += s0 * data[id].data.length;\n	}\n	_dssSizeCache = {\n		key,\n		bytes\n	};\n	return bytes;\n}\nfunction size_of(object) {\n	let list = [], stack = [object], bytes = 0;\n	while (stack.length) {\n		let value = stack.pop();\n		let type = typeof value;\n		if (type === \"boolean\") bytes += 4;\n		else if (type === \"string\") bytes += value.length * 2;\n		else if (type === \"number\") bytes += 8;\n		else if (type === \"object\" && list.indexOf(value) === -1) {\n			list.push(value);\n			for (let i in value) stack.push(value[i]);\n		}\n	}\n	return bytes;\n}\nfunction update(data, val) {\n	const i = data.length - 1;\n	const last = data[i];\n	if (!last || val[0] > last[0]) data.push(val);\n	else data[i] = val;\n}\n//#endregion\n//#region src/helpers/std/math.js\nvar math_default = {\n	/** Absolute value\n	* @param {number} x - Input\n	* @return {number} - Absolute value\n	*/\n	abs(x) {\n		return Math.abs(x);\n	},\n	/** Arccosine function\n	* @param {number} x - Input\n	* @return {number} - Arccosine of x\n	*/\n	acos(x) {\n		return Math.acos(x);\n	},\n	/** Arcsine function\n	* @param {number} x - Input\n	* @return {number} - Arcsine of x\n	*/\n	asin(x) {\n		return Math.asin(x);\n	},\n	/** Arctangent function\n	* @param {number} x - Input\n	* @return {number} - Arctangent of x\n	*/\n	atan(x) {\n		return Math.atan(x);\n	},\n	/** Shortcut for Math.ceil()\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	ceil(x) {\n		return Math.ceil(x);\n	},\n	/** Cosine function\n	* @param {number} x - Input\n	* @return {number} - Cosine of x\n	*/\n	cos(x) {\n		return Math.cos(x);\n	},\n	/** Shortcut for Math.exp()\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	exp(x) {\n		return Math.exp(x);\n	},\n	/** Shortcut for Math.floor()\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	floor(x) {\n		return Math.floor(x);\n	},\n	/** Shortcut for Math.log()\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	log(x) {\n		return Math.log(x);\n	},\n	/** Shortcut for Math.log10()\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	log10(x) {\n		return Math.log10(x);\n	},\n	/** Shortcut for Math.pow()\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	pow(x, y) {\n		return Math.pow(x, y);\n	},\n	/** Shortcut for Math.round()\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	round(x) {\n		return Math.round(x);\n	},\n	/** Shortcut for Math.sign()\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	sign(x) {\n		return Math.sign(x);\n	},\n	/** Sine function\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	sin(x) {\n		return Math.sin(x);\n	},\n	/** Shortcut for Math.sqrt()\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	sqrt(x) {\n		return Math.sqrt(x);\n	},\n	/** Tangent function\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	tan(x) {\n		return Math.tan(x);\n	}\n};\n//#endregion\n//#region src/helpers/std/time.js\nvar time_default = {\n	/** Day of month, literally\n	* @param {number} [time] - Time in ms (current t, if not defined)\n	* @return {number} - Day\n	*/\n	dayofmonth(time) {\n		return new Date(time || state.t).getUTCDate();\n	},\n	/** Day of week, literally\n	* @param {number} [time] - Time in ms (current t, if not defined)\n	* @return {number} - Day\n	*/\n	dayofweek(time) {\n		return new Date(time || state.t).getUTCDay() + 1;\n	},\n	/** Returns hours of a given timestamp\n	* @param {number} [time] - Time in ms (current t, if not defined)\n	* @return {number} - Hour\n	*/\n	hour(time) {\n		return new Date(time || state.t).getUTCHours();\n	},\n	/** Returns minutes of a given timestamp\n	* @param {number} [time] - Time in ms (current t, if not defined)\n	* @return {number} - Minute\n	*/\n	minute(time) {\n		return new Date(time || state.t).getUTCMinutes();\n	},\n	/** Month\n	* @param {number} [time] - Time in ms (current t, if not defined)\n	* @return {number} - Month\n	*/\n	month(time) {\n		return new Date(time || state.t).getUTCMonth();\n	},\n	/** The current time\n	* @return {number} - timestamp\n	*/\n	now() {\n		return Date.now();\n	},\n	/** Returns seconds of a given timestamp\n	* @param {number} [time] - Time in ms (current t, if not defined)\n	* @return {number} - Second\n	*/\n	second(time) {\n		return new Date(time || state.t).getUTCSeconds();\n	},\n	/** Week of year, literally\n	* @param {number} [time] - Time in ms (current t, if not defined)\n	* @return {number} - Week\n	*/\n	weekofyear(time) {\n		let date = new Date(time || state.t);\n		date.setUTCHours(0, 0, 0, 0);\n		date.setDate(date.getUTCDate() + 3 - (date.getUTCDay() + 6) % 7);\n		let week1 = new Date(date.getUTCFullYear(), 0, 4);\n		return 1 + Math.round(((date - week1) / 864e5 - 3 + (week1.getUTCDay() + 6) % 7) / 7);\n	},\n	/** Year\n	* @param {number} [time] - Time in ms (current t, if not defined)\n	* @return {number} - Year\n	*/\n	year(time) {\n		return new Date(time || state.t).getUTCFullYear();\n	}\n};\n//#endregion\n//#region src/helpers/std/chart.js\nvar chart_default = {\n	chart() {},\n	/** Display data point onchart\n	* (create a new overlay in DataCube)\n	* @param {(TS|TS[]|*)} x - Data point / TS / array of TS\n	* @param {string} [name] - Overlay name\n	* @param {Object} [sett] - Object with settings & OV type\n	*/\n	onchart(x, name, sett = {}, _id) {\n		let off = 0;\n		name = name || get_fn_id(\"Onchart\", _id);\n		if (x && x.__id__) {\n			off = x.__offset__ || 0;\n			x = x[0];\n		}\n		if (Array.isArray(x) && x[0] && x[0].__id__) {\n			off = x[0].__offset__ || 0;\n			x = x.map((x) => x[0]);\n		}\n		if (!this.env.onchart[name]) {\n			let type = sett.type;\n			delete sett.type;\n			sett.$synth = true;\n			sett.skipNaN = true;\n			let post = Array.isArray(x) ? \"s\" : \"\";\n			this.env.onchart[name] = {\n				name,\n				type: type || \"Spline\" + post,\n				data: [],\n				settings: sett,\n				scripts: false,\n				grid: sett.grid || {}\n			};\n		}\n		off *= state.tf;\n		let v = Array.isArray(x) ? [state.t + off, ...x] : [state.t + off, x];\n		update(this.env.onchart[name].data, v);\n	},\n	/** Display data point offchart\n	* (create a new overlay in DataCube)\n	* @param {(TS|TS[]|*)} x - Data point / TS / array of TS\n	* @param {string} [name] - Overlay name\n	* @param {Object} [sett] - Object with settings & OV type\n	*/\n	offchart(x, name, sett = {}, _id) {\n		name = name || get_fn_id(\"Offchart\", _id);\n		let off = 0;\n		if (x && x.__id__) {\n			off = x.__offset__ || 0;\n			x = x[0];\n		}\n		if (Array.isArray(x) && x[0] && x[0].__id__) {\n			off = x[0].__offset__ || 0;\n			x = x.map((x) => x[0]);\n		}\n		if (!this.env.offchart[name]) {\n			let type = sett.type;\n			delete sett.type;\n			sett.$synth = true;\n			sett.skipNaN = true;\n			let post = Array.isArray(x) ? \"s\" : \"\";\n			this.env.offchart[name] = {\n				name,\n				type: type || \"Spline\" + post,\n				data: [],\n				settings: sett,\n				scripts: false,\n				grid: sett.grid || {}\n			};\n		}\n		off *= state.tf;\n		let v = Array.isArray(x) ? [state.t + off, ...x] : [state.t + off, x];\n		update(this.env.offchart[name].data, v);\n	},\n	/** Returns true when the candle(<tf>) is being closed\n	* @param {(number|string)} tf - Timeframe in ms or as a string\n	* @return {boolean}\n	*/\n	onclose(tf) {\n		if (!this.env.shared.onclose) return false;\n		if (!tf) tf = state.tf;\n		return (state.t + state.tf) % tf_from_str(tf) === 0;\n	},\n	/** Emits an event to DataCube\n	* @param {string} type - Signal type\n	* @param {*} data - Signal data\n	*/\n	signal(type, data = {}) {\n		if (state.shared.event !== \"update\") return;\n		state.send(\"script-signal\", {\n			type,\n			data\n		});\n	},\n	/** Emits an event if cond === true\n	* @param {(boolean|TS)} cond - The condition\n	* @param {string} type - Signal type\n	* @param {*} data - Signal data\n	*/\n	signalif(cond, type, data = {}) {\n		if (state.shared.event !== \"update\") return;\n		if (cond && cond.__id__) cond = cond[0];\n		if (cond) state.send(\"script-signal\", {\n			type,\n			data\n		});\n	},\n	/** Sends update to some overlay / main chart\n	* @param {string} id - Overlay id\n	* @param {Object} fields - Fields to be overwritten\n	*/\n	modify(id, fields) {\n		state.send(\"modify-overlay\", {\n			uuid: id,\n			fields\n		});\n	},\n	/** Sends settings update\n	* (can be called from init(), update() or post())\n	* @param {Object} upd - Settings update (object to merge)\n	*/\n	settings(upd) {\n		this.env.send_modify({ settings: upd });\n		Object.assign(this.env.src.sett, upd);\n	}\n};\n//#endregion\n//#region src/helpers/std/utils.js\nvar utils_default$1 = {\n	/** Replaces the variable if it's NaN\n	* @param {*} x - The variable\n	* @param {*} [v] - A value to replace with\n	* @return {*} - New value\n	*/\n	nz(x, v) {\n		if (x == void 0 || x !== x) return v || 0;\n		return x;\n	},\n	/** Is the variable NaN ?\n	* @param {*} x - The variable\n	* @return {boolean} - New value\n	*/\n	na(x) {\n		return x == void 0 || x !== x;\n	},\n	/** Replaces the var with NaN if Infinite\n	* @param {*} x - The variable\n	* @param {*} [v] - A value to replace with\n	* @return {*} - New value\n	*/\n	nf(x, v) {\n		if (!isFinite(x)) return v !== void 0 ? v : NaN;\n		return x;\n	},\n	/** Converts the variable to Boolean\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	bool(x) {\n		return !!x;\n	},\n	/** Returns x or y depending on the condition\n	* @param {(boolean|TS)} cond - Condition\n	* @param {*} x - First value\n	* @param {*} y - Second value\n	* @return {*}\n	*/\n	iff(cond, x, y) {\n		if (cond && cond.__id__) cond = cond[0];\n		return cond ? x : y;\n	},\n	/** Sets the reverse buffer size for a given\n	* time-series (default = 5, grows on demand)\n	* @param {TS} src - Input\n	* @param {number} len - New length\n	*/\n	buffsize(src, len) {\n		src.__len__ = len;\n	},\n	/** For a given series replaces NaN values with\n	* previous nearest non-NaN value\n	* @param {TS} src - Input time-series\n	* @return {TS}\n	*/\n	fixnan(src) {\n		if (this.na(src[0])) {\n			for (var i = 1; i < src.length; i++) if (!this.na(src[i])) {\n				src[0] = src[i];\n				break;\n			}\n		}\n		return src;\n	},\n	/** Shifts TS left or right by \"num\" candles\n	* @param {number} num - Offset measured in candles\n	* @return {TS} - New / existing time-series\n	*/\n	offset(src, num, _id) {\n		if (src.__id__) {\n			src.__offset__ = num;\n			return src;\n		}\n		let id = this._tsid(_id, `offset(${num})`);\n		let out = this.ts(src, id);\n		out.__offset__ = num;\n		return out;\n	}\n};\n//#endregion\n//#region src/helpers/std/analysis.js\nvar analysis_default = {\n	/** Adds values / time-series\n	* @param {(TS|*)} x - First input\n	* @param {(TS|*)} y - Second input\n	* @return {TS} - New time-series\n	*/\n	add(x, y, _id) {\n		let id = this._tsid(_id, `add`);\n		let x0 = this.na(x) ? NaN : x.__id__ ? x[0] : x;\n		let y0 = this.na(y) ? NaN : y.__id__ ? y[0] : y;\n		return this.ts(x0 + y0, id, x.__tf__);\n	},\n	/** Subtracts values / time-series\n	* @param {(TS|*)} x - First input\n	* @param {(TS|*)} y - Second input\n	* @return {TS} - New time-series\n	*/\n	sub(x, y, _id) {\n		let id = this._tsid(_id, `sub`);\n		let x0 = this.na(x) ? NaN : x.__id__ ? x[0] : x;\n		let y0 = this.na(y) ? NaN : y.__id__ ? y[0] : y;\n		return this.ts(x0 - y0, id, x.__tf__);\n	},\n	/** Multiplies values / time-series\n	* @param {(TS|*)} x - First input\n	* @param {(TS|*)} y - Second input\n	* @return {TS} - New time-series\n	*/\n	mult(x, y, _id) {\n		let id = this._tsid(_id, `mult`);\n		let x0 = this.na(x) ? NaN : x.__id__ ? x[0] : x;\n		let y0 = this.na(y) ? NaN : y.__id__ ? y[0] : y;\n		return this.ts(x0 * y0, id, x.__tf__);\n	},\n	/** Divides values / time-series\n	* @param {(TS|*)} x - First input\n	* @param {(TS|*)} y - Second input\n	* @return {TS} - New time-series\n	*/\n	div(x, y, _id) {\n		let id = this._tsid(_id, `div`);\n		let x0 = this.na(x) ? NaN : x.__id__ ? x[0] : x;\n		let y0 = this.na(y) ? NaN : y.__id__ ? y[0] : y;\n		return this.ts(x0 / y0, id, x.__tf__);\n	},\n	/** Returns a negative value / time-series\n	* @param {(TS|*)} x - Input\n	* @return {TS} - New time-series\n	*/\n	neg(x, _id) {\n		let id = this._tsid(_id, `neg`);\n		let x0 = this.na(x) ? NaN : x.__id__ ? x[0] : x;\n		return this.ts(-x0, id, x.__tf__);\n	},\n	/** Average of arguments\n	* @param {...number} args - Numeric values\n	* @return {number}\n	*/\n	avg(...args) {\n		args.pop();\n		let sum = 0;\n		for (var i = 0; i < args.length; i++) sum += args[i];\n		return sum / args.length;\n	},\n	/** Max of arguments\n	* @param {...number} args - Numeric values\n	* @return {number}\n	*/\n	max(...args) {\n		args.pop();\n		return Math.max(...args);\n	},\n	/** Min of arguments\n	* @param {...number} args - Numeric values\n	* @return {number}\n	*/\n	min(...args) {\n		args.pop();\n		return Math.min(...args);\n	},\n	/** Change: x[0] - x[len]\n	* @param {TS} src - Input\n	* @param {number} [len] - Length\n	* @return {TS} - New time-series\n	*/\n	change(src, len = 1, _id) {\n		let id = this._tsid(_id, `change(${len})`);\n		return this.ts(src[0] - src[len], id, src.__tf__);\n	},\n	/** When one time-series crosses another\n	* @param {TS} src1 - TS1\n	* @param {TS} src2 - TS2\n	* @return {TS} - New time-series\n	*/\n	cross(src1, src2, _id) {\n		let id = this._tsid(_id, `cross`);\n		let x = src1[0] > src2[0] !== src1[1] > src2[1];\n		return this.ts(x, id, src1.__tf__);\n	},\n	/** When one time-series goes over another one\n	* @param {TS} src1 - TS1\n	* @param {TS} src2 - TS2\n	* @return {TS} - New time-series\n	*/\n	crossover(src1, src2, _id) {\n		let id = this._tsid(_id, `crossover`);\n		let x = src1[0] > src2[0] && src1[1] <= src2[1];\n		return this.ts(x, id, src1.__tf__);\n	},\n	/** When one time-series goes under another one\n	* @param {TS} src1 - TS1\n	* @param {TS} src2 - TS2\n	* @return {TS} - New time-series\n	*/\n	crossunder(src1, src2, _id) {\n		let id = this._tsid(_id, `crossunder`);\n		let x = src1[0] < src2[0] && src1[1] >= src2[1];\n		return this.ts(x, id, src1.__tf__);\n	},\n	/** Sum of all elements of src\n	* @param {TS} src1 - Input\n	* @return {TS} - New time-series\n	*/\n	cum(src, _id) {\n		let id = this._tsid(_id, `cum`);\n		let res = this.ts(0, id, src.__tf__);\n		res[0] = this.nz(src[0]) + this.nz(res[1]);\n		return res;\n	},\n	/** Test if \"src\" TS is falling for \"len\" candles\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	falling(src, len, _id) {\n		let id = this._tsid(_id, `falling(${len})`);\n		let bot = src[0];\n		for (var i = 1; i < len + 1; i++) if (bot >= src[i]) return this.ts(false, id, src.__tf__);\n		return this.ts(true, id, src.__tf__);\n	},\n	/** Test if \"src\" TS is rising for \"len\" candles\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	rising(src, len, _id) {\n		let id = this._tsid(_id, `rising(${len})`);\n		let top = src[0];\n		for (var i = 1; i < len + 1; i++) if (top <= src[i]) return this.ts(false, id, src.__tf__);\n		return this.ts(true, id, src.__tf__);\n	},\n	/** Highest value for a given number of candles back\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	highest(src, len, _id) {\n		let id = this._tsid(_id, `highest(${len})`);\n		let high = -Infinity;\n		for (var i = 0; i < len; i++) if (src[i] > high) high = src[i];\n		return this.ts(high, id, src.__tf__);\n	},\n	/** Highest value offset for a given number of bars back\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	*/\n	highestbars(src, len, _id) {\n		let id = this._tsid(_id, `highestbars(${len})`);\n		let high = -Infinity;\n		let hi = 0;\n		for (var i = 0; i < len; i++) if (src[i] > high) high = src[i], hi = i;\n		return this.ts(-hi, id, src.__tf__);\n	},\n	/** Lowest value for a given number of candles back\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	lowest(src, len, _id) {\n		let id = this._tsid(_id, `lowest(${len})`);\n		let low = Infinity;\n		for (var i = 0; i < len; i++) if (src[i] < low) low = src[i];\n		return this.ts(low, id, src.__tf__);\n	},\n	/** Lowest value offset for a given number of bars back\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	*/\n	lowestbars(src, len, _id) {\n		let id = this._tsid(_id, `lowestbars(${len})`);\n		let low = Infinity;\n		let li = 0;\n		for (var i = 0; i < len; i++) if (src[i] < low) low = src[i], li = i;\n		return this.ts(-li, id, src.__tf__);\n	},\n	/** Momentum\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	mom(src, len, _id) {\n		let id = this._tsid(_id, `mom(${len})`);\n		return this.ts(src[0] - src[len], id, src.__tf__);\n	},\n	/** Returns price of the pivot high point\n	* Tip: works best with `offset` function\n	* @param {TS} src - Input\n	* @param {number} left - left threshold, candles\n	* @param {number} right - right threshold, candles\n	* @return {TS} - New time-series\n	*/\n	pivothigh(src, left, right, _id) {\n		let id = this._tsid(_id, `pivothigh(${left},${right})`);\n		let len = left + right + 1;\n		let top = src[right];\n		for (var i = 0; i < len; i++) if (top <= src[i] && i !== right) return this.ts(NaN, id, src.__tf__);\n		return this.ts(top, id, src.__tf__);\n	},\n	/** Returns price of the pivot low point\n	* Tip: works best with `offset` function\n	* @param {TS} src - Input\n	* @param {number} left - left threshold, candles\n	* @param {number} right - right threshold, candles\n	* @return {TS} - New time-series\n	*/\n	pivotlow(src, left, right, _id) {\n		let id = this._tsid(_id, `pivotlow(${left},${right})`);\n		let len = left + right + 1;\n		let bot = src[right];\n		for (var i = 0; i < len; i++) if (bot >= src[i] && i !== right) return this.ts(NaN, id, src.__tf__);\n		return this.ts(bot, id, src.__tf__);\n	},\n	/** Candles since the event occured (cond === true)\n	* @param {(boolean|TS)} cond - the condition\n	*/\n	since(cond, _id) {\n		let id = this._tsid(_id, `since()`);\n		if (cond && cond.__id__) cond = cond[0];\n		let s = this.ts(void 0, id);\n		s[0] = cond ? 0 : this.nz(s[1], 0) + 1;\n		return s;\n	},\n	/** Returns the sliding sum of last \"len\" values of the source\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	sum(src, len, _id) {\n		let id = this._tsid(_id, `sum(${len})`);\n		let sum = 0;\n		for (var i = 0; i < len; i++) sum = sum + src[i];\n		return this.ts(sum, id, src.__tf__);\n	}\n};\n//#endregion\n//#region src/stuff/linreg.js\n/**\n* Simple linear regression\n*\n* @param {Array.<number>} data\n* @return {Function}\n*/\nfunction regression(data, len, offset) {\n	data = data.slice(0, len).reverse().map((x, i) => [i, x]);\n	let sum_x = 0, sum_y = 0, sum_xy = 0, sum_xx = 0, count = 0, m, b;\n	for (let i = 0, len = data.length; i < len; i++) {\n		if (!data[i]) return NaN;\n		let point = data[i];\n		sum_x += point[0];\n		sum_y += point[1];\n		sum_xx += point[0] * point[0];\n		sum_xy += point[0] * point[1];\n		count++;\n	}\n	m = (count * sum_xy - sum_x * sum_y) / (count * sum_xx - sum_x * sum_x);\n	b = sum_y / count - m * sum_x / count;\n	return m * (data.length - 1 - offset) + b;\n}\n//#endregion\n//#region src/helpers/std/indicators.js\nvar indicators_default = {\n	/** Arnaud Legoux Moving Average\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @param {number} offset - Offset\n	* @param {number} sigma - Sigma\n	* @return {TS} - New time-series\n	*/\n	alma(src, len, offset, sigma, _id) {\n		let id = this._tsid(_id, `alma(${len},${offset},${sigma})`);\n		let m = Math.floor(offset * (len - 1));\n		let s = len / sigma;\n		let norm = 0;\n		let sum = 0;\n		for (let i = 0; i < len; i++) {\n			let w = Math.exp(-1 * Math.pow(i - m, 2) / (2 * Math.pow(s, 2)));\n			norm = norm + w;\n			sum = sum + src[len - i - 1] * w;\n		}\n		return this.ts(sum / norm, id, src.__tf__);\n	},\n	/** Average True Range\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	atr(len, _id, _tf) {\n		let tfs = _tf || \"\";\n		let id = this._tsid(_id, `atr(${len})`);\n		let high = this.env.shared[`high${tfs}`];\n		let low = this.env.shared[`low${tfs}`];\n		let close = this.env.shared[`close${tfs}`];\n		let tr = this.ts(0, id, _tf);\n		tr[0] = this.na(high[1]) ? high[0] - low[0] : Math.max(Math.max(high[0] - low[0], Math.abs(high[0] - close[1])), Math.abs(low[0] - close[1]));\n		return this.rma(tr, len, id);\n	},\n	/** Bollinger Bands\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @param {number} mult - Multiplier\n	* @return {TS[]} - Array of new time-series (3 bands)\n	*/\n	bb(src, len, mult, _id) {\n		let id = this._tsid(_id, `bb(${len},${mult})`);\n		let basis = this.sma(src, len, id);\n		let dev = this.stdev(src, len, id)[0] * mult;\n		return [\n			basis,\n			this.ts(basis[0] + dev, id + \"1\", src.__tf__),\n			this.ts(basis[0] - dev, id + \"2\", src.__tf__)\n		];\n	},\n	/** Bollinger Bands Width\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @param {number} mult - Multiplier\n	* @return {TS} - New time-series\n	*/\n	bbw(src, len, mult, _id) {\n		let id = this._tsid(_id, `bbw(${len},${mult})`);\n		let basis = this.sma(src, len, id)[0];\n		let dev = this.stdev(src, len, id)[0] * mult;\n		return this.ts(basis === 0 ? NaN : 2 * dev / basis, id, src.__tf__);\n	},\n	/** Commodity Channel Index\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	cci(src, len, _id) {\n		let id = this._tsid(_id, `cci(${len})`);\n		let ma = this.sma(src, len, id);\n		let dev = this.dev(src, len, id);\n		let cci = dev[0] === 0 ? NaN : (src[0] - ma[0]) / (.015 * dev[0]);\n		return this.ts(cci, id, src.__tf__);\n	},\n	/** Chande Momentum Oscillator\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	cmo(src, len, _id) {\n		let id = this._tsid(_id, `cmo(${len})`);\n		let mom = this.change(src, 1, id);\n		let g = this.ts(mom[0] >= 0 ? mom[0] : 0, id + \"g\", src.__tf__);\n		let l = this.ts(mom[0] >= 0 ? 0 : -mom[0], id + \"l\", src.__tf__);\n		let sm1 = this.sum(g, len, id + \"1\")[0];\n		let sm2 = this.sum(l, len, id + \"2\")[0];\n		return this.ts(sm1 + sm2 === 0 ? NaN : 100 * (sm1 - sm2) / (sm1 + sm2), id, src.__tf__);\n	},\n	/** Center of Gravity\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	cog(src, len, _id) {\n		let id = this._tsid(_id, `cog(${len})`);\n		let sum = this.sum(src, len, id)[0];\n		let num = 0;\n		for (let i = 0; i < len; i++) num += src[i] * (i + 1);\n		return this.ts(sum === 0 ? NaN : -num / sum, id, src.__tf__);\n	},\n	/** Deviation from SMA\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	dev(src, len, _id) {\n		let id = this._tsid(_id, `dev(${len})`);\n		let mean = this.sma(src, len, id)[0];\n		let sum = 0;\n		for (let i = 0; i < len; i++) sum += Math.abs(src[i] - mean);\n		return this.ts(sum / len, id, src.__tf__);\n	},\n	/** Directional Movement Index ADX, +DI, -DI\n	* @param {number} len - Length\n	* @param {number} smooth - Smoothness\n	* @return {TS} - New time-series\n	*/\n	dmi(len, smooth, _id, _tf) {\n		let id = this._tsid(_id, `dmi(${len},${smooth})`);\n		let tfs = _tf || \"\";\n		let high = this.env.shared[`high${tfs}`];\n		let low = this.env.shared[`low${tfs}`];\n		let up = this.change(high, 1, id + \"1\")[0];\n		let down = this.neg(this.change(low, 1, id + \"2\"), id)[0];\n		let plusDM = this.ts(100 * (this.na(up) ? NaN : up > down && up > 0 ? up : 0), id + \"3\", _tf);\n		let minusDM = this.ts(100 * (this.na(down) ? NaN : down > up && down > 0 ? down : 0), id + \"4\", _tf);\n		let trur = this.rma(this.tr(false, id, _tf), len, id + \"5\");\n		let plus = this.div(this.rma(plusDM, len, id + \"6\"), trur, id + \"8\");\n		let minus = this.div(this.rma(minusDM, len, id + \"7\"), trur, id + \"9\");\n		let sum = this.add(plus, minus, id + \"10\")[0];\n		return [\n			this.rma(this.ts(100 * Math.abs(plus[0] - minus[0]) / (sum === 0 ? 1 : sum), id + \"11\", _tf), smooth, id + \"12\"),\n			plus,\n			minus\n		];\n	},\n	/** Exponential Moving Average with alpha = 2 / (y + 1)\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	ema(src, len, _id) {\n		let id = this._tsid(_id, `ema(${len})`);\n		let a = 2 / (len + 1);\n		let ema = this.ts(0, id, src.__tf__);\n		ema[0] = this.na(ema[1]) ? this.sma(src, len, id)[0] : a * src[0] + (1 - a) * this.nz(ema[1]);\n		return ema;\n	},\n	/** Hull Moving Average\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	hma(src, len, _id) {\n		let id = this._tsid(_id, `hma(${len})`);\n		let len2 = Math.floor(len / 2);\n		let len3 = Math.round(Math.sqrt(len));\n		let a = this.mult(this.wma(src, len2, id + \"1\"), 2, id);\n		let b = this.wma(src, len, id + \"2\");\n		let delt = this.sub(a, b, id + \"3\");\n		return this.wma(delt, len3, id + \"4\");\n	},\n	/** Keltner Channels\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @param {number} mult - Multiplier\n	* @param {boolean} [use_tr] - Use true range\n	* @return {TS[]} - Array of new time-series (3 bands)\n	*/\n	kc(src, len, mult, use_tr = true, _id, _tf) {\n		let id = this._tsid(_id, `kc(${len},${mult},${use_tr})`);\n		let tfs = _tf || \"\";\n		let high = this.env.shared[`high${tfs}`];\n		let low = this.env.shared[`low${tfs}`];\n		let basis = this.ema(src, len, id + \"1\");\n		let range = use_tr ? this.tr(false, id + \"2\", _tf) : this.ts(high[0] - low[0], id + \"3\", src.__tf__);\n		let ema = this.ema(range, len, id + \"4\");\n		return [\n			basis,\n			this.ts(basis[0] + ema[0] * mult, id + \"5\", src.__tf__),\n			this.ts(basis[0] - ema[0] * mult, id + \"6\", src.__tf__)\n		];\n	},\n	/** Keltner Channels Width\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @param {number} mult - Multiplier\n	* @param {boolean} [use_tr] - Use true range\n	* @return {TS} - New time-series\n	*/\n	kcw(src, len, mult, use_tr = true, _id, _tf) {\n		let id = this._tsid(_id, `kcw(${len},${mult},${use_tr})`);\n		let kc = this.kc(src, len, mult, use_tr, `kcw`, _tf);\n		return this.ts(kc[0][0] === 0 ? NaN : (kc[1][0] - kc[2][0]) / kc[0][0], id, src.__tf__);\n	},\n	/** Linear Regression\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @param {number} offset - Offset\n	* @return {TS} - New time-series\n	*/\n	linreg(src, len, offset = 0, _id) {\n		let id = this._tsid(_id, `linreg(${len})`);\n		src.__len__ = Math.max(src.__len__ || 0, len);\n		let lr = regression(src, len, offset);\n		return this.ts(lr, id, src.__tf__);\n	},\n	/** Moving Average Convergence/Divergence\n	* @param {TS} src - Input\n	* @param {number} fast - Fast EMA\n	* @param {number} slow - Slow EMA\n	* @param {number} sig - Signal\n	* @return {TS[]} - [macd, signal, hist]\n	*/\n	macd(src, fast, slow, sig, _id) {\n		let id = this._tsid(_id, `macd(${fast}${slow}${sig})`);\n		let fast_ma = this.ema(src, fast, id + \"1\");\n		let slow_ma = this.ema(src, slow, id + \"2\");\n		let macd = this.sub(fast_ma, slow_ma, id + \"3\");\n		let signal = this.ema(macd, sig, id + \"4\");\n		return [\n			macd,\n			signal,\n			this.sub(macd, signal, id + \"5\")\n		];\n	},\n	/** Money Flow Index\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	mfi(src, len, _id) {\n		let id = this._tsid(_id, `mfi(${len})`);\n		let vol = this.env.shared.vol;\n		let ch = this.change(src, 1, id + \"1\")[0];\n		let ts1 = this.mult(vol, ch <= 0 ? 0 : src[0], id + \"2\");\n		let ts2 = this.mult(vol, ch >= 0 ? 0 : src[0], id + \"3\");\n		let upper = this.sum(ts1, len, id + \"4\");\n		let lower = this.sum(ts2, len, id + \"5\");\n		let res = void 0;\n		if (!this.na(lower)) res = this.rsi(upper, lower, id + \"6\")[0];\n		return this.ts(res, id, src.__tf__);\n	},\n	/** Exponentially MA with alpha = 1 / length\n	* Used in RSI\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	rma(src, len, _id) {\n		let id = this._tsid(_id, `rma(${len})`);\n		let a = len;\n		let sum = this.ts(0, id, src.__tf__);\n		sum[0] = this.na(sum[1]) ? this.sma(src, len, id)[0] : (src[0] + (a - 1) * this.nz(sum[1])) / a;\n		return sum;\n	},\n	/** Rate of Change\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	roc(src, len, _id) {\n		let id = this._tsid(_id, `roc(${len})`);\n		return this.ts(100 * (src[0] - src[len]) / src[len], id, src.__tf__);\n	},\n	/** Relative Strength Index\n	* @param {TS} x - First Input\n	* @param {number|TS} y - Second Input\n	* @return {TS} - New time-series\n	*/\n	rsi(x, y, _id) {\n		let id, rsi;\n		if (!this.na(y) && y.__id__) {\n			id = this._tsid(_id, `rsi(x,y)`);\n			rsi = 100 - 100 / (1 + this.div(x, y, id)[0]);\n		} else {\n			id = this._tsid(_id, `rsi(${y})`);\n			let ch = this.change(x, 1, _id)[0];\n			let pc = this.ts(Math.max(ch, 0), id + \"1\", x.__tf__);\n			let nc = this.ts(-Math.min(ch, 0), id + \"2\", x.__tf__);\n			let up = this.rma(pc, y, id + \"3\")[0];\n			let down = this.rma(nc, y, id + \"4\")[0];\n			rsi = down === 0 ? 100 : up === 0 ? 0 : 100 - 100 / (1 + up / down);\n		}\n		return this.ts(rsi, id + \"5\", x.__tf__);\n	},\n	/** Parabolic SAR\n	* @param {number} start - Start\n	* @param {number} inc - Increment\n	* @param {number} max - Maximum\n	* @return {TS} - New time-series\n	*/\n	sar(start, inc, max, _id, _tf) {\n		let id = this._tsid(_id, `sar(${start},${inc},${max})`);\n		let tfs = _tf || \"\";\n		let high = this.env.shared[`high${tfs}`];\n		let low = this.env.shared[`low${tfs}`];\n		let close = this.env.shared[`close${tfs}`];\n		let minTick = 0;\n		let out = this.ts(void 0, id + \"1\", _tf);\n		let pos = this.ts(void 0, id + \"2\", _tf);\n		let maxMin = this.ts(void 0, id + \"3\", _tf);\n		let acc = this.ts(void 0, id + \"4\", _tf);\n		let n = _tf ? out.__len__ - 1 : state.iter;\n		let prev;\n		let outSet = false;\n		if (n >= 1) {\n			prev = out[1];\n			if (n === 1) {\n				if (close[0] > close[1]) {\n					pos[0] = 1;\n					maxMin[0] = Math.max(high[0], high[1]);\n					prev = Math.min(low[0], low[1]);\n				} else {\n					pos[0] = -1;\n					maxMin[0] = Math.min(low[0], low[1]);\n					prev = Math.max(high[0], high[1]);\n				}\n				acc[0] = start;\n			} else {\n				pos[0] = pos[1];\n				acc[0] = acc[1];\n				maxMin[0] = maxMin[1];\n			}\n			if (pos[0] === 1) {\n				if (high[0] > maxMin[0]) {\n					maxMin[0] = high[0];\n					acc[0] = Math.min(acc[0] + inc, max);\n				}\n				if (low[0] <= prev) {\n					pos[0] = -1;\n					out[0] = maxMin[0];\n					maxMin[0] = low[0];\n					acc[0] = start;\n					outSet = true;\n				}\n			} else {\n				if (low[0] < maxMin[0]) {\n					maxMin[0] = low[0];\n					acc[0] = Math.min(acc[0] + inc, max);\n				}\n				if (high[0] >= prev) {\n					pos[0] = 1;\n					out[0] = maxMin[0];\n					maxMin[0] = high[0];\n					acc[0] = start;\n					outSet = true;\n				}\n			}\n			if (!outSet) {\n				out[0] = prev + acc[0] * (maxMin[0] - prev);\n				if (pos[0] === 1) {\n					if (out[0] >= low[0]) out[0] = low[0] - minTick;\n				}\n				if (pos[0] === -1) {\n					if (out[0] <= high[0]) out[0] = high[0] + minTick;\n				}\n			}\n		}\n		return out;\n	},\n	/** Simple Moving Average\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	sma(src, len, _id) {\n		let id = this._tsid(_id, `sma(${len})`);\n		let sum = 0;\n		for (let i = 0; i < len; i++) sum = sum + src[i];\n		return this.ts(sum / len, id, src.__tf__);\n	},\n	/** Standard deviation\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	stdev(src, len, _id) {\n		let sumf = (x, y) => {\n			return x + y;\n		};\n		let id = this._tsid(_id, `stdev(${len})`);\n		let avg = this.sma(src, len, id);\n		let sqd = 0;\n		for (let i = 0; i < len; i++) {\n			let sum = sumf(src[i], -avg[0]);\n			sqd += sum * sum;\n		}\n		return this.ts(Math.sqrt(sqd / len), id, src.__tf__);\n	},\n	/** Stochastic\n	* @param {TS} src - Input\n	* @param {TS} high - TS of high\n	* @param {TS} low - TS of low\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	stoch(src, high, low, len, _id) {\n		let id = this._tsid(_id, `sum(${len})`);\n		let x = 100 * (src[0] - this.lowest(low, len)[0]);\n		let y = this.highest(high, len)[0] - this.lowest(low, len)[0];\n		return this.ts(y === 0 ? NaN : x / y, id, src.__tf__);\n	},\n	/** Supertrend Indicator\n	* @param {number} factor - ATR multiplier\n	* @param {number} atrlen - Length of ATR\n	* @return {TS[]} - Supertrend line and direction of trend\n	*/\n	supertrend(factor, atrlen, _id, _tf) {\n		let id = this._tsid(_id, `supertrend(${factor},${atrlen})`);\n		let tfs = _tf || \"\";\n		let high = this.env.shared[`high${tfs}`];\n		let low = this.env.shared[`low${tfs}`];\n		let close = this.env.shared[`close${tfs}`];\n		let hl2 = (high[0] + low[0]) * .5;\n		let atr = factor * this.atr(atrlen, id + \"1\", _tf)[0];\n		let ls = this.ts(hl2 - atr, id + \"2\", _tf);\n		let ls1 = this.nz(ls[1], ls[0]);\n		ls[0] = close[1] > ls1 ? Math.max(ls[0], ls1) : ls[0];\n		let ss = this.ts(hl2 + atr, id + \"3\", _tf);\n		let ss1 = this.nz(ss[1], ss[0]);\n		ss[0] = close[1] < ss1 ? Math.min(ss[0], ss1) : ss[0];\n		let dir = this.ts(1, id + \"4\", _tf);\n		dir[0] = this.nz(dir[1], dir[0]);\n		dir[0] = dir[0] === -1 && close[0] > ss1 ? 1 : dir[0] === 1 && close[0] < ls1 ? -1 : dir[0];\n		return [this.ts(dir[0] === 1 ? ls[0] : ss[0], id + \"5\", _tf), this.neg(dir, id + \"6\")];\n	},\n	/** Symmetrically Weighted Moving Average\n	* @param {TS} src - Input\n	* @return {TS} - New time-series\n	*/\n	swma(src, _id) {\n		let id = this._tsid(_id, `swma`);\n		let sum = src[3] * this.SWMA[0] + src[2] * this.SWMA[1] + src[1] * this.SWMA[2] + src[0] * this.SWMA[3];\n		return this.ts(sum, id, src.__tf__);\n	},\n	/** True Range\n	* @param {TS} fixnan - Fix NaN values\n	* @return {TS} - New time-series\n	*/\n	tr(fixnan = false, _id, _tf) {\n		let id = this._tsid(_id, `tr(${fixnan})`);\n		let tfs = _tf || \"\";\n		let high = this.env.shared[`high${tfs}`];\n		let low = this.env.shared[`low${tfs}`];\n		let close = this.env.shared[`close${tfs}`];\n		let res = 0;\n		if (this.na(close[1]) && fixnan) res = high[0] - low[0];\n		else res = Math.max(high[0] - low[0], Math.abs(high[0] - close[1]), Math.abs(low[0] - close[1]));\n		return this.ts(res, id, _tf);\n	},\n	/** True strength index\n	* @param {TS} src - Input\n	* @param {number} short - Short length\n	* @param {number} long - Long length\n	* @return {TS} - New time-series\n	*/\n	tsi(src, short, long, _id) {\n		let id = this._tsid(_id, `tsi(${short},${long})`);\n		let m = this.change(src, 1, id + \"0\");\n		let m_abs = this.ts(Math.abs(m[0]), id + \"1\", src.__tf__);\n		let tsi = this.ema(this.ema(m, long, id + \"1\"), short, id + \"2\")[0] / this.ema(this.ema(m_abs, long, id + \"3\"), short, id + \"4\")[0];\n		return this.ts(tsi, id, src.__tf__);\n	},\n	/** Volume Weighted Moving Average\n	* @param {TS} src - Input\n	* @param {number} len - length\n	* @return {TS} - New time-series\n	*/\n	vwma(src, len, _id) {\n		let id = this._tsid(_id, `vwma(${len})`);\n		let vol = this.env.shared.vol;\n		let sxv = this.ts(src[0] * vol[0], id + \"1\", src.__tf__);\n		let res = this.sma(sxv, len, id + \"2\")[0] / this.sma(vol, len, id + \"3\")[0];\n		return this.ts(res, id + \"4\", src.__tf__);\n	},\n	/** Weighted moving average\n	* @param {TS} src - Input\n	* @param {number} len - length\n	* @return {TS} - New time-series\n	*/\n	wma(src, len, _id) {\n		let id = this._tsid(_id, `wma(${len})`);\n		let norm = 0;\n		let sum = 0;\n		for (let i = 0; i < len; i++) {\n			let w = (len - i) * len;\n			norm += w;\n			sum += src[i] * w;\n		}\n		return this.ts(sum / norm, id, src.__tf__);\n	},\n	/** Williams %R\n	* @param {number} len - length\n	* @return {TS} - New time-series\n	*/\n	wpr(len, _id, _tf) {\n		let id = this._tsid(_id, `wpr(${len})`);\n		let tfs = _tf || \"\";\n		let high = this.env.shared[`high${tfs}`];\n		let low = this.env.shared[`low${tfs}`];\n		let close = this.env.shared[`close${tfs}`];\n		let hh = this.highest(high, len, id);\n		let ll = this.lowest(low, len, id);\n		let res = hh[0] - ll[0] === 0 ? NaN : (hh[0] - close[0]) / (hh[0] - ll[0]);\n		return this.ts(-res * 100, id, _tf);\n	}\n};\n//#endregion\n//#region src/helpers/sampler.js\nconst { DEF_LIMIT: DEF_LIMIT$2 } = constants_default;\nfunction sampler_default(T, auto = false) {\n	let Ti = [\n		\"high\",\n		\"low\",\n		\"close\",\n		\"vol\"\n	].indexOf(T);\n	return function(x, t) {\n		let tf = this.__tf__;\n		this.__id__;\n		t = t || script_engine_default.t;\n		let val = auto ? script_engine_default[T][0] : x;\n		if (!this.__t0__ || t >= this.__t0__ + tf) {\n			this.unshift(Ti !== 3 ? val : 0);\n			this.__t0__ = t - t % tf;\n		}\n		switch (Ti) {\n			case 0:\n				if (val > this[0]) this[0] = val;\n				break;\n			case 1:\n				if (val < this[0]) this[0] = val;\n				break;\n			case 2:\n				this[0] = val;\n				break;\n			case 3: this[0] += val;\n		}\n		this.length = this.__len__ || DEF_LIMIT$2;\n	};\n}\n//#endregion\n//#region src/helpers/std/timeseries.js\nconst { BUF_INC } = constants_default;\nvar timeseries_default = {\n	/**\n	* Creates a new time-series & records each x.\n	* Returns an array. Id is auto-generated\n	* @param {*} x - A variable to sample from\n	* @return {TS} - New time-series\n	*/\n	ts(x, _id, _tf) {\n		if (_tf) return this.tstf(x, _tf, _id);\n		let ts = this.env.tss[_id];\n		if (!ts) {\n			ts = this.env.tss[_id] = [x];\n			ts.__id__ = _id;\n		} else ts[0] = x;\n		return ts;\n	},\n	/**\n	* Creates a new time-series & records each x.\n	* Uses Sampler to aggregate the values\n	* Return the an array. Id is auto-generated\n	* @param {*} x - A variable to sample from\n	* @param {(number|string)} tf - Timeframe in ms or as a string\n	* @return {TS} - New time-series\n	*/\n	tstf(x, tf, _id) {\n		let ts = this.env.tss[_id];\n		if (!ts) {\n			ts = this.env.tss[_id] = [x];\n			ts.__id__ = _id;\n			ts.__tf__ = tf_from_str(tf);\n			ts.__fn__ = sampler_default(\"close\").bind(ts);\n		} else ts.__fn__(x);\n		return ts;\n	},\n	/**\n	* Creates a new custom sampler.\n	* Return the an array. Id is auto-generated\n	* @param {*} x - A variable to sample from\n	* @param {string} type - Sampler type\n	* @param {(number|string)} tf - Timeframe in ms or as a string\n	* @return {TS} - New time-series\n	*/\n	sample(x, type, tf, _id) {\n		let ts = this.env.tss[_id];\n		if (!ts) {\n			ts = this.env.tss[_id] = [x];\n			ts.__id__ = _id;\n			ts.__tf__ = tf_from_str(tf);\n			ts.__fn__ = sampler_default(type).bind(ts);\n		} else ts.__fn__(x);\n		return ts;\n	},\n	_tsid(prev, next) {\n		return `${prev}<-${next}`;\n	},\n	_i(i, x) {\n		if (x != void 0 && x === x && x.__id__) {\n			if (!x.__len__ || i >= x.__len__) x.__len__ = i + BUF_INC;\n		}\n		return i;\n	},\n	_v(x, i) {\n		if (x != void 0 && x === x && x.__id__) {\n			if (!x.__len__ || i >= x.__len__) x.__len__ = i + BUF_INC;\n		}\n		return x;\n	}\n};\n//#endregion\n//#region src/helpers/script_ts.js\nfunction TS(id, arr, len) {\n	arr.__id__ = id;\n	arr.__len__ = len;\n	return arr;\n}\n//#endregion\n//#region src/helpers/symbol.js\nconst OHLCV = [\n	\"open\",\n	\"high\",\n	\"low\",\n	\"close\",\n	\"vol\"\n];\nvar Sym = class {\n	constructor(data, params) {\n		this.id = params.id;\n		this.tf = tf_from_str(params.tf);\n		this.format = params.format;\n		this.aggtype = params.aggtype || \"ohlcv\";\n		this.window = params.window;\n		this.fillgaps = params.fillgaps;\n		this.data = data;\n		this.data_type = 0;\n		this.main = !!params.main;\n		this.idx = this.data_idx();\n		this.tmap = {};\n		this.tf = this.tf || script_engine_default.tf;\n		if (this.main) this.tf = script_engine_default.tf;\n		if (this.aggtype === \"ohlcv\") for (let id of OHLCV) {\n			this[id] = TS(`${this.id}_${id}`, []);\n			this[id].__fn__ = sampler_default(id).bind(this[id]);\n			this[id].__tf__ = this.tf;\n		}\n		if (this.aggtype === \"copy\") {\n			for (let id of OHLCV) {\n				this[id] = TS(`${this.id}_${id}`, []);\n				this[id].__tf__ = this.tf;\n			}\n			for (let i = 0; i < this.data.length; i++) this.tmap[this.data[i][0]] = i;\n		}\n		if (typeof this.aggtype === \"function\") {\n			this.close = TS(`${this.id}_close`, []);\n			this.close.__fn__ = this.aggtype;\n			this.close.__tf__ = this.tf;\n		}\n		if (this.main) {\n			if (!this.tf) throw \"Main tf should be defined\";\n			if (!this.data || !this.data.length || !this.data[0]) throw \"Main symbol requires non-empty data\";\n			script_engine_default.custom_main = this;\n			let t0 = this.data[0][0];\n			script_engine_default.t = t0 - t0 % this.tf;\n			this.update(null, script_engine_default.t);\n			script_engine_default.data.ohlcv.data.length = 0;\n			script_engine_default.data.ohlcv.data.push([\n				script_engine_default.t,\n				this.open[0],\n				this.high[0],\n				this.low[0],\n				this.close[0],\n				this.vol[0]\n			]);\n		}\n	}\n	update(x, t) {\n		if (this.aggtype === \"ohlcv\") return this.update_ohlcv(x, t);\n		else if (this.aggtype === \"copy\") return this.update_copy(x, t);\n		else if (typeof this.aggtype === \"function\") return this.update_custom(x, t);\n	}\n	update_ohlcv(x, t) {\n		t = t || script_engine_default.t;\n		let idx = this.idx;\n		switch (this.data_type) {\n			case 0:\n				if (t > this.data[this.data.length - 1][0]) return false;\n				let t0 = this.window ? t - this.window + this.tf : t;\n				let dt = t0 % this.tf;\n				t0 -= dt;\n				let i0 = nextt(this.data, t0);\n				if (i0 >= this.data.length) return false;\n				let t1 = t + script_engine_default.tf;\n				if (t < this.vol.__t0__ + this.tf) this.vol[0] = 0;\n				let noevent = true;\n				for (let i = i0; i < this.data.length; i++) {\n					noevent = false;\n					let dp = this.data[i];\n					if (dp[idx.time] >= t1) break;\n					this.open.__fn__(dp[idx.open], t);\n					this.high.__fn__(dp[idx.high], t);\n					this.low.__fn__(dp[idx.low], t);\n					this.close.__fn__(dp[idx.close], t);\n					this.vol.__fn__(dp[idx.vol], t);\n				}\n				if (noevent) {\n					if (this.fillgaps === false && !this.main) return false;\n					let last = this.close[0];\n					this.open.__fn__(last, t);\n					this.high.__fn__(last, t);\n					this.low.__fn__(last, t);\n					this.close.__fn__(last, t);\n					this.vol.__fn__(0, t);\n				}\n				break;\n			case 1: break;\n			case 2: break;\n		}\n		return true;\n	}\n	update_copy(x, t) {\n		t = t || script_engine_default.t;\n		let i = this.tmap[t];\n		let s = this.data[i];\n		let ts0 = this.__t0__;\n		if (!ts0 || t >= ts0 + this.tf) {\n			for (let k = 0; k < 5; k++) {\n				let tsn = OHLCV[k];\n				this[tsn].unshift(void 0);\n			}\n			this.__t0__ = t - t % this.tf;\n			let last = this.data.length - 1;\n			if (this.__t0__ === this.data[last][0]) {\n				this.tmap[this.__t0__] = last;\n				s = this.data[last];\n			}\n		}\n		if (s) for (let k = 0; k < 5; k++) {\n			let tsn = OHLCV[k];\n			this[tsn][0] = s[k + 1];\n		}\n		else if (this.fillgaps) for (let k = 0; k < 5; k++) {\n			let tsn = OHLCV[k];\n			this[tsn][0] = this.close[1];\n		}\n	}\n	update_custom(x, t) {\n		t = t || script_engine_default.t;\n		let idx = this.idx;\n		switch (this.data_type) {\n			case 0:\n				if (!this.data.length) return false;\n				if (t > this.data[this.data.length - 1][0]) return false;\n				let t0 = this.window ? t - this.window + this.tf : t;\n				let dt = t0 % this.tf;\n				t0 -= dt;\n				let i0 = nextt(this.data, t0);\n				if (i0 >= this.data.length) return false;\n				let t1 = t + script_engine_default.tf;\n				let sub = [];\n				for (let i = i0; i < this.data.length; i++) {\n					let dp = this.data[i];\n					if (dp[idx.time] >= t1) break;\n					sub.push(dp);\n				}\n				let val;\n				if (sub.length || this.fillgaps === false) val = this.close.__fn__(sub);\n				else if (this.fillgaps !== false) val = this.close[0];\n				let ts0 = this.close.__t0__;\n				if (!ts0 || t >= ts0 + this.tf) {\n					this.close.unshift(val);\n					this.close.__t0__ = t - t % this.tf;\n				} else this.close[0] = val;\n				break;\n			case 1: break;\n			case 2: break;\n		}\n		return true;\n	}\n	data_idx() {\n		let idx = {};\n		switch (this.aggtype) {\n			case \"ohlcv\":\n				if (!this.format) {\n					let x0 = this.data[0];\n					if (!x0 || x0.length === 6) this.format = \"time:open:high:low:close:vol\";\n					else if (x0.length === 3) this.format = \"time:open,high,low,close:vol\";\n				}\n				break;\n			default:\n				this.format = \"time:close\";\n				break;\n		}\n		this.format.split(\":\").forEach((x, i) => {\n			if (!x.length) return;\n			x.split(\",\").forEach((y) => idx[y] = i);\n		});\n		return idx;\n	}\n};\n//#endregion\n//#region src/helpers/std/symbol.js\nvar symbol_default = { \n/** Creates a new Symbol.\n* @param {*} x - Something, depends on arg variation\n* @param {*} y - Something, depends on arg variation\n* @return {Sym}\n* Argument variations:\n* <data>(Array), [<params>(Object)]\n* <ts>(TS), [<params>(Object)]\n* <point>(Number), [<params>(Object)]\n* <tf>(String) 1m, 5m, 1H, etc. (uses main OHLCV)\n* Params object: {\n*  id: <String>,\n*  tf: <String|Number>,\n*  aggtype: <String> (TODO: Type of aggregation)\n*  format: <String> (Data format, e.g. \"time:price:vol\")\n*  window: <String|Number> (Aggregation window)\n*  main <true|false> (Use as the main chart)\n* }\n*/\nsym(x, y = {}, _id) {\n	let id = y.id || this._tsid(_id, `sym`);\n	y.id = id;\n	if (this.env.syms[id]) {\n		this.env.syms[id].update(x);\n		return this.env.syms[id];\n	}\n	let sym;\n	switch (typeof x) {\n		case \"object\":\n			sym = new Sym(x, y);\n			this.env.syms[id] = sym;\n			if (x.__id__) sym.data_type = 1;\n			else sym.data_type = 0;\n			break;\n		case \"number\":\n			sym = new Sym(null, y);\n			sym.data_type = 2;\n			break;\n		case \"string\":\n			y.tf = x;\n			sym = new Sym(state.data.ohlcv.data, y);\n			sym.data_type = 0;\n			break;\n	}\n	this.env.syms[id] = sym;\n	return sym;\n} };\n//#endregion\n//#region src/helpers/script_std.js\nvar ScriptStd = class {\n	constructor(env) {\n		this.env = env;\n		this.se = state;\n		this.SWMA = [\n			1 / 6,\n			2 / 6,\n			2 / 6,\n			1 / 6\n		];\n		this.STDEV_EPS = 1e-10;\n		this.STDEV_Z = 1e-4;\n		this._index_tracking();\n	}\n	_index_tracking() {\n		let proto = Object.getPrototypeOf(this);\n		for (var k of Object.getOwnPropertyNames(proto)) {\n			switch (k) {\n				case \"constructor\":\n				case \"ts\":\n				case \"tstf\":\n				case \"sample\":\n				case \"_index_tracking\":\n				case \"_tsid\":\n				case \"_i\":\n				case \"_v\":\n				case \"_add_i\":\n				case \"chart\":\n				case \"onchart\":\n				case \"offchart\":\n				case \"sym\": continue;\n			}\n			let f = this._add_i(k, this[k].toString());\n			if (f) this[k] = f;\n		}\n	}\n	_add_i(name, src) {\n		let args = f_args(src);\n		src = f_body(src);\n		let src2 = wrap_idxs(src, \"this.\");\n		if (src2 !== src) return new Function(...args, src2);\n		return null;\n	}\n	corr() {}\n	time(res, sesh) {}\n	timestamp() {}\n	linearint() {}\n	nearestrank() {}\n	percentrank() {}\n	variance(src, len) {}\n	vwap(src) {}\n};\nconst proto = ScriptStd.prototype;\nObject.assign(proto, math_default);\nObject.assign(proto, time_default);\nObject.assign(proto, chart_default);\nObject.assign(proto, utils_default$1);\nObject.assign(proto, analysis_default);\nObject.assign(proto, indicators_default);\nObject.assign(proto, timeseries_default);\nObject.assign(proto, symbol_default);\n//#endregion\n//#region src/helpers/script_env.js\nconst { DEF_LIMIT: DEF_LIMIT$1, FDEFS1, FDEFS2 } = constants_default;\nvar ScriptEnv = class {\n	constructor(s, data) {\n		this.std = state.std_inject(new ScriptStd(this));\n		this.id = s.uuid;\n		this.src = s;\n		this.output = TS(\"output\", []);\n		this.data = [];\n		this.tss = {};\n		this.syms = {};\n		this.shared = data;\n		this.output.box_maker = this.make_box(s.src);\n		this.onchart = {};\n		this.offchart = {};\n	}\n	build() {\n		this.output.box_maker(this, this.shared, state);\n		delete this.output.box_maker;\n	}\n	init() {\n		this.output.init();\n	}\n	step(unshift = true) {\n		if (unshift) this.unshift();\n		let v = this.output.update();\n		this.copy(v, unshift);\n		this.limit();\n	}\n	unshift() {\n		this.output.unshift(void 0);\n		for (let id in this.tss) {\n			if (this.tss[id].__tf__) continue;\n			this.tss[id].unshift(void 0);\n		}\n	}\n	limit() {\n		let out = this.output;\n		out.length = out.__len__ || DEF_LIMIT$1;\n		for (let id in this.tss) {\n			let ts = this.tss[id];\n			ts.length = ts.__len__ || DEF_LIMIT$1;\n		}\n	}\n	copy(v, unshift = true) {\n		let off = this.output.__offset__;\n		if (v != void 0) {\n			this.output[0] = v.__id__ ? v[0] : v;\n			off = off || v.__offset__;\n		}\n		let val = this.output[0];\n		let t = state.t;\n		if (off) t += off * state.tf;\n		let point;\n		if (val == null || !val.length) point = [t, val];\n		else point = [t, ...val];\n		if (unshift) this.data.push(point);\n		else this.data[this.data.length - 1] = point;\n	}\n	make_box(src) {\n		let proto = Object.getPrototypeOf(this.std);\n		let std = ``;\n		for (let k of Object.getOwnPropertyNames(proto)) {\n			if (k === \"constructor\") continue;\n			std += `const std_${k} = self.std.${k}.bind(self.std)\\n`;\n		}\n		let props = ``;\n		for (let k in src.props || {}) {\n			let val;\n			if (src.props[k].val !== void 0) val = src.props[k].val;\n			else if (this.src.sett[k] !== void 0) val = this.src.sett[k];\n			else val = src.props[k].def;\n			props += `var ${k} = ${JSON.stringify(val)}\\n`;\n		}\n		let tss = ``;\n		for (let k in this.shared) if (this.shared[k] && this.shared[k].__id__) tss += `const ${k} = shared.${k}\\n`;\n		let dss = ``;\n		for (let k in src.data || {}) {\n			let id = state.match_ds(this.id, src.data[k].type);\n			if (!this.shared.dss[id]) {\n				let T = src.data[k].type;\n				console.warn(`Dataset '${T}' is undefined`);\n				continue;\n			}\n			dss += `const ${k} = shared.dss['${id}'].data\\n`;\n		}\n		try {\n			return Function(\"self,shared,se\", `\n                'use strict';\n\n                // Built-in functions (aliases)\n                ${std}\n\n                // Modules (API / interfaces)\n                ${this.make_modules()}\n\n                // Timeseries\n                ${tss}\n\n                // Direct data ts\n                const data = self.data\n                const ohlcv = shared.dss.ohlcv.data\n                ${dss}\n\n                // Script's properties (init)\n                ${props}\n\n                // Globals\n                const settings = self.src.sett\n                const tf = shared.tf\n                const range = shared.range\n\n                this.init = (_id = 'root') => {\n                    ${this.prep(src.init_src)}\n                }\n\n                this.update = (_id = 'root') => {\n                    const t = shared.t()\n                    const iter = shared.iter()\n                    ${this.prep(src.upd_src)}\n                }\n\n                this.post = (_id = 'root') => {\n                    ${this.prep(src.post_src)}\n                }\n            `);\n		} catch (e) {\n			if (state && state.send) state.send(\"script-error\", {\n				uuid: this.id,\n				name: this.src && this.src.name,\n				type: this.src && this.src.type,\n				phase: \"build\",\n				message: e && e.message || String(e)\n			});\n			return Function(\"self,shared\", `\n                'use strict';\n                this.init = () => {}\n                this.update = () => {}\n                this.post = () => {}\n            `);\n		}\n	}\n	make_modules() {\n		let s = ``;\n		for (let id in state.mods) {\n			if (!state.mods[id].api) continue;\n			s += `const ${id} = se.mods['${id}'].api[self.id]`;\n			s += \"\\n\";\n		}\n		return s;\n	}\n	prep(src) {\n		src = \"		  let _pref = `${_id}<-\" + this.src.use_for[0] + \"<-`\\n\" + src;\n		FDEFS2.lastIndex = 0;\n		let call_id = 0;\n		let m;\n		do {\n			m = FDEFS2.exec(src);\n			if (m) {\n				let fkeyword = m[1].trim();\n				let fname = m[2];\n				m[3];\n				if (fkeyword === \"function\") {} else {\n					let off = m.index + m[0].indexOf(\"(\");\n					if (this.std[fname]) {\n						src = this.postfix(src, m, ++call_id);\n						off += 4;\n					}\n					FDEFS2.lastIndex = off;\n				}\n			}\n		} while (m);\n		return wrap_idxs(src, \"std_\");\n	}\n	postfix(src, m, call_id) {\n		let target = this.get_args(this.fdef(m[2])).length;\n		let m0 = this.parentheses(m[0]);\n		let args = this.get_args_2(m0);\n		for (let i = args.length; i < target; i++) args.push(\"void 0\");\n		args.push(`_pref+\"f${call_id}\"`);\n		return src.replace(m0, `std_${m[2]}(${args.join(\", \")})`);\n	}\n	parentheses(str) {\n		let count = 0, first = false;\n		for (let i = 0; i < str.length; i++) {\n			if (str[i] === \"(\") {\n				count++;\n				first = true;\n			} else if (str[i] === \")\") count--;\n			if (first && count === 0) return str.substr(0, i + 1);\n		}\n		return str;\n	}\n	fdef(fname) {\n		return this.std[fname].toString();\n	}\n	get_args(src) {\n		let reg = this.regex_clone(FDEFS1);\n		reg.lastIndex = 0;\n		let m = reg.exec(src);\n		if (!m[3].trim().length) return [];\n		return m[3].split(\",\").map((x) => x.trim()).filter((x) => x !== \"_id\" && x !== \"_tf\");\n	}\n	get_args_2(str) {\n		let parts = [];\n		let c = 0;\n		let s = 0;\n		let q1 = false, q2 = false, q3 = false;\n		let part;\n		for (let i = 0; i < str.length; i++) {\n			if (str[i] === \"(\") {\n				c++;\n				if (!part) part = [i + 1];\n			}\n			if (str[i] === \")\") c--;\n			if (str[i] === \"[\") s++;\n			if (str[i] === \"]\") s--;\n			if (str[i] === \"'\") q1 = !q1;\n			if (str[i] === \"\\\"\") q2 = !q2;\n			if (str[i] === \"`\") q3 = !q3;\n			if (str[i] === \",\" && c === 1 && !s && !q1 && !q2 && !q3) {\n				if (part) {\n					part[1] = i;\n					parts.push(part);\n					part = [i + 1];\n				}\n			}\n			if (c === 0 && part) {\n				part[1] = i;\n				parts.push(part);\n				part = null;\n			}\n		}\n		return parts.map((x) => str.slice(...x)).filter((x) => /[^\\s]+/.exec(x));\n	}\n	regex_clone(rex) {\n		return new RegExp(rex.source, rex.flags);\n	}\n	send_modify(upd) {\n		state.send(\"modify-overlay\", {\n			uuid: this.id,\n			fields: upd\n		});\n	}\n};\n//#endregion\n//#region node_modules/arrayslicer/lib/util.js\nvar require_util = /* @__PURE__ */ __commonJSMin(((exports, module) => {\n	/**\n	* Utils module\n	*/\n	/**\n	* Check if an object is an array-like object\n	*\n	* @credit Javascript: The Definitive Guide, O'Reilly, 2011\n	*/\n	function isArrayLike(o) {\n		if (o && typeof o === \"object\" && isFinite(o.length) && o.length >= 0 && o.length === Math.floor(o.length) && o.length < 4294967296) return true;\n		else return false;\n	}\n	/**\n	* Check for the existence of the sort function in the object\n	*/\n	function isSortable(o) {\n		if (o && typeof o === \"object\" && typeof o.sort === \"function\") return true;\n		else return false;\n	}\n	/**\n	* Check for sortable-array-like objects\n	*/\n	module.exports.isSortableArrayLike = function(o) {\n		return isArrayLike(o) && isSortable(o);\n	};\n}));\n//#endregion\n//#region node_modules/arrayslicer/lib/compare/index.js\nvar require_compare = /* @__PURE__ */ __commonJSMin(((exports, module) => {\n	/**\n	* Utility compare functions\n	*/\n	module.exports = {\n		/**\n		* Compare two numbers.\n		*\n		* @param {Number} a\n		* @param {Number} b\n		* @returns {Number} 1 if a > b, 0 if a = b, -1 if a < b\n		*/\n		numcmp: function(a, b) {\n			return a - b;\n		},\n		/**\n		* Compare two strings.\n		*\n		* @param {Number|String} a\n		* @param {Number|String} b\n		* @returns {Number} 1 if a > b, 0 if a = b, -1 if a < b\n		*/\n		strcmp: function(a, b) {\n			return a < b ? -1 : a > b ? 1 : 0;\n		}\n	};\n}));\n//#endregion\n//#region node_modules/arrayslicer/lib/search/binary.js\nvar require_binary = /* @__PURE__ */ __commonJSMin(((exports, module) => {\n	/**\n	* Binary search implementation\n	*/\n	/**\n	* Main search recursive function\n	*/\n	function loop(data, min, max, index, valpos) {\n		var curr = max + min >>> 1;\n		var diff = this.compare(data[curr][this.index], index);\n		if (!diff) return valpos[index] = {\n			\"found\": true,\n			\"index\": curr,\n			\"prev\": null,\n			\"next\": null\n		};\n		if (min >= max) return valpos[index] = {\n			\"found\": false,\n			\"index\": null,\n			\"prev\": diff < 0 ? max : max - 1,\n			\"next\": diff < 0 ? max + 1 : max\n		};\n		if (diff > 0) return loop.call(this, data, min, curr - 1, index, valpos);\n		else return loop.call(this, data, curr + 1, max, index, valpos);\n	}\n	/**\n	* Search bootstrap\n	* The function has to be executed in the context of the IndexedArray object\n	*/\n	function search(index) {\n		var data = this.data;\n		return loop.call(this, data, 0, data.length - 1, index, this.valpos);\n	}\n	/**\n	* Export search function\n	*/\n	module.exports.search = search;\n}));\n//#endregion\n//#region src/stuff/utils.js\nvar import_lib = /* @__PURE__ */ __toESM((/* @__PURE__ */ __commonJSMin(((exports, module) => {\n	/**\n	* Indexed Array Binary Search module\n	*/\n	/**\n	* Dependencies\n	*/\n	var util = require_util(), cmp = require_compare(), bin = require_binary();\n	/**\n	* Module interface definition\n	*/\n	module.exports = IndexedArray;\n	/**\n	* Indexed Array constructor\n	*\n	* It loads the array data, defines the index field and the comparison function\n	* to be used.\n	*\n	* @param {Array} data is an array of objects\n	* @param {String} index is the object's property used to search the array\n	*/\n	function IndexedArray(data, index) {\n		if (!util.isSortableArrayLike(data)) throw new Error(\"Invalid data\");\n		if (!index || data.length > 0 && !(index in data[0])) throw new Error(\"Invalid index\");\n		this.data = data;\n		this.index = index;\n		this.setBoundaries();\n		this.compare = typeof this.minv === \"number\" ? cmp.numcmp : cmp.strcmp;\n		this.search = bin.search;\n		this.valpos = {};\n		this.cursor = null;\n		this.nextlow = null;\n		this.nexthigh = null;\n	}\n	/**\n	* Set the comparison function\n	*\n	* @param {Function} fn to compare index values that returnes 1, 0, -1\n	*/\n	IndexedArray.prototype.setCompare = function(fn) {\n		if (typeof fn !== \"function\") throw new Error(\"Invalid argument\");\n		this.compare = fn;\n		return this;\n	};\n	/**\n	* Set the search function\n	*\n	* @param {Function} fn to search index values in the array of objects\n	*/\n	IndexedArray.prototype.setSearch = function(fn) {\n		if (typeof fn !== \"function\") throw new Error(\"Invalid argument\");\n		this.search = fn;\n		return this;\n	};\n	/**\n	* Sort the data array by its index property\n	*/\n	IndexedArray.prototype.sort = function() {\n		var self = this, index = this.index;\n		this.data.sort(function(a, b) {\n			return self.compare(a[index], b[index]);\n		});\n		this.setBoundaries();\n		return this;\n	};\n	/**\n	* Inspect and set the boundaries of the internal data array\n	*/\n	IndexedArray.prototype.setBoundaries = function() {\n		var data = this.data, index = this.index;\n		this.minv = data.length && data[0][index];\n		this.maxv = data.length && data[data.length - 1][index];\n		return this;\n	};\n	/**\n	* Get the position of the object corresponding to the given index\n	*\n	* @param {Number|String} index is the id of the requested object\n	* @returns {Number} the position of the object in the array\n	*/\n	IndexedArray.prototype.fetch = function(value) {\n		if (this.data.length === 0) {\n			this.cursor = null;\n			this.nextlow = null;\n			this.nexthigh = null;\n			return this;\n		}\n		if (this.compare(value, this.minv) === -1) {\n			this.cursor = null;\n			this.nextlow = null;\n			this.nexthigh = 0;\n			return this;\n		}\n		if (this.compare(value, this.maxv) === 1) {\n			this.cursor = null;\n			this.nextlow = this.data.length - 1;\n			this.nexthigh = null;\n			return this;\n		}\n		var pos = this.valpos[value];\n		if (pos) {\n			if (pos.found) {\n				this.cursor = pos.index;\n				this.nextlow = null;\n				this.nexthigh = null;\n			} else {\n				this.cursor = null;\n				this.nextlow = pos.prev;\n				this.nexthigh = pos.next;\n			}\n			return this;\n		}\n		var result = this.search.call(this, value);\n		this.cursor = result.index;\n		this.nextlow = result.prev;\n		this.nexthigh = result.next;\n		return this;\n	};\n	/**\n	* Get the object corresponding to the given index\n	*\n	* When no value is given, the function will default to the last fetched item.\n	*\n	* @param {Number|String} [optional] index is the id of the requested object\n	* @returns {Object} the found object or null\n	*/\n	IndexedArray.prototype.get = function(value) {\n		if (value) this.fetch(value);\n		var pos = this.cursor;\n		return pos !== null ? this.data[pos] : null;\n	};\n	/**\n	* Get an slice of the data array\n	*\n	* Boundaries have to be in order.\n	*\n	* @param {Number|String} begin index is the id of the requested object\n	* @param {Number|String} end index is the id of the requested object\n	* @returns {Object} the slice of data array or []\n	*/\n	IndexedArray.prototype.getRange = function(begin, end) {\n		if (this.compare(begin, end) === 1) return [];\n		this.fetch(begin);\n		var start = this.cursor || this.nexthigh;\n		this.fetch(end);\n		var finish = this.cursor || this.nextlow;\n		if (start === null || finish === null) return [];\n		return this.data.slice(start, finish + 1);\n	};\n})))(), 1);\nvar utils_default = {\n	clamp(num, min, max) {\n		return num <= min ? min : num >= max ? max : num;\n	},\n	add_zero(i) {\n		if (i < 10) i = \"0\" + i;\n		return i;\n	},\n	day_start(t) {\n		return new Date(t).setUTCHours(0, 0, 0, 0);\n	},\n	month_start(t) {\n		let date = new Date(t);\n		return Date.UTC(date.getFullYear(), date.getMonth(), 1);\n	},\n	year_start(t) {\n		return Date.UTC(new Date(t).getFullYear());\n	},\n	get_year(t) {\n		if (!t) return void 0;\n		return new Date(t).getUTCFullYear();\n	},\n	get_month(t) {\n		if (!t) return void 0;\n		return new Date(t).getUTCMonth();\n	},\n	nearest_a(x, array) {\n		if (!array || !array.length) return [-1, null];\n		if (array.length === 1) return [0, array[0]];\n		let lo = 0;\n		let hi = array.length - 1;\n		if (x <= array[lo]) return [lo, array[lo]];\n		if (x >= array[hi]) return [hi, array[hi]];\n		while (lo < hi - 1) {\n			const mid = lo + hi >> 1;\n			if (array[mid] === x) return [mid, array[mid]];\n			if (array[mid] < x) lo = mid;\n			else hi = mid;\n		}\n		return Math.abs(array[lo] - x) <= Math.abs(array[hi] - x) ? [lo, array[lo]] : [hi, array[hi]];\n	},\n	round(num, decimals = 8) {\n		return parseFloat(num.toFixed(decimals));\n	},\n	strip(number) {\n		return parseFloat(parseFloat(number).toPrecision(12));\n	},\n	get_day(t) {\n		return t ? new Date(t).getDate() : null;\n	},\n	overwrite(arr, new_arr) {\n		arr.splice(0, arr.length, ...new_arr);\n	},\n	copy_layout(obj, new_obj) {\n		for (let k in obj) if (Array.isArray(obj[k])) {\n			if (obj[k].length !== new_obj[k].length) {\n				this.overwrite(obj[k], new_obj[k]);\n				continue;\n			}\n			for (let m in obj[k]) Object.assign(obj[k][m], new_obj[k][m]);\n		} else Object.assign(obj[k], new_obj[k]);\n	},\n	detect_interval(ohlcv) {\n		let len = Math.min(ohlcv.length - 1, 99);\n		let min = Infinity;\n		ohlcv.slice(0, len).forEach((x, i) => {\n			let d = ohlcv[i + 1][0] - x[0];\n			if (d === d && d < min) min = d;\n		});\n		if (min >= constants_default.MONTH && min <= constants_default.DAY * 30) return constants_default.DAY * 31;\n		return min;\n	},\n	get_num_id(id) {\n		return parseInt(id.split(\"_\").pop());\n	},\n	fast_filter(arr, t1, t2) {\n		if (!arr.length) return [arr, void 0];\n		if (arr[arr.length - 1][0] < t1 || arr[0][0] > t2) return [[], void 0];\n		try {\n			let ia = new import_lib.default(arr, \"0\");\n			return [ia.getRange(t1, t2), ia.valpos[t1].next];\n		} catch (e) {\n			return [arr.filter((x) => x[0] >= t1 && x[0] <= t2), 0];\n		}\n	},\n	fast_filter_i(arr, t1, t2) {\n		if (!arr.length) return [arr, void 0];\n		let i1 = Math.floor(t1);\n		if (i1 < 0) i1 = 0;\n		let i2 = Math.floor(t2 + 1);\n		return [arr.slice(i1, i2), i1];\n	},\n	fast_nearest(arr, t1) {\n		let ia = new import_lib.default(arr, \"0\");\n		ia.fetch(t1);\n		return [ia.nextlow, ia.nexthigh];\n	},\n	now() {\n		return (/* @__PURE__ */ new Date()).getTime();\n	},\n	pause(delay) {\n		return new Promise((rs, rj) => setTimeout(rs, delay));\n	},\n	smart_wheel(delta) {\n		let abs = Math.abs(delta);\n		if (abs > 500) return (200 + Math.log(abs)) * Math.sign(delta);\n		return delta;\n	},\n	get_deltaX(event) {\n		return event.originalEvent.deltaX / 12;\n	},\n	get_deltaY(event) {\n		return event.originalEvent.deltaY / 12;\n	},\n	apply_opacity(c, op) {\n		if (c.length === 7) {\n			let n = Math.floor(op * 255);\n			n = this.clamp(n, 0, 255);\n			c += n.toString(16).padStart(2, \"0\");\n		}\n		return c;\n	},\n	parse_tf(smth) {\n		if (typeof smth === \"string\") return constants_default.map_unit[smth];\n		else return smth;\n	},\n	index_shift(sub, data) {\n		if (!data.length) return 0;\n		let first = data[0][0];\n		let second;\n		let i = 1;\n		for (; i < data.length; i++) if (data[i][0] !== first) {\n			second = data[i][0];\n			break;\n		}\n		for (let j = 0; j < sub.length; j++) if (sub[j][0] === second) return j - i;\n		return 0;\n	},\n	measureText(ctx, text, tv_id) {\n		let m = ctx.measureTextOrg(text);\n		if (m.width === 0) {\n			const doc = document;\n			const id = \"tvjs-measure-text\";\n			let el = doc.getElementById(id);\n			if (!el) {\n				let base = doc.getElementById(tv_id);\n				el = doc.createElement(\"div\");\n				el.id = id;\n				el.style.position = \"absolute\";\n				el.style.top = \"-1000px\";\n				base.appendChild(el);\n			}\n			if (ctx.font) el.style.font = ctx.font;\n			el.innerText = text.replace(/ /g, \".\");\n			return { width: el.offsetWidth };\n		} else return m;\n	},\n	uuid(temp = \"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx\") {\n		return temp.replace(/[xy]/g, (c) => {\n			let r = Math.random() * 16 | 0;\n			return (c == \"x\" ? r : r & 3 | 8).toString(16);\n		});\n	},\n	uuid2() {\n		return this.uuid(\"xxxxxxxxxxxx\");\n	},\n	warn(f, text, delay = 0) {\n		setTimeout(() => {\n			if (f()) console.warn(text);\n		}, delay);\n	},\n	is_scr_props_upd(n, prev) {\n		let p = prev.find((x) => x.v.$uuid === n.v.$uuid);\n		if (!p) return false;\n		let props = n.p.settings.$props;\n		if (!props) return false;\n		return props.some((x) => n.v[x] !== p.v[x]);\n	},\n	delayed_exec(v) {\n		if (!v.script || !v.script.execInterval) return true;\n		let t = this.now();\n		let dt = v.script.execInterval;\n		if (!v.settings.$last_exec || t > v.settings.$last_exec + dt) {\n			v.settings.$last_exec = t;\n			return true;\n		}\n		return false;\n	},\n	format_name(ov) {\n		if (!ov.name) return void 0;\n		let name = ov.name;\n		for (let k in ov.settings || {}) {\n			let val = ov.settings[k];\n			let reg = new RegExp(`\\\\$${k}`, \"g\");\n			name = name.replace(reg, val);\n		}\n		return name;\n	},\n	xmode() {\n		return this.is_mobile ? \"explore\" : \"default\";\n	},\n	default_prevented(event) {\n		if (event.original) return event.original.defaultPrevented;\n		return event.defaultPrevented;\n	},\n	is_mobile: ((w) => \"onorientationchange\" in w && (!!navigator.maxTouchPoints || !!navigator.msMaxTouchPoints || \"ontouchstart\" in w || w.DocumentTouch && document instanceof w.DocumentTouch))(typeof window !== \"undefined\" ? window : {}),\n	maxInArray(arr) {\n		if (!arr || !arr.length) return -Infinity;\n		let max = arr[0];\n		for (let i = 1; i < arr.length; i++) if (arr[i] > max) max = arr[i];\n		return max;\n	},\n	minInArray(arr) {\n		if (!arr || !arr.length) return Infinity;\n		let min = arr[0];\n		for (let i = 1; i < arr.length; i++) if (arr[i] < min) min = arr[i];\n		return min;\n	},\n	maxAtIndex(arr, idx) {\n		if (!arr || !arr.length) return -Infinity;\n		let max = arr[0][idx];\n		for (let i = 1; i < arr.length; i++) {\n			const val = arr[i][idx];\n			if (val > max) max = val;\n		}\n		return max;\n	},\n	minAtIndex(arr, idx) {\n		if (!arr || !arr.length) return Infinity;\n		let min = arr[0][idx];\n		for (let i = 1; i < arr.length; i++) {\n			const val = arr[i][idx];\n			if (val < min) min = val;\n		}\n		return min;\n	},\n	rafThrottle(fn) {\n		let rafId = null;\n		let lastArgs = null;\n		let context = null;\n		const throttled = function(...args) {\n			lastArgs = args;\n			context = this;\n			if (rafId !== null) return;\n			rafId = requestAnimationFrame(() => {\n				rafId = null;\n				fn.apply(context, lastArgs);\n			});\n		};\n		throttled.cancel = () => {\n			if (rafId !== null) {\n				cancelAnimationFrame(rafId);\n				rafId = null;\n			}\n		};\n		return throttled;\n	},\n	fastDeepCopy(obj) {\n		if (obj === null || typeof obj !== \"object\") return obj;\n		if (Array.isArray(obj)) {\n			if (obj.length === 0) return [];\n			const first = obj[0];\n			if (first === null || typeof first !== \"object\") return obj.slice();\n			const copy = new Array(obj.length);\n			for (let i = 0; i < obj.length; i++) copy[i] = this.fastDeepCopy(obj[i]);\n			return copy;\n		}\n		const copy = {};\n		for (const key in obj) if (Object.prototype.hasOwnProperty.call(obj, key)) copy[key] = this.fastDeepCopy(obj[key]);\n		return copy;\n	},\n	_dateCache: /* @__PURE__ */ new Map(),\n	_dateCacheMax: 16,\n	getCachedDate(timestamp) {\n		let d = this._dateCache.get(timestamp);\n		if (d !== void 0) return d;\n		d = new Date(timestamp);\n		if (this._dateCache.size >= this._dateCacheMax) this._dateCache.delete(this._dateCache.keys().next().value);\n		this._dateCache.set(timestamp, d);\n		return d;\n	}\n};\n//#endregion\n//#region src/helpers/symstd.js\nconst SYMTF = /(open|high|low|close|vol)(\\d+)(\\w*)/gm;\nconst FNSTD = /(a?tr|kcw?|dmi|sar|supertrend|wpr)(\\d+?\\w*)\\s*\\(/gm;\nconst SYMSTD = /(?:hl2|hlc3|ohlc4)/gm;\nvar symstd_default = {\n	parse(s) {\n		let ss = s.src;\n		let all = `${ss.init_src}\\n${ss.upd_src}\\n${ss.post_src}`;\n		SYMTF.lastIndex = 0;\n		FNSTD.lastIndex = 0;\n		SYMSTD.lastIndex = 0;\n		let m;\n		do {\n			m = SYMTF.exec(all);\n			if (m) {\n				if (m[0] in script_engine_default.tss) continue;\n				let ts = script_engine_default.tss[m[0]] = TS(m[0], []);\n				ts.__tf__ = tf_from_pair(m[2], m[3]);\n				ts.__fn__ = sampler_default(m[1], true).bind(ts);\n			}\n		} while (m);\n		do {\n			m = SYMSTD.exec(all);\n			if (m) {\n				if (m[0] in script_engine_default.tss) continue;\n				this.parse_ts_sym(m[0]);\n			}\n		} while (m);\n		do {\n			m = FNSTD.exec(all);\n			if (m) {\n				let fn = m[1] + m[2];\n				let tf = m[2];\n				if (fn in script_engine_default.std_plus) continue;\n				switch (m[1]) {\n					case \"tr\":\n						this.deps([\n							\"high\",\n							\"low\",\n							\"close\"\n						], m[2]);\n						script_engine_default.std_plus[fn] = function(fixnan = false, _id) {\n							return this.tr(fixnan, _id, tf);\n						};\n						break;\n					case \"atr\":\n						this.deps([\n							\"high\",\n							\"low\",\n							\"close\"\n						], m[2]);\n						script_engine_default.std_plus[fn] = function(len, _id) {\n							return this.atr(len, _id, tf);\n						};\n						break;\n					case \"kc\":\n						this.deps([\n							\"high\",\n							\"low\",\n							\"close\"\n						], m[2]);\n						script_engine_default.std_plus[fn] = function(src, len, mult, use_tr = true, _id) {\n							return this.kc(src, len, mult, use_tr, _id, tf);\n						};\n						break;\n					case \"kcw\":\n						this.deps([\n							\"high\",\n							\"low\",\n							\"close\"\n						], m[2]);\n						script_engine_default.std_plus[fn] = function(src, len, mult, use_tr = true, _id) {\n							return this.kcw(src, len, mult, use_tr, _id, tf);\n						};\n						break;\n					case \"dmi\":\n						this.deps([\n							\"high\",\n							\"low\",\n							\"close\"\n						], m[2]);\n						script_engine_default.std_plus[fn] = function(len, smooth, _id) {\n							return this.dmi(len, smooth, _id, tf);\n						};\n						break;\n					case \"sar\":\n						this.deps([\n							\"high\",\n							\"low\",\n							\"close\"\n						], m[2]);\n						script_engine_default.std_plus[fn] = function(start, inc, max, _id) {\n							return this.sar(start, inc, max, _id, tf);\n						};\n						break;\n					case \"supertrend\":\n						this.deps([\n							\"high\",\n							\"low\",\n							\"close\"\n						], m[2]);\n						script_engine_default.std_plus[fn] = function(factor, atrlen, _id) {\n							return this.supertrend(factor, atrlen, _id, tf);\n						};\n						break;\n					case \"wpr\":\n						this.deps([\n							\"high\",\n							\"low\",\n							\"close\"\n						], m[2]);\n						script_engine_default.std_plus[fn] = function(len, _id) {\n							return this.wpr(len, _id, tf);\n						};\n						break;\n				}\n			}\n		} while (m);\n	},\n	parse_ts_sym(sym, tf) {\n		switch (sym) {\n			case \"hl2\":\n				script_engine_default.tss[\"hl2\"] = TS(\"hl2\", []);\n				script_engine_default.tss[\"hl2\"].__fn__ = () => {\n					return (script_engine_default.high[0] + script_engine_default.low[0]) * .5;\n				};\n				break;\n			case \"hlc3\":\n				script_engine_default.tss[\"hlc3\"] = TS(\"hlc3\", []);\n				script_engine_default.tss[\"hlc3\"].__fn__ = () => {\n					return (script_engine_default.high[0] + script_engine_default.low[0] + script_engine_default.close[0]) / 3;\n				};\n				break;\n			case \"ohlc4\":\n				script_engine_default.tss[\"ohlc4\"] = TS(\"ohlc4\", []);\n				script_engine_default.tss[\"ohlc4\"].__fn__ = () => {\n					return (script_engine_default.open[0] + script_engine_default.high[0] + script_engine_default.low[0] + script_engine_default.close[0]) * .25;\n				};\n				break;\n		}\n	},\n	deps(types, tf) {\n		for (let type of types) {\n			let sym = type + tf;\n			if (sym in script_engine_default.tss) continue;\n			let ts = script_engine_default.tss[sym] = TS(sym, []);\n			ts.__tf__ = tf_from_str(tf);\n			ts.__fn__ = sampler_default(type, true).bind(ts);\n		}\n	}\n};\n//#endregion\n//#region src/helpers/script_engine.js\nconst { DEF_LIMIT } = constants_default;\nconst WAIT_EXEC = 10;\nconst DISPLAY_ONLY_SETTINGS = new Set([\n	\"color\",\n	\"lineColor\",\n	\"fillColor\",\n	\"upColor\",\n	\"downColor\",\n	\"wickUpColor\",\n	\"wickDownColor\",\n	\"borderUpColor\",\n	\"borderDownColor\",\n	\"backgroundColor\",\n	\"textColor\",\n	\"labelColor\",\n	\"crossColor\",\n	\"lineWidth\",\n	\"lineStyle\",\n	\"lineDash\",\n	\"opacity\",\n	\"alpha\",\n	\"showLabels\",\n	\"showLegend\",\n	\"showValues\",\n	\"showPrice\",\n	\"visible\",\n	\"display\",\n	\"showBands\",\n	\"showFill\",\n	\"precision\",\n	\"prec\",\n	\"zIndex\",\n	\"z\"\n]);\nfunction fastDeepCopy(obj) {\n	if (obj === null || typeof obj !== \"object\") return obj;\n	if (Array.isArray(obj)) {\n		if (obj.length === 0) return [];\n		const first = obj[0];\n		if (first === null || typeof first !== \"object\") return obj.slice();\n		const copy = new Array(obj.length);\n		for (let i = 0; i < obj.length; i++) copy[i] = fastDeepCopy(obj[i]);\n		return copy;\n	}\n	const copy = {};\n	for (const key in obj) if (Object.prototype.hasOwnProperty.call(obj, key)) copy[key] = fastDeepCopy(obj[key]);\n	return copy;\n}\nconst YIELD_FREQUENCY = 2e3;\nvar ScriptEngine = class {\n	constructor() {\n		this.map = {};\n		this.data = {};\n		this.exec_id = null;\n		this.queue = [];\n		this.delta_queue = [];\n		this.update_queue = [];\n		this.sett = {};\n		this.state = {};\n		this.mods = {};\n		this.std_plus = {};\n		this.tf = void 0;\n		this._outputCache = /* @__PURE__ */ new Map();\n		this._dataHash = null;\n		this._hooksCache = {};\n		this._hooksModsKey = null;\n		this._updateTemplate = null;\n		state.send = (...args) => this.send(...args);\n		state.std_inject = (...args) => this.std_inject(...args);\n		state.match_ds = (...args) => this.match_ds(...args);\n	}\n	_computationHash(script) {\n		const props = script.src?.props || {};\n		const sett = script.sett || {};\n		const parts = [];\n		if (script.src?.init) parts.push(\"i:\" + script.src.init.toString().length);\n		if (script.src?.update) parts.push(\"u:\" + script.src.update.toString().length);\n		for (const key in props) if (!DISPLAY_ONLY_SETTINGS.has(key)) {\n			const val = props[key].val !== void 0 ? props[key].val : props[key].def;\n			const sv = val !== null && typeof val === \"object\" ? JSON.stringify(val) : String(val);\n			parts.push(`${key}:${sv}`);\n		}\n		for (const key in sett) if (!DISPLAY_ONLY_SETTINGS.has(key)) {\n			const sv = sett[key] !== null && typeof sett[key] === \"object\" ? JSON.stringify(sett[key]) : String(sett[key]);\n			parts.push(`s.${key}:${sv}`);\n		}\n		return parts.sort().join(\"|\");\n	}\n	_computeDataHash() {\n		const ohlcv = this.data?.ohlcv?.data;\n		if (!ohlcv || !ohlcv.length) return \"\";\n		return `${ohlcv.length}:${ohlcv[0]?.[0]}:${ohlcv[ohlcv.length - 1]?.[0]}`;\n	}\n	_isDisplayOnlyChange(delta, scriptId) {\n		if (!delta || !delta[scriptId]) return false;\n		const changes = delta[scriptId];\n		for (const key in changes) if (!DISPLAY_ONLY_SETTINGS.has(key)) return false;\n		return true;\n	}\n	_restoreFromCache(scriptId) {\n		const cached = this._outputCache.get(scriptId);\n		if (!cached) return false;\n		const script = this.map[scriptId];\n		if (!script || !script.env) return false;\n		script.env.data = cached.data.slice();\n		script.env.onchart = fastDeepCopy(cached.onchart || {});\n		script.env.offchart = fastDeepCopy(cached.offchart || {});\n		return true;\n	}\n	_saveToCache(scriptId) {\n		const script = this.map[scriptId];\n		if (!script || !script.env) return;\n		if (this._outputCache.size > 50) {\n			const firstKey = this._outputCache.keys().next().value;\n			this._outputCache.delete(firstKey);\n		}\n		const hash = this._computationHash(script);\n		this._outputCache.set(scriptId, {\n			hash,\n			dataHash: this._dataHash,\n			data: script.env.data.slice(),\n			onchart: fastDeepCopy(script.env.onchart || {}),\n			offchart: fastDeepCopy(script.env.offchart || {})\n		});\n	}\n	_isCacheValid(scriptId) {\n		const cached = this._outputCache.get(scriptId);\n		if (!cached) return false;\n		const script = this.map[scriptId];\n		if (!script) return false;\n		if (cached.dataHash !== this._dataHash) return false;\n		const currentHash = this._computationHash(script);\n		return cached.hash === currentHash;\n	}\n	syncState() {\n		state.t = this.t;\n		state.tf = this.tf;\n		state.iter = this.iter;\n		state.data = this.data;\n		state.shared = this.shared;\n		state.mods = this.mods;\n	}\n	exec_all() {\n		clearTimeout(this.exec_id);\n		if (!this.data.ohlcv) return;\n		this._dataHash = this._computeDataHash();\n		this.exec_id = setTimeout(async () => {\n			if (!this.init_state(Object.keys(this.map))) return;\n			this.re_init_map();\n			while (this.queue.length) this.exec(this.queue.shift());\n			if (Object.keys(this.map).length) {\n				await this.run();\n				for (let id in this.map) this._saveToCache(id);\n				this.drain_queues();\n			}\n			this.send_state();\n		}, WAIT_EXEC);\n	}\n	async exec_sel(delta) {\n		if (!this.data.ohlcv) return;\n		let sel = Object.keys(delta).filter((x) => x in this.map);\n		const needsReExec = [];\n		const displayOnlyChanges = [];\n		for (let id of sel) {\n			if (!this.map[id]) continue;\n			if (this._isDisplayOnlyChange(delta, id) && this._isCacheValid(id)) displayOnlyChanges.push(id);\n			else needsReExec.push(id);\n			let props = this.map[id].src.props || {};\n			for (let k in props) if (k in delta[id]) props[k].val = delta[id][k];\n		}\n		if (displayOnlyChanges.length > 0) {\n			for (let id of displayOnlyChanges) this._restoreFromCache(id);\n			if (needsReExec.length === 0) {\n				this.send(\"overlay-data\", this.format_map(sel));\n				this.send_state();\n				return;\n			}\n		}\n		if (!this.init_state(needsReExec)) {\n			this.delta_queue.push(delta);\n			return;\n		}\n		for (let id of needsReExec) {\n			if (!this.map[id]) continue;\n			this.exec(this.map[id]);\n		}\n		await this.run(needsReExec);\n		for (let id of needsReExec) this._saveToCache(id);\n		this.drain_queues();\n		this.send_state();\n	}\n	exec(s) {\n		if (!s.src.conf) s.src.conf = {};\n		if (s.src.init) s.src.init_src = get_raw_src(s.src.init);\n		if (s.src.update) s.src.upd_src = get_raw_src(s.src.update);\n		if (s.src.post) s.src.post_src = get_raw_src(s.src.post);\n		symstd_default.parse(s);\n		for (let id in this.mods) if (this.mods[id].pre_env) this.mods[id].pre_env(s.uuid, s);\n		s.env = new ScriptEnv(s, Object.assign(this.shared, {\n			open: this.open,\n			high: this.high,\n			low: this.low,\n			close: this.close,\n			vol: this.vol,\n			dss: this.data,\n			t: () => this.t,\n			iter: () => this.iter,\n			tf: this.tf,\n			range: this.range,\n			onclose: true\n		}, this.tss));\n		this.map[s.uuid] = s;\n		this._updateTemplate = null;\n		for (let id in this.mods) if (this.mods[id].new_env) this.mods[id].new_env(s.uuid, s);\n		s.env.build();\n	}\n	update(candles) {\n		if (!this.data.ohlcv || !this.data.ohlcv.data.length) return;\n		if (this.running) {\n			this.update_queue.push(candles);\n			return;\n		}\n		let mfs1 = this.make_mods_hooks(\"pre_step\");\n		let mfs2 = this.make_mods_hooks(\"post_step\");\n		const hasMods1 = mfs1.length > 0;\n		const hasMods2 = mfs2.length > 0;\n		let step = (sel, unshift) => {\n			if (hasMods1) for (let m = 0; m < mfs1.length; m++) mfs1[m](sel);\n			for (let j = 0; j < sel.length; j++) this.map[sel[j]].env.step(unshift);\n			if (hasMods2) for (let m = 0; m < mfs2.length; m++) mfs2[m](sel);\n		};\n		try {\n			let ohlcv = this.data.ohlcv.data;\n			let i = ohlcv.length - 1;\n			let last = ohlcv[i];\n			let sel = Object.keys(this.map);\n			let unshift = false;\n			this.shared.event = \"update\";\n			for (let candle of candles) if (candle[0] > last[0]) {\n				this.shared.onclose = true;\n				step(sel, false);\n				ohlcv.push(candle);\n				unshift = true;\n				i++;\n			} else if (candle[0] < last[0]) continue;\n			else ohlcv[i] = candle;\n			this.iter = i;\n			this.t = ohlcv[i][0];\n			this.syncState();\n			this.step(ohlcv[i], unshift);\n			this.shared.onclose = false;\n			step(sel, unshift);\n			this.limit();\n			this.send_update();\n			this.send_state();\n		} catch (e) {\n			console.error(\"Script update error:\", e);\n		}\n	}\n	init_state(sel) {\n		let task = sel.join(\",\");\n		if (this.running) {\n			this._restart = task === this.task;\n			return false;\n		}\n		this.open = TS(\"open\", []);\n		this.high = TS(\"high\", []);\n		this.low = TS(\"low\", []);\n		this.close = TS(\"close\", []);\n		this.vol = TS(\"vol\", []);\n		this.tss = {};\n		this.std_plus = {};\n		this.shared = {};\n		this.iter = 0;\n		this.t = 0;\n		this.skip = false;\n		this.running = true;\n		this.task = task;\n		this.syncState();\n		return true;\n	}\n	std_inject(std) {\n		Object.assign(Object.getPrototypeOf(std), this.std_plus);\n		return std;\n	}\n	_onScriptError(id, phase, e) {\n		const scr = this.map[id];\n		const err = {\n			uuid: id,\n			name: scr && scr.name,\n			type: scr && scr.type,\n			phase,\n			message: e && e.message || String(e)\n		};\n		this.send(\"script-error\", err);\n		if (typeof console !== \"undefined\") console.error(`Script \"${err.name || id}\" ${phase} error:`, e);\n	}\n	send_state() {\n		this.send(\"engine-state\", {\n			scripts: Object.keys(this.map).length,\n			last_perf: this.perf,\n			iter: this.iter,\n			last_t: this.t,\n			data_size: this.data_size,\n			running: false\n		});\n	}\n	send_update() {\n		this.send(\"overlay-update\", this.format_update());\n	}\n	re_init_map() {\n		for (let id in this.map) this.exec(this.map[id]);\n	}\n	async run(sel) {\n		this.send(\"engine-state\", { running: true });\n		let t1 = utils_default.now();\n		sel = sel || Object.keys(this.map);\n		this.pre_run_mods(sel);\n		let mfs1 = this.make_mods_hooks(\"pre_step\");\n		let mfs2 = this.make_mods_hooks(\"post_step\");\n		const skip = /* @__PURE__ */ new Set();\n		try {\n			for (let id of sel) try {\n				this.map[id].env.init();\n			} catch (e) {\n				skip.add(id);\n				this._onScriptError(id, \"init\", e);\n			}\n			let ohlcv = this.data.ohlcv.data;\n			let start = this.start(ohlcv);\n			let total = ohlcv.length - start;\n			this.shared.event = \"step\";\n			state.tf = this.tf;\n			state.data = this.data;\n			state.shared = this.shared;\n			state.mods = this.mods;\n			const ohlcvLen = ohlcv.length;\n			const lastIdx = ohlcvLen - 1;\n			const hasMods1 = mfs1.length > 0;\n			const hasMods2 = mfs2.length > 0;\n			const hasCustomMain = !!this.custom_main;\n			const selLen = sel.length;\n			let lastProgress = 0;\n			for (let i = start; i < ohlcvLen; i++) {\n				if (i % YIELD_FREQUENCY === 0) {\n					await utils_default.pause(0);\n					let progress = Math.floor((i - start) / total * 100);\n					if (progress > lastProgress) {\n						lastProgress = progress;\n						this.send(\"engine-state\", {\n							running: true,\n							progress\n						});\n					}\n				}\n				if (this.restarted()) return;\n				const candle = ohlcv[i];\n				this.iter = i - start;\n				this.t = candle[0];\n				state.t = this.t;\n				state.iter = this.iter;\n				this.step(candle);\n				this.shared.onclose = i !== lastIdx;\n				if (hasMods1) for (let m = 0; m < mfs1.length; m++) mfs1[m](sel);\n				for (let j = 0; j < selLen; j++) {\n					const id = sel[j];\n					if (skip.has(id)) continue;\n					try {\n						this.map[id].env.step();\n					} catch (e) {\n						skip.add(id);\n						this._onScriptError(id, \"exec\", e);\n					}\n				}\n				if (hasMods2) for (let m = 0; m < mfs2.length; m++) mfs2[m](sel);\n				if (hasCustomMain) this.make_ohlcv();\n				this.limit();\n			}\n			for (let j = 0; j < selLen; j++) {\n				const id = sel[j];\n				if (skip.has(id)) continue;\n				try {\n					this.map[id].env.output.post();\n				} catch (e) {\n					skip.add(id);\n					this._onScriptError(id, \"post\", e);\n				}\n			}\n		} catch (e) {\n			console.error(\"Script execution error:\", e);\n			this.send(\"script-error\", {\n				uuid: null,\n				phase: \"engine\",\n				message: e && e.message || String(e)\n			});\n		}\n		this.post_run_mods(sel);\n		this.perf = utils_default.now() - t1;\n		this.running = false;\n		this._buildUpdateTemplate();\n		this.send(\"overlay-data\", this.format_map(sel));\n	}\n	step(data, unshift = true) {\n		if (unshift) {\n			this.open.unshift(data[1]);\n			this.high.unshift(data[2]);\n			this.low.unshift(data[3]);\n			this.close.unshift(data[4]);\n			this.vol.unshift(data[5]);\n		} else {\n			this.open[0] = data[1];\n			this.high[0] = data[2];\n			this.low[0] = data[3];\n			this.close[0] = data[4];\n			this.vol[0] = data[5];\n		}\n		for (let id in this.tss) {\n			let ts = this.tss[id];\n			if (ts.__tf__) ts.__fn__();\n			else if (unshift) ts.unshift(ts.__fn__());\n			else ts[0] = ts.__fn__();\n		}\n	}\n	limit() {\n		this.open.length = this.open.__len__ || DEF_LIMIT;\n		this.high.length = this.high.__len__ || DEF_LIMIT;\n		this.low.length = this.low.__len__ || DEF_LIMIT;\n		this.close.length = this.close.__len__ || DEF_LIMIT;\n		this.vol.length = this.vol.__len__ || DEF_LIMIT;\n	}\n	start(ohlcv) {\n		let depth = this.sett.script_depth;\n		return depth ? Math.max(ohlcv.length - depth, 0) : 0;\n	}\n	drain_queues() {\n		if (this.queue.length) this.exec_all();\n		else if (this.delta_queue.length) {\n			this.exec_sel(this.delta_queue.pop());\n			this.delta_queue = [];\n		} else while (this.update_queue.length) {\n			let c = this.update_queue.shift();\n			this.update(c);\n		}\n	}\n	_bsGTE(arr, t) {\n		let lo = 0, hi = arr.length;\n		while (lo < hi) {\n			let mid = lo + hi >> 1;\n			if (arr[mid][0] < t) lo = mid + 1;\n			else hi = mid;\n		}\n		return lo;\n	}\n	_bsGT(arr, t) {\n		let lo = 0, hi = arr.length;\n		while (lo < hi) {\n			let mid = lo + hi >> 1;\n			if (arr[mid][0] <= t) lo = mid + 1;\n			else hi = mid;\n		}\n		return lo;\n	}\n	_rangeSlice(arr, t1, t2) {\n		if (!arr.length) return arr;\n		let lo = this._bsGTE(arr, t1);\n		let hi = this._bsGT(arr, t2);\n		return lo >= hi ? [] : arr.slice(lo, hi);\n	}\n	format_map(sel, range, output) {\n		sel = sel || Object.keys(this.map);\n		let res = [];\n		for (let id of sel) {\n			let x = this.map[id];\n			let f = (x) => x;\n			if ((x.output === false || x.output === \"none\") && !output) {\n				res.push({\n					id,\n					data: null\n				});\n				continue;\n			}\n			if (x.output === \"range\" || range) {\n				let [t1, t2] = range || this.range;\n				f = (arr) => this._rangeSlice(arr, t1, t2);\n			}\n			res.push({\n				id,\n				data: f(x.env.data),\n				new_ovs: {\n					onchart: ovf(x.env.onchart, f),\n					offchart: ovf(x.env.offchart, f)\n				}\n			});\n		}\n		if (this.custom_main) res.push({\n			id: \"chart\",\n			data: this.data.ohlcv.data\n		});\n		return res;\n	}\n	_buildUpdateTemplate() {\n		let tmpl = [];\n		for (let id in this.map) {\n			let x = this.map[id];\n			if (x.output === false) {\n				tmpl.push({\n					id,\n					src: null\n				});\n				continue;\n			}\n			tmpl.push({\n				id,\n				src: x.env.data\n			});\n			for (let side of [\"onchart\", \"offchart\"]) for (let oid in x.env[side]) tmpl.push({\n				id: `${side}.${oid}`,\n				src: x.env[side][oid].data\n			});\n		}\n		this._updateTemplate = tmpl;\n	}\n	format_update() {\n		let tmpl = this._updateTemplate;\n		if (!tmpl) {\n			this._buildUpdateTemplate();\n			tmpl = this._updateTemplate;\n		}\n		let res = new Array(tmpl.length);\n		for (let i = 0; i < tmpl.length; i++) {\n			let entry = tmpl[i];\n			res[i] = {\n				id: entry.id,\n				data: entry.src ? entry.src[entry.src.length - 1] : null\n			};\n		}\n		return res;\n	}\n	restarted() {\n		if (this._restart) {\n			this._restart = false;\n			this.running = false;\n			this.perf = 0;\n			return true;\n		}\n		return false;\n	}\n	remove_scripts(ids) {\n		for (let id of ids) {\n			delete this.map[id];\n			this._outputCache.delete(id);\n		}\n		this._updateTemplate = null;\n		this.send_state();\n	}\n	pre_run_mods(sel) {\n		for (let id in this.mods) if (this.mods[id].pre_run) this.mods[id].pre_run(sel);\n	}\n	post_run_mods(sel) {\n		for (let id in this.mods) if (this.mods[id].post_run) this.mods[id].post_run(sel);\n	}\n	make_mods_hooks(name) {\n		let modsKey = Object.keys(this.mods).join(\",\");\n		if (modsKey === this._hooksModsKey && this._hooksCache[name]) return this._hooksCache[name];\n		this._hooksModsKey = modsKey;\n		let arr = [];\n		for (let id in this.mods) if (this.mods[id][name]) arr.push(this.mods[id][name].bind(this.mods[id]));\n		this._hooksCache[name] = arr;\n		return arr;\n	}\n	data_required(s) {\n		let all = Object.values(this.map);\n		if (s) all.push(s);\n		let types = [{ type: \"OHLCV\" }];\n		for (let sc of all) if (sc.src.data) {\n			let reqs = Object.values(sc.src.data);\n			types.push(...reqs.map((x) => ({\n				id: sc.uuid,\n				type: x.type\n			})));\n		}\n		let existing = new Set(Object.values(this.data).map((y) => y.type));\n		let unf = types.filter((x) => !existing.has(x.type));\n		return unf.length ? unf : null;\n	}\n	match_ds(id, type) {\n		for (let dsId in this.data) if (this.data[dsId].type === type) return dsId;\n	}\n	make_ohlcv() {\n		let sym = this.custom_main;\n		let tNext = this.t + this.tf;\n		if (sym.update(null, tNext)) this.data.ohlcv.data.push([\n			tNext,\n			sym.open[0],\n			sym.high[0],\n			sym.low[0],\n			sym.close[0],\n			sym.vol[0]\n		]);\n	}\n	recalc_size() {\n		let sz = 0;\n		let maxIter = 100;\n		while (maxIter-- > 0) {\n			sz = size_of_dss(this.data) / (1024 * 1024);\n			let lim = this.sett.ww_ram_limit;\n			if (lim && sz > lim) this.limit_size();\n			else break;\n		}\n		this.data_size = +sz.toFixed(2);\n		this.send_state();\n	}\n	limit_size() {\n		let dss = Object.values(this.data).map((x) => ({\n			id: x.id,\n			t: x.last_upd\n		}));\n		dss.sort((a, b) => a.t - b.t);\n		if (dss.length) delete this.data[dss[0].id];\n	}\n};\nvar script_engine_default = new ScriptEngine();\n//#endregion\n//#region src/helpers/dataset.js\nvar DatasetWW = class {\n	constructor(id, data) {\n		this.last_upd = utils_default.now();\n		this.id = id;\n		if (Array.isArray(data)) {\n			this.data = data;\n			if (id === \"ohlcv\") this.type = \"OHLCV\";\n		} else {\n			this.data = data.data;\n			this.type = data.type;\n		}\n	}\n	static update_all(se, data) {\n		for (var k in data) {\n			if (k === \"ohlcv\") continue;\n			let id = k.split(\".\")[1] || k;\n			if (!se.data[id]) continue;\n			let arr = se.data[id].data;\n			let last = arr[arr.length - 1];\n			for (var dp of data[k]) if (!last || dp[0] > last[0]) arr.push(dp);\n			se.data[id].last_upd = utils_default.now();\n		}\n	}\n	merge(data) {\n		let len = this.data.length;\n		if (!len) {\n			this.data = data;\n			return;\n		}\n		let t0 = this.data[0][0];\n		let tN = this.data[len - 1][0];\n		let l = data.filter((x) => x[0] < t0);\n		let r = data.filter((x) => x[0] > tN);\n		this.data = l.concat(this.data, r);\n	}\n	op(se, op) {\n		this.last_upd = utils_default.now();\n		switch (op.type) {\n			case \"set\":\n				this.data = op.data;\n				se.recalc_size();\n				break;\n			case \"del\":\n				delete se.data[this.id];\n				se.recalc_size();\n				break;\n			case \"mrg\":\n				this.merge(op.data);\n				se.recalc_size();\n				break;\n		}\n	}\n};\n//#endregion\n//#region src/helpers/schema/diagnostics.js\n/**\n* @typedef {Object} Diagnostic\n* @property {'error'|'warn'} level\n* @property {string} code   - stable machine code, e.g. 'ohlcv.row.shape'\n* @property {string} message- human-readable explanation\n* @property {string} [path] - location, e.g. 'chart.data[42]'\n*/\n/** Make a diagnostic. */\nfunction diag(level, code, message, path) {\n	return path !== void 0 ? {\n		level,\n		code,\n		message,\n		path\n	} : {\n		level,\n		code,\n		message\n	};\n}\nconst error = (code, message, path) => diag(\"error\", code, message, path);\nconst warn = (code, message, path) => diag(\"warn\", code, message, path);\n/** True if any diagnostic is error-level. */\nfunction hasErrors(diagnostics) {\n	for (const d of diagnostics) if (d.level === \"error\") return true;\n	return false;\n}\n/** One-line human summary of a diagnostic list (capped). */\nfunction formatDiagnostics(diagnostics, cap = 8) {\n	const shown = diagnostics.slice(0, cap).map((d) => `  [${d.level}] ${d.code}${d.path ? ` @ ${d.path}` : \"\"}: ${d.message}`);\n	const extra = diagnostics.length > cap ? `\\n  …and ${diagnostics.length - cap} more` : \"\";\n	return shown.join(\"\\n\") + extra;\n}\n/**\n* Report diagnostics according to `mode`:\n*   'off'    - do nothing\n*   'warn'   - console.warn errors+warnings (default; non-breaking)\n*   'strict' - throw on any error-level diagnostic (after logging)\n*\n* Returns the (possibly filtered) diagnostics so callers can also surface them\n* on an event bus. Never throws in 'warn'/'off'.\n*\n* @param {Diagnostic[]} diagnostics\n* @param {'off'|'warn'|'strict'} mode\n* @param {string} context - label for the log line, e.g. 'OHLCV data'\n*/\nfunction report(diagnostics, mode = \"warn\", context = \"data\") {\n	if (!diagnostics || !diagnostics.length || mode === \"off\") return diagnostics;\n	const header = `[trading-vue] ${context}: ${diagnostics.length} validation issue(s)`;\n	const body = formatDiagnostics(diagnostics);\n	if (mode === \"strict\" && hasErrors(diagnostics)) {\n		if (typeof console !== \"undefined\") console.error(header + \"\\n\" + body);\n		const err = /* @__PURE__ */ new Error(`${header} (strict mode)\\n${body}`);\n		err.diagnostics = diagnostics;\n		throw err;\n	}\n	if (typeof console !== \"undefined\") (hasErrors(diagnostics) ? console.error : console.warn)(header + \"\\n\" + body);\n	return diagnostics;\n}\n//#endregion\n//#region src/helpers/schema/worker-messages.js\nconst DC_TO_WW_TYPES = new Set([\n	\"update-dc-settings\",\n	\"exec-script\",\n	\"exec-all-scripts\",\n	\"upload-data\",\n	\"upload-module\",\n	\"module-event\",\n	\"update-data\",\n	\"get-dataset\",\n	\"dataset-op\",\n	\"update-ov-settings\",\n	\"send-meta-info\",\n	\"remove-scripts\"\n]);\n/**\n* Validate an inbound worker message envelope.\n* Returns { ok, diagnostics }. `ok:false` => caller should NOT dispatch it.\n* An unknown (but well-formed) type is a warning, not a hard error, so the\n* protocol can be extended without bricking older workers.\n*\n* @param {any} data - the `e.data` from onmessage\n*/\nfunction validateWorkerMessage(data) {\n	const out = [];\n	if (data == null || typeof data !== \"object\") {\n		out.push(error(\"ww.msg.shape\", `worker message is not an object: ${typeof data}`));\n		return {\n			ok: false,\n			diagnostics: out\n		};\n	}\n	if (typeof data.type !== \"string\" || !data.type) {\n		out.push(error(\"ww.msg.type\", \"worker message missing string `type`\"));\n		return {\n			ok: false,\n			diagnostics: out\n		};\n	}\n	if (!DC_TO_WW_TYPES.has(data.type)) {\n		out.push(warn(\"ww.msg.unknown\", `unknown worker message type \"${data.type}\"`));\n		return {\n			ok: true,\n			diagnostics: out\n		};\n	}\n	if (data.type !== \"exec-all-scripts\" && data.type !== \"send-meta-info\" && data.type !== \"module-event\" && data.data === void 0) {\n		out.push(error(\"ww.msg.payload\", `message \"${data.type}\" missing \\`data\\` payload`));\n		return {\n			ok: false,\n			diagnostics: out\n		};\n	}\n	return {\n		ok: true,\n		diagnostics: out\n	};\n}\n//#endregion\n//#region src/helpers/script_dispatch.js\n/**\n* Wire engine -> DC events. The engine calls `se.send(type, data)`; we forward\n* the whitelisted event types to `post` as a `{type, data}` envelope.\n* @param {object} se   - a ScriptEngine instance\n* @param {(msg:any)=>void} post - delivers a message to the DC side\n*/\nfunction wireEngineEvents(se, post) {\n	se.send = (type, data) => {\n		switch (type) {\n			case \"overlay-data\":\n			case \"overlay-update\":\n			case \"engine-state\":\n			case \"modify-overlay\":\n			case \"module-data\":\n			case \"script-signal\":\n			case \"script-error\":\n				post({\n					type,\n					data\n				});\n				break;\n		}\n	};\n}\n/**\n* Build the DC -> engine message dispatcher.\n* @param {object} se   - a ScriptEngine instance\n* @param {(msg:any)=>void} post - delivers a message to the DC side\n* @returns {(msg:any)=>Promise<void>} dispatch(msg)\n*/\nfunction makeDispatcher(se, post) {\n	let data_requested = false;\n	return async function dispatch(msg) {\n		const guard = validateWorkerMessage(msg);\n		if (guard.diagnostics.length) report(guard.diagnostics, \"warn\", \"worker message\");\n		if (!guard.ok) return;\n		switch (msg.type) {\n			case \"update-dc-settings\":\n				se.sett = msg.data;\n				break;\n			case \"exec-script\": {\n				let req = se.data_required(msg.data.s);\n				if (req && !data_requested) {\n					data_requested = true;\n					post({\n						type: \"request-data\",\n						data: req\n					});\n				}\n				se.tf = tf_from_str(msg.data.tf);\n				se.range = msg.data.range;\n				se.queue.push(msg.data.s);\n				se.exec_all();\n				break;\n			}\n			case \"exec-all-scripts\": {\n				let req2 = se.data_required(msg.data && msg.data.s);\n				if (req2 && !data_requested) {\n					data_requested = true;\n					post({\n						type: \"request-data\",\n						data: req2\n					});\n				}\n				se.tf = tf_from_str(msg.data && msg.data.tf);\n				se.range = msg.data && msg.data.range;\n				se.exec_all();\n				break;\n			}\n			case \"upload-data\":\n				post({ type: \"data-uploaded\" });\n				await utils_default.pause(1);\n				for (let id in msg.data) {\n					let data = msg.data[id];\n					se.data[id] = new DatasetWW(id, data);\n				}\n				se.recalc_size();\n				data_requested = false;\n				se.exec_all();\n				break;\n			case \"upload-module\": {\n				let lib = make_module_lib(msg.data);\n				se.mods[msg.data.id] = new new Function(\"mod\", \"se\", \"lib\", f_body(msg.data.main))(msg.data.id, se, lib);\n				break;\n			}\n			case \"module-event\": break;\n			case \"update-data\":\n				DatasetWW.update_all(se, msg.data);\n				if (msg.data.ohlcv) se.update(msg.data.ohlcv);\n				break;\n			case \"get-dataset\":\n				post({\n					id: msg.id,\n					data: se.data[msg.data]\n				});\n				break;\n			case \"dataset-op\":\n				await utils_default.pause(1);\n				if (msg.data.id in se.data) se.data[msg.data.id].op(se, msg.data);\n				if (msg.data.exec) se.exec_all();\n				break;\n			case \"update-ov-settings\":\n				se.tf = tf_from_str(msg.data.tf);\n				se.range = msg.data.range;\n				se.exec_sel(msg.data.delta);\n				break;\n			case \"send-meta-info\":\n				se.tf = tf_from_str(msg.data && msg.data.tf);\n				se.range = msg.data && msg.data.range;\n				break;\n			case \"remove-scripts\":\n				se.remove_scripts(msg.data);\n				break;\n		}\n	};\n}\n//#endregion\n//#region src/helpers/script_ww.js\nconst wwGlobal = typeof self !== \"undefined\" ? self : globalThis;\nwireEngineEvents(script_engine_default, (msg) => wwGlobal.postMessage(msg));\nconst dispatch = makeDispatcher(script_engine_default, (msg) => wwGlobal.postMessage(msg));\nwwGlobal.onmessage = (e) => dispatch(e.data).catch((err) => console.error(\"[ScriptWorker] dispatch failed:\", err));\n//#endregion\n\n//# sourceMappingURL=script_ww-BBRMzHUb.js.map";
+	var jsContent = "//#region \\0rolldown/runtime.js\nvar __create = Object.create;\nvar __defProp = Object.defineProperty;\nvar __getOwnPropDesc = Object.getOwnPropertyDescriptor;\nvar __getOwnPropNames = Object.getOwnPropertyNames;\nvar __getProtoOf = Object.getPrototypeOf;\nvar __hasOwnProp = Object.prototype.hasOwnProperty;\nvar __commonJSMin = (cb, mod) => () => (mod || (cb((mod = { exports: {} }).exports, mod), cb = null), mod.exports);\nvar __copyProps = (to, from, except, desc) => {\n	if (from && typeof from === \"object\" || typeof from === \"function\") for (var keys = __getOwnPropNames(from), i = 0, n = keys.length, key; i < n; i++) {\n		key = keys[i];\n		if (!__hasOwnProp.call(to, key) && key !== except) __defProp(to, key, {\n			get: ((k) => from[k]).bind(null, key),\n			enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable\n		});\n	}\n	return to;\n};\nvar __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(isNodeMode || !mod || !mod.__esModule ? __defProp(target, \"default\", {\n	value: mod,\n	enumerable: true\n}) : target, mod));\n//#endregion\n//#region src/helpers/script_state.js\nconst state = {\n	t: 0,\n	tf: 0,\n	iter: 0,\n	data: {},\n	shared: {},\n	mods: {},\n	send: null,\n	std_inject: null,\n	match_ds: null\n};\n//#endregion\n//#region src/stuff/constants.js\nconst DEF_LIMIT$3 = 5;\nconst BUF_INC$2 = 5;\nconst FDEFS$1 = /(function |)([$A-Z_][0-9A-Z_$\\.]*)[\\s]*?\\((.*?)\\)/gim;\nconst FDEFS1$1 = /(function |)([$A-Z_][0-9A-Z_$\\.]*)[\\s]*?\\((.*?\\s*)\\)/im;\nconst FDEFS2$1 = /(function |)([$A-Z_][0-9A-Z_$\\.]*)[\\s]*?\\((.*\\s*)\\)/gims;\nconst SBRACKETS$1 = /([$A-Z_][0-9A-Z_$\\.]*)[\\s]*?\\[([^\"^\\[^\\]]+?)\\]/gim;\nconst TFSTR$1 = /(\\d+)(\\w*)/gm;\nconst SECOND = 1e3;\nconst MINUTE = SECOND * 60;\nconst MINUTE3 = MINUTE * 3;\nconst MINUTE5 = MINUTE * 5;\nconst MINUTE15 = MINUTE * 15;\nconst MINUTE30 = MINUTE * 30;\nconst HOUR = MINUTE * 60;\nconst HOUR4 = HOUR * 4;\nconst HOUR12 = HOUR * 12;\nconst DAY = HOUR * 24;\nconst WEEK = DAY * 7;\nconst MONTH = WEEK * 4;\nconst YEAR = DAY * 365;\nconst MONTHMAP = [\n	\"Jan\",\n	\"Feb\",\n	\"Mar\",\n	\"Apr\",\n	\"May\",\n	\"Jun\",\n	\"Jul\",\n	\"Aug\",\n	\"Sep\",\n	\"Oct\",\n	\"Nov\",\n	\"Dec\"\n];\nconst TIMESCALES = [\n	MINUTE,\n	MINUTE * 2,\n	MINUTE5,\n	MINUTE * 10,\n	MINUTE15,\n	MINUTE30,\n	HOUR,\n	HOUR * 1.5,\n	HOUR * 3,\n	HOUR * 6,\n	HOUR * 12,\n	DAY,\n	DAY * 2,\n	DAY * 3,\n	DAY * 5,\n	DAY * 7,\n	DAY * 10,\n	DAY * 15,\n	MONTH,\n	MONTH * 2,\n	MONTH * 3,\n	MONTH * 4,\n	MONTH * 6,\n	YEAR,\n	YEAR * 2,\n	YEAR * 3,\n	YEAR * 5,\n	YEAR * 10\n];\nconst $SCALES = [\n	.05,\n	.1,\n	.2,\n	.25,\n	.5,\n	.8,\n	1,\n	2,\n	5\n];\nconst OVERLAY_COLORS = [\n	\"#42b28a\",\n	\"#5691ce\",\n	\"#612ff9\",\n	\"#d50b90\",\n	\"#ff2316\"\n];\nconst ChartConfig = {\n	SBMIN: 60,\n	SBMAX: Infinity,\n	TOOLBAR: 57,\n	RIGHTBAR: 250,\n	TB_ICON: 25,\n	TB_ITEM_M: 6,\n	TB_ICON_BRI: 1,\n	TB_ICON_HOLD: 420,\n	TB_BORDER: 1,\n	TB_B_STYLE: \"dotted\",\n	TOOL_COLL: 7,\n	EXPAND: .15,\n	CANDLEW: .6,\n	GRIDX: 100,\n	GRIDY: 47,\n	BOTBAR: 28,\n	PANHEIGHT: 22,\n	DEFAULT_LEN: 50,\n	MINIMUM_LEN: 5,\n	MIN_ZOOM: 25,\n	MAX_ZOOM: 1e3,\n	VOLSCALE: .15,\n	UX_OPACITY: .9,\n	ZOOM_MODE: \"tv\",\n	L_BTN_SIZE: 21,\n	L_BTN_MARGIN: \"-6px 0 -6px 0\",\n	SCROLL_WHEEL: \"prevent\"\n};\nChartConfig.FONT = `11px -apple-system,BlinkMacSystemFont,\n    Segoe UI,Roboto,Oxygen,Ubuntu,Cantarell,\n    Fira Sans,Droid Sans,Helvetica Neue,\n    sans-serif`;\nvar constants_default = {\n	DEF_LIMIT: DEF_LIMIT$3,\n	BUF_INC: BUF_INC$2,\n	FDEFS: FDEFS$1,\n	FDEFS1: FDEFS1$1,\n	FDEFS2: FDEFS2$1,\n	SBRACKETS: SBRACKETS$1,\n	TFSTR: TFSTR$1,\n	SECOND,\n	MINUTE,\n	MINUTE5,\n	MINUTE15,\n	MINUTE30,\n	HOUR,\n	HOUR4,\n	DAY,\n	WEEK,\n	MONTH,\n	YEAR,\n	MONTHMAP,\n	TIMESCALES,\n	$SCALES,\n	ChartConfig,\n	map_unit: {\n		\"1s\": SECOND,\n		\"5s\": SECOND * 5,\n		\"10s\": SECOND * 10,\n		\"20s\": SECOND * 20,\n		\"30s\": SECOND * 30,\n		\"1m\": MINUTE,\n		\"3m\": MINUTE3,\n		\"5m\": MINUTE5,\n		\"15m\": MINUTE15,\n		\"30m\": MINUTE30,\n		\"1H\": HOUR,\n		\"2H\": HOUR * 2,\n		\"3H\": HOUR * 3,\n		\"4H\": HOUR4,\n		\"6H\": HOUR * 6,\n		\"8H\": HOUR * 8,\n		\"12H\": HOUR12,\n		\"1h\": HOUR,\n		\"2h\": HOUR * 2,\n		\"3h\": HOUR * 3,\n		\"4h\": HOUR4,\n		\"6h\": HOUR * 6,\n		\"8h\": HOUR * 8,\n		\"12h\": HOUR12,\n		\"1D\": DAY,\n		\"1d\": DAY,\n		\"1W\": WEEK,\n		\"1w\": WEEK,\n		\"1M\": MONTH,\n		\"1Y\": YEAR\n	},\n	IB_TF_WARN: \"When using IB mode you should specify timeframe ('tf' filed in 'chart' object),otherwise you can get an unexpected behaviour\",\n	OVERLAY_COLORS\n};\n//#endregion\n//#region src/helpers/script_utils.js\nconst { BUF_INC: BUF_INC$1, FDEFS, SBRACKETS, TFSTR } = constants_default;\nlet tf_cache = {};\nfunction f_args(src) {\n	FDEFS.lastIndex = 0;\n	let m = FDEFS.exec(src);\n	if (m) {\n		m[1].trim();\n		m[2].trim();\n		return m[3].trim().split(\",\").map((x) => x.trim());\n	}\n	return [];\n}\nfunction f_body(src) {\n	return src.slice(src.indexOf(\"{\") + 1, src.lastIndexOf(\"}\"));\n}\nfunction wrap_idxs(src, pre = \"\") {\n	SBRACKETS.lastIndex = 0;\n	let changed = false;\n	let m;\n	do {\n		m = SBRACKETS.exec(src);\n		if (m) {\n			let vname = m[1].trim();\n			let vindex = m[2].trim();\n			if (vindex === \"0\" || parseInt(vindex) < BUF_INC$1) continue;\n			switch (vname) {\n				case \"let\":\n				case \"var\":\n				case \"return\": continue;\n			}\n			let wrap = `${vname}[${pre}_i(${vindex}, ${vname})]`;\n			src = src.replace(m[0], wrap);\n			changed = true;\n		}\n	} while (m);\n	return changed ? src : src;\n}\nfunction make_module_lib(mod) {\n	let lib = {};\n	for (let k in mod) {\n		if (k === \"main\" || k === \"id\") continue;\n		let a = f_args(mod[k]);\n		lib[k] = new Function(a, f_body(mod[k]));\n	}\n	return lib;\n}\nfunction get_raw_src(f) {\n	if (typeof f === \"string\") return f;\n	let src = f.toString();\n	return src.slice(src.indexOf(\"{\") + 1, src.lastIndexOf(\"}\"));\n}\nfunction tf_from_pair(num, pf) {\n	let mult = 1;\n	switch (pf) {\n		case \"s\":\n			mult = constants_default.SECOND;\n			break;\n		case \"m\":\n			mult = constants_default.MINUTE;\n			break;\n		case \"H\":\n			mult = constants_default.HOUR;\n			break;\n		case \"D\":\n			mult = constants_default.DAY;\n			break;\n		case \"W\":\n			mult = constants_default.WEEK;\n			break;\n		case \"M\":\n			mult = constants_default.MONTH;\n			break;\n		case \"Y\":\n			mult = constants_default.YEAR;\n			break;\n	}\n	return parseInt(num) * mult;\n}\nfunction tf_from_str(str) {\n	if (typeof str === \"number\") return str;\n	if (tf_cache[str]) return tf_cache[str];\n	TFSTR.lastIndex = 0;\n	let m = TFSTR.exec(str);\n	if (m) {\n		tf_cache[str] = tf_from_pair(m[1], m[2]);\n		return tf_cache[str];\n	}\n}\nfunction get_fn_id(pre, id) {\n	return pre + \"-\" + id.split(\"<-\").pop();\n}\nfunction ovf(obj, f) {\n	let nw = {};\n	for (let id in obj) {\n		nw[id] = {};\n		for (let k in obj[id]) {\n			if (k === \"data\") continue;\n			nw[id][k] = obj[id][k];\n		}\n		nw[id].data = f(obj[id].data);\n	}\n	return nw;\n}\nfunction nextt(data, t, ti = 0) {\n	let i0 = 0;\n	let iN = data.length - 1;\n	let mid;\n	while (i0 <= iN) {\n		mid = Math.floor((i0 + iN) / 2);\n		if (data[mid][ti] === t) return mid;\n		else if (data[mid][ti] < t) i0 = mid + 1;\n		else iN = mid - 1;\n	}\n	return t < data[mid][ti] ? mid : mid + 1;\n}\nlet _dssSizeCache = {\n	key: \"\",\n	bytes: 0\n};\nfunction size_of_dss(data) {\n	let keyParts = [];\n	for (let id in data) if (data[id].data) keyParts.push(id + \":\" + data[id].data.length);\n	let key = keyParts.join(\",\");\n	if (key === _dssSizeCache.key) return _dssSizeCache.bytes;\n	let bytes = 0;\n	for (let id in data) if (data[id].data && data[id].data[0]) {\n		let s0 = size_of(data[id].data[0]);\n		bytes += s0 * data[id].data.length;\n	}\n	_dssSizeCache = {\n		key,\n		bytes\n	};\n	return bytes;\n}\nfunction size_of(object) {\n	let list = [], stack = [object], bytes = 0;\n	while (stack.length) {\n		let value = stack.pop();\n		let type = typeof value;\n		if (type === \"boolean\") bytes += 4;\n		else if (type === \"string\") bytes += value.length * 2;\n		else if (type === \"number\") bytes += 8;\n		else if (type === \"object\" && list.indexOf(value) === -1) {\n			list.push(value);\n			for (let i in value) stack.push(value[i]);\n		}\n	}\n	return bytes;\n}\nfunction update(data, val) {\n	const i = data.length - 1;\n	const last = data[i];\n	if (!last || val[0] > last[0]) data.push(val);\n	else data[i] = val;\n}\n//#endregion\n//#region src/helpers/std/math.js\nvar math_default = {\n	/** Absolute value\n	* @param {number} x - Input\n	* @return {number} - Absolute value\n	*/\n	abs(x) {\n		return Math.abs(x);\n	},\n	/** Arccosine function\n	* @param {number} x - Input\n	* @return {number} - Arccosine of x\n	*/\n	acos(x) {\n		return Math.acos(x);\n	},\n	/** Arcsine function\n	* @param {number} x - Input\n	* @return {number} - Arcsine of x\n	*/\n	asin(x) {\n		return Math.asin(x);\n	},\n	/** Arctangent function\n	* @param {number} x - Input\n	* @return {number} - Arctangent of x\n	*/\n	atan(x) {\n		return Math.atan(x);\n	},\n	/** Shortcut for Math.ceil()\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	ceil(x) {\n		return Math.ceil(x);\n	},\n	/** Cosine function\n	* @param {number} x - Input\n	* @return {number} - Cosine of x\n	*/\n	cos(x) {\n		return Math.cos(x);\n	},\n	/** Shortcut for Math.exp()\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	exp(x) {\n		return Math.exp(x);\n	},\n	/** Shortcut for Math.floor()\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	floor(x) {\n		return Math.floor(x);\n	},\n	/** Shortcut for Math.log()\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	log(x) {\n		return Math.log(x);\n	},\n	/** Shortcut for Math.log10()\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	log10(x) {\n		return Math.log10(x);\n	},\n	/** Shortcut for Math.pow()\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	pow(x, y) {\n		return Math.pow(x, y);\n	},\n	/** Shortcut for Math.round()\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	round(x) {\n		return Math.round(x);\n	},\n	/** Shortcut for Math.sign()\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	sign(x) {\n		return Math.sign(x);\n	},\n	/** Sine function\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	sin(x) {\n		return Math.sin(x);\n	},\n	/** Shortcut for Math.sqrt()\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	sqrt(x) {\n		return Math.sqrt(x);\n	},\n	/** Tangent function\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	tan(x) {\n		return Math.tan(x);\n	}\n};\n//#endregion\n//#region src/helpers/std/time.js\nvar time_default = {\n	/** Day of month, literally\n	* @param {number} [time] - Time in ms (current t, if not defined)\n	* @return {number} - Day\n	*/\n	dayofmonth(time) {\n		return new Date(time || state.t).getUTCDate();\n	},\n	/** Day of week, literally\n	* @param {number} [time] - Time in ms (current t, if not defined)\n	* @return {number} - Day\n	*/\n	dayofweek(time) {\n		return new Date(time || state.t).getUTCDay() + 1;\n	},\n	/** Returns hours of a given timestamp\n	* @param {number} [time] - Time in ms (current t, if not defined)\n	* @return {number} - Hour\n	*/\n	hour(time) {\n		return new Date(time || state.t).getUTCHours();\n	},\n	/** Returns minutes of a given timestamp\n	* @param {number} [time] - Time in ms (current t, if not defined)\n	* @return {number} - Minute\n	*/\n	minute(time) {\n		return new Date(time || state.t).getUTCMinutes();\n	},\n	/** Month\n	* @param {number} [time] - Time in ms (current t, if not defined)\n	* @return {number} - Month\n	*/\n	month(time) {\n		return new Date(time || state.t).getUTCMonth();\n	},\n	/** The current time\n	* @return {number} - timestamp\n	*/\n	now() {\n		return Date.now();\n	},\n	/** Returns seconds of a given timestamp\n	* @param {number} [time] - Time in ms (current t, if not defined)\n	* @return {number} - Second\n	*/\n	second(time) {\n		return new Date(time || state.t).getUTCSeconds();\n	},\n	/** Week of year, literally\n	* @param {number} [time] - Time in ms (current t, if not defined)\n	* @return {number} - Week\n	*/\n	weekofyear(time) {\n		let date = new Date(time || state.t);\n		date.setUTCHours(0, 0, 0, 0);\n		date.setDate(date.getUTCDate() + 3 - (date.getUTCDay() + 6) % 7);\n		let week1 = new Date(date.getUTCFullYear(), 0, 4);\n		return 1 + Math.round(((date - week1) / 864e5 - 3 + (week1.getUTCDay() + 6) % 7) / 7);\n	},\n	/** Year\n	* @param {number} [time] - Time in ms (current t, if not defined)\n	* @return {number} - Year\n	*/\n	year(time) {\n		return new Date(time || state.t).getUTCFullYear();\n	}\n};\n//#endregion\n//#region src/helpers/std/chart.js\nvar chart_default = {\n	chart() {},\n	/** Display data point onchart\n	* (create a new overlay in DataCube)\n	* @param {(TS|TS[]|*)} x - Data point / TS / array of TS\n	* @param {string} [name] - Overlay name\n	* @param {Object} [sett] - Object with settings & OV type\n	*/\n	onchart(x, name, sett = {}, _id) {\n		let off = 0;\n		name = name || get_fn_id(\"Onchart\", _id);\n		if (x && x.__id__) {\n			off = x.__offset__ || 0;\n			x = x[0];\n		}\n		if (Array.isArray(x) && x[0] && x[0].__id__) {\n			off = x[0].__offset__ || 0;\n			x = x.map((x) => x[0]);\n		}\n		if (!this.env.onchart[name]) {\n			let type = sett.type;\n			delete sett.type;\n			sett.$synth = true;\n			sett.skipNaN = true;\n			let post = Array.isArray(x) ? \"s\" : \"\";\n			this.env.onchart[name] = {\n				name,\n				type: type || \"Spline\" + post,\n				data: [],\n				settings: sett,\n				scripts: false,\n				grid: sett.grid || {}\n			};\n		}\n		off *= state.tf;\n		let v = Array.isArray(x) ? [state.t + off, ...x] : [state.t + off, x];\n		update(this.env.onchart[name].data, v);\n	},\n	/** Display data point offchart\n	* (create a new overlay in DataCube)\n	* @param {(TS|TS[]|*)} x - Data point / TS / array of TS\n	* @param {string} [name] - Overlay name\n	* @param {Object} [sett] - Object with settings & OV type\n	*/\n	offchart(x, name, sett = {}, _id) {\n		name = name || get_fn_id(\"Offchart\", _id);\n		let off = 0;\n		if (x && x.__id__) {\n			off = x.__offset__ || 0;\n			x = x[0];\n		}\n		if (Array.isArray(x) && x[0] && x[0].__id__) {\n			off = x[0].__offset__ || 0;\n			x = x.map((x) => x[0]);\n		}\n		if (!this.env.offchart[name]) {\n			let type = sett.type;\n			delete sett.type;\n			sett.$synth = true;\n			sett.skipNaN = true;\n			let post = Array.isArray(x) ? \"s\" : \"\";\n			this.env.offchart[name] = {\n				name,\n				type: type || \"Spline\" + post,\n				data: [],\n				settings: sett,\n				scripts: false,\n				grid: sett.grid || {}\n			};\n		}\n		off *= state.tf;\n		let v = Array.isArray(x) ? [state.t + off, ...x] : [state.t + off, x];\n		update(this.env.offchart[name].data, v);\n	},\n	/** Returns true when the candle(<tf>) is being closed\n	* @param {(number|string)} tf - Timeframe in ms or as a string\n	* @return {boolean}\n	*/\n	onclose(tf) {\n		if (!this.env.shared.onclose) return false;\n		if (!tf) tf = state.tf;\n		return (state.t + state.tf) % tf_from_str(tf) === 0;\n	},\n	/** Emits an event to DataCube\n	* @param {string} type - Signal type\n	* @param {*} data - Signal data\n	*/\n	signal(type, data = {}) {\n		if (state.shared.event !== \"update\") return;\n		state.send(\"script-signal\", {\n			type,\n			data\n		});\n	},\n	/** Emits an event if cond === true\n	* @param {(boolean|TS)} cond - The condition\n	* @param {string} type - Signal type\n	* @param {*} data - Signal data\n	*/\n	signalif(cond, type, data = {}) {\n		if (state.shared.event !== \"update\") return;\n		if (cond && cond.__id__) cond = cond[0];\n		if (cond) state.send(\"script-signal\", {\n			type,\n			data\n		});\n	},\n	/** Sends update to some overlay / main chart\n	* @param {string} id - Overlay id\n	* @param {Object} fields - Fields to be overwritten\n	*/\n	modify(id, fields) {\n		state.send(\"modify-overlay\", {\n			uuid: id,\n			fields\n		});\n	},\n	/** Sends settings update\n	* (can be called from init(), update() or post())\n	* @param {Object} upd - Settings update (object to merge)\n	*/\n	settings(upd) {\n		this.env.send_modify({ settings: upd });\n		Object.assign(this.env.src.sett, upd);\n	}\n};\n//#endregion\n//#region src/helpers/std/utils.js\nvar utils_default$1 = {\n	/** Replaces the variable if it's NaN\n	* @param {*} x - The variable\n	* @param {*} [v] - A value to replace with\n	* @return {*} - New value\n	*/\n	nz(x, v) {\n		if (x == void 0 || x !== x) return v || 0;\n		return x;\n	},\n	/** Is the variable NaN ?\n	* @param {*} x - The variable\n	* @return {boolean} - New value\n	*/\n	na(x) {\n		return x == void 0 || x !== x;\n	},\n	/** Replaces the var with NaN if Infinite\n	* @param {*} x - The variable\n	* @param {*} [v] - A value to replace with\n	* @return {*} - New value\n	*/\n	nf(x, v) {\n		if (!isFinite(x)) return v !== void 0 ? v : NaN;\n		return x;\n	},\n	/** Converts the variable to Boolean\n	* @param {number} x The variable\n	* @return {number}\n	*/\n	bool(x) {\n		return !!x;\n	},\n	/** Returns x or y depending on the condition\n	* @param {(boolean|TS)} cond - Condition\n	* @param {*} x - First value\n	* @param {*} y - Second value\n	* @return {*}\n	*/\n	iff(cond, x, y) {\n		if (cond && cond.__id__) cond = cond[0];\n		return cond ? x : y;\n	},\n	/** Sets the reverse buffer size for a given\n	* time-series (default = 5, grows on demand)\n	* @param {TS} src - Input\n	* @param {number} len - New length\n	*/\n	buffsize(src, len) {\n		src.__len__ = len;\n	},\n	/** For a given series replaces NaN values with\n	* previous nearest non-NaN value\n	* @param {TS} src - Input time-series\n	* @return {TS}\n	*/\n	fixnan(src) {\n		if (this.na(src[0])) {\n			for (var i = 1; i < src.length; i++) if (!this.na(src[i])) {\n				src[0] = src[i];\n				break;\n			}\n		}\n		return src;\n	},\n	/** Shifts TS left or right by \"num\" candles\n	* @param {number} num - Offset measured in candles\n	* @return {TS} - New / existing time-series\n	*/\n	offset(src, num, _id) {\n		if (src.__id__) {\n			src.__offset__ = num;\n			return src;\n		}\n		let id = this._tsid(_id, `offset(${num})`);\n		let out = this.ts(src, id);\n		out.__offset__ = num;\n		return out;\n	}\n};\n//#endregion\n//#region src/helpers/std/analysis.js\nvar analysis_default = {\n	/** Adds values / time-series\n	* @param {(TS|*)} x - First input\n	* @param {(TS|*)} y - Second input\n	* @return {TS} - New time-series\n	*/\n	add(x, y, _id) {\n		let id = this._tsid(_id, `add`);\n		let x0 = this.na(x) ? NaN : x.__id__ ? x[0] : x;\n		let y0 = this.na(y) ? NaN : y.__id__ ? y[0] : y;\n		return this.ts(x0 + y0, id, x.__tf__);\n	},\n	/** Subtracts values / time-series\n	* @param {(TS|*)} x - First input\n	* @param {(TS|*)} y - Second input\n	* @return {TS} - New time-series\n	*/\n	sub(x, y, _id) {\n		let id = this._tsid(_id, `sub`);\n		let x0 = this.na(x) ? NaN : x.__id__ ? x[0] : x;\n		let y0 = this.na(y) ? NaN : y.__id__ ? y[0] : y;\n		return this.ts(x0 - y0, id, x.__tf__);\n	},\n	/** Multiplies values / time-series\n	* @param {(TS|*)} x - First input\n	* @param {(TS|*)} y - Second input\n	* @return {TS} - New time-series\n	*/\n	mult(x, y, _id) {\n		let id = this._tsid(_id, `mult`);\n		let x0 = this.na(x) ? NaN : x.__id__ ? x[0] : x;\n		let y0 = this.na(y) ? NaN : y.__id__ ? y[0] : y;\n		return this.ts(x0 * y0, id, x.__tf__);\n	},\n	/** Divides values / time-series\n	* @param {(TS|*)} x - First input\n	* @param {(TS|*)} y - Second input\n	* @return {TS} - New time-series\n	*/\n	div(x, y, _id) {\n		let id = this._tsid(_id, `div`);\n		let x0 = this.na(x) ? NaN : x.__id__ ? x[0] : x;\n		let y0 = this.na(y) ? NaN : y.__id__ ? y[0] : y;\n		return this.ts(x0 / y0, id, x.__tf__);\n	},\n	/** Returns a negative value / time-series\n	* @param {(TS|*)} x - Input\n	* @return {TS} - New time-series\n	*/\n	neg(x, _id) {\n		let id = this._tsid(_id, `neg`);\n		let x0 = this.na(x) ? NaN : x.__id__ ? x[0] : x;\n		return this.ts(-x0, id, x.__tf__);\n	},\n	/** Average of arguments\n	* @param {...number} args - Numeric values\n	* @return {number}\n	*/\n	avg(...args) {\n		args.pop();\n		let sum = 0;\n		for (var i = 0; i < args.length; i++) sum += args[i];\n		return sum / args.length;\n	},\n	/** Max of arguments\n	* @param {...number} args - Numeric values\n	* @return {number}\n	*/\n	max(...args) {\n		args.pop();\n		return Math.max(...args);\n	},\n	/** Min of arguments\n	* @param {...number} args - Numeric values\n	* @return {number}\n	*/\n	min(...args) {\n		args.pop();\n		return Math.min(...args);\n	},\n	/** Change: x[0] - x[len]\n	* @param {TS} src - Input\n	* @param {number} [len] - Length\n	* @return {TS} - New time-series\n	*/\n	change(src, len = 1, _id) {\n		let id = this._tsid(_id, `change(${len})`);\n		return this.ts(src[0] - src[len], id, src.__tf__);\n	},\n	/** When one time-series crosses another\n	* @param {TS} src1 - TS1\n	* @param {TS} src2 - TS2\n	* @return {TS} - New time-series\n	*/\n	cross(src1, src2, _id) {\n		let id = this._tsid(_id, `cross`);\n		let x = src1[0] > src2[0] !== src1[1] > src2[1];\n		return this.ts(x, id, src1.__tf__);\n	},\n	/** When one time-series goes over another one\n	* @param {TS} src1 - TS1\n	* @param {TS} src2 - TS2\n	* @return {TS} - New time-series\n	*/\n	crossover(src1, src2, _id) {\n		let id = this._tsid(_id, `crossover`);\n		let x = src1[0] > src2[0] && src1[1] <= src2[1];\n		return this.ts(x, id, src1.__tf__);\n	},\n	/** When one time-series goes under another one\n	* @param {TS} src1 - TS1\n	* @param {TS} src2 - TS2\n	* @return {TS} - New time-series\n	*/\n	crossunder(src1, src2, _id) {\n		let id = this._tsid(_id, `crossunder`);\n		let x = src1[0] < src2[0] && src1[1] >= src2[1];\n		return this.ts(x, id, src1.__tf__);\n	},\n	/** Sum of all elements of src\n	* @param {TS} src1 - Input\n	* @return {TS} - New time-series\n	*/\n	cum(src, _id) {\n		let id = this._tsid(_id, `cum`);\n		let res = this.ts(0, id, src.__tf__);\n		res[0] = this.nz(src[0]) + this.nz(res[1]);\n		return res;\n	},\n	/** Test if \"src\" TS is falling for \"len\" candles\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	falling(src, len, _id) {\n		let id = this._tsid(_id, `falling(${len})`);\n		let bot = src[0];\n		for (var i = 1; i < len + 1; i++) if (bot >= src[i]) return this.ts(false, id, src.__tf__);\n		return this.ts(true, id, src.__tf__);\n	},\n	/** Test if \"src\" TS is rising for \"len\" candles\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	rising(src, len, _id) {\n		let id = this._tsid(_id, `rising(${len})`);\n		let top = src[0];\n		for (var i = 1; i < len + 1; i++) if (top <= src[i]) return this.ts(false, id, src.__tf__);\n		return this.ts(true, id, src.__tf__);\n	},\n	/** Highest value for a given number of candles back\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	highest(src, len, _id) {\n		let id = this._tsid(_id, `highest(${len})`);\n		let high = -Infinity;\n		for (var i = 0; i < len; i++) if (src[i] > high) high = src[i];\n		return this.ts(high, id, src.__tf__);\n	},\n	/** Highest value offset for a given number of bars back\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	*/\n	highestbars(src, len, _id) {\n		let id = this._tsid(_id, `highestbars(${len})`);\n		let high = -Infinity;\n		let hi = 0;\n		for (var i = 0; i < len; i++) if (src[i] > high) high = src[i], hi = i;\n		return this.ts(-hi, id, src.__tf__);\n	},\n	/** Lowest value for a given number of candles back\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	lowest(src, len, _id) {\n		let id = this._tsid(_id, `lowest(${len})`);\n		let low = Infinity;\n		for (var i = 0; i < len; i++) if (src[i] < low) low = src[i];\n		return this.ts(low, id, src.__tf__);\n	},\n	/** Lowest value offset for a given number of bars back\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	*/\n	lowestbars(src, len, _id) {\n		let id = this._tsid(_id, `lowestbars(${len})`);\n		let low = Infinity;\n		let li = 0;\n		for (var i = 0; i < len; i++) if (src[i] < low) low = src[i], li = i;\n		return this.ts(-li, id, src.__tf__);\n	},\n	/** Momentum\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	mom(src, len, _id) {\n		let id = this._tsid(_id, `mom(${len})`);\n		return this.ts(src[0] - src[len], id, src.__tf__);\n	},\n	/** Returns price of the pivot high point\n	* Tip: works best with `offset` function\n	* @param {TS} src - Input\n	* @param {number} left - left threshold, candles\n	* @param {number} right - right threshold, candles\n	* @return {TS} - New time-series\n	*/\n	pivothigh(src, left, right, _id) {\n		let id = this._tsid(_id, `pivothigh(${left},${right})`);\n		let len = left + right + 1;\n		let top = src[right];\n		for (var i = 0; i < len; i++) {\n			if (src[i] === void 0) return this.ts(NaN, id, src.__tf__);\n			if (top <= src[i] && i !== right) return this.ts(NaN, id, src.__tf__);\n		}\n		return this.ts(top, id, src.__tf__);\n	},\n	/** Returns price of the pivot low point\n	* Tip: works best with `offset` function\n	* @param {TS} src - Input\n	* @param {number} left - left threshold, candles\n	* @param {number} right - right threshold, candles\n	* @return {TS} - New time-series\n	*/\n	pivotlow(src, left, right, _id) {\n		let id = this._tsid(_id, `pivotlow(${left},${right})`);\n		let len = left + right + 1;\n		let bot = src[right];\n		for (var i = 0; i < len; i++) {\n			if (src[i] === void 0) return this.ts(NaN, id, src.__tf__);\n			if (bot >= src[i] && i !== right) return this.ts(NaN, id, src.__tf__);\n		}\n		return this.ts(bot, id, src.__tf__);\n	},\n	/** Candles since the event occured (cond === true)\n	* @param {(boolean|TS)} cond - the condition\n	*/\n	since(cond, _id) {\n		let id = this._tsid(_id, `since()`);\n		if (cond && cond.__id__) cond = cond[0];\n		let s = this.ts(void 0, id);\n		s[0] = cond ? 0 : this.nz(s[1], 0) + 1;\n		return s;\n	},\n	/** Returns the sliding sum of last \"len\" values of the source\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	sum(src, len, _id) {\n		let id = this._tsid(_id, `sum(${len})`);\n		let sum = 0;\n		for (var i = 0; i < len; i++) sum = sum + src[i];\n		return this.ts(sum, id, src.__tf__);\n	}\n};\n//#endregion\n//#region src/stuff/linreg.js\n/**\n* Simple linear regression\n*\n* @param {Array.<number>} data\n* @return {Function}\n*/\nfunction regression(data, len, offset) {\n	data = data.slice(0, len).reverse().map((x, i) => [i, x]);\n	let sum_x = 0, sum_y = 0, sum_xy = 0, sum_xx = 0, count = 0, m, b;\n	for (let i = 0, len = data.length; i < len; i++) {\n		if (!data[i]) return NaN;\n		let point = data[i];\n		sum_x += point[0];\n		sum_y += point[1];\n		sum_xx += point[0] * point[0];\n		sum_xy += point[0] * point[1];\n		count++;\n	}\n	m = (count * sum_xy - sum_x * sum_y) / (count * sum_xx - sum_x * sum_x);\n	b = sum_y / count - m * sum_x / count;\n	return m * (data.length - 1 - offset) + b;\n}\n//#endregion\n//#region src/helpers/std/indicators.js\nvar indicators_default = {\n	/** Arnaud Legoux Moving Average\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @param {number} offset - Offset\n	* @param {number} sigma - Sigma\n	* @return {TS} - New time-series\n	*/\n	alma(src, len, offset, sigma, _id) {\n		let id = this._tsid(_id, `alma(${len},${offset},${sigma})`);\n		let m = Math.floor(offset * (len - 1));\n		let s = len / sigma;\n		let norm = 0;\n		let sum = 0;\n		for (let i = 0; i < len; i++) {\n			let w = Math.exp(-1 * Math.pow(i - m, 2) / (2 * Math.pow(s, 2)));\n			norm = norm + w;\n			sum = sum + src[len - i - 1] * w;\n		}\n		return this.ts(sum / norm, id, src.__tf__);\n	},\n	/** Average True Range\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	atr(len, _id, _tf) {\n		let tfs = _tf || \"\";\n		let id = this._tsid(_id, `atr(${len})`);\n		let high = this.env.shared[`high${tfs}`];\n		let low = this.env.shared[`low${tfs}`];\n		let close = this.env.shared[`close${tfs}`];\n		let tr = this.ts(0, id, _tf);\n		tr[0] = this.na(high[1]) ? high[0] - low[0] : Math.max(Math.max(high[0] - low[0], Math.abs(high[0] - close[1])), Math.abs(low[0] - close[1]));\n		return this.rma(tr, len, id);\n	},\n	/** Bollinger Bands\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @param {number} mult - Multiplier\n	* @return {TS[]} - Array of new time-series (3 bands)\n	*/\n	bb(src, len, mult, _id) {\n		let id = this._tsid(_id, `bb(${len},${mult})`);\n		let basis = this.sma(src, len, id);\n		let dev = this.stdev(src, len, id)[0] * mult;\n		return [\n			basis,\n			this.ts(basis[0] + dev, id + \"1\", src.__tf__),\n			this.ts(basis[0] - dev, id + \"2\", src.__tf__)\n		];\n	},\n	/** Bollinger Bands Width\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @param {number} mult - Multiplier\n	* @return {TS} - New time-series\n	*/\n	bbw(src, len, mult, _id) {\n		let id = this._tsid(_id, `bbw(${len},${mult})`);\n		let basis = this.sma(src, len, id)[0];\n		let dev = this.stdev(src, len, id)[0] * mult;\n		return this.ts(basis === 0 ? NaN : 2 * dev / basis, id, src.__tf__);\n	},\n	/** Commodity Channel Index\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	cci(src, len, _id) {\n		let id = this._tsid(_id, `cci(${len})`);\n		let ma = this.sma(src, len, id);\n		let dev = this.dev(src, len, id);\n		let cci = dev[0] === 0 ? NaN : (src[0] - ma[0]) / (.015 * dev[0]);\n		return this.ts(cci, id, src.__tf__);\n	},\n	/** Chande Momentum Oscillator\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	cmo(src, len, _id) {\n		let id = this._tsid(_id, `cmo(${len})`);\n		let mom = this.change(src, 1, id);\n		let g = this.ts(mom[0] >= 0 ? mom[0] : 0, id + \"g\", src.__tf__);\n		let l = this.ts(mom[0] >= 0 ? 0 : -mom[0], id + \"l\", src.__tf__);\n		let sm1 = this.sum(g, len, id + \"1\")[0];\n		let sm2 = this.sum(l, len, id + \"2\")[0];\n		return this.ts(sm1 + sm2 === 0 ? NaN : 100 * (sm1 - sm2) / (sm1 + sm2), id, src.__tf__);\n	},\n	/** Center of Gravity\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	cog(src, len, _id) {\n		let id = this._tsid(_id, `cog(${len})`);\n		let sum = this.sum(src, len, id)[0];\n		let num = 0;\n		for (let i = 0; i < len; i++) num += src[i] * (i + 1);\n		return this.ts(sum === 0 ? NaN : -num / sum, id, src.__tf__);\n	},\n	/** Deviation from SMA\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	dev(src, len, _id) {\n		let id = this._tsid(_id, `dev(${len})`);\n		let mean = this.sma(src, len, id)[0];\n		let sum = 0;\n		for (let i = 0; i < len; i++) sum += Math.abs(src[i] - mean);\n		return this.ts(sum / len, id, src.__tf__);\n	},\n	/** Directional Movement Index ADX, +DI, -DI\n	* @param {number} len - Length\n	* @param {number} smooth - Smoothness\n	* @return {TS} - New time-series\n	*/\n	dmi(len, smooth, _id, _tf) {\n		let id = this._tsid(_id, `dmi(${len},${smooth})`);\n		let tfs = _tf || \"\";\n		let high = this.env.shared[`high${tfs}`];\n		let low = this.env.shared[`low${tfs}`];\n		let up = this.change(high, 1, id + \"1\")[0];\n		let down = this.neg(this.change(low, 1, id + \"2\"), id)[0];\n		let plusDM = this.ts(100 * (this.na(up) ? NaN : up > down && up > 0 ? up : 0), id + \"3\", _tf);\n		let minusDM = this.ts(100 * (this.na(down) ? NaN : down > up && down > 0 ? down : 0), id + \"4\", _tf);\n		let trur = this.rma(this.tr(false, id, _tf), len, id + \"5\");\n		let plus = this.div(this.rma(plusDM, len, id + \"6\"), trur, id + \"8\");\n		let minus = this.div(this.rma(minusDM, len, id + \"7\"), trur, id + \"9\");\n		let sum = this.add(plus, minus, id + \"10\")[0];\n		return [\n			this.rma(this.ts(100 * Math.abs(plus[0] - minus[0]) / (sum === 0 ? 1 : sum), id + \"11\", _tf), smooth, id + \"12\"),\n			plus,\n			minus\n		];\n	},\n	/** Exponential Moving Average with alpha = 2 / (y + 1)\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	ema(src, len, _id) {\n		let id = this._tsid(_id, `ema(${len})`);\n		let a = 2 / (len + 1);\n		let ema = this.ts(0, id, src.__tf__);\n		ema[0] = this.na(ema[1]) ? this.sma(src, len, id)[0] : a * src[0] + (1 - a) * this.nz(ema[1]);\n		return ema;\n	},\n	/** Hull Moving Average\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	hma(src, len, _id) {\n		let id = this._tsid(_id, `hma(${len})`);\n		let len2 = Math.floor(len / 2);\n		let len3 = Math.round(Math.sqrt(len));\n		let a = this.mult(this.wma(src, len2, id + \"1\"), 2, id);\n		let b = this.wma(src, len, id + \"2\");\n		let delt = this.sub(a, b, id + \"3\");\n		return this.wma(delt, len3, id + \"4\");\n	},\n	/** Keltner Channels\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @param {number} mult - Multiplier\n	* @param {boolean} [use_tr] - Use true range\n	* @return {TS[]} - Array of new time-series (3 bands)\n	*/\n	kc(src, len, mult, use_tr = true, _id, _tf) {\n		let id = this._tsid(_id, `kc(${len},${mult},${use_tr})`);\n		let tfs = _tf || \"\";\n		let high = this.env.shared[`high${tfs}`];\n		let low = this.env.shared[`low${tfs}`];\n		let basis = this.ema(src, len, id + \"1\");\n		let range = use_tr ? this.tr(false, id + \"2\", _tf) : this.ts(high[0] - low[0], id + \"3\", src.__tf__);\n		let ema = this.ema(range, len, id + \"4\");\n		return [\n			basis,\n			this.ts(basis[0] + ema[0] * mult, id + \"5\", src.__tf__),\n			this.ts(basis[0] - ema[0] * mult, id + \"6\", src.__tf__)\n		];\n	},\n	/** Keltner Channels Width\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @param {number} mult - Multiplier\n	* @param {boolean} [use_tr] - Use true range\n	* @return {TS} - New time-series\n	*/\n	kcw(src, len, mult, use_tr = true, _id, _tf) {\n		let id = this._tsid(_id, `kcw(${len},${mult},${use_tr})`);\n		let kc = this.kc(src, len, mult, use_tr, `kcw`, _tf);\n		return this.ts(kc[0][0] === 0 ? NaN : (kc[1][0] - kc[2][0]) / kc[0][0], id, src.__tf__);\n	},\n	/** Linear Regression\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @param {number} offset - Offset\n	* @return {TS} - New time-series\n	*/\n	linreg(src, len, offset = 0, _id) {\n		let id = this._tsid(_id, `linreg(${len})`);\n		src.__len__ = Math.max(src.__len__ || 0, len);\n		let lr = regression(src, len, offset);\n		return this.ts(lr, id, src.__tf__);\n	},\n	/** Moving Average Convergence/Divergence\n	* @param {TS} src - Input\n	* @param {number} fast - Fast EMA\n	* @param {number} slow - Slow EMA\n	* @param {number} sig - Signal\n	* @return {TS[]} - [macd, signal, hist]\n	*/\n	macd(src, fast, slow, sig, _id) {\n		let id = this._tsid(_id, `macd(${fast}${slow}${sig})`);\n		let fast_ma = this.ema(src, fast, id + \"1\");\n		let slow_ma = this.ema(src, slow, id + \"2\");\n		let macd = this.sub(fast_ma, slow_ma, id + \"3\");\n		let signal = this.ema(macd, sig, id + \"4\");\n		return [\n			macd,\n			signal,\n			this.sub(macd, signal, id + \"5\")\n		];\n	},\n	/** Money Flow Index\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	mfi(src, len, _id) {\n		let id = this._tsid(_id, `mfi(${len})`);\n		let vol = this.env.shared.vol;\n		let ch = this.change(src, 1, id + \"1\")[0];\n		let ts1 = this.mult(vol, ch <= 0 ? 0 : src[0], id + \"2\");\n		let ts2 = this.mult(vol, ch >= 0 ? 0 : src[0], id + \"3\");\n		let upper = this.sum(ts1, len, id + \"4\");\n		let lower = this.sum(ts2, len, id + \"5\");\n		let res = void 0;\n		if (!this.na(lower)) res = this.rsi(upper, lower, id + \"6\")[0];\n		return this.ts(res, id, src.__tf__);\n	},\n	/** Exponentially MA with alpha = 1 / length\n	* Used in RSI\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	rma(src, len, _id) {\n		let id = this._tsid(_id, `rma(${len})`);\n		let a = len;\n		let sum = this.ts(0, id, src.__tf__);\n		sum[0] = this.na(sum[1]) ? this.sma(src, len, id)[0] : (src[0] + (a - 1) * this.nz(sum[1])) / a;\n		return sum;\n	},\n	/** Rate of Change\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	roc(src, len, _id) {\n		let id = this._tsid(_id, `roc(${len})`);\n		return this.ts(100 * (src[0] - src[len]) / src[len], id, src.__tf__);\n	},\n	/** Relative Strength Index\n	* @param {TS} x - First Input\n	* @param {number|TS} y - Second Input\n	* @return {TS} - New time-series\n	*/\n	rsi(x, y, _id) {\n		let id, rsi;\n		if (!this.na(y) && y.__id__) {\n			id = this._tsid(_id, `rsi(x,y)`);\n			rsi = 100 - 100 / (1 + this.div(x, y, id)[0]);\n		} else {\n			id = this._tsid(_id, `rsi(${y})`);\n			let ch = this.change(x, 1, _id)[0];\n			let pc = this.ts(Math.max(ch, 0), id + \"1\", x.__tf__);\n			let nc = this.ts(-Math.min(ch, 0), id + \"2\", x.__tf__);\n			let up = this.rma(pc, y, id + \"3\")[0];\n			let down = this.rma(nc, y, id + \"4\")[0];\n			rsi = down === 0 ? 100 : up === 0 ? 0 : 100 - 100 / (1 + up / down);\n		}\n		return this.ts(rsi, id + \"5\", x.__tf__);\n	},\n	/** Parabolic SAR\n	* @param {number} start - Start\n	* @param {number} inc - Increment\n	* @param {number} max - Maximum\n	* @return {TS} - New time-series\n	*/\n	sar(start, inc, max, _id, _tf) {\n		let id = this._tsid(_id, `sar(${start},${inc},${max})`);\n		let tfs = _tf || \"\";\n		let high = this.env.shared[`high${tfs}`];\n		let low = this.env.shared[`low${tfs}`];\n		let close = this.env.shared[`close${tfs}`];\n		let minTick = 0;\n		let out = this.ts(void 0, id + \"1\", _tf);\n		let pos = this.ts(void 0, id + \"2\", _tf);\n		let maxMin = this.ts(void 0, id + \"3\", _tf);\n		let acc = this.ts(void 0, id + \"4\", _tf);\n		let n = _tf ? out.length - 1 : state.iter;\n		let prev;\n		let outSet = false;\n		if (n >= 1) {\n			prev = out[1];\n			if (n === 1) {\n				if (close[0] > close[1]) {\n					pos[0] = 1;\n					maxMin[0] = Math.max(high[0], high[1]);\n					prev = Math.min(low[0], low[1]);\n				} else {\n					pos[0] = -1;\n					maxMin[0] = Math.min(low[0], low[1]);\n					prev = Math.max(high[0], high[1]);\n				}\n				acc[0] = start;\n			} else {\n				pos[0] = pos[1];\n				acc[0] = acc[1];\n				maxMin[0] = maxMin[1];\n			}\n			if (pos[0] === 1) {\n				if (high[0] > maxMin[0]) {\n					maxMin[0] = high[0];\n					acc[0] = Math.min(acc[0] + inc, max);\n				}\n				if (low[0] <= prev) {\n					pos[0] = -1;\n					out[0] = maxMin[0];\n					maxMin[0] = low[0];\n					acc[0] = start;\n					outSet = true;\n				}\n			} else {\n				if (low[0] < maxMin[0]) {\n					maxMin[0] = low[0];\n					acc[0] = Math.min(acc[0] + inc, max);\n				}\n				if (high[0] >= prev) {\n					pos[0] = 1;\n					out[0] = maxMin[0];\n					maxMin[0] = high[0];\n					acc[0] = start;\n					outSet = true;\n				}\n			}\n			if (!outSet) {\n				out[0] = prev + acc[0] * (maxMin[0] - prev);\n				if (pos[0] === 1) {\n					if (out[0] >= low[0]) out[0] = low[0] - minTick;\n				}\n				if (pos[0] === -1) {\n					if (out[0] <= high[0]) out[0] = high[0] + minTick;\n				}\n			}\n		}\n		return out;\n	},\n	/** Simple Moving Average\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	sma(src, len, _id) {\n		let id = this._tsid(_id, `sma(${len})`);\n		let sum = 0;\n		for (let i = 0; i < len; i++) sum = sum + src[i];\n		return this.ts(sum / len, id, src.__tf__);\n	},\n	/** Standard deviation\n	* @param {TS} src - Input\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	stdev(src, len, _id) {\n		let sumf = (x, y) => {\n			return x + y;\n		};\n		let id = this._tsid(_id, `stdev(${len})`);\n		let avg = this.sma(src, len, id);\n		let sqd = 0;\n		for (let i = 0; i < len; i++) {\n			let sum = sumf(src[i], -avg[0]);\n			sqd += sum * sum;\n		}\n		return this.ts(Math.sqrt(sqd / len), id, src.__tf__);\n	},\n	/** Stochastic\n	* @param {TS} src - Input\n	* @param {TS} high - TS of high\n	* @param {TS} low - TS of low\n	* @param {number} len - Length\n	* @return {TS} - New time-series\n	*/\n	stoch(src, high, low, len, _id) {\n		let id = this._tsid(_id, `sum(${len})`);\n		let x = 100 * (src[0] - this.lowest(low, len)[0]);\n		let y = this.highest(high, len)[0] - this.lowest(low, len)[0];\n		return this.ts(y === 0 ? NaN : x / y, id, src.__tf__);\n	},\n	/** Supertrend Indicator\n	* @param {number} factor - ATR multiplier\n	* @param {number} atrlen - Length of ATR\n	* @return {TS[]} - Supertrend line and direction of trend\n	*/\n	supertrend(factor, atrlen, _id, _tf) {\n		let id = this._tsid(_id, `supertrend(${factor},${atrlen})`);\n		let tfs = _tf || \"\";\n		let high = this.env.shared[`high${tfs}`];\n		let low = this.env.shared[`low${tfs}`];\n		let close = this.env.shared[`close${tfs}`];\n		let hl2 = (high[0] + low[0]) * .5;\n		let atr = factor * this.atr(atrlen, id + \"1\", _tf)[0];\n		let ls = this.ts(hl2 - atr, id + \"2\", _tf);\n		let ls1 = this.nz(ls[1], ls[0]);\n		ls[0] = close[1] > ls1 ? Math.max(ls[0], ls1) : ls[0];\n		let ss = this.ts(hl2 + atr, id + \"3\", _tf);\n		let ss1 = this.nz(ss[1], ss[0]);\n		ss[0] = close[1] < ss1 ? Math.min(ss[0], ss1) : ss[0];\n		let dir = this.ts(1, id + \"4\", _tf);\n		dir[0] = this.nz(dir[1], dir[0]);\n		dir[0] = dir[0] === -1 && close[0] > ss1 ? 1 : dir[0] === 1 && close[0] < ls1 ? -1 : dir[0];\n		return [this.ts(dir[0] === 1 ? ls[0] : ss[0], id + \"5\", _tf), this.neg(dir, id + \"6\")];\n	},\n	/** Symmetrically Weighted Moving Average\n	* @param {TS} src - Input\n	* @return {TS} - New time-series\n	*/\n	swma(src, _id) {\n		let id = this._tsid(_id, `swma`);\n		let sum = src[3] * this.SWMA[0] + src[2] * this.SWMA[1] + src[1] * this.SWMA[2] + src[0] * this.SWMA[3];\n		return this.ts(sum, id, src.__tf__);\n	},\n	/** True Range\n	* @param {TS} fixnan - Fix NaN values\n	* @return {TS} - New time-series\n	*/\n	tr(fixnan = false, _id, _tf) {\n		let id = this._tsid(_id, `tr(${fixnan})`);\n		let tfs = _tf || \"\";\n		let high = this.env.shared[`high${tfs}`];\n		let low = this.env.shared[`low${tfs}`];\n		let close = this.env.shared[`close${tfs}`];\n		let res = 0;\n		if (this.na(close[1]) && fixnan) res = high[0] - low[0];\n		else res = Math.max(high[0] - low[0], Math.abs(high[0] - close[1]), Math.abs(low[0] - close[1]));\n		return this.ts(res, id, _tf);\n	},\n	/** True strength index\n	* @param {TS} src - Input\n	* @param {number} short - Short length\n	* @param {number} long - Long length\n	* @return {TS} - New time-series\n	*/\n	tsi(src, short, long, _id) {\n		let id = this._tsid(_id, `tsi(${short},${long})`);\n		let m = this.change(src, 1, id + \"0\");\n		let m_abs = this.ts(Math.abs(m[0]), id + \"1\", src.__tf__);\n		let tsi = this.ema(this.ema(m, long, id + \"1\"), short, id + \"2\")[0] / this.ema(this.ema(m_abs, long, id + \"3\"), short, id + \"4\")[0];\n		return this.ts(tsi, id, src.__tf__);\n	},\n	/** Volume Weighted Moving Average\n	* @param {TS} src - Input\n	* @param {number} len - length\n	* @return {TS} - New time-series\n	*/\n	vwma(src, len, _id) {\n		let id = this._tsid(_id, `vwma(${len})`);\n		let vol = this.env.shared.vol;\n		let sxv = this.ts(src[0] * vol[0], id + \"1\", src.__tf__);\n		let res = this.sma(sxv, len, id + \"2\")[0] / this.sma(vol, len, id + \"3\")[0];\n		return this.ts(res, id + \"4\", src.__tf__);\n	},\n	/** Weighted moving average\n	* @param {TS} src - Input\n	* @param {number} len - length\n	* @return {TS} - New time-series\n	*/\n	wma(src, len, _id) {\n		let id = this._tsid(_id, `wma(${len})`);\n		let norm = 0;\n		let sum = 0;\n		for (let i = 0; i < len; i++) {\n			let w = (len - i) * len;\n			norm += w;\n			sum += src[i] * w;\n		}\n		return this.ts(sum / norm, id, src.__tf__);\n	},\n	/** Williams %R\n	* @param {number} len - length\n	* @return {TS} - New time-series\n	*/\n	wpr(len, _id, _tf) {\n		let id = this._tsid(_id, `wpr(${len})`);\n		let tfs = _tf || \"\";\n		let high = this.env.shared[`high${tfs}`];\n		let low = this.env.shared[`low${tfs}`];\n		let close = this.env.shared[`close${tfs}`];\n		let hh = this.highest(high, len, id);\n		let ll = this.lowest(low, len, id);\n		let res = hh[0] - ll[0] === 0 ? NaN : (hh[0] - close[0]) / (hh[0] - ll[0]);\n		return this.ts(-res * 100, id, _tf);\n	}\n};\n//#endregion\n//#region src/helpers/sampler.js\nconst { DEF_LIMIT: DEF_LIMIT$2 } = constants_default;\nfunction sampler_default(T, auto = false) {\n	let Ti = [\n		\"high\",\n		\"low\",\n		\"close\",\n		\"vol\"\n	].indexOf(T);\n	return function(x, t) {\n		let tf = this.__tf__;\n		this.__id__;\n		t = t || state.t;\n		let val = auto ? state[T][0] : x;\n		if (!this.__t0__ || t >= this.__t0__ + tf) {\n			this.unshift(Ti !== 3 ? val : 0);\n			this.__t0__ = t - t % tf;\n		}\n		switch (Ti) {\n			case 0:\n				if (val > this[0]) this[0] = val;\n				break;\n			case 1:\n				if (val < this[0]) this[0] = val;\n				break;\n			case 2:\n				this[0] = val;\n				break;\n			case 3: this[0] += val;\n		}\n		this.length = this.__len__ || DEF_LIMIT$2;\n	};\n}\n//#endregion\n//#region src/helpers/std/timeseries.js\nconst { BUF_INC } = constants_default;\nvar timeseries_default = {\n	/**\n	* Creates a new time-series & records each x.\n	* Returns an array. Id is auto-generated\n	* @param {*} x - A variable to sample from\n	* @return {TS} - New time-series\n	*/\n	ts(x, _id, _tf) {\n		if (_tf) return this.tstf(x, _tf, _id);\n		let ts = this.env.tss[_id];\n		if (!ts) {\n			ts = this.env.tss[_id] = [x];\n			ts.__id__ = _id;\n		} else ts[0] = x;\n		return ts;\n	},\n	/**\n	* Creates a new time-series & records each x.\n	* Uses Sampler to aggregate the values\n	* Return the an array. Id is auto-generated\n	* @param {*} x - A variable to sample from\n	* @param {(number|string)} tf - Timeframe in ms or as a string\n	* @return {TS} - New time-series\n	*/\n	tstf(x, tf, _id) {\n		let ts = this.env.tss[_id];\n		if (!ts) {\n			ts = this.env.tss[_id] = [x];\n			ts.__id__ = _id;\n			ts.__tf__ = tf_from_str(tf);\n			ts.__fn__ = sampler_default(\"close\").bind(ts);\n		} else ts.__fn__(x);\n		return ts;\n	},\n	/**\n	* Creates a new custom sampler.\n	* Return the an array. Id is auto-generated\n	* @param {*} x - A variable to sample from\n	* @param {string} type - Sampler type\n	* @param {(number|string)} tf - Timeframe in ms or as a string\n	* @return {TS} - New time-series\n	*/\n	sample(x, type, tf, _id) {\n		let ts = this.env.tss[_id];\n		if (!ts) {\n			ts = this.env.tss[_id] = [x];\n			ts.__id__ = _id;\n			ts.__tf__ = tf_from_str(tf);\n			ts.__fn__ = sampler_default(type).bind(ts);\n		} else ts.__fn__(x);\n		return ts;\n	},\n	_tsid(prev, next) {\n		return `${prev}<-${next}`;\n	},\n	_i(i, x) {\n		if (x != void 0 && x === x && x.__id__) {\n			if (!x.__len__ || i >= x.__len__) x.__len__ = i + BUF_INC;\n		}\n		return i;\n	},\n	_v(x, i) {\n		if (x != void 0 && x === x && x.__id__) {\n			if (!x.__len__ || i >= x.__len__) x.__len__ = i + BUF_INC;\n		}\n		return x;\n	}\n};\n//#endregion\n//#region src/helpers/script_ts.js\nfunction TS(id, arr, len) {\n	arr.__id__ = id;\n	arr.__len__ = len;\n	return arr;\n}\n//#endregion\n//#region src/helpers/symbol.js\nconst OHLCV = [\n	\"open\",\n	\"high\",\n	\"low\",\n	\"close\",\n	\"vol\"\n];\nvar Sym = class {\n	constructor(data, params) {\n		this.id = params.id;\n		this.tf = tf_from_str(params.tf);\n		this.format = params.format;\n		this.aggtype = params.aggtype || \"ohlcv\";\n		this.window = params.window;\n		this.fillgaps = params.fillgaps;\n		this.data = data;\n		this.data_type = 0;\n		this.main = !!params.main;\n		this.idx = this.data_idx();\n		this.tmap = {};\n		this.tf = this.tf || state.tf;\n		if (this.main) this.tf = state.tf;\n		if (this.aggtype === \"ohlcv\") for (let id of OHLCV) {\n			this[id] = TS(`${this.id}_${id}`, []);\n			this[id].__fn__ = sampler_default(id).bind(this[id]);\n			this[id].__tf__ = this.tf;\n		}\n		if (this.aggtype === \"copy\") {\n			for (let id of OHLCV) {\n				this[id] = TS(`${this.id}_${id}`, []);\n				this[id].__tf__ = this.tf;\n			}\n			for (let i = 0; i < this.data.length; i++) this.tmap[this.data[i][0]] = i;\n		}\n		if (typeof this.aggtype === \"function\") {\n			this.close = TS(`${this.id}_close`, []);\n			this.close.__fn__ = this.aggtype;\n			this.close.__tf__ = this.tf;\n		}\n		if (this.main) {\n			if (!this.tf) throw \"Main tf should be defined\";\n			if (!this.data || !this.data.length || !this.data[0]) throw \"Main symbol requires non-empty data\";\n			if (state.set_custom_main) state.set_custom_main(this);\n			else state.custom_main = this;\n			let t0 = this.data[0][0];\n			state.t = t0 - t0 % this.tf;\n			this.update(null, state.t);\n			state.data.ohlcv.data.length = 0;\n			state.data.ohlcv.data.push([\n				state.t,\n				this.open[0],\n				this.high[0],\n				this.low[0],\n				this.close[0],\n				this.vol[0]\n			]);\n		}\n	}\n	update(x, t) {\n		if (this.aggtype === \"ohlcv\") return this.update_ohlcv(x, t);\n		else if (this.aggtype === \"copy\") return this.update_copy(x, t);\n		else if (typeof this.aggtype === \"function\") return this.update_custom(x, t);\n	}\n	update_ohlcv(x, t) {\n		t = t || state.t;\n		let idx = this.idx;\n		switch (this.data_type) {\n			case 0:\n				if (t > this.data[this.data.length - 1][0]) return false;\n				let t0 = this.window ? t - this.window + this.tf : t;\n				let dt = t0 % this.tf;\n				t0 -= dt;\n				let i0 = nextt(this.data, t0);\n				if (i0 >= this.data.length) return false;\n				let t1 = t + state.tf;\n				if (t < this.vol.__t0__ + this.tf) this.vol[0] = 0;\n				let noevent = true;\n				for (let i = i0; i < this.data.length; i++) {\n					noevent = false;\n					let dp = this.data[i];\n					if (dp[idx.time] >= t1) break;\n					this.open.__fn__(dp[idx.open], t);\n					this.high.__fn__(dp[idx.high], t);\n					this.low.__fn__(dp[idx.low], t);\n					this.close.__fn__(dp[idx.close], t);\n					this.vol.__fn__(dp[idx.vol], t);\n				}\n				if (noevent) {\n					if (this.fillgaps === false && !this.main) return false;\n					let last = this.close[0];\n					this.open.__fn__(last, t);\n					this.high.__fn__(last, t);\n					this.low.__fn__(last, t);\n					this.close.__fn__(last, t);\n					this.vol.__fn__(0, t);\n				}\n				break;\n			case 1: break;\n			case 2: break;\n		}\n		return true;\n	}\n	update_copy(x, t) {\n		t = t || state.t;\n		let i = this.tmap[t];\n		let s = this.data[i];\n		let ts0 = this.__t0__;\n		if (!ts0 || t >= ts0 + this.tf) {\n			for (let k = 0; k < 5; k++) {\n				let tsn = OHLCV[k];\n				this[tsn].unshift(void 0);\n			}\n			this.__t0__ = t - t % this.tf;\n			let last = this.data.length - 1;\n			if (this.__t0__ === this.data[last][0]) {\n				this.tmap[this.__t0__] = last;\n				s = this.data[last];\n			}\n		}\n		if (s) for (let k = 0; k < 5; k++) {\n			let tsn = OHLCV[k];\n			this[tsn][0] = s[k + 1];\n		}\n		else if (this.fillgaps) for (let k = 0; k < 5; k++) {\n			let tsn = OHLCV[k];\n			this[tsn][0] = tsn === \"vol\" ? 0 : this.close[1];\n		}\n	}\n	update_custom(x, t) {\n		t = t || state.t;\n		let idx = this.idx;\n		switch (this.data_type) {\n			case 0:\n				if (!this.data.length) return false;\n				if (t > this.data[this.data.length - 1][0]) return false;\n				let t0 = this.window ? t - this.window + this.tf : t;\n				let dt = t0 % this.tf;\n				t0 -= dt;\n				let i0 = nextt(this.data, t0);\n				if (i0 >= this.data.length) return false;\n				let t1 = t + state.tf;\n				let sub = [];\n				for (let i = i0; i < this.data.length; i++) {\n					let dp = this.data[i];\n					if (dp[idx.time] >= t1) break;\n					sub.push(dp);\n				}\n				let val;\n				if (sub.length || this.fillgaps === false) val = this.close.__fn__(sub);\n				else if (this.fillgaps !== false) val = this.close[0];\n				let ts0 = this.close.__t0__;\n				if (!ts0 || t >= ts0 + this.tf) {\n					this.close.unshift(val);\n					this.close.__t0__ = t - t % this.tf;\n				} else this.close[0] = val;\n				break;\n			case 1: break;\n			case 2: break;\n		}\n		return true;\n	}\n	data_idx() {\n		let idx = {};\n		switch (this.aggtype) {\n			case \"ohlcv\":\n				if (!this.format) {\n					let x0 = this.data[0];\n					if (!x0 || x0.length === 6) this.format = \"time:open:high:low:close:vol\";\n					else if (x0.length === 3) this.format = \"time:open,high,low,close:vol\";\n				}\n				break;\n			default:\n				this.format = \"time:close\";\n				break;\n		}\n		this.format.split(\":\").forEach((x, i) => {\n			if (!x.length) return;\n			x.split(\",\").forEach((y) => idx[y] = i);\n		});\n		return idx;\n	}\n};\n//#endregion\n//#region src/helpers/std/symbol.js\nvar symbol_default = { \n/** Creates a new Symbol.\n* @param {*} x - Something, depends on arg variation\n* @param {*} y - Something, depends on arg variation\n* @return {Sym}\n* Argument variations:\n* <data>(Array), [<params>(Object)]\n* <ts>(TS), [<params>(Object)]\n* <point>(Number), [<params>(Object)]\n* <tf>(String) 1m, 5m, 1H, etc. (uses main OHLCV)\n* Params object: {\n*  id: <String>,\n*  tf: <String|Number>,\n*  aggtype: <String> (TODO: Type of aggregation)\n*  format: <String> (Data format, e.g. \"time:price:vol\")\n*  window: <String|Number> (Aggregation window)\n*  main <true|false> (Use as the main chart)\n* }\n*/\nsym(x, y = {}, _id) {\n	let id = y.id || this._tsid(_id, `sym`);\n	y.id = id;\n	if (this.env.syms[id]) {\n		this.env.syms[id].update(x);\n		return this.env.syms[id];\n	}\n	let sym;\n	switch (typeof x) {\n		case \"object\":\n			sym = new Sym(x, y);\n			this.env.syms[id] = sym;\n			if (x.__id__) sym.data_type = 1;\n			else sym.data_type = 0;\n			break;\n		case \"number\":\n			sym = new Sym(null, y);\n			sym.data_type = 2;\n			break;\n		case \"string\":\n			y.tf = x;\n			sym = new Sym(state.data.ohlcv.data, y);\n			sym.data_type = 0;\n			break;\n	}\n	this.env.syms[id] = sym;\n	return sym;\n} };\n//#endregion\n//#region src/helpers/script_std.js\nvar ScriptStd = class {\n	constructor(env) {\n		this.env = env;\n		this.se = state;\n		this.SWMA = [\n			1 / 6,\n			2 / 6,\n			2 / 6,\n			1 / 6\n		];\n		this.STDEV_EPS = 1e-10;\n		this.STDEV_Z = 1e-4;\n		this._index_tracking();\n	}\n	_index_tracking() {\n		let proto = Object.getPrototypeOf(this);\n		for (var k of Object.getOwnPropertyNames(proto)) {\n			switch (k) {\n				case \"constructor\":\n				case \"ts\":\n				case \"tstf\":\n				case \"sample\":\n				case \"_index_tracking\":\n				case \"_tsid\":\n				case \"_i\":\n				case \"_v\":\n				case \"_add_i\":\n				case \"chart\":\n				case \"onchart\":\n				case \"offchart\":\n				case \"sym\": continue;\n			}\n			let f = this._add_i(k, this[k].toString());\n			if (f) this[k] = f;\n		}\n	}\n	_add_i(name, src) {\n		let args = f_args(src);\n		src = f_body(src);\n		let src2 = wrap_idxs(src, \"this.\");\n		if (src2 !== src) return new Function(...args, src2);\n		return null;\n	}\n	corr() {}\n	time(res, sesh) {}\n	timestamp() {}\n	linearint() {}\n	nearestrank() {}\n	percentrank() {}\n	variance(src, len) {}\n	vwap(src) {}\n};\nconst proto = ScriptStd.prototype;\nObject.assign(proto, math_default);\nObject.assign(proto, time_default);\nObject.assign(proto, chart_default);\nObject.assign(proto, utils_default$1);\nObject.assign(proto, analysis_default);\nObject.assign(proto, indicators_default);\nObject.assign(proto, timeseries_default);\nObject.assign(proto, symbol_default);\n//#endregion\n//#region src/helpers/script_env.js\nconst { DEF_LIMIT: DEF_LIMIT$1, FDEFS1, FDEFS2 } = constants_default;\nvar ScriptEnv = class {\n	constructor(s, data) {\n		this.std = state.std_inject(new ScriptStd(this));\n		this.id = s.uuid;\n		this.src = s;\n		this.output = TS(\"output\", []);\n		this.data = [];\n		this.tss = {};\n		this.syms = {};\n		this.shared = data;\n		this.output.box_maker = this.make_box(s.src);\n		this.onchart = {};\n		this.offchart = {};\n	}\n	build() {\n		this.output.box_maker(this, this.shared, state);\n		delete this.output.box_maker;\n	}\n	init() {\n		this.output.init();\n	}\n	step(unshift = true) {\n		if (unshift) this.unshift();\n		let v = this.output.update();\n		this.copy(v, unshift);\n		this.limit();\n	}\n	unshift() {\n		this.output.unshift(void 0);\n		for (let id in this.tss) {\n			if (this.tss[id].__tf__) continue;\n			this.tss[id].unshift(void 0);\n		}\n	}\n	limit() {\n		let out = this.output;\n		out.length = out.__len__ || DEF_LIMIT$1;\n		for (let id in this.tss) {\n			let ts = this.tss[id];\n			ts.length = ts.__len__ || DEF_LIMIT$1;\n		}\n	}\n	copy(v, unshift = true) {\n		let off = this.output.__offset__;\n		if (v != void 0) {\n			this.output[0] = v.__id__ ? v[0] : v;\n			off = off || v.__offset__;\n		}\n		let val = this.output[0];\n		let t = state.t;\n		if (off) t += off * state.tf;\n		let point;\n		if (val == null || !val.length) point = [t, val];\n		else point = [t, ...val];\n		if (unshift) this.data.push(point);\n		else this.data[this.data.length - 1] = point;\n	}\n	make_box(src) {\n		let proto = Object.getPrototypeOf(this.std);\n		let std = ``;\n		for (let k of Object.getOwnPropertyNames(proto)) {\n			if (k === \"constructor\") continue;\n			std += `const std_${k} = self.std.${k}.bind(self.std)\\n`;\n		}\n		let props = ``;\n		for (let k in src.props || {}) {\n			let val;\n			if (src.props[k].val !== void 0) val = src.props[k].val;\n			else if (this.src.sett[k] !== void 0) val = this.src.sett[k];\n			else val = src.props[k].def;\n			props += `var ${k} = ${JSON.stringify(val)}\\n`;\n		}\n		let tss = ``;\n		for (let k in this.shared) if (this.shared[k] && this.shared[k].__id__) tss += `const ${k} = shared.${k}\\n`;\n		let dss = ``;\n		for (let k in src.data || {}) {\n			let id = state.match_ds(this.id, src.data[k].type);\n			if (!this.shared.dss[id]) {\n				let T = src.data[k].type;\n				console.warn(`Dataset '${T}' is undefined`);\n				continue;\n			}\n			dss += `const ${k} = shared.dss['${id}'].data\\n`;\n		}\n		try {\n			return Function(\"self,shared,se\", `\n                'use strict';\n\n                // Built-in functions (aliases)\n                ${std}\n\n                // Modules (API / interfaces)\n                ${this.make_modules()}\n\n                // Timeseries\n                ${tss}\n\n                // Direct data ts\n                const data = self.data\n                const ohlcv = shared.dss.ohlcv.data\n                ${dss}\n\n                // Script's properties (init)\n                ${props}\n\n                // Globals\n                const settings = self.src.sett\n                const tf = shared.tf\n                const range = shared.range\n\n                this.init = (_id = 'root') => {\n                    ${this.prep(src.init_src)}\n                }\n\n                this.update = (_id = 'root') => {\n                    const t = shared.t()\n                    const iter = shared.iter()\n                    ${this.prep(src.upd_src)}\n                }\n\n                this.post = (_id = 'root') => {\n                    ${this.prep(src.post_src)}\n                }\n            `);\n		} catch (e) {\n			if (state && state.send) state.send(\"script-error\", {\n				uuid: this.id,\n				name: this.src && this.src.name,\n				type: this.src && this.src.type,\n				phase: \"build\",\n				message: e && e.message || String(e)\n			});\n			return Function(\"self,shared\", `\n                'use strict';\n                this.init = () => {}\n                this.update = () => {}\n                this.post = () => {}\n            `);\n		}\n	}\n	make_modules() {\n		let s = ``;\n		for (let id in state.mods) {\n			if (!state.mods[id].api) continue;\n			s += `const ${id} = se.mods['${id}'].api[self.id]`;\n			s += \"\\n\";\n		}\n		return s;\n	}\n	prep(src) {\n		src = \"		  let _pref = `${_id}<-\" + this.src.use_for[0] + \"<-`\\n\" + src;\n		FDEFS2.lastIndex = 0;\n		let call_id = 0;\n		let m;\n		do {\n			m = FDEFS2.exec(src);\n			if (m) {\n				let fkeyword = m[1].trim();\n				let fname = m[2];\n				m[3];\n				if (fkeyword === \"function\") {} else {\n					let off = m.index + m[0].indexOf(\"(\");\n					if (this.std[fname]) {\n						src = this.postfix(src, m, ++call_id);\n						off += 4;\n					}\n					FDEFS2.lastIndex = off;\n				}\n			}\n		} while (m);\n		return wrap_idxs(src, \"std_\");\n	}\n	postfix(src, m, call_id) {\n		let target = this.get_args(this.fdef(m[2])).length;\n		let m0 = this.parentheses(m[0]);\n		let args = this.get_args_2(m0);\n		for (let i = args.length; i < target; i++) args.push(\"void 0\");\n		args.push(`_pref+\"f${call_id}\"`);\n		return src.replace(m0, `std_${m[2]}(${args.join(\", \")})`);\n	}\n	parentheses(str) {\n		let count = 0, first = false;\n		for (let i = 0; i < str.length; i++) {\n			if (str[i] === \"(\") {\n				count++;\n				first = true;\n			} else if (str[i] === \")\") count--;\n			if (first && count === 0) return str.substr(0, i + 1);\n		}\n		return str;\n	}\n	fdef(fname) {\n		return this.std[fname].toString();\n	}\n	get_args(src) {\n		let reg = this.regex_clone(FDEFS1);\n		reg.lastIndex = 0;\n		let m = reg.exec(src);\n		if (!m[3].trim().length) return [];\n		return m[3].split(\",\").map((x) => x.trim()).filter((x) => x !== \"_id\" && x !== \"_tf\");\n	}\n	get_args_2(str) {\n		let parts = [];\n		let c = 0;\n		let s = 0;\n		let q1 = false, q2 = false, q3 = false;\n		let part;\n		for (let i = 0; i < str.length; i++) {\n			if (str[i] === \"(\") {\n				c++;\n				if (!part) part = [i + 1];\n			}\n			if (str[i] === \")\") c--;\n			if (str[i] === \"[\") s++;\n			if (str[i] === \"]\") s--;\n			if (str[i] === \"'\") q1 = !q1;\n			if (str[i] === \"\\\"\") q2 = !q2;\n			if (str[i] === \"`\") q3 = !q3;\n			if (str[i] === \",\" && c === 1 && !s && !q1 && !q2 && !q3) {\n				if (part) {\n					part[1] = i;\n					parts.push(part);\n					part = [i + 1];\n				}\n			}\n			if (c === 0 && part) {\n				part[1] = i;\n				parts.push(part);\n				part = null;\n			}\n		}\n		return parts.map((x) => str.slice(...x)).filter((x) => /[^\\s]+/.exec(x));\n	}\n	regex_clone(rex) {\n		return new RegExp(rex.source, rex.flags);\n	}\n	send_modify(upd) {\n		state.send(\"modify-overlay\", {\n			uuid: this.id,\n			fields: upd\n		});\n	}\n};\n//#endregion\n//#region node_modules/arrayslicer/lib/util.js\nvar require_util = /* @__PURE__ */ __commonJSMin(((exports, module) => {\n	/**\n	* Utils module\n	*/\n	/**\n	* Check if an object is an array-like object\n	*\n	* @credit Javascript: The Definitive Guide, O'Reilly, 2011\n	*/\n	function isArrayLike(o) {\n		if (o && typeof o === \"object\" && isFinite(o.length) && o.length >= 0 && o.length === Math.floor(o.length) && o.length < 4294967296) return true;\n		else return false;\n	}\n	/**\n	* Check for the existence of the sort function in the object\n	*/\n	function isSortable(o) {\n		if (o && typeof o === \"object\" && typeof o.sort === \"function\") return true;\n		else return false;\n	}\n	/**\n	* Check for sortable-array-like objects\n	*/\n	module.exports.isSortableArrayLike = function(o) {\n		return isArrayLike(o) && isSortable(o);\n	};\n}));\n//#endregion\n//#region node_modules/arrayslicer/lib/compare/index.js\nvar require_compare = /* @__PURE__ */ __commonJSMin(((exports, module) => {\n	/**\n	* Utility compare functions\n	*/\n	module.exports = {\n		/**\n		* Compare two numbers.\n		*\n		* @param {Number} a\n		* @param {Number} b\n		* @returns {Number} 1 if a > b, 0 if a = b, -1 if a < b\n		*/\n		numcmp: function(a, b) {\n			return a - b;\n		},\n		/**\n		* Compare two strings.\n		*\n		* @param {Number|String} a\n		* @param {Number|String} b\n		* @returns {Number} 1 if a > b, 0 if a = b, -1 if a < b\n		*/\n		strcmp: function(a, b) {\n			return a < b ? -1 : a > b ? 1 : 0;\n		}\n	};\n}));\n//#endregion\n//#region node_modules/arrayslicer/lib/search/binary.js\nvar require_binary = /* @__PURE__ */ __commonJSMin(((exports, module) => {\n	/**\n	* Binary search implementation\n	*/\n	/**\n	* Main search recursive function\n	*/\n	function loop(data, min, max, index, valpos) {\n		var curr = max + min >>> 1;\n		var diff = this.compare(data[curr][this.index], index);\n		if (!diff) return valpos[index] = {\n			\"found\": true,\n			\"index\": curr,\n			\"prev\": null,\n			\"next\": null\n		};\n		if (min >= max) return valpos[index] = {\n			\"found\": false,\n			\"index\": null,\n			\"prev\": diff < 0 ? max : max - 1,\n			\"next\": diff < 0 ? max + 1 : max\n		};\n		if (diff > 0) return loop.call(this, data, min, curr - 1, index, valpos);\n		else return loop.call(this, data, curr + 1, max, index, valpos);\n	}\n	/**\n	* Search bootstrap\n	* The function has to be executed in the context of the IndexedArray object\n	*/\n	function search(index) {\n		var data = this.data;\n		return loop.call(this, data, 0, data.length - 1, index, this.valpos);\n	}\n	/**\n	* Export search function\n	*/\n	module.exports.search = search;\n}));\n//#endregion\n//#region src/stuff/utils.js\nvar import_lib = /* @__PURE__ */ __toESM((/* @__PURE__ */ __commonJSMin(((exports, module) => {\n	/**\n	* Indexed Array Binary Search module\n	*/\n	/**\n	* Dependencies\n	*/\n	var util = require_util(), cmp = require_compare(), bin = require_binary();\n	/**\n	* Module interface definition\n	*/\n	module.exports = IndexedArray;\n	/**\n	* Indexed Array constructor\n	*\n	* It loads the array data, defines the index field and the comparison function\n	* to be used.\n	*\n	* @param {Array} data is an array of objects\n	* @param {String} index is the object's property used to search the array\n	*/\n	function IndexedArray(data, index) {\n		if (!util.isSortableArrayLike(data)) throw new Error(\"Invalid data\");\n		if (!index || data.length > 0 && !(index in data[0])) throw new Error(\"Invalid index\");\n		this.data = data;\n		this.index = index;\n		this.setBoundaries();\n		this.compare = typeof this.minv === \"number\" ? cmp.numcmp : cmp.strcmp;\n		this.search = bin.search;\n		this.valpos = {};\n		this.cursor = null;\n		this.nextlow = null;\n		this.nexthigh = null;\n	}\n	/**\n	* Set the comparison function\n	*\n	* @param {Function} fn to compare index values that returnes 1, 0, -1\n	*/\n	IndexedArray.prototype.setCompare = function(fn) {\n		if (typeof fn !== \"function\") throw new Error(\"Invalid argument\");\n		this.compare = fn;\n		return this;\n	};\n	/**\n	* Set the search function\n	*\n	* @param {Function} fn to search index values in the array of objects\n	*/\n	IndexedArray.prototype.setSearch = function(fn) {\n		if (typeof fn !== \"function\") throw new Error(\"Invalid argument\");\n		this.search = fn;\n		return this;\n	};\n	/**\n	* Sort the data array by its index property\n	*/\n	IndexedArray.prototype.sort = function() {\n		var self = this, index = this.index;\n		this.data.sort(function(a, b) {\n			return self.compare(a[index], b[index]);\n		});\n		this.setBoundaries();\n		return this;\n	};\n	/**\n	* Inspect and set the boundaries of the internal data array\n	*/\n	IndexedArray.prototype.setBoundaries = function() {\n		var data = this.data, index = this.index;\n		this.minv = data.length && data[0][index];\n		this.maxv = data.length && data[data.length - 1][index];\n		return this;\n	};\n	/**\n	* Get the position of the object corresponding to the given index\n	*\n	* @param {Number|String} index is the id of the requested object\n	* @returns {Number} the position of the object in the array\n	*/\n	IndexedArray.prototype.fetch = function(value) {\n		if (this.data.length === 0) {\n			this.cursor = null;\n			this.nextlow = null;\n			this.nexthigh = null;\n			return this;\n		}\n		if (this.compare(value, this.minv) === -1) {\n			this.cursor = null;\n			this.nextlow = null;\n			this.nexthigh = 0;\n			return this;\n		}\n		if (this.compare(value, this.maxv) === 1) {\n			this.cursor = null;\n			this.nextlow = this.data.length - 1;\n			this.nexthigh = null;\n			return this;\n		}\n		var pos = this.valpos[value];\n		if (pos) {\n			if (pos.found) {\n				this.cursor = pos.index;\n				this.nextlow = null;\n				this.nexthigh = null;\n			} else {\n				this.cursor = null;\n				this.nextlow = pos.prev;\n				this.nexthigh = pos.next;\n			}\n			return this;\n		}\n		var result = this.search.call(this, value);\n		this.cursor = result.index;\n		this.nextlow = result.prev;\n		this.nexthigh = result.next;\n		return this;\n	};\n	/**\n	* Get the object corresponding to the given index\n	*\n	* When no value is given, the function will default to the last fetched item.\n	*\n	* @param {Number|String} [optional] index is the id of the requested object\n	* @returns {Object} the found object or null\n	*/\n	IndexedArray.prototype.get = function(value) {\n		if (value) this.fetch(value);\n		var pos = this.cursor;\n		return pos !== null ? this.data[pos] : null;\n	};\n	/**\n	* Get an slice of the data array\n	*\n	* Boundaries have to be in order.\n	*\n	* @param {Number|String} begin index is the id of the requested object\n	* @param {Number|String} end index is the id of the requested object\n	* @returns {Object} the slice of data array or []\n	*/\n	IndexedArray.prototype.getRange = function(begin, end) {\n		if (this.compare(begin, end) === 1) return [];\n		this.fetch(begin);\n		var start = this.cursor || this.nexthigh;\n		this.fetch(end);\n		var finish = this.cursor || this.nextlow;\n		if (start === null || finish === null) return [];\n		return this.data.slice(start, finish + 1);\n	};\n})))(), 1);\nvar utils_default = {\n	clamp(num, min, max) {\n		return num <= min ? min : num >= max ? max : num;\n	},\n	add_zero(i) {\n		if (i < 10) i = \"0\" + i;\n		return i;\n	},\n	day_start(t) {\n		return new Date(t).setUTCHours(0, 0, 0, 0);\n	},\n	month_start(t) {\n		let date = new Date(t);\n		return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);\n	},\n	year_start(t) {\n		return Date.UTC(new Date(t).getUTCFullYear());\n	},\n	get_year(t) {\n		if (!t) return void 0;\n		return new Date(t).getUTCFullYear();\n	},\n	get_month(t) {\n		if (!t) return void 0;\n		return new Date(t).getUTCMonth();\n	},\n	nearest_a(x, array) {\n		if (!array || !array.length) return [-1, null];\n		if (array.length === 1) return [0, array[0]];\n		let lo = 0;\n		let hi = array.length - 1;\n		if (x <= array[lo]) return [lo, array[lo]];\n		if (x >= array[hi]) return [hi, array[hi]];\n		while (lo < hi - 1) {\n			const mid = lo + hi >> 1;\n			if (array[mid] === x) return [mid, array[mid]];\n			if (array[mid] < x) lo = mid;\n			else hi = mid;\n		}\n		return Math.abs(array[lo] - x) <= Math.abs(array[hi] - x) ? [lo, array[lo]] : [hi, array[hi]];\n	},\n	round(num, decimals = 8) {\n		return parseFloat(num.toFixed(decimals));\n	},\n	strip(number) {\n		return parseFloat(parseFloat(number).toPrecision(12));\n	},\n	get_day(t) {\n		return t ? new Date(t).getDate() : null;\n	},\n	overwrite(arr, new_arr) {\n		arr.splice(0, arr.length, ...new_arr);\n	},\n	copy_layout(obj, new_obj) {\n		for (let k in obj) if (Array.isArray(obj[k])) {\n			if (obj[k].length !== new_obj[k].length) {\n				this.overwrite(obj[k], new_obj[k]);\n				continue;\n			}\n			for (let m in obj[k]) Object.assign(obj[k][m], new_obj[k][m]);\n		} else Object.assign(obj[k], new_obj[k]);\n	},\n	detect_interval(ohlcv) {\n		let len = Math.min(ohlcv.length - 1, 99);\n		let min = Infinity;\n		ohlcv.slice(0, len).forEach((x, i) => {\n			let d = ohlcv[i + 1][0] - x[0];\n			if (d === d && d < min) min = d;\n		});\n		if (min >= constants_default.MONTH && min <= constants_default.DAY * 30) return constants_default.DAY * 31;\n		return min;\n	},\n	get_num_id(id) {\n		return parseInt(id.split(\"_\").pop());\n	},\n	fast_filter(arr, t1, t2) {\n		if (!arr.length) return [arr, void 0];\n		if (arr[arr.length - 1][0] < t1 || arr[0][0] > t2) return [[], void 0];\n		try {\n			let ia = new import_lib.default(arr, \"0\");\n			return [ia.getRange(t1, t2), ia.valpos[t1].next];\n		} catch (e) {\n			return [arr.filter((x) => x[0] >= t1 && x[0] <= t2), 0];\n		}\n	},\n	fast_filter_i(arr, t1, t2) {\n		if (!arr.length) return [arr, void 0];\n		let i1 = Math.floor(t1);\n		if (i1 < 0) i1 = 0;\n		let i2 = Math.floor(t2 + 1);\n		return [arr.slice(i1, i2), i1];\n	},\n	fast_nearest(arr, t1) {\n		let ia = new import_lib.default(arr, \"0\");\n		ia.fetch(t1);\n		return [ia.nextlow, ia.nexthigh];\n	},\n	now() {\n		return (/* @__PURE__ */ new Date()).getTime();\n	},\n	pause(delay) {\n		return new Promise((rs, rj) => setTimeout(rs, delay));\n	},\n	smart_wheel(delta) {\n		let abs = Math.abs(delta);\n		if (abs > 500) return (200 + Math.log(abs)) * Math.sign(delta);\n		return delta;\n	},\n	get_deltaX(event) {\n		return event.originalEvent.deltaX / 12;\n	},\n	get_deltaY(event) {\n		return event.originalEvent.deltaY / 12;\n	},\n	apply_opacity(c, op) {\n		if (c.length === 7) {\n			let n = Math.floor(op * 255);\n			n = this.clamp(n, 0, 255);\n			c += n.toString(16).padStart(2, \"0\");\n		}\n		return c;\n	},\n	parse_tf(smth) {\n		if (typeof smth === \"string\") return constants_default.map_unit[smth];\n		else return smth;\n	},\n	index_shift(sub, data) {\n		if (!data.length) return 0;\n		let first = data[0][0];\n		let second;\n		let i = 1;\n		for (; i < data.length; i++) if (data[i][0] !== first) {\n			second = data[i][0];\n			break;\n		}\n		for (let j = 0; j < sub.length; j++) if (sub[j][0] === second) return j - i;\n		return 0;\n	},\n	measureText(ctx, text, tv_id) {\n		let m = ctx.measureTextOrg(text);\n		if (m.width === 0) {\n			const doc = document;\n			const id = \"tvjs-measure-text\";\n			let el = doc.getElementById(id);\n			if (!el) {\n				let base = doc.getElementById(tv_id);\n				el = doc.createElement(\"div\");\n				el.id = id;\n				el.style.position = \"absolute\";\n				el.style.top = \"-1000px\";\n				base.appendChild(el);\n			}\n			if (ctx.font) el.style.font = ctx.font;\n			el.innerText = text.replace(/ /g, \".\");\n			return { width: el.offsetWidth };\n		} else return m;\n	},\n	uuid(temp = \"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx\") {\n		return temp.replace(/[xy]/g, (c) => {\n			let r = Math.random() * 16 | 0;\n			return (c == \"x\" ? r : r & 3 | 8).toString(16);\n		});\n	},\n	uuid2() {\n		return this.uuid(\"xxxxxxxxxxxx\");\n	},\n	warn(f, text, delay = 0) {\n		setTimeout(() => {\n			if (f()) console.warn(text);\n		}, delay);\n	},\n	is_scr_props_upd(n, prev) {\n		let p = prev.find((x) => x.v.$uuid === n.v.$uuid);\n		if (!p) return false;\n		let props = n.p.settings.$props;\n		if (!props) return false;\n		return props.some((x) => n.v[x] !== p.v[x]);\n	},\n	delayed_exec(v) {\n		if (!v.script || !v.script.execInterval) return true;\n		let t = this.now();\n		let dt = v.script.execInterval;\n		if (!v.settings.$last_exec || t > v.settings.$last_exec + dt) {\n			v.settings.$last_exec = t;\n			return true;\n		}\n		return false;\n	},\n	format_name(ov) {\n		if (!ov.name) return void 0;\n		let name = ov.name;\n		for (let k in ov.settings || {}) {\n			let val = ov.settings[k];\n			let reg = new RegExp(`\\\\$${k}`, \"g\");\n			name = name.replace(reg, val);\n		}\n		return name;\n	},\n	xmode() {\n		return this.is_mobile ? \"explore\" : \"default\";\n	},\n	default_prevented(event) {\n		if (event.original) return event.original.defaultPrevented;\n		return event.defaultPrevented;\n	},\n	is_mobile: ((w) => \"onorientationchange\" in w && (!!navigator.maxTouchPoints || !!navigator.msMaxTouchPoints || \"ontouchstart\" in w || w.DocumentTouch && document instanceof w.DocumentTouch))(typeof window !== \"undefined\" ? window : {}),\n	maxInArray(arr) {\n		if (!arr || !arr.length) return -Infinity;\n		let max = arr[0];\n		for (let i = 1; i < arr.length; i++) if (arr[i] > max) max = arr[i];\n		return max;\n	},\n	minInArray(arr) {\n		if (!arr || !arr.length) return Infinity;\n		let min = arr[0];\n		for (let i = 1; i < arr.length; i++) if (arr[i] < min) min = arr[i];\n		return min;\n	},\n	maxAtIndex(arr, idx) {\n		if (!arr || !arr.length) return -Infinity;\n		let max = arr[0][idx];\n		for (let i = 1; i < arr.length; i++) {\n			const val = arr[i][idx];\n			if (val > max) max = val;\n		}\n		return max;\n	},\n	minAtIndex(arr, idx) {\n		if (!arr || !arr.length) return Infinity;\n		let min = arr[0][idx];\n		for (let i = 1; i < arr.length; i++) {\n			const val = arr[i][idx];\n			if (val < min) min = val;\n		}\n		return min;\n	},\n	rafThrottle(fn) {\n		let rafId = null;\n		let lastArgs = null;\n		let context = null;\n		const throttled = function(...args) {\n			lastArgs = args;\n			context = this;\n			if (rafId !== null) return;\n			rafId = requestAnimationFrame(() => {\n				rafId = null;\n				fn.apply(context, lastArgs);\n			});\n		};\n		throttled.cancel = () => {\n			if (rafId !== null) {\n				cancelAnimationFrame(rafId);\n				rafId = null;\n			}\n		};\n		return throttled;\n	},\n	fastDeepCopy(obj) {\n		if (obj === null || typeof obj !== \"object\") return obj;\n		if (Array.isArray(obj)) {\n			if (obj.length === 0) return [];\n			const first = obj[0];\n			if (first === null || typeof first !== \"object\") return obj.slice();\n			const copy = new Array(obj.length);\n			for (let i = 0; i < obj.length; i++) copy[i] = this.fastDeepCopy(obj[i]);\n			return copy;\n		}\n		const copy = {};\n		for (const key in obj) if (Object.prototype.hasOwnProperty.call(obj, key)) copy[key] = this.fastDeepCopy(obj[key]);\n		return copy;\n	},\n	_dateCache: /* @__PURE__ */ new Map(),\n	_dateCacheMax: 16,\n	getCachedDate(timestamp) {\n		let d = this._dateCache.get(timestamp);\n		if (d !== void 0) return d;\n		d = new Date(timestamp);\n		if (this._dateCache.size >= this._dateCacheMax) this._dateCache.delete(this._dateCache.keys().next().value);\n		this._dateCache.set(timestamp, d);\n		return d;\n	}\n};\n//#endregion\n//#region src/helpers/symstd.js\nconst SYMTF = /(open|high|low|close|vol)(\\d+)(\\w*)/gm;\nconst FNSTD = /(a?tr|kcw?|dmi|sar|supertrend|wpr)(\\d+?\\w*)\\s*\\(/gm;\nconst SYMSTD = /(?:hl2|hlc3|ohlc4)/gm;\nvar symstd_default = {\n	parse(s) {\n		let ss = s.src;\n		let all = `${ss.init_src}\\n${ss.upd_src}\\n${ss.post_src}`;\n		SYMTF.lastIndex = 0;\n		FNSTD.lastIndex = 0;\n		SYMSTD.lastIndex = 0;\n		let m;\n		do {\n			m = SYMTF.exec(all);\n			if (m) {\n				if (m[0] in state.tss) continue;\n				let ts = state.tss[m[0]] = TS(m[0], []);\n				ts.__tf__ = tf_from_pair(m[2], m[3]);\n				ts.__fn__ = sampler_default(m[1], true).bind(ts);\n			}\n		} while (m);\n		do {\n			m = SYMSTD.exec(all);\n			if (m) {\n				if (m[0] in state.tss) continue;\n				this.parse_ts_sym(m[0]);\n			}\n		} while (m);\n		do {\n			m = FNSTD.exec(all);\n			if (m) {\n				let fn = m[1] + m[2];\n				let tf = m[2];\n				if (fn in state.std_plus) continue;\n				switch (m[1]) {\n					case \"tr\":\n						this.deps([\n							\"high\",\n							\"low\",\n							\"close\"\n						], m[2]);\n						state.std_plus[fn] = function(fixnan = false, _id) {\n							return this.tr(fixnan, _id, tf);\n						};\n						break;\n					case \"atr\":\n						this.deps([\n							\"high\",\n							\"low\",\n							\"close\"\n						], m[2]);\n						state.std_plus[fn] = function(len, _id) {\n							return this.atr(len, _id, tf);\n						};\n						break;\n					case \"kc\":\n						this.deps([\n							\"high\",\n							\"low\",\n							\"close\"\n						], m[2]);\n						state.std_plus[fn] = function(src, len, mult, use_tr = true, _id) {\n							return this.kc(src, len, mult, use_tr, _id, tf);\n						};\n						break;\n					case \"kcw\":\n						this.deps([\n							\"high\",\n							\"low\",\n							\"close\"\n						], m[2]);\n						state.std_plus[fn] = function(src, len, mult, use_tr = true, _id) {\n							return this.kcw(src, len, mult, use_tr, _id, tf);\n						};\n						break;\n					case \"dmi\":\n						this.deps([\n							\"high\",\n							\"low\",\n							\"close\"\n						], m[2]);\n						state.std_plus[fn] = function(len, smooth, _id) {\n							return this.dmi(len, smooth, _id, tf);\n						};\n						break;\n					case \"sar\":\n						this.deps([\n							\"high\",\n							\"low\",\n							\"close\"\n						], m[2]);\n						state.std_plus[fn] = function(start, inc, max, _id) {\n							return this.sar(start, inc, max, _id, tf);\n						};\n						break;\n					case \"supertrend\":\n						this.deps([\n							\"high\",\n							\"low\",\n							\"close\"\n						], m[2]);\n						state.std_plus[fn] = function(factor, atrlen, _id) {\n							return this.supertrend(factor, atrlen, _id, tf);\n						};\n						break;\n					case \"wpr\":\n						this.deps([\n							\"high\",\n							\"low\",\n							\"close\"\n						], m[2]);\n						state.std_plus[fn] = function(len, _id) {\n							return this.wpr(len, _id, tf);\n						};\n						break;\n				}\n			}\n		} while (m);\n	},\n	parse_ts_sym(sym, tf) {\n		switch (sym) {\n			case \"hl2\":\n				state.tss[\"hl2\"] = TS(\"hl2\", []);\n				state.tss[\"hl2\"].__fn__ = () => {\n					return (state.high[0] + state.low[0]) * .5;\n				};\n				break;\n			case \"hlc3\":\n				state.tss[\"hlc3\"] = TS(\"hlc3\", []);\n				state.tss[\"hlc3\"].__fn__ = () => {\n					return (state.high[0] + state.low[0] + state.close[0]) / 3;\n				};\n				break;\n			case \"ohlc4\":\n				state.tss[\"ohlc4\"] = TS(\"ohlc4\", []);\n				state.tss[\"ohlc4\"].__fn__ = () => {\n					return (state.open[0] + state.high[0] + state.low[0] + state.close[0]) * .25;\n				};\n				break;\n		}\n	},\n	deps(types, tf) {\n		for (let type of types) {\n			let sym = type + tf;\n			if (sym in state.tss) continue;\n			let ts = state.tss[sym] = TS(sym, []);\n			ts.__tf__ = tf_from_str(tf);\n			ts.__fn__ = sampler_default(type, true).bind(ts);\n		}\n	}\n};\n//#endregion\n//#region src/helpers/script_engine.js\nconst { DEF_LIMIT } = constants_default;\nconst WAIT_EXEC = 10;\nconst DISPLAY_ONLY_SETTINGS = new Set([\n	\"color\",\n	\"lineColor\",\n	\"fillColor\",\n	\"upColor\",\n	\"downColor\",\n	\"wickUpColor\",\n	\"wickDownColor\",\n	\"borderUpColor\",\n	\"borderDownColor\",\n	\"backgroundColor\",\n	\"textColor\",\n	\"labelColor\",\n	\"crossColor\",\n	\"lineWidth\",\n	\"lineStyle\",\n	\"lineDash\",\n	\"opacity\",\n	\"alpha\",\n	\"showLabels\",\n	\"showLegend\",\n	\"showValues\",\n	\"showPrice\",\n	\"visible\",\n	\"display\",\n	\"showBands\",\n	\"showFill\",\n	\"precision\",\n	\"prec\",\n	\"zIndex\",\n	\"z\"\n]);\nfunction fastDeepCopy(obj) {\n	if (obj === null || typeof obj !== \"object\") return obj;\n	if (Array.isArray(obj)) {\n		if (obj.length === 0) return [];\n		const first = obj[0];\n		if (first === null || typeof first !== \"object\") return obj.slice();\n		const copy = new Array(obj.length);\n		for (let i = 0; i < obj.length; i++) copy[i] = fastDeepCopy(obj[i]);\n		return copy;\n	}\n	const copy = {};\n	for (const key in obj) if (Object.prototype.hasOwnProperty.call(obj, key)) copy[key] = fastDeepCopy(obj[key]);\n	return copy;\n}\nconst YIELD_FREQUENCY = 2e3;\nvar ScriptEngine = class {\n	constructor() {\n		this.map = {};\n		this.data = {};\n		this.exec_id = null;\n		this.queue = [];\n		this.delta_queue = [];\n		this.update_queue = [];\n		this.sett = {};\n		this.state = {};\n		this.mods = {};\n		this.std_plus = {};\n		this.tf = void 0;\n		this._outputCache = /* @__PURE__ */ new Map();\n		this._dataHash = null;\n		this._hooksCache = {};\n		this._hooksModsKey = null;\n		this._updateTemplate = null;\n		state.send = (...args) => this.send(...args);\n		state.std_inject = (...args) => this.std_inject(...args);\n		state.match_ds = (...args) => this.match_ds(...args);\n		state.set_custom_main = (sym) => {\n			this.custom_main = sym;\n		};\n	}\n	_computationHash(script) {\n		const props = script.src?.props || {};\n		const sett = script.sett || {};\n		const parts = [];\n		if (script.src?.init) parts.push(\"i:\" + script.src.init.toString().length);\n		if (script.src?.update) parts.push(\"u:\" + script.src.update.toString().length);\n		for (const key in props) if (!DISPLAY_ONLY_SETTINGS.has(key)) {\n			const val = props[key].val !== void 0 ? props[key].val : props[key].def;\n			const sv = val !== null && typeof val === \"object\" ? JSON.stringify(val) : String(val);\n			parts.push(`${key}:${sv}`);\n		}\n		for (const key in sett) if (!DISPLAY_ONLY_SETTINGS.has(key)) {\n			const sv = sett[key] !== null && typeof sett[key] === \"object\" ? JSON.stringify(sett[key]) : String(sett[key]);\n			parts.push(`s.${key}:${sv}`);\n		}\n		return parts.sort().join(\"|\");\n	}\n	_computeDataHash() {\n		const ohlcv = this.data?.ohlcv?.data;\n		if (!ohlcv || !ohlcv.length) return \"\";\n		return `${ohlcv.length}:${ohlcv[0]?.[0]}:${ohlcv[ohlcv.length - 1]?.[0]}`;\n	}\n	_isDisplayOnlyChange(delta, scriptId) {\n		if (!delta || !delta[scriptId]) return false;\n		const changes = delta[scriptId];\n		for (const key in changes) if (!DISPLAY_ONLY_SETTINGS.has(key)) return false;\n		return true;\n	}\n	_restoreFromCache(scriptId) {\n		const cached = this._outputCache.get(scriptId);\n		if (!cached) return false;\n		const script = this.map[scriptId];\n		if (!script || !script.env) return false;\n		script.env.data = cached.data.slice();\n		script.env.onchart = fastDeepCopy(cached.onchart || {});\n		script.env.offchart = fastDeepCopy(cached.offchart || {});\n		return true;\n	}\n	_saveToCache(scriptId) {\n		const script = this.map[scriptId];\n		if (!script || !script.env) return;\n		if (this._outputCache.size > 50) {\n			const firstKey = this._outputCache.keys().next().value;\n			this._outputCache.delete(firstKey);\n		}\n		const hash = this._computationHash(script);\n		this._outputCache.set(scriptId, {\n			hash,\n			dataHash: this._dataHash,\n			data: script.env.data.slice(),\n			onchart: fastDeepCopy(script.env.onchart || {}),\n			offchart: fastDeepCopy(script.env.offchart || {})\n		});\n	}\n	_isCacheValid(scriptId) {\n		const cached = this._outputCache.get(scriptId);\n		if (!cached) return false;\n		const script = this.map[scriptId];\n		if (!script) return false;\n		if (cached.dataHash !== this._dataHash) return false;\n		const currentHash = this._computationHash(script);\n		return cached.hash === currentHash;\n	}\n	syncState() {\n		state.t = this.t;\n		state.tf = this.tf;\n		state.iter = this.iter;\n		state.data = this.data;\n		state.shared = this.shared;\n		state.mods = this.mods;\n		state.tss = this.tss;\n		state.std_plus = this.std_plus;\n		state.open = this.open;\n		state.high = this.high;\n		state.low = this.low;\n		state.close = this.close;\n		state.vol = this.vol;\n	}\n	exec_all() {\n		clearTimeout(this.exec_id);\n		if (!this.data.ohlcv) return;\n		this._dataHash = this._computeDataHash();\n		this.exec_id = setTimeout(async () => {\n			if (!this.init_state(Object.keys(this.map))) {\n				this._execAllPending = true;\n				return;\n			}\n			try {\n				this.re_init_map();\n				while (this.queue.length) this.exec(this.queue.shift());\n			} catch (e) {\n				this.running = false;\n				this._onScriptError(\"exec-all\", \"init\", e);\n				return;\n			}\n			if (Object.keys(this.map).length) {\n				await this.run();\n				if (!this._aborted) for (let id in this.map) this._saveToCache(id);\n				this.drain_queues();\n			}\n			this.send_state();\n		}, WAIT_EXEC);\n	}\n	async exec_sel(delta) {\n		if (!this.data.ohlcv) return;\n		let sel = Object.keys(delta).filter((x) => x in this.map);\n		const needsReExec = [];\n		const displayOnlyChanges = [];\n		for (let id of sel) {\n			if (!this.map[id]) continue;\n			if (this._isDisplayOnlyChange(delta, id) && this._isCacheValid(id)) {\n				displayOnlyChanges.push(id);\n				let props = this.map[id].src.props || {};\n				for (let k in props) if (k in delta[id]) props[k].val = delta[id][k];\n			} else needsReExec.push(id);\n		}\n		const applyComputeProps = () => {\n			for (let id of needsReExec) {\n				if (!this.map[id]) continue;\n				let props = this.map[id].src.props || {};\n				for (let k in props) if (k in delta[id]) props[k].val = delta[id][k];\n			}\n		};\n		if (displayOnlyChanges.length > 0) {\n			for (let id of displayOnlyChanges) this._restoreFromCache(id);\n			if (needsReExec.length === 0) {\n				this.send(\"overlay-data\", this.format_map(sel));\n				this.send_state();\n				return;\n			}\n		}\n		const allIds = Object.keys(this.map);\n		const runSel = needsReExec.length && needsReExec.length < allIds.length ? allIds : needsReExec;\n		if (!this.init_state(runSel)) {\n			this.delta_queue.push(delta);\n			return;\n		}\n		applyComputeProps();\n		for (let id of runSel) {\n			if (!this.map[id]) continue;\n			this.exec(this.map[id]);\n		}\n		await this.run(runSel);\n		if (!this._aborted) for (let id of runSel) this._saveToCache(id);\n		this.drain_queues();\n		this.send_state();\n	}\n	exec(s) {\n		if (!s.src.conf) s.src.conf = {};\n		if (s.src.init) s.src.init_src = get_raw_src(s.src.init);\n		if (s.src.update) s.src.upd_src = get_raw_src(s.src.update);\n		if (s.src.post) s.src.post_src = get_raw_src(s.src.post);\n		symstd_default.parse(s);\n		for (let id in this.mods) if (this.mods[id].pre_env) this.mods[id].pre_env(s.uuid, s);\n		s.env = new ScriptEnv(s, Object.assign(this.shared, {\n			open: this.open,\n			high: this.high,\n			low: this.low,\n			close: this.close,\n			vol: this.vol,\n			dss: this.data,\n			t: () => this.t,\n			iter: () => this.iter,\n			tf: this.tf,\n			range: this.range,\n			onclose: true\n		}, this.tss));\n		this.map[s.uuid] = s;\n		this._updateTemplate = null;\n		for (let id in this.mods) if (this.mods[id].new_env) this.mods[id].new_env(s.uuid, s);\n		s.env.build();\n	}\n	update(candles) {\n		if (!this.data.ohlcv || !this.data.ohlcv.data.length) return;\n		if (this.running) {\n			this.update_queue.push(candles);\n			return;\n		}\n		let mfs1 = this.make_mods_hooks(\"pre_step\");\n		let mfs2 = this.make_mods_hooks(\"post_step\");\n		const hasMods1 = mfs1.length > 0;\n		const hasMods2 = mfs2.length > 0;\n		let step = (sel, unshift) => {\n			if (hasMods1) for (let m = 0; m < mfs1.length; m++) mfs1[m](sel);\n			for (let j = 0; j < sel.length; j++) this.map[sel[j]].env.step(unshift);\n			if (hasMods2) for (let m = 0; m < mfs2.length; m++) mfs2[m](sel);\n		};\n		try {\n			let ohlcv = this.data.ohlcv.data;\n			let i = ohlcv.length - 1;\n			let last = ohlcv[i];\n			let sel = Object.keys(this.map);\n			this.shared.event = \"update\";\n			for (let candle of candles) if (candle[0] > last[0]) {\n				this.shared.onclose = true;\n				step(sel, false);\n				ohlcv.push(candle);\n				i++;\n				last = candle;\n				this.iter = i;\n				this.t = candle[0];\n				this.syncState();\n				this.step(candle, true);\n				this.shared.onclose = false;\n				step(sel, true);\n			} else if (candle[0] < last[0]) continue;\n			else {\n				ohlcv[i] = candle;\n				last = candle;\n				this.iter = i;\n				this.t = candle[0];\n				this.syncState();\n				this.step(candle, false);\n				this.shared.onclose = false;\n				step(sel, false);\n			}\n			this.limit();\n			this.send_update();\n			this.send_state();\n		} catch (e) {\n			console.error(\"Script update error:\", e);\n		}\n	}\n	init_state(sel) {\n		let task = sel.join(\",\");\n		if (this.running) {\n			if (task === this.task) this._restart = true;\n			return false;\n		}\n		this.open = TS(\"open\", []);\n		this.high = TS(\"high\", []);\n		this.low = TS(\"low\", []);\n		this.close = TS(\"close\", []);\n		this.vol = TS(\"vol\", []);\n		this.tss = {};\n		this.std_plus = {};\n		this.shared = {};\n		this.iter = 0;\n		this.t = 0;\n		this.skip = false;\n		this.running = true;\n		this._aborted = false;\n		this.task = task;\n		this.syncState();\n		return true;\n	}\n	std_inject(std) {\n		Object.assign(Object.getPrototypeOf(std), this.std_plus);\n		return std;\n	}\n	_onScriptError(id, phase, e) {\n		const scr = this.map[id];\n		const err = {\n			uuid: id,\n			name: scr && scr.name,\n			type: scr && scr.type,\n			phase,\n			message: e && e.message || String(e)\n		};\n		this.send(\"script-error\", err);\n		if (typeof console !== \"undefined\") console.error(`Script \"${err.name || id}\" ${phase} error:`, e);\n	}\n	send_state() {\n		this.send(\"engine-state\", {\n			scripts: Object.keys(this.map).length,\n			last_perf: this.perf,\n			iter: this.iter,\n			last_t: this.t,\n			data_size: this.data_size,\n			running: false\n		});\n	}\n	send_update() {\n		this.send(\"overlay-update\", this.format_update());\n	}\n	re_init_map() {\n		for (let id in this.map) this.exec(this.map[id]);\n	}\n	async run(sel) {\n		this.send(\"engine-state\", { running: true });\n		let t1 = utils_default.now();\n		sel = sel || Object.keys(this.map);\n		this.pre_run_mods(sel);\n		let mfs1 = this.make_mods_hooks(\"pre_step\");\n		let mfs2 = this.make_mods_hooks(\"post_step\");\n		const skip = /* @__PURE__ */ new Set();\n		try {\n			for (let id of sel) try {\n				this.map[id].env.init();\n			} catch (e) {\n				skip.add(id);\n				this._onScriptError(id, \"init\", e);\n			}\n			let ohlcv = this.data.ohlcv.data;\n			let start = this.start(ohlcv);\n			let total = ohlcv.length - start;\n			this.shared.event = \"step\";\n			state.tf = this.tf;\n			state.data = this.data;\n			state.shared = this.shared;\n			state.mods = this.mods;\n			const ohlcvLen = ohlcv.length;\n			const lastIdx = ohlcvLen - 1;\n			const hasMods1 = mfs1.length > 0;\n			const hasMods2 = mfs2.length > 0;\n			const hasCustomMain = !!this.custom_main;\n			const selLen = sel.length;\n			let lastProgress = 0;\n			for (let i = start; i < (hasCustomMain ? ohlcv.length : ohlcvLen); i++) {\n				if (i % YIELD_FREQUENCY === 0) {\n					await utils_default.pause(0);\n					let progress = Math.floor((i - start) / total * 100);\n					if (progress > lastProgress) {\n						lastProgress = progress;\n						this.send(\"engine-state\", {\n							running: true,\n							progress\n						});\n					}\n				}\n				if (this.restarted()) return;\n				const candle = ohlcv[i];\n				this.iter = i - start;\n				this.t = candle[0];\n				state.t = this.t;\n				state.iter = this.iter;\n				this.step(candle);\n				this.shared.onclose = hasCustomMain ? i !== ohlcv.length - 1 : i !== lastIdx;\n				if (hasMods1) for (let m = 0; m < mfs1.length; m++) mfs1[m](sel);\n				for (let j = 0; j < selLen; j++) {\n					const id = sel[j];\n					if (skip.has(id)) continue;\n					try {\n						this.map[id].env.step();\n					} catch (e) {\n						skip.add(id);\n						this._onScriptError(id, \"exec\", e);\n					}\n				}\n				if (hasMods2) for (let m = 0; m < mfs2.length; m++) mfs2[m](sel);\n				if (hasCustomMain) this.make_ohlcv();\n				this.limit();\n			}\n			for (let j = 0; j < selLen; j++) {\n				const id = sel[j];\n				if (skip.has(id)) continue;\n				try {\n					this.map[id].env.output.post();\n				} catch (e) {\n					skip.add(id);\n					this._onScriptError(id, \"post\", e);\n				}\n			}\n		} catch (e) {\n			console.error(\"Script execution error:\", e);\n			this.send(\"script-error\", {\n				uuid: null,\n				phase: \"engine\",\n				message: e && e.message || String(e)\n			});\n		}\n		this.post_run_mods(sel);\n		this.perf = utils_default.now() - t1;\n		this.running = false;\n		this._buildUpdateTemplate();\n		this.send(\"overlay-data\", this.format_map(sel));\n	}\n	step(data, unshift = true) {\n		if (unshift) {\n			this.open.unshift(data[1]);\n			this.high.unshift(data[2]);\n			this.low.unshift(data[3]);\n			this.close.unshift(data[4]);\n			this.vol.unshift(data[5]);\n		} else {\n			this.open[0] = data[1];\n			this.high[0] = data[2];\n			this.low[0] = data[3];\n			this.close[0] = data[4];\n			this.vol[0] = data[5];\n		}\n		for (let id in this.tss) {\n			let ts = this.tss[id];\n			if (ts.__tf__) ts.__fn__();\n			else if (unshift) ts.unshift(ts.__fn__());\n			else ts[0] = ts.__fn__();\n		}\n	}\n	limit() {\n		this.open.length = this.open.__len__ || DEF_LIMIT;\n		this.high.length = this.high.__len__ || DEF_LIMIT;\n		this.low.length = this.low.__len__ || DEF_LIMIT;\n		this.close.length = this.close.__len__ || DEF_LIMIT;\n		this.vol.length = this.vol.__len__ || DEF_LIMIT;\n	}\n	start(ohlcv) {\n		let depth = this.sett.script_depth;\n		return depth ? Math.max(ohlcv.length - depth, 0) : 0;\n	}\n	drain_queues() {\n		if (this.queue.length || this._execAllPending) {\n			this._execAllPending = false;\n			this.exec_all();\n		} else if (this.delta_queue.length) {\n			const merged = {};\n			for (const d of this.delta_queue) for (const id in d) merged[id] = Object.assign(merged[id] || {}, d[id]);\n			this.delta_queue = [];\n			this.exec_sel(merged);\n		} else while (this.update_queue.length) {\n			let c = this.update_queue.shift();\n			this.update(c);\n		}\n	}\n	_bsGTE(arr, t) {\n		let lo = 0, hi = arr.length;\n		while (lo < hi) {\n			let mid = lo + hi >> 1;\n			if (arr[mid][0] < t) lo = mid + 1;\n			else hi = mid;\n		}\n		return lo;\n	}\n	_bsGT(arr, t) {\n		let lo = 0, hi = arr.length;\n		while (lo < hi) {\n			let mid = lo + hi >> 1;\n			if (arr[mid][0] <= t) lo = mid + 1;\n			else hi = mid;\n		}\n		return lo;\n	}\n	_rangeSlice(arr, t1, t2) {\n		if (!arr.length) return arr;\n		let lo = this._bsGTE(arr, t1);\n		let hi = this._bsGT(arr, t2);\n		return lo >= hi ? [] : arr.slice(lo, hi);\n	}\n	format_map(sel, range, output) {\n		sel = sel || Object.keys(this.map);\n		let res = [];\n		for (let id of sel) {\n			let x = this.map[id];\n			let f = (x) => x;\n			if ((x.output === false || x.output === \"none\") && !output) {\n				res.push({\n					id,\n					data: null\n				});\n				continue;\n			}\n			if (x.output === \"range\" || range) {\n				let [t1, t2] = range || this.range;\n				f = (arr) => this._rangeSlice(arr, t1, t2);\n			}\n			res.push({\n				id,\n				data: f(x.env.data),\n				new_ovs: {\n					onchart: ovf(x.env.onchart, f),\n					offchart: ovf(x.env.offchart, f)\n				}\n			});\n		}\n		if (this.custom_main) res.push({\n			id: \"chart\",\n			data: this.data.ohlcv.data\n		});\n		return res;\n	}\n	_buildUpdateTemplate() {\n		let tmpl = [];\n		for (let id in this.map) {\n			let x = this.map[id];\n			if (x.output === false) {\n				tmpl.push({\n					id,\n					src: null\n				});\n				continue;\n			}\n			tmpl.push({\n				id,\n				src: x.env.data\n			});\n			for (let side of [\"onchart\", \"offchart\"]) for (let oid in x.env[side]) tmpl.push({\n				id: `${side}.${oid}`,\n				src: x.env[side][oid].data\n			});\n		}\n		this._updateTemplate = tmpl;\n	}\n	format_update() {\n		let tmpl = this._updateTemplate;\n		if (!tmpl) {\n			this._buildUpdateTemplate();\n			tmpl = this._updateTemplate;\n		}\n		let res = new Array(tmpl.length);\n		for (let i = 0; i < tmpl.length; i++) {\n			let entry = tmpl[i];\n			res[i] = {\n				id: entry.id,\n				data: entry.src ? entry.src[entry.src.length - 1] : null\n			};\n		}\n		return res;\n	}\n	restarted() {\n		if (this._restart) {\n			this._restart = false;\n			this.running = false;\n			this._aborted = true;\n			this.perf = 0;\n			return true;\n		}\n		return false;\n	}\n	remove_scripts(ids) {\n		const dead = new Set(ids);\n		for (let id of ids) {\n			delete this.map[id];\n			this._outputCache.delete(id);\n		}\n		this.queue = this.queue.filter((s) => !dead.has(s.uuid));\n		this.delta_queue = this.delta_queue.map((d) => {\n			const copy = { ...d };\n			for (const id of dead) delete copy[id];\n			return copy;\n		}).filter((d) => Object.keys(d).length);\n		this._updateTemplate = null;\n		this.send_state();\n	}\n	pre_run_mods(sel) {\n		for (let id in this.mods) if (this.mods[id].pre_run) this.mods[id].pre_run(sel);\n	}\n	post_run_mods(sel) {\n		for (let id in this.mods) if (this.mods[id].post_run) this.mods[id].post_run(sel);\n	}\n	make_mods_hooks(name) {\n		let modsKey = Object.keys(this.mods).join(\",\");\n		if (modsKey !== this._hooksModsKey) {\n			this._hooksCache = {};\n			this._hooksModsKey = modsKey;\n		}\n		if (this._hooksCache[name]) return this._hooksCache[name];\n		let arr = [];\n		for (let id in this.mods) if (this.mods[id][name]) arr.push(this.mods[id][name].bind(this.mods[id]));\n		this._hooksCache[name] = arr;\n		return arr;\n	}\n	data_required(s) {\n		let all = Object.values(this.map);\n		if (s) all.push(s);\n		let types = [{ type: \"OHLCV\" }];\n		for (let sc of all) if (sc.src.data) {\n			let reqs = Object.values(sc.src.data);\n			types.push(...reqs.map((x) => ({\n				id: sc.uuid,\n				type: x.type\n			})));\n		}\n		let existing = new Set(Object.values(this.data).map((y) => y.type));\n		let unf = types.filter((x) => !existing.has(x.type));\n		return unf.length ? unf : null;\n	}\n	match_ds(id, type) {\n		for (let dsId in this.data) if (this.data[dsId].type === type) return dsId;\n	}\n	make_ohlcv() {\n		let sym = this.custom_main;\n		let tNext = this.t + this.tf;\n		if (sym.update(null, tNext)) this.data.ohlcv.data.push([\n			tNext,\n			sym.open[0],\n			sym.high[0],\n			sym.low[0],\n			sym.close[0],\n			sym.vol[0]\n		]);\n	}\n	recalc_size() {\n		let sz = 0;\n		let maxIter = 100;\n		while (maxIter-- > 0) {\n			sz = size_of_dss(this.data) / (1024 * 1024);\n			let lim = this.sett.ww_ram_limit;\n			if (lim && sz > lim) this.limit_size();\n			else break;\n		}\n		this.data_size = +sz.toFixed(2);\n		this.send_state();\n	}\n	limit_size() {\n		let dss = Object.values(this.data).map((x) => ({\n			id: x.id,\n			t: x.last_upd\n		}));\n		dss.sort((a, b) => a.t - b.t);\n		let victim = dss.find((d) => d.id !== \"ohlcv\");\n		if (victim) delete this.data[victim.id];\n	}\n};\nvar script_engine_default = new ScriptEngine();\n//#endregion\n//#region src/helpers/dataset.js\nvar DatasetWW = class {\n	constructor(id, data) {\n		this.last_upd = utils_default.now();\n		this.id = id;\n		if (Array.isArray(data)) {\n			this.data = data;\n			if (id === \"ohlcv\") this.type = \"OHLCV\";\n		} else {\n			this.data = data.data;\n			this.type = data.type;\n		}\n	}\n	static update_all(se, data) {\n		for (var k in data) {\n			if (k === \"ohlcv\") continue;\n			let id = k.split(\".\")[1] || k;\n			if (!se.data[id]) continue;\n			let arr = se.data[id].data;\n			let last = arr[arr.length - 1];\n			for (var dp of data[k]) if (!last || dp[0] > last[0]) arr.push(dp);\n			se.data[id].last_upd = utils_default.now();\n		}\n	}\n	merge(data) {\n		let len = this.data.length;\n		if (!len) {\n			this.data = data;\n			return;\n		}\n		let t0 = this.data[0][0];\n		let tN = this.data[len - 1][0];\n		let l = data.filter((x) => x[0] < t0);\n		let r = data.filter((x) => x[0] > tN);\n		this.data = l.concat(this.data, r);\n	}\n	op(se, op) {\n		this.last_upd = utils_default.now();\n		switch (op.type) {\n			case \"set\":\n				this.data = op.data;\n				se.recalc_size();\n				break;\n			case \"del\":\n				delete se.data[this.id];\n				se.recalc_size();\n				break;\n			case \"mrg\":\n				this.merge(op.data);\n				se.recalc_size();\n				break;\n		}\n	}\n};\n//#endregion\n//#region src/helpers/schema/diagnostics.js\n/**\n* @typedef {Object} Diagnostic\n* @property {'error'|'warn'} level\n* @property {string} code   - stable machine code, e.g. 'ohlcv.row.shape'\n* @property {string} message- human-readable explanation\n* @property {string} [path] - location, e.g. 'chart.data[42]'\n*/\n/** Make a diagnostic. */\nfunction diag(level, code, message, path) {\n	return path !== void 0 ? {\n		level,\n		code,\n		message,\n		path\n	} : {\n		level,\n		code,\n		message\n	};\n}\nconst error = (code, message, path) => diag(\"error\", code, message, path);\nconst warn = (code, message, path) => diag(\"warn\", code, message, path);\n/** True if any diagnostic is error-level. */\nfunction hasErrors(diagnostics) {\n	for (const d of diagnostics) if (d.level === \"error\") return true;\n	return false;\n}\n/** One-line human summary of a diagnostic list (capped). */\nfunction formatDiagnostics(diagnostics, cap = 8) {\n	const shown = diagnostics.slice(0, cap).map((d) => `  [${d.level}] ${d.code}${d.path ? ` @ ${d.path}` : \"\"}: ${d.message}`);\n	const extra = diagnostics.length > cap ? `\\n  …and ${diagnostics.length - cap} more` : \"\";\n	return shown.join(\"\\n\") + extra;\n}\n/**\n* Report diagnostics according to `mode`:\n*   'off'    - do nothing\n*   'warn'   - console.warn errors+warnings (default; non-breaking)\n*   'strict' - throw on any error-level diagnostic (after logging)\n*\n* Returns the (possibly filtered) diagnostics so callers can also surface them\n* on an event bus. Never throws in 'warn'/'off'.\n*\n* @param {Diagnostic[]} diagnostics\n* @param {'off'|'warn'|'strict'} mode\n* @param {string} context - label for the log line, e.g. 'OHLCV data'\n*/\nfunction report(diagnostics, mode = \"warn\", context = \"data\") {\n	if (!diagnostics || !diagnostics.length || mode === \"off\") return diagnostics;\n	const header = `[trading-vue] ${context}: ${diagnostics.length} validation issue(s)`;\n	const body = formatDiagnostics(diagnostics);\n	if (mode === \"strict\" && hasErrors(diagnostics)) {\n		if (typeof console !== \"undefined\") console.error(header + \"\\n\" + body);\n		const err = /* @__PURE__ */ new Error(`${header} (strict mode)\\n${body}`);\n		err.diagnostics = diagnostics;\n		throw err;\n	}\n	if (typeof console !== \"undefined\") (hasErrors(diagnostics) ? console.error : console.warn)(header + \"\\n\" + body);\n	return diagnostics;\n}\n//#endregion\n//#region src/helpers/schema/worker-messages.js\nconst DC_TO_WW_TYPES = new Set([\n	\"update-dc-settings\",\n	\"exec-script\",\n	\"exec-all-scripts\",\n	\"upload-data\",\n	\"upload-module\",\n	\"module-event\",\n	\"update-data\",\n	\"get-dataset\",\n	\"dataset-op\",\n	\"update-ov-settings\",\n	\"send-meta-info\",\n	\"remove-scripts\"\n]);\n/**\n* Validate an inbound worker message envelope.\n* Returns { ok, diagnostics }. `ok:false` => caller should NOT dispatch it.\n* An unknown (but well-formed) type is a warning, not a hard error, so the\n* protocol can be extended without bricking older workers.\n*\n* @param {any} data - the `e.data` from onmessage\n*/\nfunction validateWorkerMessage(data) {\n	const out = [];\n	if (data == null || typeof data !== \"object\") {\n		out.push(error(\"ww.msg.shape\", `worker message is not an object: ${typeof data}`));\n		return {\n			ok: false,\n			diagnostics: out\n		};\n	}\n	if (typeof data.type !== \"string\" || !data.type) {\n		out.push(error(\"ww.msg.type\", \"worker message missing string `type`\"));\n		return {\n			ok: false,\n			diagnostics: out\n		};\n	}\n	if (!DC_TO_WW_TYPES.has(data.type)) {\n		out.push(warn(\"ww.msg.unknown\", `unknown worker message type \"${data.type}\"`));\n		return {\n			ok: true,\n			diagnostics: out\n		};\n	}\n	if (data.type !== \"exec-all-scripts\" && data.type !== \"send-meta-info\" && data.type !== \"module-event\" && data.data === void 0) {\n		out.push(error(\"ww.msg.payload\", `message \"${data.type}\" missing \\`data\\` payload`));\n		return {\n			ok: false,\n			diagnostics: out\n		};\n	}\n	return {\n		ok: true,\n		diagnostics: out\n	};\n}\n//#endregion\n//#region src/helpers/script_dispatch.js\n/**\n* Wire engine -> DC events. The engine calls `se.send(type, data)`; we forward\n* the whitelisted event types to `post` as a `{type, data}` envelope.\n* @param {object} se   - a ScriptEngine instance\n* @param {(msg:any)=>void} post - delivers a message to the DC side\n*/\nfunction wireEngineEvents(se, post) {\n	se.send = (type, data) => {\n		switch (type) {\n			case \"overlay-data\":\n			case \"overlay-update\":\n			case \"engine-state\":\n			case \"modify-overlay\":\n			case \"module-data\":\n			case \"script-signal\":\n			case \"script-error\":\n				post({\n					type,\n					data\n				});\n				break;\n		}\n	};\n}\n/**\n* Build the DC -> engine message dispatcher.\n* @param {object} se   - a ScriptEngine instance\n* @param {(msg:any)=>void} post - delivers a message to the DC side\n* @returns {(msg:any)=>Promise<void>} dispatch(msg)\n*/\nfunction makeDispatcher(se, post) {\n	let data_requested = false;\n	return async function dispatch(msg) {\n		const guard = validateWorkerMessage(msg);\n		if (guard.diagnostics.length) report(guard.diagnostics, \"warn\", \"worker message\");\n		if (!guard.ok) return;\n		switch (msg.type) {\n			case \"update-dc-settings\":\n				se.sett = msg.data;\n				break;\n			case \"exec-script\": {\n				let req = se.data_required(msg.data.s);\n				if (req && !data_requested) {\n					data_requested = true;\n					post({\n						type: \"request-data\",\n						data: req\n					});\n				}\n				se.tf = tf_from_str(msg.data.tf);\n				se.range = msg.data.range;\n				se.queue.push(msg.data.s);\n				se.exec_all();\n				break;\n			}\n			case \"exec-all-scripts\": {\n				let req2 = se.data_required(msg.data && msg.data.s);\n				if (req2 && !data_requested) {\n					data_requested = true;\n					post({\n						type: \"request-data\",\n						data: req2\n					});\n				}\n				se.tf = tf_from_str(msg.data && msg.data.tf);\n				se.range = msg.data && msg.data.range;\n				se.exec_all();\n				break;\n			}\n			case \"upload-data\":\n				post({ type: \"data-uploaded\" });\n				await utils_default.pause(1);\n				for (let id in msg.data) {\n					let data = msg.data[id];\n					se.data[id] = new DatasetWW(id, data);\n				}\n				se.recalc_size();\n				data_requested = false;\n				se.exec_all();\n				break;\n			case \"upload-module\": {\n				let lib = make_module_lib(msg.data);\n				se.mods[msg.data.id] = new new Function(\"mod\", \"se\", \"lib\", f_body(msg.data.main))(msg.data.id, se, lib);\n				break;\n			}\n			case \"module-event\": break;\n			case \"update-data\":\n				DatasetWW.update_all(se, msg.data);\n				if (msg.data.ohlcv) se.update(msg.data.ohlcv);\n				break;\n			case \"get-dataset\":\n				post({\n					id: msg.id,\n					data: se.data[msg.data]\n				});\n				break;\n			case \"dataset-op\":\n				await utils_default.pause(1);\n				if (msg.data.id in se.data) se.data[msg.data.id].op(se, msg.data);\n				if (msg.data.exec) se.exec_all();\n				break;\n			case \"update-ov-settings\":\n				se.tf = tf_from_str(msg.data.tf);\n				se.range = msg.data.range;\n				se.exec_sel(msg.data.delta);\n				break;\n			case \"send-meta-info\":\n				se.tf = tf_from_str(msg.data && msg.data.tf);\n				se.range = msg.data && msg.data.range;\n				break;\n			case \"remove-scripts\":\n				se.remove_scripts(msg.data);\n				break;\n		}\n	};\n}\n//#endregion\n//#region src/helpers/script_ww.js\nconst wwGlobal = typeof self !== \"undefined\" ? self : globalThis;\nwireEngineEvents(script_engine_default, (msg) => wwGlobal.postMessage(msg));\nconst dispatch = makeDispatcher(script_engine_default, (msg) => wwGlobal.postMessage(msg));\nwwGlobal.onmessage = (e) => dispatch(e.data).catch((err) => console.error(\"[ScriptWorker] dispatch failed:\", err));\n//#endregion\n\n//# sourceMappingURL=script_ww-BwN4v1AY.js.map";
 	var blob = typeof self !== "undefined" && self.Blob && new Blob(["URL.revokeObjectURL(import.meta.url);", jsContent], { type: "text/javascript;charset=utf-8" });
 	function WorkerWrapper(options) {
 		let objURL;
@@ -24209,13 +24523,16 @@ pointers: 1 },
 	}
 	//#endregion
 	//#region src/helpers/script_ww_api.js
-	function deepToRaw(obj) {
+	function deepToRaw(obj, seen) {
 		if (obj === null || typeof obj !== "object") return obj;
-		if (obj instanceof Date || obj instanceof RegExp) return obj;
+		if (obj instanceof Date || obj instanceof RegExp || obj instanceof Map || obj instanceof Set || obj instanceof ArrayBuffer || ArrayBuffer.isView(obj)) return obj;
 		if (/* @__PURE__ */ isReactive(obj) || /* @__PURE__ */ isRef(obj)) obj = /* @__PURE__ */ toRaw(obj);
-		if (Array.isArray(obj)) return obj.map((item) => deepToRaw(item));
+		if (!seen) seen = /* @__PURE__ */ new WeakSet();
+		if (seen.has(obj)) return obj;
+		seen.add(obj);
+		if (Array.isArray(obj)) return obj.map((item) => deepToRaw(item, seen));
 		const result = {};
-		for (const key in obj) if (Object.prototype.hasOwnProperty.call(obj, key)) result[key] = deepToRaw(obj[key]);
+		for (const key in obj) if (Object.prototype.hasOwnProperty.call(obj, key)) result[key] = deepToRaw(obj[key], seen);
 		return result;
 	}
 	var WebWork = class {
@@ -24492,6 +24809,12 @@ pointers: 1 },
 				case "remove-tool":
 					this.system_tool("Remove");
 					break;
+				case "submit-orders":
+					this.submit_orders(args);
+					break;
+				case "cancel-orders":
+					this.cancel_orders(args);
+					break;
 				case "before-destroy":
 					this.before_destroy();
 					break;
@@ -24711,6 +25034,23 @@ pointers: 1 },
 			delete settings.id;
 			args[1];
 			this.merge(`${args[3]}.settings`, settings);
+			if (typeof this.touchData === "function") this.touchData();
+		}
+		submit_orders(args) {
+			if (!this.orderAgent) return;
+			const uuid = args[args.length - 1];
+			for (const side of ["onchart", "offchart"]) for (const ov of this.data[side] || []) if (ov.settings && ov.settings.$uuid === uuid) {
+				this.orderAgent.submit(ov.settings);
+				return;
+			}
+		}
+		cancel_orders(args) {
+			if (!this.orderAgent) return;
+			const uuid = args[args.length - 1];
+			for (const side of ["onchart", "offchart"]) for (const ov of this.data[side] || []) if (ov.settings && ov.settings.$uuid === uuid) {
+				this.orderAgent.cancel(ov.settings);
+				return;
+			}
 		}
 		on_scroll_lock(flag) {
 			this.data["scrollLock"] = flag;
@@ -24773,7 +25113,8 @@ pointers: 1 },
 		}
 		get_overlay(obj) {
 			let id = obj.id || `g${obj.grid_id}_${obj.layer_id}`;
-			let dcid = obj.uuid || this.gldc[id];
+			let dcid = obj.uuid || this.gldc && this.gldc[id];
+			if (dcid == null) return void 0;
 			return this.get_one(`${dcid}`);
 		}
 	};
@@ -24829,7 +25170,7 @@ pointers: 1 },
 		let side = tuple[0];
 		let path = tuple[1] || "";
 		let field = tuple[2];
-		let arr = data[side].filter((x) => x.id === query || x.id && x.id.includes(path) || x.name === query || x.name && x.name.includes(path) || query.includes((x.settings || {}).$uuid));
+		let arr = data[side].filter((x) => x.id === query || x.id && x.id.includes(path) || x.name === query || x.name && x.name.includes(path) || (x.settings || {}).$uuid != null && query.includes(x.settings.$uuid));
 		if (field) return arr.map((x) => ({
 			p: x,
 			i: field,
@@ -24923,12 +25264,12 @@ pointers: 1 },
 		let id21 = binarySearchGTE(arr2, t1);
 		let id22 = binarySearchLTE(arr2, t2);
 		if (id11 === -1 || id12 === -1 || id11 > id12) {
-			id11 = 0;
-			id12 = -1;
+			id11 = id11 === -1 ? arr1.length : id11;
+			id12 = id11 - 1;
 		}
 		if (id21 === -1 || id22 === -1 || id21 > id22) {
-			id21 = 0;
-			id22 = -1;
+			id21 = id21 === -1 ? arr2.length : id21;
+			id22 = id21 - 1;
 		}
 		for (let i = id11; i <= id12 && i < arr1.length; i++) ts.set(arr1[i][0], arr1[i]);
 		for (let i = id21; i <= id22 && i < arr2.length; i++) ts.set(arr2[i][0], arr2[i]);
@@ -24952,11 +25293,11 @@ pointers: 1 },
 			o = [];
 		}
 		if (src[0][0] >= dst[0][0] && last(src) <= last(dst)) return Object.assign(dst, o);
-		else if (last(src) > last(dst)) if (o.length < 1e5 && src.length < 1e5) {
+		else if (last(src) > last(dst)) if (o.length + src.length < 6e4) {
 			dst.push(...o, ...src);
 			return dst;
 		} else return dst.concat(o, src);
-		else if (src[0][0] < dst[0][0]) if (o.length < 1e5 && src.length < 1e5) {
+		else if (src[0][0] < dst[0][0]) if (o.length + dst.length < 6e4) {
 			src.push(...o, ...dst);
 			return src;
 		} else return src.concat(o, dst);
@@ -25083,17 +25424,20 @@ pointers: 1 },
 			this._ctx.updateIds();
 		}
 		merge(query, data) {
-			for (var obj of this.query(query)) if (Array.isArray(obj.v)) {
+			let objects = this.query(query);
+			const multi = objects.length > 1 && Array.isArray(data);
+			for (var obj of objects) if (Array.isArray(obj.v)) {
 				if (!Array.isArray(data)) continue;
-				if (obj.v[0] && obj.v[0].length >= 2) mergeTs(obj, data);
-				else mergeObjects(obj, data, []);
+				const chunk = multi ? data.map((r) => Array.isArray(r) ? r.slice() : r) : data;
+				if (obj.v[0] && obj.v[0].length >= 2) mergeTs(obj, chunk);
+				else mergeObjects(obj, chunk, []);
 			} else if (typeof obj.v === "object") mergeObjects(obj, data);
 			this._ctx.updateIds();
 		}
 		del(query) {
 			for (var obj of this.query(query)) {
 				let i = typeof obj.i !== "number" ? obj.i : obj.p.indexOf(obj.v);
-				if (i !== -1) obj.p.splice(i, 1);
+				if (typeof i === "number" && i !== -1 && Array.isArray(obj.p)) obj.p.splice(i, 1);
 			}
 			this._ctx.updateIds();
 		}
@@ -25168,6 +25512,7 @@ pointers: 1 },
 			if (!this.data.chart.settings) this.data.chart["settings"] = {};
 			delete this.data.ohlcv;
 			if (!("datasets" in this.data)) this.data["datasets"] = [];
+			if (!this.dss) this.dss = {};
 			for (let ds of this.data.datasets) {
 				if (!this.dss) this.dss = {};
 				this.dss[ds.id] = new Dataset(this, ds);
@@ -25210,10 +25555,15 @@ pointers: 1 },
 					range = range.slice();
 					range[0] = Math.floor(range[0]);
 					range[1] = Math.floor(first);
-					let prom = this.loader(range, tf, (d) => {
-						this.chunk_loaded(d);
-					});
-					if (prom && prom.then) this.chunk_loaded(await prom);
+					try {
+						let prom = this.loader(range, tf, (d) => {
+							this.chunk_loaded(d);
+						});
+						if (prom && prom.then) this.chunk_loaded(await prom);
+					} catch (e) {
+						this.loading = false;
+						console.warn("DataCube loader failed:", e);
+					}
 				}
 			}
 			if (!check) this.last_chunk = [range, tf];
@@ -25261,12 +25611,12 @@ pointers: 1 },
 		}
 		update_candle(data) {
 			let ohlcv = this.data.chart.data;
-			if (!ohlcv.length) return false;
 			let last = ohlcv[ohlcv.length - 1];
 			let candle = data["candle"];
 			let tf = this.tv.$refs.chart.interval_ms;
-			let t_next = last[0] + tf;
+			if (!last && !(candle && candle.length >= 6)) return false;
 			let now = data.t || utils_default.now();
+			let t_next = last ? last[0] + tf : now - now % tf;
 			let t = now >= t_next ? now - now % tf : last[0];
 			if (candle.length >= 6) t = candle[0];
 			else candle = [t, ...candle];
@@ -25277,7 +25627,6 @@ pointers: 1 },
 		update_tick(data) {
 			let ohlcv = this.data.chart.data;
 			let last = ohlcv[ohlcv.length - 1];
-			if (!last && !ohlcv.length) return false;
 			let tick = data["price"];
 			let volume = data["volume"] || 0;
 			let tf = this.tv.$refs.chart.interval_ms;
@@ -25873,7 +26222,20 @@ pointers: 1 },
 		};
 		if (def.calc) methods.calc = def.calc;
 		if (def.tool) methods.tool = function() {
-			return def.tool;
+			const t = def.tool;
+			const copy = {
+				...t,
+				data: (t.data || []).slice(),
+				settings: { ...t.settings || {} }
+			};
+			if (t.mods) {
+				copy.mods = {};
+				for (const k in t.mods) {
+					copy.mods[k] = { ...t.mods[k] };
+					if (t.mods[k] && t.mods[k].settings) copy.mods[k].settings = { ...t.mods[k].settings };
+				}
+			}
+			return copy;
 		};
 		if (def.init) methods.init = def.init;
 		if (def.destroy) methods.destroy = def.destroy;

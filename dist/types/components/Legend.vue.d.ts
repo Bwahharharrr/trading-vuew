@@ -33,6 +33,8 @@ declare const __VLS_export: import("vue").DefineComponent<{
     openVolumeSettings(): void;
     volume_button_click(event: any): void;
     toggleVolumeDetach(): void;
+    isDetachedVolume(ind: any): any;
+    reattachVolume(): void;
 }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, {}, string, import("vue").PublicProps, Readonly<{
     grid_id?: any;
     common?: any;

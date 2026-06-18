@@ -1,27 +1,31 @@
 declare const _default: typeof __VLS_export;
 export default _default;
-declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
-    price: {};
-}, {
-    show_volume(): any;
-    price_line(): any;
-    colorCandleUp(): any;
-    colorCandleDw(): any;
-    colorWickUp(): any;
-    colorWickDw(): any;
-    colorWickSm(): any;
-    colorVolUp(): any;
-    colorVolDw(): any;
+declare const __VLS_export: import("vue").DefineComponent<{}, {}, {}, {
+    default_font(): string;
+    color(): any;
+    stroke(): any;
+    marker_size(): number;
+    line_width(): number;
+    shape(): any;
+    show_label(): boolean;
+    label_color(): any;
+    new_font(): any;
 }, {
     meta_info(): {
         author: string;
         version: string;
+        desc: string;
     };
-    init(): void;
-    _init_price(): void;
     draw(ctx: any): void;
+    draw_marker(ctx: any, x: any, y: any, r: any): void;
     use_for(): string[];
-    y_range(): number[];
+    legend(values: any): ({
+        value: string;
+        color: any;
+    } | {
+        value: string;
+        color?: undefined;
+    })[];
 }, {
     props: string[];
     mounted(): void;

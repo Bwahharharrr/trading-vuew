@@ -22,7 +22,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         required: true;
     };
 }>, {}, {
-    selectedType: string;
+    selectedType: any;
     lineColor: any;
     colorUp: any;
     colorDown: any;
@@ -32,7 +32,10 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         label: string;
         icon: string;
     }[];
-}, {}, {
+}, {
+    isVolume(): boolean;
+    isAttachedVolume(): boolean;
+}, {
     selectType(type: any): void;
     updateColors(): void;
     emitSettings(): void;

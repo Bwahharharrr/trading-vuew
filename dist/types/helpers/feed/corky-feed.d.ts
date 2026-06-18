@@ -15,6 +15,9 @@ export class CorkyFeed extends FeedSource {
     subscribeTimeoutMs: any;
     _subCounter: number;
     _subs: Map<any, any>;
+    _activeSubId: string | null;
+    _offClientEvents: (() => void)[];
+    _everOpened: boolean;
     _nextSubscriptionId(): string;
     /**
      * List the candle-state catalog (venues/symbols/timeframes/indicators)
@@ -43,7 +46,8 @@ export class CorkyFeed extends FeedSource {
         onError?: (e: any) => void;
     }): Promise<object>;
     _onSubscriptionEvent(handle: any, event: any, onStatus: any, onError: any): void;
-    _finishHistory(handle: any): void;
+    _finishHistory(handle: any, onError?: () => void): boolean;
+    _reapplyEnabled(handle: any): void;
     /**
      * Show/hide every overlay of a given indicator KIND in the DataCube,
      * WITHOUT re-subscribing — the data is already loaded and kept fresh on
@@ -59,14 +63,33 @@ export class CorkyFeed extends FeedSource {
      * @param {string} kind   - indicator kind (e.g. 'MACD'); matched against
      *                          settings.corkyKind.
      * @param {boolean} on    - enable (show) or disable (hide).
+     * @param {string} [instance] - the UNIQUE indicator instance = its
+     *   display_label (e.g. 'SCMR' vs 'SCMR(INV)'). `kindOf` collapses these two
+     *   to the same 'SCMR', which would let one's candle colouring overwrite the
+     *   other; pass the display_label so candle colour is keyed by the distinct
+     *   instance. Optional — omitted callers fall back to kind matching.
      * @returns {boolean} whether this kind actually has overlays in the loaded
      *   data (so the caller knows whether the toggle was meaningful).
      */
-    setIndicatorEnabled(handle: object, kind: string, on: boolean): boolean;
+    setIndicatorEnabled(handle: object, kind: string, on: boolean, instance?: string): boolean;
+    _applyCandleColor(handle: any, kind: any, on: any, instance?: null): boolean;
+    /**
+     * Show/hide a single view LAYER (for opt-in of hidden layers like TL/TH/
+     * diagnostics). Matches built overlays by settings.corkyLayerId and add/
+     * removes them by object identity (NOT dc.del — substring-id hazard).
+     * @returns {boolean} whether any overlay matched the layer.
+     */
+    setLayerEnabled(handle: any, layerId: any, on: any, instance?: null): boolean;
+    _addOverlay(dc: any, pane: any, ov: any): void;
+    _normalizeOffchartGrids(handle: any): void;
     _removeOverlay(dc: any, ov: any): void;
     /** Indicator kinds currently shown in the DataCube for a handle. */
     enabledKinds(handle: any): Set<any>;
-    _applyLive(handle: any, event: any, onStatus: any): void;
+    _applyLive(handle: any, event: any, onStatus: any, onError?: () => void): void;
+    _debugLive(event: any, res: any, handle: any): void;
+    _onClientOpen(): void;
+    _reissue(handle: any): void;
+    _onReconnectExhausted(info: any): void;
     _clearHandle(h: any): void;
     /**
      * Stop a stream and release its routing.

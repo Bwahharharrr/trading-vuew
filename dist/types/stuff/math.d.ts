@@ -5,6 +5,11 @@ declare namespace _default {
     function tri(p1: any, p2: any, p3: any): {
         area: number;
         base: number;
+        degenerate: number;
+    } | {
+        area: number;
+        base: number;
+        degenerate?: undefined;
     };
     function area(p1: any, p2: any, p3: any): number;
     function tri_h(area: any, base: any): number;

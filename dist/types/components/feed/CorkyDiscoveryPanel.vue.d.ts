@@ -24,6 +24,9 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
 }>, {}, {
     query: string;
     activeCategory: string;
+    collapsedVenues: Set<any>;
+    expandedSymbols: Set<any>;
+    addingFor: null;
 }, {
     categoryFilters(): {
         value: string;
@@ -40,7 +43,10 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     symbolCount(): number;
     hasProgress(): boolean;
     progressPct(): number;
-    progressText(): string;
+    progressLabel(): any;
+    progressStatusText(): string;
+    progressText(): any;
+    standardTimeframes(): string[];
     errorMessage(): any;
 }, {
     categoryLabel(cat: any): any;
@@ -50,12 +56,22 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     isSymbolActive(row: any): boolean;
     isCurrent(row: any, tf: any): boolean;
     isIndicatorOn(row: any, ind: any): boolean;
+    toggleableLayers(ind: any): any;
+    isLayerOn(row: any, ind: any, layer: any): boolean;
+    onToggleLayer(row: any, ind: any, layer: any): void;
     badgeText(tf: any): "pending" | "stale" | "ready";
     badgeClass(tf: any): "badge-pending" | "badge-stale" | "badge-ready";
     onSelectTimeframe(row: any, tf: any): void;
-    onAddTimeframe(row: any): void;
+    isVenueExpanded(venue: any): boolean;
+    toggleVenue(venue: any): void;
+    isSymbolExpanded(key: any): boolean;
+    toggleSymbol(key: any): void;
+    availableTimeframes(row: any): string[];
+    toggleAddPicker(row: any): void;
+    onAddTimeframe(row: any, timeframe: any): void;
+    closePickerIfNeeded(): void;
     onToggleIndicator(row: any, ind: any): void;
-}, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("select" | "add-timeframe" | "toggle-indicator" | "retry")[], "select" | "add-timeframe" | "toggle-indicator" | "retry", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+}, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("select" | "add-timeframe" | "toggle-indicator" | "toggle-layer" | "retry")[], "select" | "add-timeframe" | "toggle-indicator" | "toggle-layer" | "retry", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
     states: {
         type: ArrayConstructor;
         default: () => never[];
@@ -80,11 +96,12 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     onSelect?: ((...args: any[]) => any) | undefined;
     "onAdd-timeframe"?: ((...args: any[]) => any) | undefined;
     "onToggle-indicator"?: ((...args: any[]) => any) | undefined;
+    "onToggle-layer"?: ((...args: any[]) => any) | undefined;
     onRetry?: ((...args: any[]) => any) | undefined;
 }>, {
     error: Record<string, any>;
+    current: Record<string, any>;
     progress: Record<string, any>;
     states: unknown[];
-    current: Record<string, any>;
     loading: boolean;
 }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;

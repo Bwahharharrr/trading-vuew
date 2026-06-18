@@ -55,9 +55,9 @@ export default class Grid {
         r: any;
     } | null | undefined;
     _pressTimeout: NodeJS.Timeout | undefined;
-    gesturestart(event: any): void;
-    gesturechange(event: any): void;
-    gestureend(event: any): void;
+    _gesturestart: ((event: any) => any) | undefined;
+    _gesturechange: ((event: any) => any) | undefined;
+    _gestureend: ((event: any) => any) | undefined;
     mousemove(event: any): void;
     mouseout(event: any): void;
     mouseup(event: any): void;
@@ -78,6 +78,7 @@ export default class Grid {
     del_layer(id: any): void;
     show_hide_layer(event: any): void;
     update(): void;
+    markStaticDirty(): void;
     propagate(name: any, event: any): void;
     change_range(): void;
     destroy(): void;

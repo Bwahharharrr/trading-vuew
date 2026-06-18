@@ -12,6 +12,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {}, {
         version: string;
     };
     draw(ctx: any): void;
+    draw_line(ctx: any, style: any): void;
     use_for(): string[];
     legend(values: any): {
         value: any;
@@ -42,4 +43,15 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {}, {
     render(): import("vue").VNode<import("vue").RendererNode, import("vue").RendererElement, {
         [key: string]: any;
     }>;
+} | {
+    methods: {
+        drawDataLine(ctx: CanvasRenderingContext2D, data: any[], index?: number, skipNaN?: boolean): void;
+        drawStepLine(ctx: CanvasRenderingContext2D, data: any[], index?: number): void;
+        drawBandFill(ctx: CanvasRenderingContext2D, data: any[], topIndex: number, bottomIndex: number): void;
+        drawMultiLines(ctx: CanvasRenderingContext2D, data: any[], indices: any[], skipNaN?: boolean): void;
+        setupStroke(ctx: CanvasRenderingContext2D, width: number, color: string): void;
+        setupFillAndStroke(ctx: CanvasRenderingContext2D, strokeWidth: number, strokeColor: string, fillColor: string): void;
+        iterateData(data: any[], callback: Function, options?: Object): void;
+        pointToScreen(point: any[], index?: number): any[];
+    };
 }, import("vue").ComponentOptionsMixin, {}, string, import("vue").PublicProps, Readonly<{}> & Readonly<{}>, {}, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;

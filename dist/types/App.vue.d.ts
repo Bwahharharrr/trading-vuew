@@ -2,7 +2,7 @@ declare const _default: typeof __VLS_export;
 export default _default;
 declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     chart: DataCube;
-    overlays: {
+    overlays: import("vue").Raw<{
         name: string;
         mixins: {
             props: string[];
@@ -34,28 +34,300 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             use_for(): string[];
         };
         computed: {};
-    }[];
+    } | import("vue").DefineComponent<{}, {}, {}, {
+        side(): "sell" | "buy";
+        visible(): boolean;
+        orders(): any;
+        color_buy(): any;
+        color_sell(): any;
+        fill_buy(): any;
+        fill_sell(): any;
+        font11(): string;
+    }, {
+        meta_info(): {
+            author: string;
+            version: string;
+        };
+        use_for(): string[];
+        init(): void;
+        destroy(): void;
+        watch_uuid(n: any, p: any): void;
+        corner(i: any): any;
+        box_rect(): {
+            xL: number;
+            xR: number;
+            yT: number;
+            yB: number;
+        } | null;
+        order_geometry(ctx: any, r: any): {
+            eye: {
+                x: any;
+                y: any;
+                w: number;
+                h: number;
+            };
+            cog: {
+                x: any;
+                y: any;
+                w: number;
+                h: number;
+            };
+            submit: {
+                x: any;
+                y: any;
+                w: number;
+                h: number;
+                st: {
+                    label: string;
+                    color: any;
+                    submittable: any;
+                };
+            };
+            rows: {
+                id: any;
+                size: any;
+                status: any;
+                y: any;
+                xL: any;
+                xR: any;
+                widget: {
+                    x: number;
+                    y: number;
+                    w: number;
+                    h: number;
+                };
+                grab: {
+                    x: number;
+                    y: number;
+                    w: number;
+                    h: number;
+                };
+                del: {
+                    x: number;
+                    y: number;
+                    w: number;
+                    h: number;
+                };
+            }[];
+            resize: any[];
+        };
+        order_status(): {
+            label: string;
+            color: any;
+            submittable: any;
+        };
+        order_type_label(): any;
+        has_submittable(): any;
+        order_summary(): {
+            count: any;
+            origQty: any;
+            origSize: any;
+            totalSize: number;
+            filledCount: number;
+            filledSize: number;
+            avgPrice: number | null;
+        } | null;
+        has_live_orders(): any;
+        remove_tool(): void;
+        draw(ctx: any): void;
+        draw_ghost(ctx: any, color: any): void;
+        draw_resize_handles(ctx: any, handles: any, color: any): void;
+        draw_order(ctx: any, row: any, color: any): void;
+        draw_summary(ctx: any, r: any): void;
+        draw_cog(ctx: any, c: any, color: any, locked?: boolean): void;
+        draw_dist_curve(ctx: any, r: any, color: any): void;
+        draw_eye(ctx: any, e: any, open: any, color: any): void;
+        draw_submit(ctx: any, s: any): void;
+        on_mousedown(e: any): void;
+        on_mousemove(): void;
+        drag_update(): void;
+        set_cursor(c: any): void;
+        update_cursor(): void;
+        on_boundary(r: any, x: any, y: any): boolean;
+        on_mouseup(): void;
+        set_orders(mapFn: any): void;
+        delete_order(id: any): void;
+        recompute_orders(): void;
+        data_colors(): any[];
+    }, {
+        props: string[];
+        mounted(): void;
+        beforeUnmount(): void;
+        methods: {
+            use_for(): void;
+            meta_info(): void;
+            custom_event(event: any, ...args: any[]): void;
+            exec_script(): void;
+        };
+        watch: {
+            settingsDisplayKey(newKey: any, oldKey: any): void;
+        };
+        computed: {
+            sett(): any;
+            settingsDisplayKey(): string;
+        };
+        data(): {
+            uxs_count: number;
+            last_ux_id: null;
+        };
+        render(): import("vue").VNode<import("vue").RendererNode, import("vue").RendererElement, {
+            [key: string]: any;
+        }>;
+    } | {
+        beforeUnmount(): void;
+        methods: {
+            init_tool(): void;
+            render_pins(ctx: any): void;
+            set_state(name: any): void;
+            watch_uuid(n: any, p: any): void;
+            pre_draw(): void;
+            remove_tool(): void;
+            start_drag(): void;
+            drag_update(): void;
+        };
+        computed: {
+            selected(): any;
+            state(): any;
+        };
+    }, import("vue").ComponentOptionsMixin, {}, string, import("vue").PublicProps, Readonly<{}> & Readonly<{}>, {}, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any> | import("vue").DefineComponent<{}, {}, {}, {
+        font11(): string;
+    }, {
+        meta_info(): {
+            author: string;
+            version: string;
+        };
+        use_for(): string[];
+        init(): void;
+        init_axis_shader(): void;
+        alarms(): any;
+        draw(ctx: any): void;
+        draw_bell(ctx: any, x: any, y: any, color: any, ringing: any): void;
+        on_mousedown(e: any): void;
+        on_mousemove(): void;
+        on_mouseup(): void;
+        data_colors(): string[];
+    }, {
+        props: string[];
+        mounted(): void;
+        beforeUnmount(): void;
+        methods: {
+            use_for(): void;
+            meta_info(): void;
+            custom_event(event: any, ...args: any[]): void;
+            exec_script(): void;
+        };
+        watch: {
+            settingsDisplayKey(newKey: any, oldKey: any): void;
+        };
+        computed: {
+            sett(): any;
+            settingsDisplayKey(): string;
+        };
+        data(): {
+            uxs_count: number;
+            last_ux_id: null;
+        };
+        render(): import("vue").VNode<import("vue").RendererNode, import("vue").RendererElement, {
+            [key: string]: any;
+        }>;
+    } | {
+        beforeUnmount(): void;
+        methods: {
+            init_tool(): void;
+            render_pins(ctx: any): void;
+            set_state(name: any): void;
+            watch_uuid(n: any, p: any): void;
+            pre_draw(): void;
+            remove_tool(): void;
+            start_drag(): void;
+            drag_update(): void;
+        };
+        computed: {
+            selected(): any;
+            state(): any;
+        };
+    }, import("vue").ComponentOptionsMixin, {}, string, import("vue").PublicProps, Readonly<{}> & Readonly<{}>, {}, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>>[];
+    priceAlarms: never[];
     DataCubeClass: typeof DataCube;
     feedMode: string;
     corkyClient: null;
     corkyFeed: null;
     corkyStates: never[];
     corkyCurrent: null;
+    corkyEnabled: {};
+    corkyLast: null;
     corkyLoading: boolean;
     corkyProgress: null;
     corkyError: null;
     corkyHandle: null;
-}, {}, {
+    positionsFeed: null;
+    openPositions: never[];
+    historicalPositions: never[];
+    positionsAccounts: never[];
+    positionsActiveAccount: null;
+    positionsActiveTab: string;
+    positionsLoading: boolean;
+    positionsError: null;
+    positionsHistoryCursor: null;
+    positionsHistoryTotal: number;
+    auditOpen: boolean;
+    auditData: null;
+    auditLoading: boolean;
+    auditError: null;
+    auditTarget: null;
+}, {
+    positionsCurrentSymbolKey(): string;
+}, {
     setFeedMode(mode: any): void;
     enterGatewayMode(): void;
     corkyDiscover(venue: any): Promise<never[] | undefined>;
     corkySelect(opts: any): Promise<void>;
+    _corkyScheduleSelectRetry(opts: any, mapped: any): boolean;
     onCorkySelect(opts: any): void;
+    _corkyCancelSelectRetry(): void;
     onCorkyAddTimeframe(req: any): Promise<void>;
     onCorkyToggleIndicator(req: any): void;
+    _syncHandleEnabled(mem: any): void;
+    onCorkyToggleLayer(req: any): void;
+    _alarmSoundInst(): never;
+    _lastClose(): number;
+    onSidebarClick(s: any): void;
+    ensurePriceAlarmOverlay(): void;
+    checkPriceAlarms(): void;
+    onAlarmCleared({ id }: {
+        id: any;
+    }): void;
+    onAlarmMoved({ id, price }: {
+        id: any;
+        price: any;
+    }): void;
+    clearAllAlarms(): void;
+    closeCorkyIndicator(payload: any): boolean;
+    _corkyRuntimeId(venue: any, symbol: any): undefined;
+    _corkyMem(venue: any, symbol: any): any;
     _corkyPatchAndReselect(patch: any, selectOpts: any): Promise<void>;
     onCorkyRetry(): void;
     _corkyUnsub(): Promise<void>;
+    refreshPositions(): Promise<void>;
+    _applyOpenPositions(out: any): void;
+    _positionsDeriveAccounts(rows: any): void;
+    _positionsErrText(err: any): any;
+    _positionsSyncStreams(): void;
+    _positionsStartOpenStream(): void;
+    _positionsStopOpenStream(): void;
+    _positionsStartPoll(): void;
+    togglePositionsDock(open: any): void;
+    setPositionsTab(tab: any): void;
+    setPositionsAccount(acct: any): void;
+    _ensureHistoryLoaded(): void;
+    loadHistoryPage(reset?: boolean): Promise<void>;
+    onPositionSelect(pos: any): Promise<void>;
+    openAudit(pos: any): void;
+    _loadAudit(): Promise<void>;
+    _startAuditStream(): void;
+    _stopAuditStream(): void;
+    closeAudit(): void;
+    startPositionsDockResize(ev: any): void;
     teardownCorky(): void;
     _corkyErr(err: any): {
         message: any;
@@ -144,6 +416,9 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         log_scale: boolean;
         width: number;
         height: number;
+        panelWidth: number;
+        positionsDockOpen: boolean;
+        positionsDockHeight: number;
         config: {
             DEFAULT_LEN: number;
             TB_BORDER: number;
@@ -166,11 +441,18 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         chartWidth(): number;
         chartHeight(): number;
         bottomPanelHeight(): number;
+        bottomDockHeight(): number;
         timeframes(): string[];
     };
     methods: {
         onResize(): void;
+        startPanelResize(e: any): void;
+        endPanelResize(): void;
         resetView(): void;
+        captureScreen(): Promise<void>;
+        _captureViaHtml2Canvas(): Promise<void>;
+        screenshotName(now?: Date): string;
+        _saveScreenshot(blob: any, name: any): Promise<void>;
         selectTimeframe(tf: any, index: any): void;
         initializeChart(data: any): void;
     };
@@ -183,12 +465,22 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         isDrawing: boolean;
         rectStart: null;
         rectCurrent: null;
+        orderTypeModalOpen: boolean;
+        orderModalOpen: boolean;
+        pendingBoxGeometry: null;
+        editingOrderBox: null;
     };
     methods: {
         toggleRectDrawMode(): void;
         onDrawStart(event: any): void;
         onDrawMove(event: any): void;
+        _drawCanvasEl(chart: any): any;
         onDrawEnd(event: any): void;
+        onOrderTypeSelect(type: any): void;
+        onOrderTypeCancel(): void;
+        onOrderBoxSettings(payload: any): void;
+        onOrderConfirm(cfg: any): void;
+        onOrderCancel(): void;
     };
 } | {
     data(): {
@@ -840,6 +1132,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             data(): {
                 cursor: {
                     x: null;
+                    xr: null;
                     y: null;
                     t: null;
                     y$: null;
@@ -899,6 +1192,8 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
                 cursor_changed(c: any): void;
                 cursor_locked(state: any): void;
                 sidebar_transform(s: any): void;
+                sidebar_click(s: any): void;
+                sidebar_cursor(c: any): void;
                 emit_meta_props(d: any): void;
                 emit_custom_event(d: any): void;
                 button_click(event: any): void;
@@ -1129,6 +1424,8 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
                     openVolumeSettings(): void;
                     volume_button_click(event: any): void;
                     toggleVolumeDetach(): void;
+                    isDetachedVolume(ind: any): any;
+                    reattachVolume(): void;
                 }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, {}, string, import("vue").PublicProps, Readonly<{
                     grid_id?: any;
                     common?: any;
@@ -1458,7 +1755,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             required: true;
         };
     }>, {}, {
-        selectedType: string;
+        selectedType: any;
         lineColor: any;
         colorUp: any;
         colorDown: any;
@@ -1468,7 +1765,10 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             label: string;
             icon: string;
         }[];
-    }, {}, {
+    }, {
+        isVolume(): boolean;
+        isAttachedVolume(): boolean;
+    }, {
         selectType(type: any): void;
         updateColors(): void;
         emitSettings(): void;
@@ -1510,6 +1810,69 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         currentType: string;
         currentSettings: Record<string, any>;
     }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+    OrderDistributionModal: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
+        geometry: {
+            type: ObjectConstructor;
+            default: null;
+        };
+        initial: {
+            type: ObjectConstructor;
+            default: null;
+        };
+    }>, {}, {
+        orderSize: number;
+        orderQty: number;
+        distribution: any;
+        distTypes: {
+            value: string;
+            label: string;
+            icon: string;
+        }[];
+    }, {
+        low(): number;
+        high(): number;
+        valid(): boolean;
+    }, {
+        fmt(v: any): any;
+        confirm(): void;
+        close(): void;
+    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("close" | "confirm")[], "close" | "confirm", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+        geometry: {
+            type: ObjectConstructor;
+            default: null;
+        };
+        initial: {
+            type: ObjectConstructor;
+            default: null;
+        };
+    }>> & Readonly<{
+        onClose?: ((...args: any[]) => any) | undefined;
+        onConfirm?: ((...args: any[]) => any) | undefined;
+    }>, {
+        geometry: Record<string, any>;
+        initial: Record<string, any>;
+    }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+    OrderTypeModal: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
+        geometry: {
+            type: ObjectConstructor;
+            default: null;
+        };
+    }>, {}, {
+        scaledIcon: string;
+        distIcon: string;
+    }, {}, {
+        noop(): void;
+    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("select" | "close")[], "select" | "close", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+        geometry: {
+            type: ObjectConstructor;
+            default: null;
+        };
+    }>> & Readonly<{
+        onSelect?: ((...args: any[]) => any) | undefined;
+        onClose?: ((...args: any[]) => any) | undefined;
+    }>, {
+        geometry: Record<string, any>;
+    }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
     CorkyDiscoveryPanel: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
         states: {
             type: ArrayConstructor;
@@ -1534,6 +1897,9 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     }>, {}, {
         query: string;
         activeCategory: string;
+        collapsedVenues: Set<any>;
+        expandedSymbols: Set<any>;
+        addingFor: null;
     }, {
         categoryFilters(): {
             value: string;
@@ -1550,7 +1916,10 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         symbolCount(): number;
         hasProgress(): boolean;
         progressPct(): number;
-        progressText(): string;
+        progressLabel(): any;
+        progressStatusText(): string;
+        progressText(): any;
+        standardTimeframes(): string[];
         errorMessage(): any;
     }, {
         categoryLabel(cat: any): any;
@@ -1560,12 +1929,22 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         isSymbolActive(row: any): boolean;
         isCurrent(row: any, tf: any): boolean;
         isIndicatorOn(row: any, ind: any): boolean;
+        toggleableLayers(ind: any): any;
+        isLayerOn(row: any, ind: any, layer: any): boolean;
+        onToggleLayer(row: any, ind: any, layer: any): void;
         badgeText(tf: any): "pending" | "stale" | "ready";
         badgeClass(tf: any): "badge-pending" | "badge-stale" | "badge-ready";
         onSelectTimeframe(row: any, tf: any): void;
-        onAddTimeframe(row: any): void;
+        isVenueExpanded(venue: any): boolean;
+        toggleVenue(venue: any): void;
+        isSymbolExpanded(key: any): boolean;
+        toggleSymbol(key: any): void;
+        availableTimeframes(row: any): string[];
+        toggleAddPicker(row: any): void;
+        onAddTimeframe(row: any, timeframe: any): void;
+        closePickerIfNeeded(): void;
         onToggleIndicator(row: any, ind: any): void;
-    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("select" | "add-timeframe" | "toggle-indicator" | "retry")[], "select" | "add-timeframe" | "toggle-indicator" | "retry", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("select" | "add-timeframe" | "toggle-indicator" | "toggle-layer" | "retry")[], "select" | "add-timeframe" | "toggle-indicator" | "toggle-layer" | "retry", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
         states: {
             type: ArrayConstructor;
             default: () => never[];
@@ -1590,13 +1969,210 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         onSelect?: ((...args: any[]) => any) | undefined;
         "onAdd-timeframe"?: ((...args: any[]) => any) | undefined;
         "onToggle-indicator"?: ((...args: any[]) => any) | undefined;
+        "onToggle-layer"?: ((...args: any[]) => any) | undefined;
         onRetry?: ((...args: any[]) => any) | undefined;
     }>, {
         error: Record<string, any>;
+        current: Record<string, any>;
         progress: Record<string, any>;
         states: unknown[];
-        current: Record<string, any>;
         loading: boolean;
+    }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+    CorkyPositionsPanel: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
+        height: {
+            type: NumberConstructor;
+            default: number;
+        };
+        open: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        activeTab: {
+            type: StringConstructor;
+            default: string;
+        };
+        openPositions: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
+        historicalPositions: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
+        accounts: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
+        activeAccount: {
+            type: ObjectConstructor;
+            default: null;
+        };
+        loading: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        error: {
+            type: StringConstructor;
+            default: null;
+        };
+        historyHasMore: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        historyTotal: {
+            type: NumberConstructor;
+            default: number;
+        };
+        currentSymbolKey: {
+            type: StringConstructor;
+            default: string;
+        };
+    }>, {}, {}, {
+        rows(): unknown[];
+        activeAccountKey(): string;
+    }, {
+        selectTab(tab: any): void;
+        accountKey(a: any): string;
+        onAccountChange(ev: any): void;
+        rowKey(p: any): string;
+        isActiveRow(p: any): boolean;
+        sideClass(p: any): "" | "side-long" | "side-short";
+        signClass(dec: any): "" | "neg" | "pos";
+        pctText(dec: any): string;
+        fmtTime(ms: any): string;
+    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("update:open" | "update:active-tab" | "update:active-account" | "select-position" | "load-more" | "refresh" | "resize-start")[], "update:open" | "update:active-tab" | "update:active-account" | "select-position" | "load-more" | "refresh" | "resize-start", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+        height: {
+            type: NumberConstructor;
+            default: number;
+        };
+        open: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        activeTab: {
+            type: StringConstructor;
+            default: string;
+        };
+        openPositions: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
+        historicalPositions: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
+        accounts: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
+        activeAccount: {
+            type: ObjectConstructor;
+            default: null;
+        };
+        loading: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        error: {
+            type: StringConstructor;
+            default: null;
+        };
+        historyHasMore: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        historyTotal: {
+            type: NumberConstructor;
+            default: number;
+        };
+        currentSymbolKey: {
+            type: StringConstructor;
+            default: string;
+        };
+    }>> & Readonly<{
+        "onUpdate:open"?: ((...args: any[]) => any) | undefined;
+        "onUpdate:active-tab"?: ((...args: any[]) => any) | undefined;
+        "onUpdate:active-account"?: ((...args: any[]) => any) | undefined;
+        "onSelect-position"?: ((...args: any[]) => any) | undefined;
+        "onLoad-more"?: ((...args: any[]) => any) | undefined;
+        onRefresh?: ((...args: any[]) => any) | undefined;
+        "onResize-start"?: ((...args: any[]) => any) | undefined;
+    }>, {
+        error: string;
+        height: number;
+        loading: boolean;
+        open: boolean;
+        activeTab: string;
+        openPositions: unknown[];
+        historicalPositions: unknown[];
+        accounts: unknown[];
+        activeAccount: Record<string, any>;
+        historyHasMore: boolean;
+        historyTotal: number;
+        currentSymbolKey: string;
+    }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+    PositionAuditDrawer: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
+        open: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        audit: {
+            type: ObjectConstructor;
+            default: null;
+        };
+        loading: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        error: {
+            type: StringConstructor;
+            default: null;
+        };
+        target: {
+            type: ObjectConstructor;
+            default: null;
+        };
+    }>, {}, {}, {
+        headSymbol(): any;
+        headId(): any;
+        isMissing(): boolean;
+        reasons(): any;
+        orders(): any;
+        trades(): any;
+        feesText(): string;
+    }, {
+        signClass(dec: any): "" | "neg" | "pos";
+        sideClass(side: any): "" | "side-long" | "side-short";
+        fmtTime(ms: any): string;
+    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, "close"[], "close", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+        open: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        audit: {
+            type: ObjectConstructor;
+            default: null;
+        };
+        loading: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        error: {
+            type: StringConstructor;
+            default: null;
+        };
+        target: {
+            type: ObjectConstructor;
+            default: null;
+        };
+    }>> & Readonly<{
+        onClose?: ((...args: any[]) => any) | undefined;
+    }>, {
+        error: string;
+        target: Record<string, any>;
+        loading: boolean;
+        open: boolean;
+        audit: Record<string, any>;
     }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
 }, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
 import DataCube from '../src/helpers/datacube.js';

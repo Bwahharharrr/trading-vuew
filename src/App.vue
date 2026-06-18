@@ -506,6 +506,16 @@ export default {
             if (Number.isFinite(Number(savedState.panelWidth))) {
                 this.panelWidth = Number(savedState.panelWidth)
             }
+            // Positions dock layout (gateway mode).
+            if (typeof savedState.positionsDockOpen === 'boolean') {
+                this.positionsDockOpen = savedState.positionsDockOpen
+            }
+            if (Number.isFinite(Number(savedState.positionsDockHeight))) {
+                this.positionsDockHeight = Number(savedState.positionsDockHeight)
+            }
+            if (savedState.positionsActiveTab === 'open' || savedState.positionsActiveTab === 'historical') {
+                this.positionsActiveTab = savedState.positionsActiveTab
+            }
         }
 
         // Bootstrap order (FILE mode only): ?file=<name> URL param wins (per-tab,
@@ -1186,6 +1196,11 @@ export default {
                 const out = await this.positionsFeed.listOpen({ include_historical: false })
                 this._applyOpenPositions(out)
                 this._positionsSyncStreams()
+                // Restored open on the Historical tab → load the first page now that
+                // the account list is known (history is per-account).
+                if (this.positionsDockOpen && this.positionsActiveTab === 'historical') {
+                    this._ensureHistoryLoaded()
+                }
             } catch (err) {
                 this.positionsError = this._positionsErrText(err)
             } finally {

@@ -61,6 +61,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {}, {
         [key: string]: any;
     }>;
 } | {
+    beforeUnmount(): void;
     methods: {
         init_tool(): void;
         render_pins(ctx: any): void;

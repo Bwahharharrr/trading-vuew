@@ -1,4 +1,5 @@
 declare namespace _default {
+    function beforeUnmount(): void;
     namespace methods {
         function init_tool(): void;
         function render_pins(ctx: any): void;

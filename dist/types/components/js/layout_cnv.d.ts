@@ -22,4 +22,6 @@ export function layout_vol(self: any): {
     h: number;
     green: any;
     raw: any;
+    y0: any;
+    yTop: any;
 }[];

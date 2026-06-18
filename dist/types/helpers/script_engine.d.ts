@@ -18,6 +18,7 @@ export class ScriptEngine {
         id: string;
         src: any;
     }[] | null;
+    custom_main: any;
     _computationHash(script: any): string;
     _computeDataHash(): string;
     _isDisplayOnlyChange(delta: any, scriptId: any): boolean;
@@ -26,6 +27,8 @@ export class ScriptEngine {
     _isCacheValid(scriptId: any): boolean;
     syncState(): void;
     exec_all(): void;
+    _execAllPending: boolean | undefined;
+    running: boolean | undefined;
     exec_sel(delta: any): Promise<void>;
     exec(s: any): void;
     update(candles: any): void;
@@ -41,7 +44,7 @@ export class ScriptEngine {
     tss: {} | undefined;
     shared: {} | undefined;
     skip: boolean | undefined;
-    running: boolean | undefined;
+    _aborted: boolean | undefined;
     task: any;
     std_inject(std: any): any;
     _onScriptError(id: any, phase: any, e: any): void;

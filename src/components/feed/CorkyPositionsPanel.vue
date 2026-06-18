@@ -5,12 +5,14 @@
 
     <!-- Header / tab bar — always visible so the dock can be (re)opened. -->
     <div class="pd-header">
-        <div class="pd-tabs">
-            <button class="pd-tab" :class="{ active: activeTab === 'open' }"
+        <div class="pd-tabs" role="tablist" aria-label="Positions">
+            <button class="pd-tab" role="tab" :aria-selected="activeTab === 'open'"
+                    :class="{ active: activeTab === 'open' }"
                     @click="selectTab('open')">
                 Open Positions<span v-if="openPositions.length" class="pd-count">{{ openPositions.length }}</span>
             </button>
-            <button class="pd-tab" :class="{ active: activeTab === 'historical' }"
+            <button class="pd-tab" role="tab" :aria-selected="activeTab === 'historical'"
+                    :class="{ active: activeTab === 'historical' }"
                     @click="selectTab('historical')">
                 Historical<span v-if="historyTotal" class="pd-count">{{ historyTotal }}</span>
             </button>
@@ -48,7 +50,11 @@
                 <tbody>
                     <tr v-for="p in rows" :key="rowKey(p)"
                         class="pd-row" :class="{ active: isActiveRow(p) }"
+                        tabindex="0" role="button"
+                        :aria-label="`Switch chart to ${p.venue} ${p.symbol}`"
                         @click="$emit('select-position', p)"
+                        @keydown.enter.prevent="$emit('select-position', p)"
+                        @keydown.space.prevent="$emit('select-position', p)"
                         :title="`Switch chart to ${p.venue} ${p.symbol}`">
                         <td class="sym">{{ p.symbol }}</td>
                         <td :class="sideClass(p)">{{ p.side }}</td>

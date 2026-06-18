@@ -197,6 +197,10 @@ export default {
                 corkyLast: this.corkyLast,
                 // Right-panel width (user-resizable via its left-edge handle).
                 panelWidth: this.panelWidth,
+                // Positions dock: open/height + active tab (gateway mode).
+                positionsDockOpen: this.positionsDockOpen,
+                positionsDockHeight: this.positionsDockHeight,
+                positionsActiveTab: this.positionsActiveTab,
             }
             try {
                 sessionStorage.setItem(SESSION_STATE_KEY, JSON.stringify(tabState))

@@ -18,6 +18,8 @@ export default class DCEvents {
     build_tool(grid_id: any, type: any): void;
     system_tool(type: any): void;
     change_settings(args: any): void;
+    submit_orders(args: any): void;
+    cancel_orders(args: any): void;
     on_scroll_lock(flag: any): void;
     object_selected(args: any): void;
     add_trash_icon(): void;

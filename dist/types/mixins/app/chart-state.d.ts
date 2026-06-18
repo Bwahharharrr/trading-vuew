@@ -6,6 +6,9 @@ declare namespace _default {
         log_scale: boolean;
         width: number;
         height: number;
+        panelWidth: number;
+        positionsDockOpen: boolean;
+        positionsDockHeight: number;
         config: {
             DEFAULT_LEN: number;
             TB_BORDER: number;
@@ -28,11 +31,18 @@ declare namespace _default {
         function chartWidth(): number;
         function chartHeight(): number;
         function bottomPanelHeight(): number;
+        function bottomDockHeight(): number;
         function timeframes(): string[];
     }
     namespace methods {
         function onResize(): void;
+        function startPanelResize(e: any): void;
+        function endPanelResize(): void;
         function resetView(): void;
+        function captureScreen(): Promise<void>;
+        function _captureViaHtml2Canvas(): Promise<void>;
+        function screenshotName(now?: Date): string;
+        function _saveScreenshot(blob: any, name: any): Promise<void>;
         function selectTimeframe(tf: any, index: any): void;
         function initializeChart(data: any): void;
     }

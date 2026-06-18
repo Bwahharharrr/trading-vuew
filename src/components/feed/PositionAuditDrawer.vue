@@ -1,6 +1,7 @@
 <template>
 <div v-if="open" class="pad-overlay" @click.self="$emit('close')">
-    <div class="pad-modal">
+    <div class="pad-modal" role="dialog" aria-modal="true"
+         :aria-label="`Position audit ${headSymbol} #${headId}`">
         <div class="pad-head">
             <div class="pad-title">
                 <span class="pad-sym">{{ headSymbol }}</span>
@@ -108,6 +109,21 @@ export default {
         target: { type: Object, default: null },
     },
     emits: ['close'],
+    watch: {
+        // Esc-to-close while the modal is open (document-level so it works
+        // regardless of focus).
+        open(now) {
+            if (now) document.addEventListener('keydown', this._onKeydown)
+            else document.removeEventListener('keydown', this._onKeydown)
+        },
+    },
+    mounted() {
+        this._onKeydown = (e) => { if (e.key === 'Escape') this.$emit('close') }
+        if (this.open) document.addEventListener('keydown', this._onKeydown)
+    },
+    beforeUnmount() {
+        if (this._onKeydown) document.removeEventListener('keydown', this._onKeydown)
+    },
     computed: {
         headSymbol() {
             return (this.audit && this.audit.symbol) || (this.target && this.target.symbol) || '—'

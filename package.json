@@ -37,6 +37,7 @@
     "eslint": "eslint --ext .js,.vue src",
     "size": "size-limit",
     "smoke:gateway": "node scripts/corky-gateway-smoke.mjs",
+    "smoke:positions": "node scripts/corky-positions-smoke.mjs",
     "smoke:browser": "node scripts/corky-browser-smoke.mjs",
     "coverage": "vitest run --coverage"
   },

@@ -617,6 +617,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         data(): {
             cursor: {
                 x: null;
+                xr: null;
                 y: null;
                 t: null;
                 y$: null;
@@ -676,6 +677,8 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
             cursor_changed(c: any): void;
             cursor_locked(state: any): void;
             sidebar_transform(s: any): void;
+            sidebar_click(s: any): void;
+            sidebar_cursor(c: any): void;
             emit_meta_props(d: any): void;
             emit_custom_event(d: any): void;
             button_click(event: any): void;
@@ -906,6 +909,8 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
                 openVolumeSettings(): void;
                 volume_button_click(event: any): void;
                 toggleVolumeDetach(): void;
+                isDetachedVolume(ind: any): any;
+                reattachVolume(): void;
             }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, {}, string, import("vue").PublicProps, Readonly<{
                 grid_id?: any;
                 common?: any;

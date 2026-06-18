@@ -20,7 +20,8 @@ export default class Botbar {
     } | undefined;
     mc: any;
     drug: {
-        x: any;
+        x: number;
+        offX: any;
         r: any;
     } | null | undefined;
     _throttledPanmove: {
