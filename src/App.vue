@@ -435,6 +435,17 @@ export default {
         },
     },
     watch: {
+        // The chart canvas is sized from chartLayout, which is rebuilt only by an
+        // explicit update_layout() — it does NOT react to the height prop alone.
+        // So when the positions dock opens/closes/resizes (changing chartHeight),
+        // force a relayout, otherwise the canvas keeps its old height and draws
+        // OVER the dock. nextTick lets the new height prop reach the chart first.
+        bottomDockHeight() {
+            this.$nextTick(() => {
+                const tv = this.$refs.tradingVue
+                if (tv && typeof tv.updateLayout === 'function') tv.updateLayout(true)
+            })
+        },
         // `this.chart` is REPLACED on every data/timeframe load (chart-state /
         // file-manager). Re-attach the order agent to the active DataCube each
         // time (immediate: also attaches to the initial one) so OrderBox's ▶
