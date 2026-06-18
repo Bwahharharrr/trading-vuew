@@ -265,6 +265,141 @@ describe('CorkyClient — schema guard', () => {
     })
 })
 
+describe('CorkyClient — auth-position senders', () => {
+    it('builds list/history/audit/subscribe frames matching the fixtures', () => {
+        const { client, sock } = makeClient()
+
+        client.listAuthPositions({ venue: 'BITFINEX', account_id: 'paper-a', symbol: 'tBTCUSD', include_historical: true })
+        expect(sock().sent[0].command).toEqual(fx.listAuthPositionsRequest.command)
+
+        client.listAuthPositionHistory({ venue: 'BITFINEX', account_id: 'paper-a', symbol: 'tBTCUSD', limit: 2 })
+        expect(sock().sent[1].command).toEqual(fx.listAuthPositionHistoryRequest.command)
+
+        client.getAuthPositionAudit({ venue: 'BITFINEX', account_id: 'paper-a', symbol: 'tBTCUSD', position_id: 77, include_orders: true, include_trades: true })
+        expect(sock().sent[2].command).toEqual(fx.getAuthPositionAuditRequest.command)
+
+        client.subscribeAuthPositions({ subscription_id: 'auth-positions-main', venue: 'BITFINEX', account_id: 'paper-a', symbol: 'tBTCUSD', include_historical: true })
+        expect(sock().sent[3].command).toEqual(fx.subscribeAuthPositionsRequest.command)
+
+        client.subscribeAuthPositionAudit({ subscription_id: 'auth-position-audit-main', venue: 'BITFINEX', account_id: 'paper-a', symbol: 'tBTCUSD', position_id: 77, include_orders: true, include_trades: true })
+        expect(sock().sent[4].command).toEqual(fx.subscribeAuthPositionAuditRequest.command)
+    })
+
+    it('omits unset optional filters on list_auth_positions', () => {
+        const { client, sock } = makeClient()
+        client.listAuthPositions()
+        expect(sock().sent[0].command).toEqual({ type: 'list_auth_positions' })
+    })
+
+    it('throws on missing required fields (history/audit)', () => {
+        const { client } = makeClient()
+        expect(() => client.listAuthPositionHistory({ venue: 'BITFINEX' })).toThrow(/account_id/)
+        expect(() => client.getAuthPositionAudit({ venue: 'BITFINEX', account_id: 'paper-a', symbol: 'tBTCUSD' })).toThrow(/position_id/)
+        expect(() => client.subscribeAuthPositions({})).toThrow(/subscription_id/)
+    })
+
+    it('resolves listAuthPositions() with the auth_positions event', async () => {
+        const { client, sock } = makeClient()
+        const p = client.listAuthPositions({ venue: 'BITFINEX', include_historical: true })
+        const reqId = sock().sent[0].request_id
+        sock().push(withRequestId(fx.authPositionsEvent, reqId))
+        const ev = await p
+        expect(ev.type).toBe('auth_positions')
+        expect(ev.positions.map((r) => r.source).sort()).toEqual(['current', 'historical'])
+        expect(ev.positions[0].amount).toBe('0.25')   // decimal string preserved
+    })
+
+    it('resolves listAuthPositionHistory() with positions + cursor + total_count', async () => {
+        const { client, sock } = makeClient()
+        const p = client.listAuthPositionHistory({ venue: 'BITFINEX', account_id: 'paper-a' })
+        const reqId = sock().sent[0].request_id
+        sock().push(withRequestId(fx.authPositionHistoryEvent, reqId))
+        const ev = await p
+        expect(ev.type).toBe('auth_position_history')
+        expect(ev.total_count).toBe(1)
+        expect(ev.next_cursor).toBeNull()
+        expect(ev.positions[0].source).toBe('historical')
+    })
+
+    it('resolves getAuthPositionAudit() with the audit bundle', async () => {
+        const { client, sock } = makeClient()
+        const p = client.getAuthPositionAudit({ venue: 'BITFINEX', account_id: 'paper-a', symbol: 'tBTCUSD', position_id: 77 })
+        const reqId = sock().sent[0].request_id
+        sock().push(withRequestId(fx.authPositionAuditEvent, reqId))
+        const ev = await p
+        expect(ev.type).toBe('auth_position_audit')
+        expect(ev.audit.summary.status).toBe('complete')
+        expect(ev.audit.orders[0].order_id).toBe(9001)
+    })
+
+    it('surfaces auth_position_audit_unavailable as a retryable rejection', async () => {
+        const { client, sock } = makeClient()
+        const p = client.getAuthPositionAudit({ venue: 'BITFINEX', account_id: 'paper-a', symbol: 'tBTCUSD', position_id: 77 })
+        const reqId = sock().sent[0].request_id
+        sock().push(withRequestId(fx.authPositionAuditErrorEvent, reqId))
+        await expect(p).rejects.toMatchObject({ code: 'auth_position_audit_unavailable', retryable: true })
+    })
+})
+
+describe('CorkyClient — auth-position streaming', () => {
+    it('subscribeAuthPositions resolves on the first update and fans out the rest', async () => {
+        const { client, sock } = makeClient()
+        const seen = []
+        const p = client.subscribeAuthPositions({
+            subscription_id: 'auth-positions-main', venue: 'BITFINEX', account_id: 'paper-a',
+            onEvent: ({ event }) => seen.push(['onEvent', event.sequence]),
+        })
+        // first update (NULL request_id) resolves the subscribe + hits onEvent
+        sock().push(fx.authPositionsUpdateEvent)
+        const first = await p
+        expect(first.type).toBe('auth_positions_update')
+        expect(first.sequence).toBe(1)
+        expect(first.positions[0].position_id).toBe(77)
+        expect(seen).toEqual([['onEvent', 1]])
+
+        // subsequent updates only reach onSubscription (the request settled)
+        client.onSubscription('auth-positions-main', ({ event }) => seen.push(['fanout', event.sequence]))
+        sock().push({
+            schema_version: 1,
+            event: { type: 'auth_positions_update', subscription_id: 'auth-positions-main', sequence: 2, positions: [] },
+        })
+        expect(seen).toContainEqual(['fanout', 2])
+    })
+
+    it('subscribeAuthPositionAudit resolves on the first audit update', async () => {
+        const { client, sock } = makeClient()
+        const p = client.subscribeAuthPositionAudit({
+            subscription_id: 'auth-position-audit-main', venue: 'BITFINEX', account_id: 'paper-a',
+            symbol: 'tBTCUSD', position_id: 77,
+        })
+        sock().push(fx.authPositionAuditUpdateEvent)
+        const first = await p
+        expect(first.type).toBe('auth_position_audit_update')
+        expect(first.audit.position_id).toBe(77)
+        expect(first.audit.summary.status).toBe('complete')
+    })
+
+    it('a foreign subscription_id never leaks into another stream', () => {
+        const { client, sock } = makeClient()
+        client.onSubscription('other-sub', () => { throw new Error('must not fire') })
+        const seen = []
+        client.onSubscription('auth-positions-main', ({ event }) => seen.push(event.sequence))
+        sock().push(fx.authPositionsUpdateEvent)
+        expect(seen).toEqual([1])
+    })
+
+    it('rejects the subscribe when the gateway requires a stateful websocket', async () => {
+        const { client, sock } = makeClient()
+        const p = client.subscribeAuthPositions({ subscription_id: 'auth-positions-main' })
+        const reqId = sock().sent[0].request_id
+        sock().push({
+            schema_version: 1, request_id: reqId,
+            event: { type: 'error', code: 'stateful_websocket_required', message: 'subscriptions require a stateful websocket', retryable: false },
+        })
+        await expect(p).rejects.toMatchObject({ code: 'stateful_websocket_required' })
+    })
+})
+
 describe('CorkyClient — reconnect / backoff', () => {
     it('does not reconnect when backoff is disabled', () => {
         const { client, sock } = makeClient({ backoff: false })

@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-auth-position-audit-1",
+  "event": {
+    "type": "auth_position_audit",
+    "audit": {
+      "venue": "BITFINEX",
+      "account_id": "paper-a",
+      "symbol": "tBTCUSD",
+      "position_id": 77,
+      "position": {
+        "source": "current",
+        "status": "ACTIVE",
+        "side": "long",
+        "amount": "0.25",
+        "base_price": "42000.5",
+        "opened_at_ms": 1700000000000,
+        "updated_at_ms": 1700000600000
+      },
+      "summary": {
+        "status": "complete",
+        "order_count": 1,
+        "trade_count": 1,
+        "trade_amount_sum": "0.25",
+        "expected_position_amount": "0.25",
+        "amount_delta": "0.00",
+        "fees_by_currency": {
+          "USD": "-0.1"
+        },
+        "order_ids": [
+          9001
+        ],
+        "trade_ids": [
+          7001
+        ],
+        "reasons": []
+      },
+      "orders": [
+        {
+          "order_id": 9001,
+          "client_order_id": 123,
+          "symbol": "tBTCUSD",
+          "created_at_ms": 1700000000000,
+          "updated_at_ms": 1700000000500,
+          "amount": "0.25",
+          "amount_original": "0.25",
+          "order_type": "EXCHANGE LIMIT",
+          "status": "EXECUTED",
+          "price": "42000.5",
+          "price_avg": "42000.5",
+          "source": "rest:orders_hist"
+        }
+      ],
+      "trades": [
+        {
+          "trade_id": 7001,
+          "order_id": 9001,
+          "client_order_id": 123,
+          "symbol": "tBTCUSD",
+          "execution_timestamp_ms": 1700000001000,
+          "amount": "0.25",
+          "price": "42000.5",
+          "order_type": "EXCHANGE LIMIT",
+          "order_price": "42000.0",
+          "maker": true,
+          "fee": "-0.1",
+          "fee_currency": "USD",
+          "source": "rest:trades_hist"
+        }
+      ],
+      "updated_at_ms": 1700000601000
+    }
+  }
+}

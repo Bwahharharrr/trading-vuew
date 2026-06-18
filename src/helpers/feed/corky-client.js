@@ -35,6 +35,13 @@ export const KNOWN_ERROR_CODES = {
     // the catalog but can't serve the stream. Transient: it recovers when the
     // runtime re-establishes its control channel, so retry (the chart self-heals).
     runtime_control_rejected:   { retryable: true },
+    // auth-position flows. Audit/history unavailability is usually transient
+    // (disk read, REST window, runtime still loading its snapshot) → retry and
+    // keep the last good UI state. A non-stateful socket can't carry streams; the
+    // caller falls back to one-shot list, so don't churn retries on it.
+    auth_position_history_unavailable: { retryable: true },
+    auth_position_audit_unavailable:   { retryable: true },
+    stateful_websocket_required:       { retryable: false },
 }
 
 // Resolve whether an error is retryable. The wire `retryable` flag wins when
@@ -52,11 +59,25 @@ const SCHEMA_VERSION = 1
 // Terminal event types per command — the event that resolves a pending request.
 // (Streaming subscribes are special-cased; see _route.)
 const TERMINAL_EVENT = {
-    list_candle_states:   'candle_states',
-    unsubscribe:          'control_ack',
-    upsert_candle_state:  'control_ack',
-    patch_candle_state:   'control_ack',
+    list_candle_states:         'candle_states',
+    unsubscribe:                'control_ack',
+    upsert_candle_state:        'control_ack',
+    patch_candle_state:         'control_ack',
+    list_auth_positions:        'auth_positions',
+    list_auth_position_history: 'auth_position_history',
+    get_auth_position_audit:    'auth_position_audit',
 }
+
+// Subscription-stream event types: carry a subscription_id and (usually) a null
+// request_id, so they fan out by subscription_id rather than request correlation.
+// `live_update` resolves nothing here (candle subscribes settle on
+// historical_complete); the auth-position/audit streams have no separate accept
+// event, so their FIRST update resolves the originating subscribe request.
+const STREAM_EVENT_TYPES = new Set([
+    'live_update',
+    'auth_positions_update',
+    'auth_position_audit_update',
+])
 
 export class CorkyError extends Error {
     constructor(code, message, retryable) {
@@ -298,6 +319,79 @@ export class CorkyClient {
         return this._request(command)
     }
 
+    // ── auth-position senders ──────────────────────────────────────────────────
+    // Read-only private-account positions. One-shot list/history/audit resolve on
+    // their terminal event; the two subscribe_* stream a full replacement set and
+    // resolve on their first update (see STREAM_EVENT_TYPES / _route).
+
+    /** One-shot snapshot. Resolves with the `auth_positions` event. */
+    listAuthPositions(opts = {}) {
+        const { venue, account_id, symbol, include_historical } = opts
+        const command = { type: 'list_auth_positions' }
+        if (venue != null) command.venue = venue
+        if (account_id != null) command.account_id = account_id
+        if (symbol != null) command.symbol = symbol
+        if (include_historical != null) command.include_historical = include_historical
+        return this._request(command)
+    }
+
+    /** Paged closed-position history. Resolves with the `auth_position_history` event. */
+    listAuthPositionHistory(opts = {}) {
+        const { venue, account_id, symbol, limit, cursor } = opts
+        if (!venue || !account_id) {
+            throw new Error('listAuthPositionHistory: venue and account_id are required')
+        }
+        const command = { type: 'list_auth_position_history', venue, account_id }
+        if (symbol != null) command.symbol = symbol
+        if (limit != null) command.limit = limit
+        if (cursor != null) command.cursor = cursor
+        return this._request(command)
+    }
+
+    /** One-shot audit bundle. Resolves with the `auth_position_audit` event. */
+    getAuthPositionAudit(opts = {}) {
+        const { venue, account_id, symbol, position_id, include_orders, include_trades } = opts
+        if (!venue || !account_id || !symbol || position_id == null) {
+            throw new Error('getAuthPositionAudit: venue, account_id, symbol, position_id are required')
+        }
+        const command = { type: 'get_auth_position_audit', venue, account_id, symbol, position_id }
+        if (include_orders != null) command.include_orders = include_orders
+        if (include_trades != null) command.include_trades = include_trades
+        return this._request(command)
+    }
+
+    /**
+     * Stream position snapshots. Resolves with the FIRST `auth_positions_update`;
+     * register `onSubscription(subscription_id, cb)` (or pass `onEvent`) for the
+     * ongoing full-replacement updates.
+     */
+    subscribeAuthPositions(opts = {}) {
+        const { subscription_id, venue, account_id, symbol, include_historical, onEvent } = opts
+        if (!subscription_id) throw new Error('subscribeAuthPositions: subscription_id is required')
+        const command = { type: 'subscribe_auth_positions', subscription_id }
+        if (venue != null) command.venue = venue
+        if (account_id != null) command.account_id = account_id
+        if (symbol != null) command.symbol = symbol
+        if (include_historical != null) command.include_historical = include_historical
+        return this._request(command, { subscription_id, onEvent })
+    }
+
+    /**
+     * Stream the audit bundle for one position. Resolves with the FIRST
+     * `auth_position_audit_update`; register `onSubscription` for ongoing updates.
+     */
+    subscribeAuthPositionAudit(opts = {}) {
+        const { subscription_id, venue, account_id, symbol, position_id, include_orders, include_trades, onEvent } = opts
+        if (!subscription_id) throw new Error('subscribeAuthPositionAudit: subscription_id is required')
+        if (!venue || !account_id || !symbol || position_id == null) {
+            throw new Error('subscribeAuthPositionAudit: venue, account_id, symbol, position_id are required')
+        }
+        const command = { type: 'subscribe_auth_position_audit', subscription_id, venue, account_id, symbol, position_id }
+        if (include_orders != null) command.include_orders = include_orders
+        if (include_trades != null) command.include_trades = include_trades
+        return this._request(command, { subscription_id, onEvent })
+    }
+
     // ── outbound plumbing ──────────────────────────────────────────────────────
 
     _nextRequestId() {
@@ -396,8 +490,22 @@ export class CorkyClient {
         // Always emit on the type channel and the wildcard for observers.
         this._emitter.emit(type, { request_id, event })
 
-        // Live updates may carry a null request_id — fan out by subscription_id.
-        if (type === 'live_update') {
+        // Subscription-stream events may carry a null request_id — correlate by
+        // subscription_id. The auth-position/audit streams have no separate accept
+        // event, so the FIRST stream update resolves the originating subscribe
+        // request (and is delivered to its onEvent). `live_update` resolves nothing
+        // here — candle subscribes settle on historical_complete, which always
+        // precedes any live_update.
+        if (STREAM_EVENT_TYPES.has(type)) {
+            if (type !== 'live_update' && event.subscription_id != null) {
+                const sub = this._pendingBySubscription(event.subscription_id)
+                if (sub) {
+                    if (sub.onEvent) {
+                        try { sub.onEvent({ request_id, event }) } catch (_) { /* observer threw; ignore */ }
+                    }
+                    this._settleResolve(sub.request_id, event)
+                }
+            }
             this._fanOutSubscription(event.subscription_id, { request_id, event })
             return
         }
@@ -459,6 +567,18 @@ export class CorkyClient {
         for (const cb of set) {
             try { cb(payload) } catch (_) { /* subscriber threw; isolate */ }
         }
+    }
+
+    // Find an unsettled pending request by its subscription_id (auth-position
+    // stream updates carry no request_id to correlate with). Returns the minimal
+    // slice needed to resolve/deliver, or null.
+    _pendingBySubscription(subscription_id) {
+        for (const [request_id, pend] of this._pending) {
+            if (!pend.settled && pend.subscription_id === subscription_id) {
+                return { request_id, onEvent: pend.onEvent }
+            }
+        }
+        return null
     }
 
     _settleResolve(request_id, value) {

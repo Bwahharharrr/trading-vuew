@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-auth-position-audit-1",
+  "command": {
+    "type": "get_auth_position_audit",
+    "venue": "BITFINEX",
+    "account_id": "paper-a",
+    "symbol": "tBTCUSD",
+    "position_id": 77,
+    "include_orders": true,
+    "include_trades": true
+  }
+}

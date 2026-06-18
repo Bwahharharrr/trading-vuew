@@ -1,0 +1,60 @@
+// Unit tests for pick-timeframe.js — the keep→1h→lowest selection used when a
+// position click switches the chart to that position's ticker.
+
+import { describe, it, expect } from 'vitest'
+import { tfToMs, pickTimeframe } from '../../src/helpers/feed/pick-timeframe.js'
+
+describe('tfToMs — duration ordering (case-aware units)', () => {
+  it('orders minute < hour < day < week < month', () => {
+    expect(tfToMs('1m')).toBeLessThan(tfToMs('1h'))
+    expect(tfToMs('1h')).toBeLessThan(tfToMs('1D'))
+    expect(tfToMs('1D')).toBeLessThan(tfToMs('1W'))
+    expect(tfToMs('1W')).toBeLessThan(tfToMs('1M'))
+  })
+  it('distinguishes 1m (minute) from 1M (month)', () => {
+    expect(tfToMs('1m')).toBe(60 * 1000)
+    expect(tfToMs('1M')).toBeGreaterThan(tfToMs('1W'))
+  })
+  it('folds case for hour/day/week (1h == 1H, 1d == 1D)', () => {
+    expect(tfToMs('1h')).toBe(tfToMs('1H'))
+    expect(tfToMs('1d')).toBe(tfToMs('1D'))
+    expect(tfToMs('1w')).toBe(tfToMs('1W'))
+  })
+  it('handles multi-unit labels (15m, 4h)', () => {
+    expect(tfToMs('15m')).toBe(15 * 60 * 1000)
+    expect(tfToMs('4h')).toBe(4 * 60 * 60 * 1000)
+  })
+  it('returns Infinity for unparseable labels', () => {
+    expect(tfToMs('weird')).toBe(Infinity)
+    expect(tfToMs('60')).toBe(Infinity)   // bare number is not a gateway label
+    expect(tfToMs(null)).toBe(Infinity)
+  })
+})
+
+describe('pickTimeframe — keep → 1h → lowest', () => {
+  it('keeps the current timeframe when offered, returning the advertised case', () => {
+    expect(pickTimeframe('1h', ['1m', '1H', '1D'])).toBe('1H')  // case-insensitive match, advertised case kept
+    expect(pickTimeframe('1D', ['1m', '1h', '1D'])).toBe('1D')
+  })
+
+  it('falls back to 1h when the current timeframe is unavailable', () => {
+    expect(pickTimeframe('5m', ['1H', '1D', '1W'])).toBe('1H')   // 1h offered as 1H
+    expect(pickTimeframe('5m', ['15m', '1h', '4h'])).toBe('1h')
+  })
+
+  it('falls back to the lowest available when neither current nor 1h is offered', () => {
+    expect(pickTimeframe('4h', ['1D', '1W', '15m'])).toBe('15m')
+    expect(pickTimeframe('2h', ['1W', '1D', '4h'])).toBe('4h')
+    expect(pickTimeframe(null, ['1M', '1W', '1D'])).toBe('1D')
+  })
+
+  it('returns current (or null) when nothing is available', () => {
+    expect(pickTimeframe('1h', [])).toBe('1h')
+    expect(pickTimeframe(null, [])).toBeNull()
+    expect(pickTimeframe('1h', null)).toBe('1h')
+  })
+
+  it('honours a custom fallback', () => {
+    expect(pickTimeframe('5m', ['1D', '4h', '1W'], { fallback: '4h' })).toBe('4h')
+  })
+})

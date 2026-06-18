@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-auth-positions-1",
+  "command": {
+    "type": "list_auth_positions",
+    "venue": "BITFINEX",
+    "account_id": "paper-a",
+    "symbol": "tBTCUSD",
+    "include_historical": true
+  }
+}

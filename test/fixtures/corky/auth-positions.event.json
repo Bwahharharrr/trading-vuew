@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-auth-positions-1",
+  "event": {
+    "type": "auth_positions",
+    "positions": [
+      {
+        "runtime_id": "private-account-main",
+        "account_id": "paper-a",
+        "venue": "BITFINEX",
+        "source": "current",
+        "symbol": "tBTCUSD",
+        "position_id": 77,
+        "status": "ACTIVE",
+        "side": "long",
+        "amount": "0.25",
+        "base_price": "42000.5",
+        "pl": "12.75",
+        "pl_perc": "0.03",
+        "liquidation_price": "35000",
+        "leverage": "3",
+        "collateral": "250",
+        "collateral_min": "100",
+        "opened_at_ms": 1700000000000,
+        "updated_at_ms": 1700000001000
+      },
+      {
+        "runtime_id": "private-account-main",
+        "account_id": "paper-a",
+        "venue": "BITFINEX",
+        "source": "historical",
+        "symbol": "tBTCUSD",
+        "position_id": 66,
+        "status": "CLOSED",
+        "side": "short",
+        "amount": "-0.1",
+        "base_price": "41000",
+        "pl": "5.25",
+        "pl_perc": "0.01",
+        "opened_at_ms": 1699000000000,
+        "closed_at_ms": 1699100000000,
+        "updated_at_ms": 1699100000000
+      }
+    ]
+  }
+}

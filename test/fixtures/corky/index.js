@@ -16,6 +16,21 @@ import liveUpdateEvent from './live-update.event.json'
 import subscribeLatestRequest from './subscribe-latest.request.json'
 import upsertCandleStateRequest from './upsert-candle-state.request.json'
 
+// Auth-position flows (verbatim from the gateway examples, except
+// auth-position-audit-error which is hand-authored — the gateway ships no
+// auth-specific error example — to pin the `auth_position_audit_unavailable` path).
+import listAuthPositionsRequest from './list-auth-positions.request.json'
+import authPositionsEvent from './auth-positions.event.json'
+import subscribeAuthPositionsRequest from './subscribe-auth-positions.request.json'
+import authPositionsUpdateEvent from './auth-positions-update.event.json'
+import listAuthPositionHistoryRequest from './list-auth-position-history.request.json'
+import authPositionHistoryEvent from './auth-position-history.event.json'
+import getAuthPositionAuditRequest from './get-auth-position-audit.request.json'
+import authPositionAuditEvent from './auth-position-audit.event.json'
+import subscribeAuthPositionAuditRequest from './subscribe-auth-position-audit.request.json'
+import authPositionAuditUpdateEvent from './auth-position-audit-update.event.json'
+import authPositionAuditErrorEvent from './auth-position-audit-error.event.json'
+
 // Named exports keyed by a JS-friendly camelCase identifier.
 export {
   candleStatesEvent,
@@ -26,6 +41,17 @@ export {
   liveUpdateEvent,
   subscribeLatestRequest,
   upsertCandleStateRequest,
+  listAuthPositionsRequest,
+  authPositionsEvent,
+  subscribeAuthPositionsRequest,
+  authPositionsUpdateEvent,
+  listAuthPositionHistoryRequest,
+  authPositionHistoryEvent,
+  getAuthPositionAuditRequest,
+  authPositionAuditEvent,
+  subscribeAuthPositionAuditRequest,
+  authPositionAuditUpdateEvent,
+  authPositionAuditErrorEvent,
 }
 
 // Map keyed by original on-disk filename, for tests that want to iterate the
@@ -39,4 +65,15 @@ export const fixturesByFilename = {
   'live-update.event.json': liveUpdateEvent,
   'subscribe-latest.request.json': subscribeLatestRequest,
   'upsert-candle-state.request.json': upsertCandleStateRequest,
+  'list-auth-positions.request.json': listAuthPositionsRequest,
+  'auth-positions.event.json': authPositionsEvent,
+  'subscribe-auth-positions.request.json': subscribeAuthPositionsRequest,
+  'auth-positions-update.event.json': authPositionsUpdateEvent,
+  'list-auth-position-history.request.json': listAuthPositionHistoryRequest,
+  'auth-position-history.event.json': authPositionHistoryEvent,
+  'get-auth-position-audit.request.json': getAuthPositionAuditRequest,
+  'auth-position-audit.event.json': authPositionAuditEvent,
+  'subscribe-auth-position-audit.request.json': subscribeAuthPositionAuditRequest,
+  'auth-position-audit-update.event.json': authPositionAuditUpdateEvent,
+  'auth-position-audit-error.event.json': authPositionAuditErrorEvent,
 }

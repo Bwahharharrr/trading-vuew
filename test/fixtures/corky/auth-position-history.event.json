@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-auth-position-history-1",
+  "event": {
+    "type": "auth_position_history",
+    "positions": [
+      {
+        "runtime_id": "private-account-main",
+        "account_id": "paper-a",
+        "venue": "BITFINEX",
+        "source": "historical",
+        "symbol": "tBTCUSD",
+        "position_id": 66,
+        "status": "CLOSED",
+        "side": "short",
+        "amount": "-0.1",
+        "base_price": "41000",
+        "pl": "5.25",
+        "pl_perc": "0.01",
+        "opened_at_ms": 1699000000000,
+        "closed_at_ms": 1699100000000,
+        "updated_at_ms": 1699100000000
+      }
+    ],
+    "next_cursor": null,
+    "total_count": 1
+  }
+}
