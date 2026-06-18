@@ -157,6 +157,9 @@ export default {
 .positions-dock {
     display: flex;
     flex-direction: column;
+    /* As a flex child of .chart-area, never shrink below the requested height —
+       otherwise the body collapses and the tabs overlap the chart. */
+    flex-shrink: 0;
     background-color: #121827;
     border-top: 1px solid #2a2e39;
     color: #d1d4dc;
@@ -227,7 +230,7 @@ export default {
 }
 .pd-icon:hover { color: #35a776; border-color: #35a776; }
 
-.pd-body { flex: 1; overflow: auto; }
+.pd-body { flex: 1 1 0; min-height: 0; overflow: auto; }
 .pd-msg { padding: 16px; color: #808a9d; text-align: center; }
 .pd-error { color: #e54150; }
 

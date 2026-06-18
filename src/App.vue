@@ -1519,7 +1519,11 @@ body {
 }
 
 .chart-wrapper {
-    flex: 1;
+    flex: 1 1 0;
+    /* min-height:0 overrides the flex default of `auto`, which would refuse to
+       shrink the wrapper below the chart canvas's height and push the bottom
+       dock / button row out of the column (dock overlapping the chart). */
+    min-height: 0;
     position: relative;
     overflow: hidden;
 }
@@ -1527,6 +1531,7 @@ body {
 /* Bottom Panel */
 .bottom-panel {
     height: 44px;
+    flex-shrink: 0;          /* never squish the button row */
     background-color: #121827;
     border-top: 1px solid #2a2e39;
     border-left: 5px dotted #8282827d;
