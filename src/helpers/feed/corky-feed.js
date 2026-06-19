@@ -107,7 +107,7 @@ export class CorkyFeed extends FeedSource {
      * @returns {Promise<object>} a handle (carries the subscription_id).
      */
     async subscribe(opts = {}, handlers = {}) {
-        const { venue, symbol, timeframe, indicators, range, views, enabled, target_runtime_id } = opts
+        const { venue, symbol, timeframe, indicators, range, views, enabled, target_runtime_id, chunk_rows } = opts
         const onStatus = handlers.onStatus || (() => {})
         const onError = handlers.onError || (() => {})
 
@@ -137,6 +137,7 @@ export class CorkyFeed extends FeedSource {
                 venue, symbol, timeframe,
                 include_indicators: indicators != null ? true : undefined,
                 range,
+                chunk_rows,          // gateway chunk size (position windows use 500)
                 target_runtime_id,   // re-targeted on reconnect re-issue (spread below)
             },
             onStatus, onError,     // retained so reconnect/exhaustion can report
@@ -183,6 +184,7 @@ export class CorkyFeed extends FeedSource {
                 // historical request hang. `opts.indicators` stays a UI concern.
                 include_indicators: indicators != null ? true : undefined,
                 range,
+                chunk_rows,
             })
             // Race a timeout so a silent gateway/runtime hang surfaces cleanly.
             if (this.subscribeTimeoutMs > 0) {

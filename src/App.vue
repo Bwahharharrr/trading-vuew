@@ -345,9 +345,10 @@ import DataCube from '../src/helpers/datacube.js'
 import { CorkyClient } from '../src/helpers/feed/corky-client.js'
 import { CorkyFeed } from '../src/helpers/feed/corky-feed.js'
 import { CorkyPositionsFeed } from '../src/helpers/feed/corky-positions-feed.js'
-import { pickTimeframe } from '../src/helpers/feed/pick-timeframe.js'
+import { pickTimeframe, paddedCandleRange } from '../src/helpers/feed/pick-timeframe.js'
 import {
     tradeMarkers, positionSizeSeries, buySellHistogram, cumulativeFees, positionWindow,
+    orderMarkers, openCloseMarkers,
 } from '../src/helpers/feed/position-overlays.js'
 import BuysAndSells from './components/overlays/BuysAndSells.js'
 import Balance from './components/overlays/Balance.js'
@@ -477,6 +478,8 @@ export default {
                 this.positionPlot.series.fees && this.positionPlot.series.fees.currency
             return [
                 { key: 'trades', name: 'Trades' },
+                { key: 'openClose', name: 'Open / Close' },
+                { key: 'orders', name: 'Orders' },
                 { key: 'size', name: 'Position Size' },
                 { key: 'hist', name: 'Buy / Sell Histogram' },
                 { key: 'fees', name: cur ? `Fees (${cur})` : 'Fees' },
@@ -1109,6 +1112,8 @@ export default {
         _computePositionSeries(audit) {
             return {
                 markers: tradeMarkers(audit),
+                orders: orderMarkers(audit),
+                openClose: openCloseMarkers(audit),
                 size: positionSizeSeries(audit),
                 hist: buySellHistogram(audit),
                 fees: cumulativeFees(audit),   // { series, currency }
@@ -1151,6 +1156,24 @@ export default {
                         $positionOverlay: true, $uuid: 'pos-trades', 'z-index': 140,
                         legend: false, buyColor: '#23a776', sellColor: '#e54150',
                         markerSize: 6, showLabel: false,
+                    },
+                })
+            }
+            if (t.orders && s.orders && s.orders.length) {
+                dc.add('onchart', {
+                    name: 'Orders', type: 'Markers', grid: { id: 0 }, data: s.orders,
+                    settings: {
+                        $positionOverlay: true, $uuid: 'pos-orders', 'z-index': 135,
+                        legend: false, color: '#d97706', shape: 'square', markerSize: 5, showLabel: false,
+                    },
+                })
+            }
+            if (t.openClose && s.openClose && s.openClose.length) {
+                dc.add('onchart', {
+                    name: 'Open / Close', type: 'Markers', grid: { id: 0 }, data: s.openClose,
+                    settings: {
+                        $positionOverlay: true, $uuid: 'pos-openclose', 'z-index': 146,
+                        legend: false, color: '#64b5f6', shape: 'diamond', markerSize: 7, showLabel: true,
                     },
                 })
             }
@@ -1312,6 +1335,39 @@ export default {
             const st = (this.corkyStates || []).find(
                 s => s && s.venue === venue && s.symbol === symbol)
             return (st && st.runtime_id) || undefined
+        },
+
+        // True when discovery already maintains a candle state for this
+        // venue/symbol that exposes the timeframe (case-insensitive).
+        _candleStateHas(venue, symbol, timeframe) {
+            const st = (this.corkyStates || []).find(
+                s => s && s.venue === venue && s.symbol === symbol)
+            if (!st) return false
+            const want = String(timeframe).toLowerCase()
+            return (st.available_timeframes || []).some(tf => String(tf).toLowerCase() === want)
+        },
+
+        // Ensure a candle state exists for venue/symbol/timeframe before
+        // subscribing. If missing, upsert_candle_state (a control command — thread
+        // the discovered runtime_id) then poll discovery until it registers
+        // (bounded). Returns true once available, false on timeout. Mirrors
+        // scripts/corky-gateway-smoke.mjs bootstrapState.
+        async _ensureCandleState(venue, symbol, timeframe) {
+            if (this._candleStateHas(venue, symbol, timeframe)) return true
+            if (!this.corkyClient) return false
+            try {
+                await this.corkyClient.upsertCandleState({
+                    venue, symbol, timeframes: [timeframe],
+                    target_runtime_id: this._corkyRuntimeId(venue, symbol),
+                })
+            } catch (_) { /* may still register via discovery; fall through to poll */ }
+            const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+            for (let i = 0; i < 8; i++) {
+                try { await this.corkyDiscover(venue) } catch (_) { /* keep polling */ }
+                if (this._candleStateHas(venue, symbol, timeframe)) return true
+                await sleep(1000)
+            }
+            return false
         },
 
         // Per-(venue,symbol) enabled-state memory (lazily created; normalized so a
@@ -1545,7 +1601,7 @@ export default {
             this.positionPlot = {
                 venue, symbol, position_id: pos.position_id,
                 window: null, audit: null, series: null,
-                toggles: { trades: true, size: false, hist: false, fees: false },
+                toggles: { trades: true, openClose: true, orders: false, size: false, hist: false, fees: false },
             }
 
             // Fetch the audit FIRST so the window comes from the actual TRADE/fee
@@ -1556,6 +1612,22 @@ export default {
             const mine = () => this.positionPlot &&
                 this.positionPlot.symbol === symbol &&
                 this.positionPlot.position_id === pos.position_id
+
+            // Ensure the gateway maintains a candle state for this symbol+timeframe
+            // before subscribing (some account symbols have none → state_not_found).
+            // Provisions one on demand and waits for it to register.
+            this.corkyLoading = true
+            const chartable = await this._ensureCandleState(venue, symbol, timeframe)
+            if (!mine()) return
+            if (!chartable) {
+                this.corkyLoading = false
+                this.corkyError = { message:
+                    `No candle data available for ${venue} ${symbol} ${timeframe} — can't chart this position. ` +
+                    'Use the row’s details (ⓘ) for its orders/trades/fees.' }
+                this.clearPositionPlot()
+                return
+            }
+
             let audit = null
             if (this.positionsFeed && pos.position_id != null) {
                 try {
@@ -1573,11 +1645,15 @@ export default {
                 const win = this._plotWindow(pos, audit)
                 this.positionPlot.window = win
                 if (win) {
-                    const pad = Math.max(60000, Math.round((win.end - win.start) * 0.08))
-                    range = { type: 'start_end', start_ms: win.start - pad, end_ms: win.end + pad }
+                    // Load the position window padded by ~400 candles each side
+                    // (calendar-stepped for 1M), clamped to [0, now].
+                    const r = paddedCandleRange({
+                        start: win.start, end: win.end, timeframe, count: 400, now: Date.now(),
+                    })
+                    range = { type: 'start_end', start_ms: r.start_ms, end_ms: r.end_ms }
                 }
             }
-            this.corkySelect({ venue, symbol, timeframe, range })
+            this.corkySelect({ venue, symbol, timeframe, range, chunk_rows: 500 })
             // Plot now if the chart is already on this symbol; otherwise the
             // history-complete handler re-plots once the new candles load (the
             // subscribe wipes overlays). The symbol guard inside makes this safe.
@@ -1586,25 +1662,37 @@ export default {
             if (audit && pos.closed_at_ms == null) this._startPositionAuditStream(pos)
         },
 
-        // The chart window to show for a position — derived from the AUDIT's trade
-        // and fee timestamps (authoritative; the row's opened/closed can be 0). Falls
-        // back to the row window. Returns null if no usable timestamp; guarantees a
-        // minimum span so a single-trade position still has visible context.
+        // The position's chart window. PRIMARY: audit.position timestamps
+        // (opened_at_ms, closed_at_ms ?? updated_at_ms) — the gateway now infers
+        // opened_at_ms from the trade segment. FALLBACK (robustness): trade/fee
+        // timestamps, then the row window — covers older audits where the position
+        // window is absent/0. Returns null if nothing usable; enforces a minimum
+        // visible span so a single-instant window isn't degenerate.
         _plotWindow(pos, audit) {
             const valid = (t) => typeof t === 'number' && Number.isFinite(t) && t > 0
-            const ts = []
-            for (const t of (audit && audit.trades) || []) if (valid(t.execution_timestamp_ms)) ts.push(t.execution_timestamp_ms)
-            for (const f of (audit && audit.fees) || []) if (valid(f.timestamp_ms)) ts.push(f.timestamp_ms)
-            let start, end
-            if (ts.length) {
-                start = Math.min(...ts); end = Math.max(...ts)
-            } else {
-                const w = positionWindow(pos)
-                start = valid(w.start) ? w.start : null
-                end = valid(w.end) ? w.end : (pos.closed_at_ms == null && valid(w.start) ? Date.now() : null)
-                if (start == null || end == null) return null
+            const p = (audit && audit.position) || {}
+            let start = valid(p.opened_at_ms) ? p.opened_at_ms : null
+            let end = valid(p.closed_at_ms) ? p.closed_at_ms : (valid(p.updated_at_ms) ? p.updated_at_ms : null)
+            if (start == null || end == null) {
+                const ts = []
+                for (const t of (audit && audit.trades) || []) if (valid(t.execution_timestamp_ms)) ts.push(t.execution_timestamp_ms)
+                for (const f of (audit && audit.fees) || []) if (valid(f.timestamp_ms)) ts.push(f.timestamp_ms)
+                if (ts.length) {
+                    if (start == null) start = Math.min(...ts)
+                    if (end == null) end = Math.max(...ts)
+                }
             }
-            const MIN_SPAN = 12 * 60 * 60 * 1000   // ≥ ~1 day of context around the trades
+            // Open position with no end → now.
+            if (start != null && end == null && pos && pos.closed_at_ms == null) end = Date.now()
+            // Last-resort row fallback.
+            if (start == null || end == null) {
+                const w = positionWindow(pos)
+                if (start == null && valid(w.start)) start = w.start
+                if (end == null && valid(w.end)) end = w.end
+            }
+            if (start == null || end == null) return null
+            if (end < start) { const t = start; start = end; end = t }
+            const MIN_SPAN = 12 * 60 * 60 * 1000   // ≥ ~1 day visible for a tiny window
             if (end - start < MIN_SPAN) {
                 const mid = (start + end) / 2
                 start = mid - MIN_SPAN / 2; end = mid + MIN_SPAN / 2

@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   tradeMarkers, positionSizeSeries, buySellHistogram, cumulativeFees, feeEvents, positionWindow,
+  orderMarkers, openCloseMarkers,
 } from '../../src/helpers/feed/position-overlays.js'
 import { authPositionAuditEvent } from '../fixtures/corky/index.js'
 
@@ -104,6 +105,31 @@ describe('feeEvents', () => {
   it('older audit with no fees[] yields just the trade fees', () => {
     expect(feeEvents(audit)).toHaveLength(4)                   // 4 trades, 0 funding
     expect(feeEvents(audit).every((e) => e.kind === 'trade')).toBe(true)
+  })
+})
+
+describe('orderMarkers', () => {
+  it('emits [created_at_ms, price, type] for orders with a usable price', () => {
+    const m = orderMarkers(authPositionAuditEvent.event.audit)
+    expect(m).toEqual([[1700000000000, 42000.5, 'EXCHANGE LIMIT']])
+  })
+  it('skips orders without a price/timestamp; empty/missing → []', () => {
+    expect(orderMarkers({ orders: [{ created_at_ms: 0, price: '1' }, { created_at_ms: 5, price: null }] })).toEqual([])
+    expect(orderMarkers({})).toEqual([])
+  })
+})
+
+describe('openCloseMarkers', () => {
+  it('open marker only for a current position (no close)', () => {
+    const m = openCloseMarkers(authPositionAuditEvent.event.audit)   // opened + base_price, no closed
+    expect(m).toEqual([[1700000000000, 42000.5, 'Open']])
+  })
+  it('open + close for a closed position (close uses the last trade price)', () => {
+    const a = { position: { opened_at_ms: 10, closed_at_ms: 99, base_price: '100' }, trades: [{ execution_timestamp_ms: 50, price: '105' }] }
+    expect(openCloseMarkers(a)).toEqual([[10, 100, 'Open'], [99, 105, 'Close']])
+  })
+  it('skips an open marker when base_price is unusable', () => {
+    expect(openCloseMarkers({ position: { opened_at_ms: 10 } })).toEqual([])
   })
 })
 

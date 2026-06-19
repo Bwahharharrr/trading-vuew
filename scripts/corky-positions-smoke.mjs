@@ -24,6 +24,7 @@
 
 import { CorkyClient } from '../src/helpers/feed/corky-client.js'
 import { CorkyPositionsFeed } from '../src/helpers/feed/corky-positions-feed.js'
+import { paddedCandleRange } from '../src/helpers/feed/pick-timeframe.js'
 
 const argv = process.argv.slice(2)
 const urlArg = argv.find((a) => a.startsWith('ws://') || a.startsWith('wss://'))
@@ -129,6 +130,14 @@ async function main() {
         log(`    [${f.kind}] ${f.amount} ${f.currency} — ${f.description}`)
       }
       if (s && s.reasons && s.reasons.length) log(`    reasons: ${s.reasons.join('; ')}`)
+      // Computed candle window (position±400 candles at 1h), as the chart would request.
+      const p = (audit && audit.position) || {}
+      const wStart = p.opened_at_ms > 0 ? p.opened_at_ms : null
+      const wEnd = p.closed_at_ms > 0 ? p.closed_at_ms : (p.updated_at_ms > 0 ? p.updated_at_ms : Date.now())
+      if (wStart != null) {
+        const r = paddedCandleRange({ start: wStart, end: wEnd, timeframe: '1h', count: 400, now: Date.now() })
+        log(`    candle window (1h ±400): ${new Date(r.start_ms).toISOString()} → ${new Date(r.end_ms).toISOString()}`)
+      }
     } catch (e) {
       log(`\n● get_auth_position_audit: ${e.code || ''} ${e.message}`)
     }

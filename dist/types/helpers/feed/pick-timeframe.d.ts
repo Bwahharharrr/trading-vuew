@@ -5,6 +5,24 @@
  */
 export function tfToMs(tf: any): number;
 /**
+ * The candle subscribe window for a position: pad [start, end] by `count` candles
+ * on each side using the timeframe's bucket size, then clamp to [0, now]. Month
+ * (`M`) and year (`y`) timeframes step by CALENDAR units (not fixed 30-day math);
+ * everything else uses {@link tfToMs}. `now` is passed in (pure/testable).
+ *
+ * Returns `{ start_ms, end_ms }` (end_ms ≥ start_ms; never future, never < 0).
+ */
+export function paddedCandleRange({ start, end, timeframe, count, now }: {
+    start: any;
+    end: any;
+    timeframe: any;
+    count?: number | undefined;
+    now: any;
+}): {
+    start_ms: number;
+    end_ms: any;
+};
+/**
  * Choose the timeframe to use when switching to `available` (the target symbol's
  * advertised timeframes): keep `current` if present → else `fallback` (default
  * `"1h"`) → else the lowest available. Returns the exact label from `available`

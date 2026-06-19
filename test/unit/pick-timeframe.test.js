@@ -2,7 +2,7 @@
 // position click switches the chart to that position's ticker.
 
 import { describe, it, expect } from 'vitest'
-import { tfToMs, pickTimeframe } from '../../src/helpers/feed/pick-timeframe.js'
+import { tfToMs, pickTimeframe, paddedCandleRange } from '../../src/helpers/feed/pick-timeframe.js'
 
 describe('tfToMs — duration ordering (case-aware units)', () => {
   it('orders minute < hour < day < week < month', () => {
@@ -56,5 +56,33 @@ describe('pickTimeframe — keep → 1h → lowest', () => {
 
   it('honours a custom fallback', () => {
     expect(pickTimeframe('5m', ['1D', '4h', '1W'], { fallback: '4h' })).toBe('4h')
+  })
+})
+
+describe('paddedCandleRange — ±N candles around a window', () => {
+  const NOW = 2_000_000_000_000   // far future so clamps don't interfere
+  it('pads fixed timeframes by count·tfToMs each side', () => {
+    const start = 1_000_000_000_000, end = 1_000_100_000_000
+    const r = paddedCandleRange({ start, end, timeframe: '1h', count: 400, now: NOW })
+    expect(r.start_ms).toBe(start - 400 * 3600 * 1000)
+    expect(r.end_ms).toBe(end + 400 * 3600 * 1000)
+  })
+  it('1M steps by CALENDAR months, not fixed 30 days', () => {
+    // start at 2021-03-15; pad 2 months back/forward
+    const start = Date.UTC(2021, 2, 15), end = Date.UTC(2021, 2, 20)
+    const r = paddedCandleRange({ start, end, timeframe: '1M', count: 2, now: NOW })
+    // calendar: Jan 15 .. May 20 (not start - 60 days fixed)
+    expect(new Date(r.start_ms).getUTCMonth()).toBe(0)   // January
+    expect(new Date(r.end_ms).getUTCMonth()).toBe(4)     // May
+    expect(r.start_ms).not.toBe(start - 2 * 30 * 86400000)  // not fixed 30-day math
+  })
+  it('clamps start_ms ≥ 0 and end_ms ≤ now', () => {
+    const r = paddedCandleRange({ start: 1000, end: NOW - 1000, timeframe: '1D', count: 400, now: NOW })
+    expect(r.start_ms).toBe(0)            // would go negative → clamped
+    expect(r.end_ms).toBe(NOW)            // would exceed now → clamped
+  })
+  it('end_ms is never less than start_ms', () => {
+    const r = paddedCandleRange({ start: 5000, end: 6000, timeframe: '1h', count: 0, now: 5500 })
+    expect(r.end_ms).toBeGreaterThanOrEqual(r.start_ms)
   })
 })

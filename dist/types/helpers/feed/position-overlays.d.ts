@@ -11,6 +11,19 @@ export function tradeMarkers(audit: any): any;
  */
 export function positionSizeSeries(audit: any): any[][];
 /**
+ * Order markers for the price pane (Markers.vue): `[created_at_ms, price, label]`.
+ * Plotted at the order's limit price (`price`, else `price_avg`); orders without a
+ * usable price/timestamp (e.g. some market orders) are skipped. Distinct from
+ * trade markers so the user sees placement vs execution.
+ */
+export function orderMarkers(audit: any): any[][];
+/**
+ * Position open/close markers (Markers.vue): `[ts, price, 'Open'|'Close']`. Open
+ * at `position.opened_at_ms` (base_price); close at `position.closed_at_ms` (last
+ * trade price, else base_price). Each is emitted only when its timestamp is valid.
+ */
+export function openCloseMarkers(audit: any): any[][];
+/**
  * One bar per trade (Histogram.vue): `[ts, signedAmount]`. Positive (buy) renders
  * with colorUp (green), negative (sell) with colorDown (red).
  */

@@ -55,6 +55,43 @@ export function positionSizeSeries(audit) {
 }
 
 /**
+ * Order markers for the price pane (Markers.vue): `[created_at_ms, price, label]`.
+ * Plotted at the order's limit price (`price`, else `price_avg`); orders without a
+ * usable price/timestamp (e.g. some market orders) are skipped. Distinct from
+ * trade markers so the user sees placement vs execution.
+ */
+export function orderMarkers(audit) {
+  const out = []
+  for (const o of (audit && Array.isArray(audit.orders)) ? audit.orders : []) {
+    if (!o || !(o.created_at_ms > 0)) continue
+    const price = o.price != null ? Number(o.price) : (o.price_avg != null ? Number(o.price_avg) : NaN)
+    if (!Number.isFinite(price)) continue
+    out.push([o.created_at_ms, price, o.order_type || 'order'])
+  }
+  out.sort((a, b) => a[0] - b[0])
+  return out
+}
+
+/**
+ * Position open/close markers (Markers.vue): `[ts, price, 'Open'|'Close']`. Open
+ * at `position.opened_at_ms` (base_price); close at `position.closed_at_ms` (last
+ * trade price, else base_price). Each is emitted only when its timestamp is valid.
+ */
+export function openCloseMarkers(audit) {
+  const p = (audit && audit.position) || {}
+  const out = []
+  const base = p.base_price != null ? Number(p.base_price) : NaN
+  if (p.opened_at_ms > 0 && Number.isFinite(base)) out.push([p.opened_at_ms, base, 'Open'])
+  if (p.closed_at_ms > 0) {
+    const trades = sortedTrades(audit)
+    const last = trades.length ? Number(trades[trades.length - 1].price) : base
+    const closePrice = Number.isFinite(last) ? last : base
+    if (Number.isFinite(closePrice)) out.push([p.closed_at_ms, closePrice, 'Close'])
+  }
+  return out
+}
+
+/**
  * One bar per trade (Histogram.vue): `[ts, signedAmount]`. Positive (buy) renders
  * with colorUp (green), negative (sell) with colorDown (red).
  */

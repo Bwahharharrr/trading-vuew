@@ -300,6 +300,8 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     ensurePriceAlarmOverlay(): void;
     _computePositionSeries(audit: any): {
         markers: any;
+        orders: any[][];
+        openClose: any[][];
         size: any[][];
         hist: any;
         fees: {
@@ -322,6 +324,8 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     clearAllAlarms(): void;
     closeCorkyIndicator(payload: any): boolean;
     _corkyRuntimeId(venue: any, symbol: any): undefined;
+    _candleStateHas(venue: any, symbol: any, timeframe: any): any;
+    _ensureCandleState(venue: any, symbol: any, timeframe: any): Promise<boolean>;
     _corkyMem(venue: any, symbol: any): any;
     _corkyPatchAndReselect(patch: any, selectOpts: any): Promise<void>;
     onCorkyRetry(): void;

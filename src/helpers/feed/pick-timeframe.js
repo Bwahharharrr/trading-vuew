@@ -35,6 +35,42 @@ export function tfToMs(tf) {
   return ms == null ? Infinity : n * ms
 }
 
+// Parse the unit letter from a timeframe label, preserving the m/M distinction.
+function tfUnit(tf) {
+  const m = String(tf == null ? '' : tf).trim().match(/^(\d+(?:\.\d+)?)([a-zA-Z])$/)
+  if (!m) return null
+  return { n: parseFloat(m[1]), unit: (m[2] === 'm' || m[2] === 'M') ? m[2] : m[2].toLowerCase() }
+}
+
+/**
+ * The candle subscribe window for a position: pad [start, end] by `count` candles
+ * on each side using the timeframe's bucket size, then clamp to [0, now]. Month
+ * (`M`) and year (`y`) timeframes step by CALENDAR units (not fixed 30-day math);
+ * everything else uses {@link tfToMs}. `now` is passed in (pure/testable).
+ *
+ * Returns `{ start_ms, end_ms }` (end_ms ≥ start_ms; never future, never < 0).
+ */
+export function paddedCandleRange({ start, end, timeframe, count = 400, now }) {
+  const u = tfUnit(timeframe)
+  let s, e
+  if (u && (u.unit === 'M' || u.unit === 'y')) {
+    // Calendar stepping so 1M padding isn't off by days/leap years.
+    const months = (u.unit === 'M' ? u.n : u.n * 12) * count
+    const ds = new Date(start); ds.setMonth(ds.getMonth() - months)
+    const de = new Date(end); de.setMonth(de.getMonth() + months)
+    s = ds.getTime(); e = de.getTime()
+  } else {
+    const pad = count * tfToMs(timeframe)
+    s = start - pad; e = end + pad
+  }
+  if (!Number.isFinite(s)) s = start
+  if (!Number.isFinite(e)) e = end
+  s = Math.max(0, s)
+  if (typeof now === 'number' && Number.isFinite(now)) e = Math.min(now, e)
+  if (e < s) e = s
+  return { start_ms: s, end_ms: e }
+}
+
 const sameTf = (a, b) => String(a).toLowerCase() === String(b).toLowerCase()
 
 /**

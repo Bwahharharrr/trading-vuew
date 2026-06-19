@@ -8,7 +8,10 @@ import { test, expect, describe, beforeEach, vi } from 'vitest'
 import App from '../../src/App.vue'
 
 const audit = {
-  position: { source: 'historical', opened_at_ms: 1730683960000, closed_at_ms: 1733964907000, updated_at_ms: 1733964907000 },
+  position: { source: 'historical', opened_at_ms: 1730683960000, closed_at_ms: 1733964907000, updated_at_ms: 1733964907000, base_price: '69012' },
+  orders: [
+    { order_id: 1, created_at_ms: 1730683960000, price: '69012', order_type: 'LIMIT' },
+  ],
   trades: [
     { execution_timestamp_ms: 1730683960181, amount: '0.01015975', price: '69012', fee: '-1.402289334', fee_currency: 'TESTUSD' },
     { execution_timestamp_ms: 1730707382909, amount: '0.03984025', price: '69012', fee: '-2.749455333', fee_currency: 'TESTUSD' },
@@ -40,40 +43,51 @@ function mkCtx(toggles) {
 const tags = (ctx, side) => ctx.chart.data[side].filter((o) => o.settings && o.settings.$positionOverlay)
 
 let ctx
-beforeEach(() => { ctx = mkCtx({ trades: true, size: true, hist: true, fees: true }) })
+beforeEach(() => { ctx = mkCtx({ trades: true, orders: true, openClose: true, size: true, hist: true, fees: true }) })
 
 describe('syncPositionOverlays', () => {
-  test('adds Trades (onchart) + Size/Histogram/Fees (offchart) when all toggled on', () => {
+  test('adds Trades/Orders/Open-Close (onchart) + Size/Histogram/Fees (offchart) when all on', () => {
     ctx.syncPositionOverlays()
     const on = tags(ctx, 'onchart'); const off = tags(ctx, 'offchart')
-    expect(on.map((o) => o.type)).toEqual(['Trades'])
-    expect(on[0].grid).toEqual({ id: 0 })          // price pane
+    expect(on.map((o) => o.type).sort()).toEqual(['Markers', 'Markers', 'Trades'])  // trades + orders + open/close
+    expect(on.every((o) => o.grid && o.grid.id === 0)).toBe(true)   // all price pane
     expect(off.map((o) => o.type).sort()).toEqual(['Histogram', 'Spline', 'StepLine'])
     expect(off.every((o) => o.grid === undefined)).toBe(true)  // each its own pane (anchor)
     // overlay data points at the App-owned series (survives wipe)
-    expect(on[0].data).toBe(ctx.positionPlot.series.markers)
-    // fees pane labels the currency
+    expect(on.find((o) => o.type === 'Trades').data).toBe(ctx.positionPlot.series.markers)
     expect(off.find((o) => o.type === 'Spline').name).toBe('Fees (TESTUSD)')
   })
 
   test('re-adds the overlays after a simulated cube wipe (idempotent, no dupes)', () => {
     ctx.syncPositionOverlays()
     ctx.syncPositionOverlays()   // calling again must not duplicate
-    expect(tags(ctx, 'onchart')).toHaveLength(1)
+    expect(tags(ctx, 'onchart')).toHaveLength(3)
     expect(tags(ctx, 'offchart')).toHaveLength(3)
     // wipe (what corky-feed._finishHistory does), then re-sync
     ctx.chart.data.onchart.length = 0
     ctx.chart.data.offchart.length = 0
     ctx.syncPositionOverlays()
-    expect(tags(ctx, 'onchart')).toHaveLength(1)
+    expect(tags(ctx, 'onchart')).toHaveLength(3)
     expect(tags(ctx, 'offchart')).toHaveLength(3)
   })
 
   test('respects toggles — only enabled series are plotted', () => {
-    ctx.positionPlot.toggles = { trades: true, size: false, hist: false, fees: false }
+    ctx.positionPlot.toggles = { trades: true, orders: false, openClose: false, size: false, hist: false, fees: false }
     ctx.syncPositionOverlays()
     expect(tags(ctx, 'onchart').map((o) => o.type)).toEqual(['Trades'])
     expect(tags(ctx, 'offchart')).toHaveLength(0)
+  })
+
+  test('Orders + Open/Close markers carry their data on the price pane', () => {
+    ctx.positionPlot.toggles = { trades: false, orders: true, openClose: true, size: false, hist: false, fees: false }
+    ctx.syncPositionOverlays()
+    const on = tags(ctx, 'onchart')
+    const orders = on.find((o) => o.name === 'Orders')
+    const oc = on.find((o) => o.name === 'Open / Close')
+    expect(orders.data).toBe(ctx.positionPlot.series.orders)
+    expect(oc.data).toBe(ctx.positionPlot.series.openClose)
+    expect(orders.data.length).toBe(1)              // 1 order
+    expect(oc.data.length).toBe(2)                  // open + close
   })
 
   test('plots nothing when the plotted position is not the charted symbol', () => {
@@ -83,13 +97,13 @@ describe('syncPositionOverlays', () => {
     expect(tags(ctx, 'offchart')).toHaveLength(0)
   })
 
-  test('positionDetailRows lists the four toggles, labelling the fee currency', () => {
+  test('positionDetailRows lists all six toggles, labelling the fee currency', () => {
     const rows = App.computed.positionDetailRows.call(ctx)
-    expect(rows.map((r) => r.key)).toEqual(['trades', 'size', 'hist', 'fees'])
-    expect(rows[3].name).toBe('Fees (TESTUSD)')          // currency from the series
+    expect(rows.map((r) => r.key)).toEqual(['trades', 'openClose', 'orders', 'size', 'hist', 'fees'])
+    expect(rows[5].name).toBe('Fees (TESTUSD)')          // currency from the series
     // before series resolve, the fees row falls back to a generic label
     const pending = { positionPlot: { toggles: {}, series: null } }
-    expect(App.computed.positionDetailRows.call(pending)[3].name).toBe('Fees')
+    expect(App.computed.positionDetailRows.call(pending)[5].name).toBe('Fees')
     // no plotted position → no rows
     expect(App.computed.positionDetailRows.call({ positionPlot: null })).toEqual([])
   })

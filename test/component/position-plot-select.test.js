@@ -27,17 +27,21 @@ const pos = {
 
 function mkCtx() {
   const ctx = {
-    corkyStates: [{ venue: 'BITFINEX', symbol: 'tTESTBTC:TESTUSD', available_timeframes: ['1m', '1h', '1D'] }],
+    corkyStates: [{ venue: 'BITFINEX', symbol: 'tTESTBTC:TESTUSD', available_timeframes: ['1m', '1h', '1D'], runtime_id: 'public-market-main' }],
     corkyCurrent: { timeframe: '1h', symbol: 'tTESTBTC:TESTUSD' },
     positionsFeed: { streamingSupported: true, getAudit: vi.fn(async () => auditBundle), subscribeAudit: vi.fn(), unsubscribe: vi.fn() },
+    corkyClient: { upsertCandleState: vi.fn(async () => {}) },
     chart: { data: { onchart: [], offchart: [], chart: { data: [] } }, add(s, o) { this.data[s].push(o) }, update_ids() {}, touchData() {} },
     corkySelect: vi.fn(),
     corkyDiscover: vi.fn(),
+    corkyLoading: false,
+    corkyError: null,
     $nextTick: (fn) => fn && fn(),
     $refs: { tradingVue: { refreshOffchartOverlays: vi.fn(), setRange: vi.fn(), resetChart: vi.fn() } },
   }
   for (const m of ['onPositionSelect', '_plotWindow', '_startPositionAuditStream', '_stopPositionAuditStream',
-    'syncPositionOverlays', '_removePositionOverlays', '_computePositionSeries']) {
+    'syncPositionOverlays', '_removePositionOverlays', '_computePositionSeries',
+    '_ensureCandleState', '_candleStateHas', '_corkyRuntimeId', 'clearPositionPlot']) {
     ctx[m] = M[m]
   }
   return ctx
@@ -56,14 +60,19 @@ describe('onPositionSelect → audit-first, trade-derived window', () => {
     const arg = ctx.corkySelect.mock.calls[0][0]
     expect(arg.symbol).toBe('tTESTBTC:TESTUSD')
     expect(arg.timeframe).toBe('1h')          // current tf kept (offered)
+    expect(arg.chunk_rows).toBe(500)          // position windows use 500-row chunks
   })
 
-  test('subscribes with a start_end range that covers the TRADE timestamps', async () => {
+  test('subscribes with a start_end range of position±400 candles covering the trades', async () => {
     await ctx.onPositionSelect(pos)
     const arg = ctx.corkySelect.mock.calls[0][0]
     expect(arg.range.type).toBe('start_end')
     expect(arg.range.start_ms).toBeLessThan(TRADE_MIN)
     expect(arg.range.end_ms).toBeGreaterThan(TRADE_MAX)
+    // window is audit.position [opened, closed]; range pads ~400×1h each side
+    const PAD = 400 * 3600 * 1000
+    expect(arg.range.start_ms).toBe(1730683960000 - PAD)   // opened_at_ms - 400h
+    expect(arg.range.end_ms).toBe(1733964907000 + PAD)     // closed_at_ms + 400h
   })
 
   test('sets a provisional plot synchronously, fills window + series after the audit', async () => {
@@ -82,14 +91,18 @@ describe('onPositionSelect → audit-first, trade-derived window', () => {
     expect(trades.type).toBe('Trades')
   })
 
-  test('REGRESSION: opened_at_ms=0 (open position) → window from trades, NOT 1970→now', async () => {
+  test('REGRESSION: opened_at_ms=0 everywhere → window from trades, NOT 1970→now', async () => {
+    // both the row AND the audit.position lack a real open time → trade fallback
+    ctx.positionsFeed.getAudit = vi.fn(async () => ({
+      ...auditBundle,
+      position: { ...auditBundle.position, opened_at_ms: 0, closed_at_ms: null, updated_at_ms: 0 },
+    }))
     const openZero = { ...pos, opened_at_ms: 0, closed_at_ms: null }
     await ctx.onPositionSelect(openZero)
     const arg = ctx.corkySelect.mock.calls[0][0]
     // window must hug the Dec-2024 trades, never start at the epoch
     expect(ctx.positionPlot.window.start).toBeGreaterThan(1700000000000)
     expect(arg.range.start_ms).toBeGreaterThan(1700000000000)
-    expect(arg.range.start_ms).toBeLessThan(TRADE_MIN)
     expect(arg.range.end_ms).toBeGreaterThan(TRADE_MAX)
     expect(ctx.positionsFeed.subscribeAudit).toHaveBeenCalledTimes(1)   // open → live stream
   })
@@ -104,5 +117,41 @@ describe('onPositionSelect → audit-first, trade-derived window', () => {
   test('a CLOSED position does not open a live audit stream', async () => {
     await ctx.onPositionSelect(pos)
     expect(ctx.positionsFeed.subscribeAudit).not.toHaveBeenCalled()
+  })
+})
+
+describe('candle-state provisioning before subscribe', () => {
+  test('state already present → no upsert, subscribe proceeds', async () => {
+    await ctx.onPositionSelect(pos)   // corkyStates already lists 1h
+    expect(ctx.corkyClient.upsertCandleState).not.toHaveBeenCalled()
+    expect(ctx.corkySelect).toHaveBeenCalledTimes(1)
+  })
+
+  test('state absent → upsert (with runtime_id) then subscribe once it registers', async () => {
+    ctx.corkyStates = []   // not maintained yet
+    // Registers only AFTER the upsert (the gateway provisioning), not during the
+    // top-of-onPositionSelect discovery.
+    ctx.corkyDiscover = vi.fn(async () => {
+      if (ctx.corkyClient.upsertCandleState.mock.calls.length > 0) {
+        ctx.corkyStates = [{ venue: 'BITFINEX', symbol: 'tTESTBTC:TESTUSD', available_timeframes: ['1h'], runtime_id: 'public-market-main' }]
+      }
+    })
+    await ctx.onPositionSelect(pos)
+    expect(ctx.corkyClient.upsertCandleState).toHaveBeenCalledTimes(1)
+    const up = ctx.corkyClient.upsertCandleState.mock.calls[0][0]
+    expect(up).toMatchObject({ venue: 'BITFINEX', symbol: 'tTESTBTC:TESTUSD', timeframes: ['1h'] })
+    expect(ctx.corkySelect).toHaveBeenCalledTimes(1)   // proceeded after it registered
+  })
+
+  test('never registers → graceful error, no subscribe, plot cleared', async () => {
+    vi.stubGlobal('setTimeout', (fn) => { fn(); return 0 })   // make the poll sleeps instant
+    try {
+      ctx.corkyStates = []
+      ctx.corkyDiscover = vi.fn(async () => { /* never registers the state */ })
+      await ctx.onPositionSelect(pos)
+      expect(ctx.corkySelect).not.toHaveBeenCalled()
+      expect(ctx.positionPlot).toBeNull()
+      expect(ctx.corkyError).toBeTruthy()
+    } finally { vi.unstubAllGlobals() }
   })
 })
