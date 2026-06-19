@@ -2,7 +2,9 @@
 // position click switches the chart to that position's ticker.
 
 import { describe, it, expect } from 'vitest'
-import { tfToMs, pickTimeframe, paddedCandleRange } from '../../src/helpers/feed/pick-timeframe.js'
+import { tfToMs, pickTimeframe, paddedCandleRange, coarsenTimeframe } from '../../src/helpers/feed/pick-timeframe.js'
+
+const DAY = 24 * 3600 * 1000
 
 describe('tfToMs — duration ordering (case-aware units)', () => {
   it('orders minute < hour < day < week < month', () => {
@@ -84,5 +86,31 @@ describe('paddedCandleRange — ±N candles around a window', () => {
   it('end_ms is never less than start_ms', () => {
     const r = paddedCandleRange({ start: 5000, end: 6000, timeframe: '1h', count: 0, now: 5500 })
     expect(r.end_ms).toBeGreaterThanOrEqual(r.start_ms)
+  })
+})
+
+describe('coarsenTimeframe — bound candle count for long spans', () => {
+  const TFS = ['1m', '5m', '1h', '4h', '1D']
+  it('keeps the preferred tf for a short span', () => {
+    expect(coarsenTimeframe('1h', TFS, 10 * 3600 * 1000)).toBe('1h')   // 10 candles
+  })
+  it('coarsens to the finest tf that fits the cap', () => {
+    // 200 days at 1h = 4800 > 3000; at 4h = 1200 ≤ 3000 → 4h
+    expect(coarsenTimeframe('1h', TFS, 200 * DAY, { maxCandles: 3000 })).toBe('4h')
+  })
+  it('never goes finer than the preferred (caps at preferred if it cannot coarsen)', () => {
+    // only 1m and 1h offered, preferred 1h, huge span → can't coarsen → stays 1h, never 1m
+    expect(coarsenTimeframe('1h', ['1m', '1h'], 5000 * DAY)).toBe('1h')
+  })
+  it('falls back to the coarsest available when nothing fits', () => {
+    expect(coarsenTimeframe('1m', ['1m', '5m', '1h'], 4000 * DAY)).toBe('1h')
+  })
+  it('no span / no candidates → preferred unchanged', () => {
+    expect(coarsenTimeframe('1h', TFS, 0)).toBe('1h')
+    expect(coarsenTimeframe('1h', [], 999 * DAY)).toBe('1h')
+  })
+  it('respects a custom maxCandles cap', () => {
+    // 30 days at 1h = 720 candles; cap 500 → coarsen to 4h (180 ≤ 500)
+    expect(coarsenTimeframe('1h', TFS, 30 * DAY, { maxCandles: 500 })).toBe('4h')
   })
 })

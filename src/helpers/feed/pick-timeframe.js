@@ -71,6 +71,31 @@ export function paddedCandleRange({ start, end, timeframe, count = 400, now }) {
   return { start_ms: s, end_ms: e }
 }
 
+/**
+ * Coarsen a preferred timeframe so a long position window doesn't request an
+ * absurd number of candles (e.g. a multi-year position at 1m). Returns the FINEST
+ * available timeframe that is at least as coarse as `preferred` AND keeps
+ * `spanMs / tfMs ≤ maxCandles`; if even the coarsest available exceeds the cap,
+ * returns that coarsest. Never returns a timeframe FINER than `preferred`. With no
+ * span (≤0) or no usable candidates, returns `preferred` unchanged.
+ */
+export function coarsenTimeframe(preferred, available, spanMs, { maxCandles = 3000 } = {}) {
+  const list = (Array.isArray(available) ? available : []).filter((t) => t != null)
+  if (!list.length || !(spanMs > 0)) return preferred
+  const ranked = list
+    .map((t) => ({ t, ms: tfToMs(t) }))
+    .filter((x) => Number.isFinite(x.ms) && x.ms > 0)
+    .sort((a, b) => a.ms - b.ms)
+  if (!ranked.length) return preferred
+  const prefMs = tfToMs(preferred)
+  // Only consider timeframes at least as coarse as the preferred (never go finer);
+  // fall back to the full set if the preferred is coarser than everything offered.
+  const atOrCoarser = Number.isFinite(prefMs) ? ranked.filter((x) => x.ms >= prefMs) : ranked
+  const pool = atOrCoarser.length ? atOrCoarser : ranked
+  const fit = pool.find((x) => (spanMs / x.ms) <= maxCandles)   // finest that fits the cap
+  return fit ? fit.t : pool[pool.length - 1].t                   // else the coarsest available
+}
+
 const sameTf = (a, b) => String(a).toLowerCase() === String(b).toLowerCase()
 
 /**

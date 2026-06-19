@@ -23,6 +23,17 @@ export function paddedCandleRange({ start, end, timeframe, count, now }: {
     end_ms: any;
 };
 /**
+ * Coarsen a preferred timeframe so a long position window doesn't request an
+ * absurd number of candles (e.g. a multi-year position at 1m). Returns the FINEST
+ * available timeframe that is at least as coarse as `preferred` AND keeps
+ * `spanMs / tfMs ≤ maxCandles`; if even the coarsest available exceeds the cap,
+ * returns that coarsest. Never returns a timeframe FINER than `preferred`. With no
+ * span (≤0) or no usable candidates, returns `preferred` unchanged.
+ */
+export function coarsenTimeframe(preferred: any, available: any, spanMs: any, { maxCandles }?: {
+    maxCandles?: number | undefined;
+}): any;
+/**
  * Choose the timeframe to use when switching to `available` (the target symbol's
  * advertised timeframes): keep `current` if present → else `fallback` (default
  * `"1h"`) → else the lowest available. Returns the exact label from `available`

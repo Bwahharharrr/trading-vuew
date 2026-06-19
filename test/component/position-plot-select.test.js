@@ -118,6 +118,26 @@ describe('onPositionSelect → audit-first, trade-derived window', () => {
     await ctx.onPositionSelect(pos)
     expect(ctx.positionsFeed.subscribeAudit).not.toHaveBeenCalled()
   })
+
+  test('coarsens the timeframe for a long position (1h→1D), padding still ±400 candles', async () => {
+    // a ~200-day position: at 1h that is 4800 candles (> 3000 cap) → coarsen to 1D
+    const start = 1700000000000, end = start + 200 * 24 * 3600 * 1000
+    ctx.positionsFeed.getAudit = vi.fn(async () => ({
+      position: { opened_at_ms: start, closed_at_ms: end, base_price: '100' },
+      trades: [{ execution_timestamp_ms: start + 1000, amount: '0.1', price: '100', fee: '-1', fee_currency: 'USD' }],
+    }))
+    await ctx.onPositionSelect(pos)
+    const arg = ctx.corkySelect.mock.calls[0][0]
+    expect(arg.timeframe).toBe('1D')                       // coarsened from 1h
+    const DAY = 24 * 3600 * 1000
+    expect(arg.range.start_ms).toBe(start - 400 * DAY)     // padded ±400 candles at the COARSENED tf
+    expect(arg.range.end_ms).toBe(end + 400 * DAY)
+  })
+
+  test('short position keeps the preferred timeframe (no coarsening)', async () => {
+    await ctx.onPositionSelect(pos)                        // ~38-day position at 1h = 912 candles
+    expect(ctx.corkySelect.mock.calls[0][0].timeframe).toBe('1h')
+  })
 })
 
 describe('candle-state provisioning before subscribe', () => {

@@ -345,7 +345,7 @@ import DataCube from '../src/helpers/datacube.js'
 import { CorkyClient } from '../src/helpers/feed/corky-client.js'
 import { CorkyFeed } from '../src/helpers/feed/corky-feed.js'
 import { CorkyPositionsFeed } from '../src/helpers/feed/corky-positions-feed.js'
-import { pickTimeframe, paddedCandleRange } from '../src/helpers/feed/pick-timeframe.js'
+import { pickTimeframe, paddedCandleRange, coarsenTimeframe } from '../src/helpers/feed/pick-timeframe.js'
 import {
     tradeMarkers, positionSizeSeries, buySellHistogram, cumulativeFees, positionWindow,
     orderMarkers, openCloseMarkers,
@@ -1593,7 +1593,7 @@ export default {
             }
             const tfs = (state && state.available_timeframes) || []
             const current = this.corkyCurrent && this.corkyCurrent.timeframe
-            const timeframe = pickTimeframe(current, tfs, { fallback: '1h' }) || current || '1h'
+            const preferredTf = pickTimeframe(current, tfs, { fallback: '1h' }) || current || '1h'
 
             // Provisional plot (lets a discovery switch clear it); series + window
             // are filled from the audit below.
@@ -1603,20 +1603,34 @@ export default {
                 window: null, audit: null, series: null,
                 toggles: { trades: true, openClose: true, orders: false, size: false, hist: false, fees: false },
             }
-
-            // Fetch the audit FIRST so the window comes from the actual TRADE/fee
-            // timestamps — the position row's opened_at_ms/closed_at_ms can be 0 /
-            // missing (e.g. an open position with opened_at_ms=0 would otherwise
-            // request a 1965→2030 range and pull ~90k candles). On audit failure we
-            // still switch the ticker (latest view), just without the plot.
             const mine = () => this.positionPlot &&
                 this.positionPlot.symbol === symbol &&
                 this.positionPlot.position_id === pos.position_id
 
-            // Ensure the gateway maintains a candle state for this symbol+timeframe
-            // before subscribing (some account symbols have none → state_not_found).
-            // Provisions one on demand and waits for it to register.
+            // Fetch the audit FIRST: it gives the window (from audit.position /
+            // trade-fee timestamps — the row's opened_at_ms can be 0/missing) which
+            // drives BOTH the timeframe-coarsening and the candle range. On audit
+            // failure we still switch the ticker (latest view), just without a plot.
             this.corkyLoading = true
+            let audit = null
+            if (this.positionsFeed && pos.position_id != null) {
+                try {
+                    audit = await this.positionsFeed.getAudit({
+                        venue, account_id: pos.account_id, symbol, position_id: pos.position_id,
+                    })
+                } catch (_) { /* drawer surfaces audit errors; plot just won't show */ }
+            }
+            if (!mine()) return   // superseded while awaiting
+
+            const win = audit ? this._plotWindow(pos, audit) : null
+            const spanMs = win ? (win.end - win.start) : 0
+            // Coarsen the timeframe so a long position doesn't request a huge candle
+            // count at a fine tf (e.g. a multi-year position at 1m). Never goes finer
+            // than the preferred tf; no-op for short spans / no audit.
+            const timeframe = coarsenTimeframe(preferredTf, tfs, spanMs) || preferredTf
+
+            // Ensure the gateway maintains a candle state for the chosen symbol+tf
+            // before subscribing (some account symbols have none → state_not_found).
             const chartable = await this._ensureCandleState(venue, symbol, timeframe)
             if (!mine()) return
             if (!chartable) {
@@ -1628,21 +1642,10 @@ export default {
                 return
             }
 
-            let audit = null
-            if (this.positionsFeed && pos.position_id != null) {
-                try {
-                    audit = await this.positionsFeed.getAudit({
-                        venue, account_id: pos.account_id, symbol, position_id: pos.position_id,
-                    })
-                } catch (_) { /* drawer surfaces audit errors; plot just won't show */ }
-            }
-            if (!mine()) return   // superseded while awaiting
-
             let range
             if (audit) {
                 this.positionPlot.audit = audit
                 this.positionPlot.series = this._computePositionSeries(audit)
-                const win = this._plotWindow(pos, audit)
                 this.positionPlot.window = win
                 if (win) {
                     // Load the position window padded by ~400 candles each side
