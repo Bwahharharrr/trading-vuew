@@ -479,7 +479,7 @@ export default {
                 { key: 'trades', name: 'Trades' },
                 { key: 'size', name: 'Position Size' },
                 { key: 'hist', name: 'Buy / Sell Histogram' },
-                { key: 'fees', name: cur ? `Fees (${cur})` : 'Fees (trades)' },
+                { key: 'fees', name: cur ? `Fees (${cur})` : 'Fees' },
             ]
         },
     },
@@ -1174,7 +1174,7 @@ export default {
             }
             if (t.fees && s.fees && s.fees.series.length) {
                 dc.add('offchart', {
-                    name: `Fees (${s.fees.currency || 'trades'})`, type: 'Spline',
+                    name: s.fees.currency ? `Fees (${s.fees.currency})` : 'Fees', type: 'Spline',
                     data: s.fees.series,
                     settings: {
                         $positionOverlay: true, $uuid: 'pos-fees', legend: true,

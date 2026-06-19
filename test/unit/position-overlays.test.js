@@ -3,8 +3,9 @@
 
 import { describe, it, expect } from 'vitest'
 import {
-  tradeMarkers, positionSizeSeries, buySellHistogram, cumulativeFees, positionWindow,
+  tradeMarkers, positionSizeSeries, buySellHistogram, cumulativeFees, feeEvents, positionWindow,
 } from '../../src/helpers/feed/position-overlays.js'
+import { authPositionAuditEvent } from '../fixtures/corky/index.js'
 
 // The shipped fixture has 1 trade; build the richer 4-trade bundle observed live
 // (tTESTBTC:TESTUSD #178155229) so the cumulative math is exercised meaningfully.
@@ -65,8 +66,8 @@ describe('buySellHistogram', () => {
 })
 
 describe('cumulativeFees', () => {
-  it('cumulates the dominant currency, ending at the summary total', () => {
-    const { series, currency } = cumulativeFees(audit)
+  it('trade-only audit (no fees[]) cumulates the dominant currency — backward compat', () => {
+    const { series, currency } = cumulativeFees(audit)   // no audit.fees
     expect(currency).toBe('TESTUSD')
     expect(series[series.length - 1][1]).toBe(-94.80174467)   // ≈ summary.fees_by_currency
     expect(series[0]).toEqual([1730683960181, -1.40228933])   // round8 (plot y)
@@ -79,6 +80,30 @@ describe('cumulativeFees', () => {
     const { currency, series } = cumulativeFees(mixed)
     expect(currency).toBe('USD')
     expect(series).toEqual([[2, -99]])   // BTC fee omitted from the single line
+  })
+  it('COMBINES trade fees + ledger funding fees (audit.fees[]) → summary total', () => {
+    const a = authPositionAuditEvent.event.audit   // 1 trade (-0.1) + 1 funding (-0.02)
+    const { series, currency } = cumulativeFees(a)
+    expect(currency).toBe('USD')
+    expect(series).toHaveLength(2)                  // trade event + funding event
+    expect(series[series.length - 1][1]).toBe(-0.12)  // == summary.fees_by_currency.USD
+    // events are time-ordered: trade @1000 before funding @2000
+    expect(series.map((p) => p[0])).toEqual([1700000001000, 1700000002000])
+  })
+})
+
+describe('feeEvents', () => {
+  it('merges trade fees + ledger fees, time-sorted, tagged by kind', () => {
+    const evs = feeEvents(authPositionAuditEvent.event.audit)
+    expect(evs).toHaveLength(2)
+    expect(evs[0].kind).toBe('trade')
+    expect(evs[1].kind).toBe('margin_funding')
+    expect(evs[1].description).toBe('Position funding cost')   // raw ledger text kept
+    expect(evs[1].amount).toBe('-0.02')                        // raw decimal string
+  })
+  it('older audit with no fees[] yields just the trade fees', () => {
+    expect(feeEvents(audit)).toHaveLength(4)                   // 4 trades, 0 funding
+    expect(feeEvents(audit).every((e) => e.kind === 'trade')).toBe(true)
   })
 })
 

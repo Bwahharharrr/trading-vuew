@@ -121,7 +121,13 @@ async function main() {
       })
       const s = audit && audit.summary
       log(`\n● get_auth_position_audit (${target.symbol} #${target.position_id}): ` +
-          `status=${s ? s.status : '?'} orders=${s ? s.order_count : '?'} trades=${s ? s.trade_count : '?'}`)
+          `status=${s ? s.status : '?'} orders=${s ? s.order_count : '?'} trades=${s ? s.trade_count : '?'} ` +
+          `fees=${s ? (s.fee_count || 0) : '?'}`)
+      const fc = (s && s.fees_by_currency) || {}
+      if (Object.keys(fc).length) log(`    total fees: ${Object.entries(fc).map(([c, a]) => `${a} ${c}`).join(', ')}`)
+      for (const f of (audit && audit.fees) || []) {
+        log(`    [${f.kind}] ${f.amount} ${f.currency} — ${f.description}`)
+      }
       if (s && s.reasons && s.reasons.length) log(`    reasons: ${s.reasons.join('; ')}`)
     } catch (e) {
       log(`\n● get_auth_position_audit: ${e.code || ''} ${e.message}`)

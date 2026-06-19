@@ -28,11 +28,13 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     reasons(): any;
     orders(): any;
     trades(): any;
+    fees(): any;
     feesText(): string;
 }, {
     signClass(dec: any): "" | "neg" | "pos";
     sideClass(side: any): "" | "side-long" | "side-short";
     fmtTime(ms: any): string;
+    feeKindLabel(kind: any): any;
 }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, "close"[], "close", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
     open: {
         type: BooleanConstructor;

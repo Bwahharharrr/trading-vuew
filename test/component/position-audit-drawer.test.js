@@ -30,14 +30,34 @@ describe('PositionAuditDrawer', () => {
         expect(badge.classes()).toContain('st-complete')
     })
 
-    test('renders summary metrics, orders and trades from the fixture', () => {
+    test('renders summary metrics, orders, trades and ledger fees from the fixture', () => {
         const w = mountDrawer()
         const text = w.text()
         expect(text).toContain('0.25')        // trade_amount_sum / amounts (decimal string)
         expect(text).toContain('9001')        // order id
         expect(text).toContain('7001')        // trade id
         expect(text).toContain('USD')         // fee currency
-        expect(w.findAll('.pad-table')).toHaveLength(2)  // orders + trades
+        expect(w.findAll('.pad-table')).toHaveLength(3)  // orders + trades + fees
+    })
+
+    test('renders the ledger fees section with kind, description and total', () => {
+        const w = mountDrawer()
+        const text = w.text()
+        expect(text).toContain('Margin funding')          // humanized kind
+        expect(text).toContain('Position funding cost')   // raw ledger description kept
+        expect(text).toContain('-0.02 USD')               // ledger amount + currency
+        expect(text).toContain('-0.12')                   // summary.fees_by_currency total (trade + funding)
+        expect(w.find('.pad-fee-kind').classes()).toContain('fk-margin_funding')
+    })
+
+    test('older audit with no fees[] hides the fees section (backward compat)', () => {
+        const legacy = JSON.parse(JSON.stringify(audit))
+        delete legacy.fees
+        delete legacy.summary.fee_count
+        delete legacy.summary.fee_ids
+        const w = mountDrawer({ audit: legacy })
+        expect(w.text()).not.toContain('Margin funding')
+        expect(w.findAll('.pad-table')).toHaveLength(2)   // orders + trades only
     })
 
     test('decimal strings render verbatim (no float parse)', () => {

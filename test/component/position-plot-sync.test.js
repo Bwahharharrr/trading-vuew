@@ -89,7 +89,7 @@ describe('syncPositionOverlays', () => {
     expect(rows[3].name).toBe('Fees (TESTUSD)')          // currency from the series
     // before series resolve, the fees row falls back to a generic label
     const pending = { positionPlot: { toggles: {}, series: null } }
-    expect(App.computed.positionDetailRows.call(pending)[3].name).toBe('Fees (trades)')
+    expect(App.computed.positionDetailRows.call(pending)[3].name).toBe('Fees')
     // no plotted position → no rows
     expect(App.computed.positionDetailRows.call({ positionPlot: null })).toEqual([])
   })

@@ -47,10 +47,11 @@
                     <div class="pad-kv">
                         <span>Orders</span><b>{{ audit.summary.order_count }}</b>
                         <span>Trades</span><b>{{ audit.summary.trade_count }}</b>
+                        <span>Fee events</span><b>{{ audit.summary.fee_count || 0 }}</b>
                         <span>Trade Σ</span><b>{{ audit.summary.trade_amount_sum }}</b>
                         <span>Expected</span><b>{{ audit.summary.expected_position_amount }}</b>
                         <span>Δ amount</span><b :class="signClass(audit.summary.amount_delta)">{{ audit.summary.amount_delta }}</b>
-                        <span>Fees</span><b>{{ feesText }}</b>
+                        <span>Total fees</span><b>{{ feesText }}</b>
                     </div>
                 </div>
 
@@ -85,6 +86,22 @@
                                 <td>{{ t.maker ? 'maker' : 'taker' }}</td>
                                 <td class="num" :class="signClass(t.fee)">{{ t.fee == null ? '—' : (t.fee + ' ' + (t.fee_currency || '')) }}</td>
                                 <td class="time">{{ fmtTime(t.execution_timestamp_ms) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- ledger fee events (funding / margin) — distinct from trade fees -->
+                <div class="pad-section" v-if="fees.length">
+                    <div class="pad-section-title">Fees ({{ fees.length }})</div>
+                    <table class="pad-table">
+                        <thead><tr><th>Kind</th><th>Description</th><th class="num">Amount</th><th>When</th></tr></thead>
+                        <tbody>
+                            <tr v-for="f in fees" :key="f.fee_id">
+                                <td><span class="pad-fee-kind" :class="'fk-' + f.kind">{{ feeKindLabel(f.kind) }}</span></td>
+                                <td class="pad-fee-desc" :title="f.description">{{ f.description }}</td>
+                                <td class="num" :class="signClass(f.amount)">{{ f.amount }} {{ f.currency }}</td>
+                                <td class="time">{{ fmtTime(f.timestamp_ms) }}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -142,6 +159,7 @@ export default {
         },
         orders() { return (this.audit && this.audit.orders) || [] },
         trades() { return (this.audit && this.audit.trades) || [] },
+        fees() { return (this.audit && this.audit.fees) || [] },   // ledger fee events (back-compat: [])
         feesText() {
             const fees = this.audit && this.audit.summary && this.audit.summary.fees_by_currency
             if (!fees) return '—'
@@ -166,6 +184,14 @@ export default {
             if (Number.isNaN(d.getTime())) return '—'
             const pad = (n) => String(n).padStart(2, '0')
             return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+        },
+        feeKindLabel(kind) {
+            switch (kind) {
+                case 'margin_funding': return 'Margin funding'
+                case 'derivatives_funding': return 'Derivatives funding'
+                case 'funding_provider_fee': return 'Provider fee'
+                default: return kind || 'Fee'
+            }
         },
     },
 }
@@ -243,6 +269,17 @@ export default {
 .time { color: #808a9d; }
 .pos { color: #23a776; }
 .neg { color: #e54150; }
+.pad-fee-kind {
+    display: inline-block; padding: 1px 6px; border-radius: 8px;
+    font-size: 10px; font-weight: 600; white-space: nowrap;
+    background: rgba(217, 119, 6, 0.18); color: #d97706;
+}
+.fk-derivatives_funding { background: rgba(100, 181, 246, 0.18); color: #64b5f6; }
+.fk-funding_provider_fee { background: rgba(53, 167, 118, 0.18); color: #35a776; }
+.pad-fee-desc {
+    max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: #d1d4dc;
+}
 .side-long { color: #23a776; text-transform: capitalize; }
 .side-short { color: #e54150; text-transform: capitalize; }
 </style>

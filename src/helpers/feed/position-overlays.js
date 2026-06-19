@@ -63,22 +63,45 @@ export function buySellHistogram(audit) {
 }
 
 /**
- * Cumulative TRADE fees over the position (Spline.vue): `{ series:[[ts, cumFee]],
- * currency }`. Fees are decimal strings (negative = cost); the running sum stays
- * signed. Uses the dominant fee currency (largest |Σ|); other-currency fees are
- * omitted from the single line (rare — most positions are one currency).
- *
- * NOTE: this is TRADE fees only. Funding / margin-funding fees are not in the
- * chart-feed audit bundle (they live in the gateway's private_auth_state_rows_v1),
- * so a true all-in "total fees" needs a future gateway enhancement.
+ * All fee events for a position, merged + time-sorted: per-trade execution fees
+ * (`trades[].fee`) PLUS ledger-backed funding/margin events (`audit.fees[]`).
+ * Each event: `{ ts, currency, amount, kind, description, source, fee_id?, balance? }`.
+ * `amount` is the raw decimal string (negative = cost, positive = credit). Older
+ * audits with no `fees[]` simply yield the trade fees (backward-compatible).
+ */
+export function feeEvents(audit) {
+  const out = []
+  for (const t of sortedTrades(audit)) {
+    if (t.fee == null || !t.fee_currency) continue
+    out.push({
+      ts: t.execution_timestamp_ms, currency: t.fee_currency, amount: t.fee,
+      kind: 'trade', description: 'Trade fee', source: t.source,
+    })
+  }
+  const fees = (audit && Array.isArray(audit.fees)) ? audit.fees : []
+  for (const f of fees) {
+    if (!f || f.amount == null || !f.currency) continue
+    out.push({
+      ts: f.timestamp_ms, currency: f.currency, amount: f.amount,
+      kind: f.kind, description: f.description, source: f.source,
+      fee_id: f.fee_id, balance: f.balance,
+    })
+  }
+  out.sort((a, b) => (a.ts || 0) - (b.ts || 0))
+  return out
+}
+
+/**
+ * Cumulative TOTAL fees over the position (Spline.vue): `{ series:[[ts, cumFee]],
+ * currency }`. Combines trade execution fees AND ledger funding/margin fees (via
+ * {@link feeEvents}) — no longer trade-only. Signed running sum in the dominant
+ * currency (largest |Σ|); other-currency events are omitted from the single line
+ * (rare). The final point reconciles with `summary.fees_by_currency[currency]`.
  */
 export function cumulativeFees(audit) {
-  const trades = sortedTrades(audit)
+  const events = feeEvents(audit)
   const totals = {}
-  for (const t of trades) {
-    if (t.fee == null || !t.fee_currency) continue
-    totals[t.fee_currency] = (totals[t.fee_currency] || 0) + num(t.fee)
-  }
+  for (const e of events) totals[e.currency] = (totals[e.currency] || 0) + num(e.amount)
   let currency = null
   let best = -1
   for (const [c, v] of Object.entries(totals)) {
@@ -86,10 +109,10 @@ export function cumulativeFees(audit) {
   }
   const series = []
   let cum = 0
-  for (const t of trades) {
-    if (currency == null || t.fee_currency !== currency || t.fee == null) continue
-    cum += num(t.fee)                  // accumulate UNrounded (avoid step drift)
-    series.push([t.execution_timestamp_ms, round8(cum)])
+  for (const e of events) {
+    if (currency == null || e.currency !== currency) continue
+    cum += num(e.amount)               // accumulate UNrounded (avoid step drift)
+    series.push([e.ts, round8(cum)])
   }
   return { series, currency }
 }

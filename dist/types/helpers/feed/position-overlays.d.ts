@@ -16,14 +16,37 @@ export function positionSizeSeries(audit: any): any[][];
  */
 export function buySellHistogram(audit: any): any;
 /**
- * Cumulative TRADE fees over the position (Spline.vue): `{ series:[[ts, cumFee]],
- * currency }`. Fees are decimal strings (negative = cost); the running sum stays
- * signed. Uses the dominant fee currency (largest |Σ|); other-currency fees are
- * omitted from the single line (rare — most positions are one currency).
- *
- * NOTE: this is TRADE fees only. Funding / margin-funding fees are not in the
- * chart-feed audit bundle (they live in the gateway's private_auth_state_rows_v1),
- * so a true all-in "total fees" needs a future gateway enhancement.
+ * All fee events for a position, merged + time-sorted: per-trade execution fees
+ * (`trades[].fee`) PLUS ledger-backed funding/margin events (`audit.fees[]`).
+ * Each event: `{ ts, currency, amount, kind, description, source, fee_id?, balance? }`.
+ * `amount` is the raw decimal string (negative = cost, positive = credit). Older
+ * audits with no `fees[]` simply yield the trade fees (backward-compatible).
+ */
+export function feeEvents(audit: any): ({
+    ts: any;
+    currency: any;
+    amount: any;
+    kind: string;
+    description: string;
+    source: any;
+    fee_id?: undefined;
+    balance?: undefined;
+} | {
+    ts: any;
+    currency: any;
+    amount: any;
+    kind: any;
+    description: any;
+    source: any;
+    fee_id: any;
+    balance: any;
+})[];
+/**
+ * Cumulative TOTAL fees over the position (Spline.vue): `{ series:[[ts, cumFee]],
+ * currency }`. Combines trade execution fees AND ledger funding/margin fees (via
+ * {@link feeEvents}) — no longer trade-only. Signed running sum in the dominant
+ * currency (largest |Σ|); other-currency events are omitted from the single line
+ * (rare). The final point reconciles with `summary.fees_by_currency[currency]`.
  */
 export function cumulativeFees(audit: any): {
     series: any[][];

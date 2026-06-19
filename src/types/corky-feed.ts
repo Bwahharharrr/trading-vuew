@@ -310,17 +310,52 @@ export interface ChartAuthPositionAuditSummary {
   status: ChartAuthPositionAuditStatus
   order_count: number
   trade_count: number
+  /** Ledger fee-event count. Absent on older audits → treat as 0. */
+  fee_count?: number
   trade_amount_sum: DecimalString
   expected_position_amount: DecimalString
   amount_delta: DecimalString
-  /** Fees keyed by currency. Defaults to `{}`. */
+  /**
+   * AGGREGATE fees keyed by currency — includes BOTH trade execution fees and
+   * the {@link ChartAuthPositionAudit.fees} ledger events. Use this for the total
+   * fee display. Defaults to `{}`.
+   */
   fees_by_currency?: Record<string, DecimalString>
   /** Defaults to `[]`. */
   order_ids?: number[]
   /** Defaults to `[]`. */
   trade_ids?: number[]
+  /** Ledger fee ids. Absent on older audits → treat as `[]`. */
+  fee_ids?: number[]
   /** Human-readable reasons when not `complete`. Defaults to `[]`. */
   reasons?: string[]
+}
+
+/** Known `kind` values for a {@link ChartAuthPositionAuditFee} (open string). */
+export type ChartAuthPositionFeeKind =
+  | 'margin_funding'         // margin-position funding cost / interest
+  | 'derivatives_funding'    // derivatives funding payment
+  | 'funding_provider_fee'   // fee charged on funding-provider earnings
+  | (string & {})
+
+/**
+ * A ledger-backed position fee event (`audit.fees[]`) — funding / margin / etc.,
+ * distinct from per-trade execution fees. `amount` is a decimal string: negative
+ * = cost/debit, positive = credit/rebate/income. `description` is the raw
+ * Bitfinex ledger row text and should stay visible in tooltips/details.
+ */
+export interface ChartAuthPositionAuditFee {
+  fee_id: number
+  timestamp_ms: TimestampMs
+  currency: string
+  amount: DecimalString
+  /** Running wallet balance after this ledger entry. */
+  balance: DecimalString
+  kind: ChartAuthPositionFeeKind
+  description: string
+  symbol?: string | null
+  position_id?: number | null
+  source: string
 }
 
 /** A linked order row in an audit bundle. */
@@ -370,6 +405,8 @@ export interface ChartAuthPositionAudit {
   orders?: ChartAuthPositionAuditOrder[]
   /** Defaults to `[]` (or omitted when `include_trades=false`). */
   trades?: ChartAuthPositionAuditTrade[]
+  /** Ledger fee events. Absent on older audits → treat as `[]`. */
+  fees?: ChartAuthPositionAuditFee[]
   updated_at_ms?: TimestampMs | null
 }
 
