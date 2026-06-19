@@ -83,6 +83,15 @@ describe('CorkyPositionsPanel — events', () => {
         expect(ev[0][0].source).toBe('current')
     })
 
+    test('the per-row details button emits audit-position (not select)', async () => {
+        const w = mountPanel()
+        await w.find('.pd-details').trigger('click')
+        expect(w.emitted('audit-position')).toBeTruthy()
+        expect(w.emitted('audit-position')[0][0].symbol).toBe('tBTCUSD')
+        // the row click (select) must NOT also fire from the details button (@click.stop)
+        expect(w.emitted('select-position')).toBeFalsy()
+    })
+
     test('tab buttons emit update:active-tab', async () => {
         const w = mountPanel()
         await w.findAll('.pd-tab')[1].trigger('click')

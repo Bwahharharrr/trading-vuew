@@ -83,6 +83,17 @@ describe('syncPositionOverlays', () => {
     expect(tags(ctx, 'offchart')).toHaveLength(0)
   })
 
+  test('positionDetailRows lists the four toggles, labelling the fee currency', () => {
+    const rows = App.computed.positionDetailRows.call(ctx)
+    expect(rows.map((r) => r.key)).toEqual(['trades', 'size', 'hist', 'fees'])
+    expect(rows[3].name).toBe('Fees (TESTUSD)')          // currency from the series
+    // before series resolve, the fees row falls back to a generic label
+    const pending = { positionPlot: { toggles: {}, series: null } }
+    expect(App.computed.positionDetailRows.call(pending)[3].name).toBe('Fees (trades)')
+    // no plotted position → no rows
+    expect(App.computed.positionDetailRows.call({ positionPlot: null })).toEqual([])
+  })
+
   test('togglePositionDetail flips a series and re-syncs', () => {
     ctx.syncPositionOverlays()
     expect(tags(ctx, 'offchart').some((o) => o.type === 'StepLine')).toBe(true)

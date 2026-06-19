@@ -270,6 +270,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     positionsError: null;
     positionsHistoryCursor: null;
     positionsHistoryTotal: number;
+    positionPlot: null;
     auditOpen: boolean;
     auditData: null;
     auditLoading: boolean;
@@ -277,6 +278,10 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     auditTarget: null;
 }, {
     positionsCurrentSymbolKey(): string;
+    positionDetailRows(): {
+        key: string;
+        name: string;
+    }[];
 }, {
     setFeedMode(mode: any): void;
     enterGatewayMode(): void;
@@ -293,6 +298,19 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     _lastClose(): number;
     onSidebarClick(s: any): void;
     ensurePriceAlarmOverlay(): void;
+    _computePositionSeries(audit: any): {
+        markers: any;
+        size: any[][];
+        hist: any;
+        fees: {
+            series: any[][];
+            currency: string | null;
+        };
+    };
+    _removePositionOverlays(dc: any): void;
+    syncPositionOverlays(): void;
+    togglePositionDetail(key: any): void;
+    clearPositionPlot(): void;
     checkPriceAlarms(): void;
     onAlarmCleared({ id }: {
         id: any;
@@ -319,9 +337,14 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     togglePositionsDock(open: any): void;
     setPositionsTab(tab: any): void;
     setPositionsAccount(acct: any): void;
-    _ensureHistoryLoaded(): void;
-    loadHistoryPage(reset?: boolean): Promise<void>;
+    _ensureHistoryLoaded(opts?: {}): void;
+    loadHistoryPage(reset?: boolean, { silent }?: {
+        silent?: boolean | undefined;
+    }): Promise<void>;
     onPositionSelect(pos: any): Promise<void>;
+    _loadPositionAudit(pos: any): Promise<void>;
+    _startPositionAuditStream(pos: any): void;
+    _stopPositionAuditStream(): void;
     openAudit(pos: any): void;
     _loadAudit(): Promise<void>;
     _startAuditStream(): void;
@@ -2040,7 +2063,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         signClass(dec: any): "" | "neg" | "pos";
         pctText(dec: any): string;
         fmtTime(ms: any): string;
-    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("update:open" | "update:active-tab" | "update:active-account" | "select-position" | "load-more" | "refresh" | "resize-start")[], "update:open" | "update:active-tab" | "update:active-account" | "select-position" | "load-more" | "refresh" | "resize-start", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("update:open" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "refresh" | "resize-start")[], "update:open" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "refresh" | "resize-start", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
         height: {
             type: NumberConstructor;
             default: number;
@@ -2094,6 +2117,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         "onUpdate:active-tab"?: ((...args: any[]) => any) | undefined;
         "onUpdate:active-account"?: ((...args: any[]) => any) | undefined;
         "onSelect-position"?: ((...args: any[]) => any) | undefined;
+        "onAudit-position"?: ((...args: any[]) => any) | undefined;
         "onLoad-more"?: ((...args: any[]) => any) | undefined;
         onRefresh?: ((...args: any[]) => any) | undefined;
         "onResize-start"?: ((...args: any[]) => any) | undefined;

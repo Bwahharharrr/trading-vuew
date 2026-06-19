@@ -45,6 +45,7 @@
                         <th class="num">Base Price</th><th class="num">PnL</th>
                         <th class="num">PnL %</th><th>Opened</th>
                         <th v-if="activeTab === 'historical'">Closed</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -64,6 +65,11 @@
                         <td class="num" :class="signClass(p.pl_perc)">{{ pctText(p.pl_perc) }}</td>
                         <td class="time">{{ fmtTime(p.opened_at_ms) }}</td>
                         <td v-if="activeTab === 'historical'" class="time">{{ fmtTime(p.closed_at_ms) }}</td>
+                        <td class="pd-details-cell">
+                            <button class="pd-details" title="Audit details (orders & trades)"
+                                    @click.stop="$emit('audit-position', p)"
+                                    @keydown.enter.stop.prevent="$emit('audit-position', p)">ⓘ</button>
+                        </td>
                     </tr>
                 </tbody>
             </table>
@@ -99,7 +105,7 @@ export default {
     },
     emits: [
         'update:open', 'update:active-tab', 'update:active-account',
-        'select-position', 'load-more', 'refresh', 'resize-start',
+        'select-position', 'audit-position', 'load-more', 'refresh', 'resize-start',
     ],
     computed: {
         rows() {
@@ -254,6 +260,12 @@ export default {
 .pd-row { cursor: pointer; }
 .pd-row:hover { background: #1e222d; }
 .pd-row.active { background: rgba(53, 167, 118, 0.12); }
+.pd-details-cell { text-align: right; width: 1%; }
+.pd-details {
+    background: transparent; border: none; color: #808a9d;
+    cursor: pointer; font-size: 13px; padding: 0 2px;
+}
+.pd-details:hover { color: #35a776; }
 .sym { font-weight: 600; color: #fff; }
 .side-long { color: #23a776; text-transform: capitalize; }
 .side-short { color: #e54150; text-transform: capitalize; }

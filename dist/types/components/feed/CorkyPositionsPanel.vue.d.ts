@@ -62,7 +62,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     signClass(dec: any): "" | "neg" | "pos";
     pctText(dec: any): string;
     fmtTime(ms: any): string;
-}, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("update:open" | "update:active-tab" | "update:active-account" | "select-position" | "load-more" | "refresh" | "resize-start")[], "update:open" | "update:active-tab" | "update:active-account" | "select-position" | "load-more" | "refresh" | "resize-start", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+}, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("update:open" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "refresh" | "resize-start")[], "update:open" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "refresh" | "resize-start", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
     height: {
         type: NumberConstructor;
         default: number;
@@ -116,6 +116,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     "onUpdate:active-tab"?: ((...args: any[]) => any) | undefined;
     "onUpdate:active-account"?: ((...args: any[]) => any) | undefined;
     "onSelect-position"?: ((...args: any[]) => any) | undefined;
+    "onAudit-position"?: ((...args: any[]) => any) | undefined;
     "onLoad-more"?: ((...args: any[]) => any) | undefined;
     onRefresh?: ((...args: any[]) => any) | undefined;
     "onResize-start"?: ((...args: any[]) => any) | undefined;
