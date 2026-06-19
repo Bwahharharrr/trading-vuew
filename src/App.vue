@@ -1539,53 +1539,77 @@ export default {
             const current = this.corkyCurrent && this.corkyCurrent.timeframe
             const timeframe = pickTimeframe(current, tfs, { fallback: '1h' }) || current || '1h'
 
-            // Window from the row (available before the audit). Open positions
-            // (no close) extend to now. Subscribe with a candle range covering it
-            // so an old position's trades have candles behind them; history-complete
-            // then sets the visible range to this window.
+            // Provisional plot (lets a discovery switch clear it); series + window
+            // are filled from the audit below.
             this._stopPositionAuditStream()
-            const win = positionWindow(pos)
-            const isOpen = pos.closed_at_ms == null
-            const start = win.start
-            const end = isOpen ? Date.now() : win.end
-            let range
-            if (start != null && end != null && end > start) {
-                const pad = Math.max(60000, Math.round((end - start) * 0.08))
-                range = { type: 'start_end', start_ms: start - pad, end_ms: end + pad }
-            }
             this.positionPlot = {
                 venue, symbol, position_id: pos.position_id,
-                window: (start != null && end != null) ? { start, end } : null,
-                audit: null, series: null,
+                window: null, audit: null, series: null,
                 toggles: { trades: true, size: false, hist: false, fees: false },
             }
-            this.corkySelect({ venue, symbol, timeframe, range })
-            // …then load the audit → derive + plot the trade series. The raw audit
-            // drawer is opened on demand via the dock row's "details" button.
-            this._loadPositionAudit(pos)
-        },
 
-        // Fetch the audit for the plotted position, derive its chart series, and
-        // (re)plot. Guards against a newer selection superseding this one.
-        async _loadPositionAudit(pos) {
-            if (!this.positionsFeed || pos.position_id == null) return
-            const target = {
-                venue: pos.venue, account_id: pos.account_id,
-                symbol: pos.symbol, position_id: pos.position_id,
-            }
+            // Fetch the audit FIRST so the window comes from the actual TRADE/fee
+            // timestamps — the position row's opened_at_ms/closed_at_ms can be 0 /
+            // missing (e.g. an open position with opened_at_ms=0 would otherwise
+            // request a 1965→2030 range and pull ~90k candles). On audit failure we
+            // still switch the ticker (latest view), just without the plot.
             const mine = () => this.positionPlot &&
-                this.positionPlot.symbol === pos.symbol &&
+                this.positionPlot.symbol === symbol &&
                 this.positionPlot.position_id === pos.position_id
-            try {
-                const audit = await this.positionsFeed.getAudit(target)
-                if (!mine()) return
+            let audit = null
+            if (this.positionsFeed && pos.position_id != null) {
+                try {
+                    audit = await this.positionsFeed.getAudit({
+                        venue, account_id: pos.account_id, symbol, position_id: pos.position_id,
+                    })
+                } catch (_) { /* drawer surfaces audit errors; plot just won't show */ }
+            }
+            if (!mine()) return   // superseded while awaiting
+
+            let range
+            if (audit) {
                 this.positionPlot.audit = audit
                 this.positionPlot.series = this._computePositionSeries(audit)
-                this.syncPositionOverlays()
-                const dc = this.chart; if (dc && dc.touchData) dc.touchData()
-            } catch (_) { /* keep last-good; the drawer surfaces audit errors */ }
+                const win = this._plotWindow(pos, audit)
+                this.positionPlot.window = win
+                if (win) {
+                    const pad = Math.max(60000, Math.round((win.end - win.start) * 0.08))
+                    range = { type: 'start_end', start_ms: win.start - pad, end_ms: win.end + pad }
+                }
+            }
+            this.corkySelect({ venue, symbol, timeframe, range })
+            // Plot now if the chart is already on this symbol; otherwise the
+            // history-complete handler re-plots once the new candles load (the
+            // subscribe wipes overlays). The symbol guard inside makes this safe.
+            this.syncPositionOverlays()
             // Keep an OPEN position's plot live as new trades land.
-            if (pos.closed_at_ms == null) this._startPositionAuditStream(pos)
+            if (audit && pos.closed_at_ms == null) this._startPositionAuditStream(pos)
+        },
+
+        // The chart window to show for a position — derived from the AUDIT's trade
+        // and fee timestamps (authoritative; the row's opened/closed can be 0). Falls
+        // back to the row window. Returns null if no usable timestamp; guarantees a
+        // minimum span so a single-trade position still has visible context.
+        _plotWindow(pos, audit) {
+            const valid = (t) => typeof t === 'number' && Number.isFinite(t) && t > 0
+            const ts = []
+            for (const t of (audit && audit.trades) || []) if (valid(t.execution_timestamp_ms)) ts.push(t.execution_timestamp_ms)
+            for (const f of (audit && audit.fees) || []) if (valid(f.timestamp_ms)) ts.push(f.timestamp_ms)
+            let start, end
+            if (ts.length) {
+                start = Math.min(...ts); end = Math.max(...ts)
+            } else {
+                const w = positionWindow(pos)
+                start = valid(w.start) ? w.start : null
+                end = valid(w.end) ? w.end : (pos.closed_at_ms == null && valid(w.start) ? Date.now() : null)
+                if (start == null || end == null) return null
+            }
+            const MIN_SPAN = 12 * 60 * 60 * 1000   // ≥ ~1 day of context around the trades
+            if (end - start < MIN_SPAN) {
+                const mid = (start + end) / 2
+                start = mid - MIN_SPAN / 2; end = mid + MIN_SPAN / 2
+            }
+            return { start, end }
         },
 
         _startPositionAuditStream(pos) {

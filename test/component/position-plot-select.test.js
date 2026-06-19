@@ -1,18 +1,23 @@
 // @vitest-environment jsdom
 //
-// Phase C: clicking a position subscribes with a candle range covering the
-// position window, then (once the audit resolves) derives + plots the series.
-// Exercised against App's own methods with fakes (no full mount).
+// Clicking a position: fetch the audit FIRST, derive the chart window from the
+// actual TRADE/fee timestamps (NOT the row's opened/closed, which can be 0/
+// missing), subscribe with a range covering it, then plot. Exercised against
+// App's own methods with fakes (no full mount).
 import { test, expect, describe, beforeEach, vi } from 'vitest'
 import App from '../../src/App.vue'
 
+// 2 trades, Dec-2024-ish (real timestamps), with a ledger funding fee.
 const auditBundle = {
   position: { opened_at_ms: 1730683960000, closed_at_ms: 1733964907000, updated_at_ms: 1733964907000 },
   trades: [
-    { execution_timestamp_ms: 1730683960181, amount: '0.01015975', price: '69012', fee: '-1.4', fee_currency: 'TESTUSD' },
-    { execution_timestamp_ms: 1733964906796, amount: '-0.25', price: '100660', fee: '-50.33', fee_currency: 'TESTUSD' },
+    { execution_timestamp_ms: 1730683960181, amount: '0.2', price: '69012', fee: '-1.4', fee_currency: 'USD' },
+    { execution_timestamp_ms: 1733964906796, amount: '-0.2', price: '100660', fee: '-50.33', fee_currency: 'USD' },
   ],
+  fees: [{ fee_id: 1, timestamp_ms: 1733964906000, currency: 'USD', amount: '-0.02', balance: '0', kind: 'margin_funding', description: 'fund', source: 'x' }],
 }
+const TRADE_MIN = 1730683960181
+const TRADE_MAX = 1733964906796
 
 const M = App.methods
 const pos = {
@@ -28,11 +33,10 @@ function mkCtx() {
     chart: { data: { onchart: [], offchart: [], chart: { data: [] } }, add(s, o) { this.data[s].push(o) }, update_ids() {}, touchData() {} },
     corkySelect: vi.fn(),
     corkyDiscover: vi.fn(),
-    openAudit: vi.fn(),
     $nextTick: (fn) => fn && fn(),
     $refs: { tradingVue: { refreshOffchartOverlays: vi.fn(), setRange: vi.fn(), resetChart: vi.fn() } },
   }
-  for (const m of ['onPositionSelect', '_loadPositionAudit', '_startPositionAuditStream', '_stopPositionAuditStream',
+  for (const m of ['onPositionSelect', '_plotWindow', '_startPositionAuditStream', '_stopPositionAuditStream',
     'syncPositionOverlays', '_removePositionOverlays', '_computePositionSeries']) {
     ctx[m] = M[m]
   }
@@ -42,50 +46,63 @@ function mkCtx() {
 let ctx
 beforeEach(() => { ctx = mkCtx() })
 
-describe('onPositionSelect → ranged subscribe + plot', () => {
-  test('subscribes with a start_end range covering the position window + chosen tf', async () => {
-    await ctx.onPositionSelect(pos)
-    expect(ctx.corkySelect).toHaveBeenCalledTimes(1)
-    const arg = ctx.corkySelect.mock.calls[0][0]
-    expect(arg.venue).toBe('BITFINEX')
-    expect(arg.symbol).toBe('tTESTBTC:TESTUSD')
-    expect(arg.timeframe).toBe('1h')          // current tf kept (offered)
-    expect(arg.range.type).toBe('start_end')
-    // range padded around [opened, closed]
-    expect(arg.range.start_ms).toBeLessThan(pos.opened_at_ms)
-    expect(arg.range.end_ms).toBeGreaterThan(pos.closed_at_ms)
-  })
-
-  test('sets positionPlot window + default toggles before the audit resolves', async () => {
-    const p = ctx.onPositionSelect(pos)
-    expect(ctx.positionPlot).toBeTruthy()
-    expect(ctx.positionPlot.symbol).toBe('tTESTBTC:TESTUSD')
-    expect(ctx.positionPlot.window).toEqual({ start: 1730683960000, end: 1733964907000 })
-    expect(ctx.positionPlot.toggles).toEqual({ trades: true, size: false, hist: false, fees: false })
-    await p
-  })
-
-  test('after the audit resolves, derives series and plots the trades markers', async () => {
+describe('onPositionSelect → audit-first, trade-derived window', () => {
+  test('fetches the audit before subscribing, then subscribes with the chosen tf', async () => {
     await ctx.onPositionSelect(pos)
     expect(ctx.positionsFeed.getAudit).toHaveBeenCalledWith({
       venue: 'BITFINEX', account_id: 'primary-account', symbol: 'tTESTBTC:TESTUSD', position_id: 178155229,
     })
+    expect(ctx.corkySelect).toHaveBeenCalledTimes(1)
+    const arg = ctx.corkySelect.mock.calls[0][0]
+    expect(arg.symbol).toBe('tTESTBTC:TESTUSD')
+    expect(arg.timeframe).toBe('1h')          // current tf kept (offered)
+  })
+
+  test('subscribes with a start_end range that covers the TRADE timestamps', async () => {
+    await ctx.onPositionSelect(pos)
+    const arg = ctx.corkySelect.mock.calls[0][0]
+    expect(arg.range.type).toBe('start_end')
+    expect(arg.range.start_ms).toBeLessThan(TRADE_MIN)
+    expect(arg.range.end_ms).toBeGreaterThan(TRADE_MAX)
+  })
+
+  test('sets a provisional plot synchronously, fills window + series after the audit', async () => {
+    const p = ctx.onPositionSelect(pos)
+    expect(ctx.positionPlot).toBeTruthy()
+    expect(ctx.positionPlot.window).toBeNull()   // provisional, pre-audit
+    await p
+    expect(ctx.positionPlot.window.start).toBeLessThanOrEqual(TRADE_MIN)
+    expect(ctx.positionPlot.window.end).toBeGreaterThanOrEqual(TRADE_MAX)
     expect(ctx.positionPlot.series.markers).toHaveLength(2)
-    // trades toggle is on by default → markers overlay present on the price pane
+  })
+
+  test('plots the trades markers (default toggle) on the price pane', async () => {
+    await ctx.onPositionSelect(pos)
     const trades = ctx.chart.data.onchart.find((o) => o.settings && o.settings.$positionOverlay)
     expect(trades.type).toBe('Trades')
+  })
+
+  test('REGRESSION: opened_at_ms=0 (open position) → window from trades, NOT 1970→now', async () => {
+    const openZero = { ...pos, opened_at_ms: 0, closed_at_ms: null }
+    await ctx.onPositionSelect(openZero)
+    const arg = ctx.corkySelect.mock.calls[0][0]
+    // window must hug the Dec-2024 trades, never start at the epoch
+    expect(ctx.positionPlot.window.start).toBeGreaterThan(1700000000000)
+    expect(arg.range.start_ms).toBeGreaterThan(1700000000000)
+    expect(arg.range.start_ms).toBeLessThan(TRADE_MIN)
+    expect(arg.range.end_ms).toBeGreaterThan(TRADE_MAX)
+    expect(ctx.positionsFeed.subscribeAudit).toHaveBeenCalledTimes(1)   // open → live stream
+  })
+
+  test('_plotWindow enforces a minimum span for a single-trade position', () => {
+    const single = { trades: [{ execution_timestamp_ms: 1733964906796, amount: '0.1' }] }
+    const w = ctx._plotWindow({ closed_at_ms: null }, single)
+    expect(w.end - w.start).toBeGreaterThanOrEqual(12 * 60 * 60 * 1000)
+    expect((w.start + w.end) / 2).toBe(1733964906796)   // centred on the trade
   })
 
   test('a CLOSED position does not open a live audit stream', async () => {
     await ctx.onPositionSelect(pos)
     expect(ctx.positionsFeed.subscribeAudit).not.toHaveBeenCalled()
-  })
-
-  test('an OPEN position opens a live audit stream and ranges to now', async () => {
-    const openPos = { ...pos, closed_at_ms: null }
-    await ctx.onPositionSelect(openPos)
-    expect(ctx.positionsFeed.subscribeAudit).toHaveBeenCalledTimes(1)
-    // window end extends beyond the open timestamp (≈ now)
-    expect(ctx.positionPlot.window.end).toBeGreaterThan(openPos.opened_at_ms)
   })
 })

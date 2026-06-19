@@ -342,7 +342,10 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         silent?: boolean | undefined;
     }): Promise<void>;
     onPositionSelect(pos: any): Promise<void>;
-    _loadPositionAudit(pos: any): Promise<void>;
+    _plotWindow(pos: any, audit: any): {
+        start: any;
+        end: any;
+    } | null;
     _startPositionAuditStream(pos: any): void;
     _stopPositionAuditStream(): void;
     openAudit(pos: any): void;
