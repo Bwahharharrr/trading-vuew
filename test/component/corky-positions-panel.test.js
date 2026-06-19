@@ -119,6 +119,11 @@ describe('CorkyPositionsPanel — events', () => {
         const w = mountPanel({ openPositions: [] })
         expect(w.find('.pd-msg').text()).toContain('No open positions')
     })
+
+    test('opened_at_ms=0 shows — in the Opened column, never 1970', () => {
+        const w = mountPanel({ openPositions: [{ ...openRows[0], opened_at_ms: 0 }] })
+        expect(w.text()).not.toContain('1970')
+    })
 })
 
 // ── App.onPositionSelect timeframe rule (keep → 1h → lowest) ──────────────────

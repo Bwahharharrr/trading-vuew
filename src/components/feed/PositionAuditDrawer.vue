@@ -179,7 +179,9 @@ export default {
             return ''
         },
         fmtTime(ms) {
-            if (ms == null) return '—'
+            // null / 0 / negative / NaN = unknown — never render the 1970 epoch
+            // (e.g. a current position whose opened_at_ms came through as 0).
+            if (!(ms > 0)) return '—'
             const d = new Date(ms)
             if (Number.isNaN(d.getTime())) return '—'
             const pad = (n) => String(n).padStart(2, '0')

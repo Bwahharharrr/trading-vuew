@@ -50,6 +50,15 @@ describe('PositionAuditDrawer', () => {
         expect(w.find('.pad-fee-kind').classes()).toContain('fk-margin_funding')
     })
 
+    test('opened_at_ms=0 renders as — (unknown), never 1970', () => {
+        const zero = JSON.parse(JSON.stringify(audit))
+        zero.position.opened_at_ms = 0
+        zero.position.closed_at_ms = null
+        const w = mountDrawer({ audit: zero })
+        expect(w.text()).not.toContain('1970')
+        expect(w.text()).toContain('—')
+    })
+
     test('older audit with no fees[] hides the fees section (backward compat)', () => {
         const legacy = JSON.parse(JSON.stringify(audit))
         delete legacy.fees
