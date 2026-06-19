@@ -100,18 +100,23 @@ describe('onPositionSelect → audit-first, trade-derived window', () => {
     const openZero = { ...pos, opened_at_ms: 0, closed_at_ms: null }
     await ctx.onPositionSelect(openZero)
     const arg = ctx.corkySelect.mock.calls[0][0]
-    // window must hug the Dec-2024 trades, never start at the epoch
-    expect(ctx.positionPlot.window.start).toBeGreaterThan(1700000000000)
-    expect(arg.range.start_ms).toBeGreaterThan(1700000000000)
+    // window starts at the (real) Dec-2024 first trade and runs to now — never 1970
+    expect(ctx.positionPlot.window.start).toBe(TRADE_MIN)
+    expect(ctx.positionPlot.window.end).toBeGreaterThan(TRADE_MAX)
+    // padded range is sane (post-2020), covers the trades, never the epoch
+    expect(arg.range.start_ms).toBeGreaterThan(Date.UTC(2020, 0, 1))
+    expect(arg.range.start_ms).toBeLessThan(TRADE_MIN)
     expect(arg.range.end_ms).toBeGreaterThan(TRADE_MAX)
     expect(ctx.positionsFeed.subscribeAudit).toHaveBeenCalledTimes(1)   // open → live stream
   })
 
-  test('_plotWindow enforces a minimum span for a single-trade position', () => {
-    const single = { trades: [{ execution_timestamp_ms: 1733964906796, amount: '0.1' }] }
-    const w = ctx._plotWindow({ closed_at_ms: null }, single)
+  test('_plotWindow enforces a minimum span for a CLOSED single-instant position', () => {
+    const T = 1733964906796
+    const w = ctx._plotWindow(
+      { closed_at_ms: T },
+      { position: { opened_at_ms: T, closed_at_ms: T }, trades: [{ execution_timestamp_ms: T, amount: '0.1' }] })
     expect(w.end - w.start).toBeGreaterThanOrEqual(12 * 60 * 60 * 1000)
-    expect((w.start + w.end) / 2).toBe(1733964906796)   // centred on the trade
+    expect((w.start + w.end) / 2).toBe(T)   // centred on the instant
   })
 
   test('a CLOSED position does not open a live audit stream', async () => {
@@ -137,6 +142,27 @@ describe('onPositionSelect → audit-first, trade-derived window', () => {
   test('short position keeps the preferred timeframe (no coarsening)', async () => {
     await ctx.onPositionSelect(pos)                        // ~38-day position at 1h = 912 candles
     expect(ctx.corkySelect.mock.calls[0][0].timeframe).toBe('1h')
+  })
+
+  test('OPEN single-trade position: window extends to NOW + size/fees draw a line', async () => {
+    const entry = 1735126384704   // Dec 2024
+    ctx.positionsFeed.getAudit = vi.fn(async () => ({
+      // open: closed null, updated == entry (the gateway-inferred trade stamp)
+      position: { opened_at_ms: entry, closed_at_ms: null, updated_at_ms: entry, base_price: '98837' },
+      orders: [{ order_id: 1, created_at_ms: entry, price: '98837', order_type: 'MARKET' }],
+      trades: [{ execution_timestamp_ms: entry, amount: '0.01', price: '98837', fee: '-0.6', fee_currency: 'USD' }],
+    }))
+    const openPos = { ...pos, opened_at_ms: entry, closed_at_ms: null }
+    const before = Date.now()
+    await ctx.onPositionSelect(openPos)
+    // window ends at ~now, not the entry stamp → spans the live position entry→now
+    expect(ctx.positionPlot.window.end).toBeGreaterThanOrEqual(before)
+    expect(ctx.positionPlot.window.start).toBe(entry)
+    // single-event size + fees series now have a trailing point → a drawable line
+    expect(ctx.positionPlot.series.size.length).toBe(2)
+    expect(ctx.positionPlot.series.size[1][1]).toBe(0.01)              // flat hold
+    expect(ctx.positionPlot.series.fees.series.length).toBe(2)
+    expect(ctx.positionsFeed.subscribeAudit).toHaveBeenCalledTimes(1)  // open → live stream
   })
 })
 

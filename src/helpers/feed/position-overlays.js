@@ -37,7 +37,7 @@ export function tradeMarkers(audit) {
  * Running signed sum of trade amounts; a final point at the close timestamp so a
  * closed position visibly holds its last size to the end of its window.
  */
-export function positionSizeSeries(audit) {
+export function positionSizeSeries(audit, tailTs) {
   const trades = sortedTrades(audit)
   const out = []
   let cum = 0
@@ -45,12 +45,16 @@ export function positionSizeSeries(audit) {
     cum += num(t.amount)               // accumulate UNrounded (avoid step drift)
     out.push([t.execution_timestamp_ms, round8(cum)])   // round only for display
   }
+  if (!out.length) return out
+  // Carry the last size flat to a trailing point so a single-trade / open position
+  // still draws a visible line. Prefer the caller's window end (`tailTs` — "now"
+  // for an open position); else fall back to the position's close/update stamp.
+  const lastTs = out[out.length - 1][0]
   const p = (audit && audit.position) || {}
-  const end = p.closed_at_ms != null ? p.closed_at_ms
+  const fallback = p.closed_at_ms != null ? p.closed_at_ms
     : (p.updated_at_ms != null ? p.updated_at_ms : null)
-  if (out.length && end != null && end > out[out.length - 1][0]) {
-    out.push([end, out[out.length - 1][1]])
-  }
+  const tail = (typeof tailTs === 'number') ? tailTs : fallback
+  if (tail != null && tail > lastTs) out.push([tail, out[out.length - 1][1]])
   return out
 }
 
@@ -135,7 +139,7 @@ export function feeEvents(audit) {
  * currency (largest |Σ|); other-currency events are omitted from the single line
  * (rare). The final point reconciles with `summary.fees_by_currency[currency]`.
  */
-export function cumulativeFees(audit) {
+export function cumulativeFees(audit, tailTs) {
   const events = feeEvents(audit)
   const totals = {}
   for (const e of events) totals[e.currency] = (totals[e.currency] || 0) + num(e.amount)
@@ -150,6 +154,11 @@ export function cumulativeFees(audit) {
     if (currency == null || e.currency !== currency) continue
     cum += num(e.amount)               // accumulate UNrounded (avoid step drift)
     series.push([e.ts, round8(cum)])
+  }
+  // Carry the accrued fee flat to the window end so a single-fee / open position
+  // still draws a visible line (fees don't accrue between events).
+  if (series.length && typeof tailTs === 'number' && tailTs > series[series.length - 1][0]) {
+    series.push([tailTs, series[series.length - 1][1]])
   }
   return { series, currency }
 }

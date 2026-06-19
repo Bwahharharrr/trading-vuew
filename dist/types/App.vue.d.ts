@@ -298,7 +298,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     _lastClose(): number;
     onSidebarClick(s: any): void;
     ensurePriceAlarmOverlay(): void;
-    _computePositionSeries(audit: any): {
+    _computePositionSeries(audit: any, tailTs: any): {
         markers: any;
         orders: any[][];
         openClose: any[][];

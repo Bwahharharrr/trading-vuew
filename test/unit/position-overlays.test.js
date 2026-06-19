@@ -52,6 +52,15 @@ describe('positionSizeSeries', () => {
     const s = positionSizeSeries(audit)
     expect(s[1][1]).toBe(0.05)   // not 0.049999999
   })
+  it('extends a single-trade (open) position to tailTs so the line is visible', () => {
+    const single = { trades: [{ execution_timestamp_ms: 100, amount: '0.01' }] }
+    expect(positionSizeSeries(single)).toEqual([[100, 0.01]])           // no tail → 1 point
+    expect(positionSizeSeries(single, 9999)).toEqual([[100, 0.01], [9999, 0.01]])  // tail → flat line
+  })
+  it('tailTs ≤ last point is ignored', () => {
+    const single = { trades: [{ execution_timestamp_ms: 100, amount: '0.01' }] }
+    expect(positionSizeSeries(single, 50)).toEqual([[100, 0.01]])
+  })
 })
 
 describe('buySellHistogram', () => {
@@ -81,6 +90,11 @@ describe('cumulativeFees', () => {
     const { currency, series } = cumulativeFees(mixed)
     expect(currency).toBe('USD')
     expect(series).toEqual([[2, -99]])   // BTC fee omitted from the single line
+  })
+  it('extends a single-fee (open) position to tailTs so the line is visible', () => {
+    const one = { trades: [{ execution_timestamp_ms: 100, amount: '1', fee: '-0.6', fee_currency: 'USD' }] }
+    expect(cumulativeFees(one).series).toEqual([[100, -0.6]])                 // no tail → 1 point
+    expect(cumulativeFees(one, 9999).series).toEqual([[100, -0.6], [9999, -0.6]])  // tail → flat line
   })
   it('COMBINES trade fees + ledger funding fees (audit.fees[]) → summary total', () => {
     const a = authPositionAuditEvent.event.audit   // 1 trade (-0.1) + 1 funding (-0.02)

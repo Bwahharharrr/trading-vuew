@@ -9,7 +9,7 @@ export function tradeMarkers(audit: any): any;
  * Running signed sum of trade amounts; a final point at the close timestamp so a
  * closed position visibly holds its last size to the end of its window.
  */
-export function positionSizeSeries(audit: any): any[][];
+export function positionSizeSeries(audit: any, tailTs: any): any[][];
 /**
  * Order markers for the price pane (Markers.vue): `[created_at_ms, price, label]`.
  * Plotted at the order's limit price (`price`, else `price_avg`); orders without a
@@ -61,7 +61,7 @@ export function feeEvents(audit: any): ({
  * currency (largest |Σ|); other-currency events are omitted from the single line
  * (rare). The final point reconciles with `summary.fees_by_currency[currency]`.
  */
-export function cumulativeFees(audit: any): {
+export function cumulativeFees(audit: any, tailTs: any): {
     series: any[][];
     currency: string | null;
 };

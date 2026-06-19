@@ -1109,14 +1109,16 @@ export default {
         // ── Position plot (trades + Position Details panes) ────────────────────
 
         // Derive all chart series from an audit bundle (Phase A transforms).
-        _computePositionSeries(audit) {
+        // tailTs (the window end — "now" for an open position) extends the size +
+        // fees lines to the right edge so single-event / open positions still draw.
+        _computePositionSeries(audit, tailTs) {
             return {
                 markers: tradeMarkers(audit),
                 orders: orderMarkers(audit),
                 openClose: openCloseMarkers(audit),
-                size: positionSizeSeries(audit),
+                size: positionSizeSeries(audit, tailTs),
                 hist: buySellHistogram(audit),
-                fees: cumulativeFees(audit),   // { series, currency }
+                fees: cumulativeFees(audit, tailTs),   // { series, currency }
             }
         },
 
@@ -1149,22 +1151,27 @@ export default {
                 pp.symbol !== this.corkyCurrent.symbol) return
             const s = pp.series
             const t = pp.toggles || {}
+            // Price-pane markers can coincide (a single-trade position has its
+            // trade, order and open marker at the same instant/price). Draw them
+            // CONCENTRIC — largest behind, smallest on top — so each still peeks:
+            // orders (square, z135, big) < trades (circle, z140) < open/close
+            // (diamond, z146, small, labelled).
+            if (t.orders && s.orders && s.orders.length) {
+                dc.add('onchart', {
+                    name: 'Orders', type: 'Markers', grid: { id: 0 }, data: s.orders,
+                    settings: {
+                        $positionOverlay: true, $uuid: 'pos-orders', 'z-index': 135,
+                        legend: false, color: '#d97706', shape: 'square', markerSize: 10, showLabel: false,
+                    },
+                })
+            }
             if (t.trades && s.markers.length) {
                 dc.add('onchart', {
                     name: 'Trades', type: 'Trades', grid: { id: 0 }, data: s.markers,
                     settings: {
                         $positionOverlay: true, $uuid: 'pos-trades', 'z-index': 140,
                         legend: false, buyColor: '#23a776', sellColor: '#e54150',
-                        markerSize: 6, showLabel: false,
-                    },
-                })
-            }
-            if (t.orders && s.orders && s.orders.length) {
-                dc.add('onchart', {
-                    name: 'Orders', type: 'Markers', grid: { id: 0 }, data: s.orders,
-                    settings: {
-                        $positionOverlay: true, $uuid: 'pos-orders', 'z-index': 135,
-                        legend: false, color: '#d97706', shape: 'square', markerSize: 5, showLabel: false,
+                        markerSize: 7, showLabel: false,
                     },
                 })
             }
@@ -1173,7 +1180,7 @@ export default {
                     name: 'Open / Close', type: 'Markers', grid: { id: 0 }, data: s.openClose,
                     settings: {
                         $positionOverlay: true, $uuid: 'pos-openclose', 'z-index': 146,
-                        legend: false, color: '#64b5f6', shape: 'diamond', markerSize: 7, showLabel: true,
+                        legend: false, color: '#64b5f6', shape: 'diamond', markerSize: 5, showLabel: true,
                     },
                 })
             }
@@ -1645,7 +1652,7 @@ export default {
             let range
             if (audit) {
                 this.positionPlot.audit = audit
-                this.positionPlot.series = this._computePositionSeries(audit)
+                this.positionPlot.series = this._computePositionSeries(audit, win ? win.end : undefined)
                 this.positionPlot.window = win
                 if (win) {
                     // Load the position window padded by ~400 candles each side
@@ -1665,33 +1672,33 @@ export default {
             if (audit && pos.closed_at_ms == null) this._startPositionAuditStream(pos)
         },
 
-        // The position's chart window. PRIMARY: audit.position timestamps
-        // (opened_at_ms, closed_at_ms ?? updated_at_ms) — the gateway now infers
-        // opened_at_ms from the trade segment. FALLBACK (robustness): trade/fee
-        // timestamps, then the row window — covers older audits where the position
-        // window is absent/0. Returns null if nothing usable; enforces a minimum
-        // visible span so a single-instant window isn't degenerate.
+        // The position's chart window. START: audit.position.opened_at_ms (gateway
+        // infers it from the trade segment), else first trade/fee ts, else the row.
+        // END: for a CLOSED position the close time; for an OPEN position **now**,
+        // so the window spans the live position entry→now (its updated_at_ms can be
+        // the entry stamp, which would otherwise collapse the window). Returns null
+        // if nothing usable; enforces a minimum visible span for a tiny window.
         _plotWindow(pos, audit) {
             const valid = (t) => typeof t === 'number' && Number.isFinite(t) && t > 0
             const p = (audit && audit.position) || {}
+            const isOpen = !valid(p.closed_at_ms) && (!pos || pos.closed_at_ms == null)
             let start = valid(p.opened_at_ms) ? p.opened_at_ms : null
-            let end = valid(p.closed_at_ms) ? p.closed_at_ms : (valid(p.updated_at_ms) ? p.updated_at_ms : null)
+            let end = valid(p.closed_at_ms) ? p.closed_at_ms
+                : (isOpen ? Date.now() : (valid(p.updated_at_ms) ? p.updated_at_ms : null))
             if (start == null || end == null) {
                 const ts = []
                 for (const t of (audit && audit.trades) || []) if (valid(t.execution_timestamp_ms)) ts.push(t.execution_timestamp_ms)
                 for (const f of (audit && audit.fees) || []) if (valid(f.timestamp_ms)) ts.push(f.timestamp_ms)
                 if (ts.length) {
                     if (start == null) start = Math.min(...ts)
-                    if (end == null) end = Math.max(...ts)
+                    if (end == null) end = isOpen ? Date.now() : Math.max(...ts)
                 }
             }
-            // Open position with no end → now.
-            if (start != null && end == null && pos && pos.closed_at_ms == null) end = Date.now()
             // Last-resort row fallback.
             if (start == null || end == null) {
                 const w = positionWindow(pos)
                 if (start == null && valid(w.start)) start = w.start
-                if (end == null && valid(w.end)) end = w.end
+                if (end == null) end = isOpen ? Date.now() : (valid(w.end) ? w.end : null)
             }
             if (start == null || end == null) return null
             if (end < start) { const t = start; start = end; end = t }
@@ -1716,7 +1723,8 @@ export default {
                         this.positionPlot.symbol !== pos.symbol ||
                         this.positionPlot.position_id !== pos.position_id) return
                     this.positionPlot.audit = audit
-                    this.positionPlot.series = this._computePositionSeries(audit)
+                    const tail = this.positionPlot.window ? this.positionPlot.window.end : undefined
+                    this.positionPlot.series = this._computePositionSeries(audit, tail)
                     this.syncPositionOverlays()
                     const dc = this.chart; if (dc && dc.touchData) dc.touchData()
                 },
