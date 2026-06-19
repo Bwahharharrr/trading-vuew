@@ -1672,33 +1672,33 @@ export default {
             if (audit && pos.closed_at_ms == null) this._startPositionAuditStream(pos)
         },
 
-        // The position's chart window. START: audit.position.opened_at_ms (gateway
-        // infers it from the trade segment), else first trade/fee ts, else the row.
-        // END: for a CLOSED position the close time; for an OPEN position **now**,
-        // so the window spans the live position entry→now (its updated_at_ms can be
-        // the entry stamp, which would otherwise collapse the window). Returns null
-        // if nothing usable; enforces a minimum visible span for a tiny window.
+        // The position's chart window, framed around its ACTUAL activity so the
+        // overlays sit inside the visible range. START: audit.position.opened_at_ms
+        // (gateway infers it) else first trade/fee ts; END: closed_at_ms ??
+        // updated_at_ms ?? last trade/fee ts. We deliberately do NOT stretch an open
+        // position to "now": a months-old position would make an 18-month / ~13k
+        // candle window that the chart can't range to, pushing the data off-screen
+        // (only the tail point stayed in view). `now` is a last resort only when
+        // nothing else is known. enforces a minimum visible span for a tiny window.
         _plotWindow(pos, audit) {
             const valid = (t) => typeof t === 'number' && Number.isFinite(t) && t > 0
             const p = (audit && audit.position) || {}
-            const isOpen = !valid(p.closed_at_ms) && (!pos || pos.closed_at_ms == null)
             let start = valid(p.opened_at_ms) ? p.opened_at_ms : null
-            let end = valid(p.closed_at_ms) ? p.closed_at_ms
-                : (isOpen ? Date.now() : (valid(p.updated_at_ms) ? p.updated_at_ms : null))
+            let end = valid(p.closed_at_ms) ? p.closed_at_ms : (valid(p.updated_at_ms) ? p.updated_at_ms : null)
             if (start == null || end == null) {
                 const ts = []
                 for (const t of (audit && audit.trades) || []) if (valid(t.execution_timestamp_ms)) ts.push(t.execution_timestamp_ms)
                 for (const f of (audit && audit.fees) || []) if (valid(f.timestamp_ms)) ts.push(f.timestamp_ms)
                 if (ts.length) {
                     if (start == null) start = Math.min(...ts)
-                    if (end == null) end = isOpen ? Date.now() : Math.max(...ts)
+                    if (end == null) end = Math.max(...ts)
                 }
             }
-            // Last-resort row fallback.
+            // Last-resort row fallback, then now (only if nothing else is known).
             if (start == null || end == null) {
                 const w = positionWindow(pos)
                 if (start == null && valid(w.start)) start = w.start
-                if (end == null) end = isOpen ? Date.now() : (valid(w.end) ? w.end : null)
+                if (end == null) end = valid(w.end) ? w.end : (start != null ? Date.now() : null)
             }
             if (start == null || end == null) return null
             if (end < start) { const t = start; start = end; end = t }

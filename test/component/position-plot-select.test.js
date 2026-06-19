@@ -100,11 +100,11 @@ describe('onPositionSelect → audit-first, trade-derived window', () => {
     const openZero = { ...pos, opened_at_ms: 0, closed_at_ms: null }
     await ctx.onPositionSelect(openZero)
     const arg = ctx.corkySelect.mock.calls[0][0]
-    // window starts at the (real) Dec-2024 first trade and runs to now — never 1970
+    // window is framed around the (real) Dec-2024 trades — never the epoch, never
+    // stretched to an 18-month "now" window
     expect(ctx.positionPlot.window.start).toBe(TRADE_MIN)
-    expect(ctx.positionPlot.window.end).toBeGreaterThan(TRADE_MAX)
-    // padded range is sane (post-2020), covers the trades, never the epoch
-    expect(arg.range.start_ms).toBeGreaterThan(Date.UTC(2020, 0, 1))
+    expect(ctx.positionPlot.window.end).toBe(TRADE_MAX)
+    expect(arg.range.start_ms).toBeGreaterThan(Date.UTC(2020, 0, 1))   // sane, not 1970
     expect(arg.range.start_ms).toBeLessThan(TRADE_MIN)
     expect(arg.range.end_ms).toBeGreaterThan(TRADE_MAX)
     expect(ctx.positionsFeed.subscribeAudit).toHaveBeenCalledTimes(1)   // open → live stream
@@ -144,7 +144,7 @@ describe('onPositionSelect → audit-first, trade-derived window', () => {
     expect(ctx.corkySelect.mock.calls[0][0].timeframe).toBe('1h')
   })
 
-  test('OPEN single-trade position: window extends to NOW + size/fees draw a line', async () => {
+  test('OPEN single-trade position: window framed around the entry; size/fees draw 2-pt lines', async () => {
     const entry = 1735126384704   // Dec 2024
     ctx.positionsFeed.getAudit = vi.fn(async () => ({
       // open: closed null, updated == entry (the gateway-inferred trade stamp)
@@ -153,14 +153,15 @@ describe('onPositionSelect → audit-first, trade-derived window', () => {
       trades: [{ execution_timestamp_ms: entry, amount: '0.01', price: '98837', fee: '-0.6', fee_currency: 'USD' }],
     }))
     const openPos = { ...pos, opened_at_ms: entry, closed_at_ms: null }
-    const before = Date.now()
     await ctx.onPositionSelect(openPos)
-    // window ends at ~now, not the entry stamp → spans the live position entry→now
-    expect(ctx.positionPlot.window.end).toBeGreaterThanOrEqual(before)
-    expect(ctx.positionPlot.window.start).toBe(entry)
-    // single-event size + fees series now have a trailing point → a drawable line
-    expect(ctx.positionPlot.series.size.length).toBe(2)
-    expect(ctx.positionPlot.series.size[1][1]).toBe(0.01)              // flat hold
+    const w = ctx.positionPlot.window
+    // window is a BOUNDED span around the entry (MIN_SPAN), NOT stretched to now
+    expect(w.start).toBeLessThan(entry)
+    expect(w.end).toBeGreaterThan(entry)
+    expect(w.end - w.start).toBe(12 * 60 * 60 * 1000)   // single-instant → MIN_SPAN
+    expect(w.end).toBeLessThan(entry + 24 * 60 * 60 * 1000)   // not "now" (18 months out)
+    // single-event size + fees series get a trailing point at window.end → drawable line
+    expect(ctx.positionPlot.series.size).toEqual([[entry, 0.01], [w.end, 0.01]])
     expect(ctx.positionPlot.series.fees.series.length).toBe(2)
     expect(ctx.positionsFeed.subscribeAudit).toHaveBeenCalledTimes(1)  // open → live stream
   })
