@@ -321,6 +321,9 @@ import { CorkyClient } from '../src/helpers/feed/corky-client.js'
 import { CorkyFeed } from '../src/helpers/feed/corky-feed.js'
 import { CorkyPositionsFeed } from '../src/helpers/feed/corky-positions-feed.js'
 import { pickTimeframe } from '../src/helpers/feed/pick-timeframe.js'
+import {
+    tradeMarkers, positionSizeSeries, buySellHistogram, cumulativeFees, positionWindow,
+} from '../src/helpers/feed/position-overlays.js'
 import BuysAndSells from './components/overlays/BuysAndSells.js'
 import Balance from './components/overlays/Balance.js'
 import LineTracker from './components/overlays/LineTracker.js'
@@ -419,6 +422,13 @@ export default {
             positionsHistoryCursor: null,  // opaque next_cursor (null = exhausted)
             positionsHistoryTotal: 0,
 
+            // ── Selected position plotted on the chart (trades + detail panes) ──
+            // { venue, symbol, position_id, window:{start,end},
+            //   series:{ markers, size, hist, fees }, toggles:{trades,size,hist,fees} }
+            // Null when no position is plotted. App-owned so the derived series
+            // survive the candle feed's onchart/offchart wipe on every reload.
+            positionPlot: null,
+
             // ── Selected-position audit drawer ──
             auditOpen: false,
             auditData: null,               // parsed audit bundle (kept on error)
@@ -492,6 +502,10 @@ export default {
                 // renderer — re-add it pointing at the same alarms array.
                 if (dc && this.priceAlarms && this.priceAlarms.length) {
                     this.$nextTick(() => this.ensurePriceAlarmOverlay())
+                }
+                // Re-plot the selected position's overlays onto the new cube.
+                if (dc && this.positionPlot) {
+                    this.$nextTick(() => this.syncPositionOverlays())
                 }
             }
         }
@@ -757,6 +771,24 @@ export default {
                                 // The gateway load wiped onchart — restore the
                                 // price-alarm renderer (same alarms array).
                                 if (this.priceAlarms.length) this.ensurePriceAlarmOverlay()
+                                // …and the plotted position's trades + detail panes.
+                                this.syncPositionOverlays()
+                                // For a plotted position, range to its window instead
+                                // of the default latest view (so its trades are on
+                                // screen). Double-nextTick: after the resetChart
+                                // remount settles (mirrors resetChart's own timing).
+                                const pp = this.positionPlot
+                                if (pp && pp.window && this.corkyCurrent &&
+                                    pp.symbol === this.corkyCurrent.symbol &&
+                                    pp.window.start != null && pp.window.end != null) {
+                                    this.$nextTick(() => {
+                                        this.$nextTick(() => {
+                                            if (this.$refs.tradingVue) {
+                                                this.$refs.tradingVue.setRange(pp.window.start, pp.window.end)
+                                            }
+                                        })
+                                    })
+                                }
                             })
                         }
                     },
@@ -852,6 +884,7 @@ export default {
         // Panel: select a venue/symbol/timeframe (+ default indicators).
         onCorkySelect(opts) {
             this._corkyCancelSelectRetry()   // a manual pick supersedes any pending retry
+            this.clearPositionPlot()         // a discovery pick drops any plotted position
             this.corkySelect(opts)
         },
 
@@ -1030,6 +1063,111 @@ export default {
                     alarms: this.priceAlarms,
                 },
             })
+        },
+
+        // ── Position plot (trades + Position Details panes) ────────────────────
+
+        // Derive all chart series from an audit bundle (Phase A transforms).
+        _computePositionSeries(audit) {
+            return {
+                markers: tradeMarkers(audit),
+                size: positionSizeSeries(audit),
+                hist: buySellHistogram(audit),
+                fees: cumulativeFees(audit),   // { series, currency }
+            }
+        },
+
+        // Remove our tagged overlays from the cube (identity via settings flag).
+        _removePositionOverlays(dc) {
+            let changed = false
+            for (const side of ['onchart', 'offchart']) {
+                const arr = dc.data && dc.data[side]
+                if (!Array.isArray(arr)) continue
+                for (let i = arr.length - 1; i >= 0; i--) {
+                    if (arr[i] && arr[i].settings && arr[i].settings.$positionOverlay) {
+                        arr.splice(i, 1); changed = true
+                    }
+                }
+            }
+            if (changed && typeof dc.update_ids === 'function') dc.update_ids()
+        },
+
+        // Reconcile the chart's position overlays to `positionPlot` + its toggles.
+        // Called after every history-complete (the candle feed wiped onchart/
+        // offchart), on a toggle, and on an audit refresh. Idempotent: it removes
+        // our tagged overlays then re-adds the enabled ones with fresh data.
+        syncPositionOverlays() {
+            const dc = this.chart
+            if (!dc || !dc.data || typeof dc.add !== 'function') return
+            this._removePositionOverlays(dc)
+            const pp = this.positionPlot
+            // Only plot when the plotted position matches the charted symbol.
+            if (!pp || !pp.series || !this.corkyCurrent ||
+                pp.symbol !== this.corkyCurrent.symbol) return
+            const s = pp.series
+            const t = pp.toggles || {}
+            if (t.trades && s.markers.length) {
+                dc.add('onchart', {
+                    name: 'Trades', type: 'Trades', grid: { id: 0 }, data: s.markers,
+                    settings: {
+                        $positionOverlay: true, $uuid: 'pos-trades', 'z-index': 140,
+                        legend: false, buyColor: '#23a776', sellColor: '#e54150',
+                        markerSize: 6, showLabel: false,
+                    },
+                })
+            }
+            if (t.size && s.size.length) {
+                dc.add('offchart', {
+                    name: 'Position Size', type: 'StepLine', data: s.size,
+                    settings: {
+                        $positionOverlay: true, $uuid: 'pos-size', legend: true,
+                        color: '#64b5f6', lineWidth: 1.5,
+                    },
+                })
+            }
+            if (t.hist && s.hist.length) {
+                dc.add('offchart', {
+                    name: 'Buy / Sell', type: 'Histogram', data: s.hist,
+                    settings: {
+                        $positionOverlay: true, $uuid: 'pos-hist', legend: true,
+                        colorUp: '#23a776', colorDown: '#e54150', zeroLine: true,
+                    },
+                })
+            }
+            if (t.fees && s.fees && s.fees.series.length) {
+                dc.add('offchart', {
+                    name: `Fees (${s.fees.currency || 'trades'})`, type: 'Spline',
+                    data: s.fees.series,
+                    settings: {
+                        $positionOverlay: true, $uuid: 'pos-fees', legend: true,
+                        color: '#d97706', lineWidth: 1.5,
+                    },
+                })
+            }
+        },
+
+        // Toggle one Position Details series on/off and re-sync.
+        togglePositionDetail(key) {
+            if (!this.positionPlot) return
+            const t = this.positionPlot.toggles
+            t[key] = !t[key]
+            this.syncPositionOverlays()
+            const dc = this.chart
+            if (dc && typeof dc.touchData === 'function') dc.touchData()
+            this.$nextTick(() => {
+                if (this.$refs.tradingVue) this.$refs.tradingVue.refreshOffchartOverlays()
+            })
+        },
+
+        // Drop the plotted position entirely (e.g. a discovery-panel ticker switch).
+        clearPositionPlot() {
+            this._stopPositionAuditStream()
+            this.positionPlot = null
+            const dc = this.chart
+            if (dc && dc.data) {
+                this._removePositionOverlays(dc)
+                if (typeof dc.touchData === 'function') dc.touchData()
+            }
         },
         // Poll the last close (feed-agnostic — works for File AND Gateway):
         // ring alarms whose level the price has reached, and silence + re-arm
@@ -1362,9 +1500,83 @@ export default {
             const tfs = (state && state.available_timeframes) || []
             const current = this.corkyCurrent && this.corkyCurrent.timeframe
             const timeframe = pickTimeframe(current, tfs, { fallback: '1h' }) || current || '1h'
-            this.corkySelect({ venue, symbol, timeframe })
+
+            // Window from the row (available before the audit). Open positions
+            // (no close) extend to now. Subscribe with a candle range covering it
+            // so an old position's trades have candles behind them; history-complete
+            // then sets the visible range to this window.
+            this._stopPositionAuditStream()
+            const win = positionWindow(pos)
+            const isOpen = pos.closed_at_ms == null
+            const start = win.start
+            const end = isOpen ? Date.now() : win.end
+            let range
+            if (start != null && end != null && end > start) {
+                const pad = Math.max(60000, Math.round((end - start) * 0.08))
+                range = { type: 'start_end', start_ms: start - pad, end_ms: end + pad }
+            }
+            this.positionPlot = {
+                venue, symbol, position_id: pos.position_id,
+                window: (start != null && end != null) ? { start, end } : null,
+                audit: null, series: null,
+                toggles: { trades: true, size: false, hist: false, fees: false },
+            }
+            this.corkySelect({ venue, symbol, timeframe, range })
+            // …then load the audit → derive + plot the trade series.
+            this._loadPositionAudit(pos)
             // …and open the audit drawer for the selected position (rich detail).
             this.openAudit(pos)
+        },
+
+        // Fetch the audit for the plotted position, derive its chart series, and
+        // (re)plot. Guards against a newer selection superseding this one.
+        async _loadPositionAudit(pos) {
+            if (!this.positionsFeed || pos.position_id == null) return
+            const target = {
+                venue: pos.venue, account_id: pos.account_id,
+                symbol: pos.symbol, position_id: pos.position_id,
+            }
+            const mine = () => this.positionPlot &&
+                this.positionPlot.symbol === pos.symbol &&
+                this.positionPlot.position_id === pos.position_id
+            try {
+                const audit = await this.positionsFeed.getAudit(target)
+                if (!mine()) return
+                this.positionPlot.audit = audit
+                this.positionPlot.series = this._computePositionSeries(audit)
+                this.syncPositionOverlays()
+                const dc = this.chart; if (dc && dc.touchData) dc.touchData()
+            } catch (_) { /* keep last-good; the drawer surfaces audit errors */ }
+            // Keep an OPEN position's plot live as new trades land.
+            if (pos.closed_at_ms == null) this._startPositionAuditStream(pos)
+        },
+
+        _startPositionAuditStream(pos) {
+            if (!this.positionsFeed || !this.positionsFeed.streamingSupported) return
+            this._stopPositionAuditStream()
+            this._posAuditSub = this.positionsFeed.subscribeAudit({
+                subscription_id: 'corky-position-plot-audit',
+                venue: pos.venue, account_id: pos.account_id,
+                symbol: pos.symbol, position_id: pos.position_id,
+            }, {
+                onData: (audit) => {
+                    if (!audit || !this.positionPlot ||
+                        this.positionPlot.symbol !== pos.symbol ||
+                        this.positionPlot.position_id !== pos.position_id) return
+                    this.positionPlot.audit = audit
+                    this.positionPlot.series = this._computePositionSeries(audit)
+                    this.syncPositionOverlays()
+                    const dc = this.chart; if (dc && dc.touchData) dc.touchData()
+                },
+                onError: () => { /* keep last-good */ },
+            })
+        },
+
+        _stopPositionAuditStream() {
+            if (this._posAuditSub && this.positionsFeed) {
+                try { this.positionsFeed.unsubscribe(this._posAuditSub) } catch (_) { /* gone */ }
+            }
+            this._posAuditSub = null
         },
 
         // ── Selected-position audit drawer ────────────────────────────────────
@@ -1455,6 +1667,7 @@ export default {
             this._corkyUnsub()
             this._positionsStopOpenStream()
             this._stopAuditStream()
+            this._stopPositionAuditStream()
             if (this._positionsPoll) { clearInterval(this._positionsPoll); this._positionsPoll = null }
             if (this.corkyFeed) {
                 try { this.corkyFeed.destroy() } catch (_) { /* already gone */ }
@@ -1481,6 +1694,7 @@ export default {
             this.auditData = null
             this.auditTarget = null
             this.auditError = null
+            this.positionPlot = null
         },
 
         // Normalise an error into the { message, retryable } shape the panel
