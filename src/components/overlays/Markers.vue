@@ -18,6 +18,11 @@ export default {
             const data = this.$props.data
             if (!data || !data.length) return
             const r = this.marker_size
+            // Per-point SYMBOL rule (e.g. SCMR reversal markers): each row carries
+            // its own glyph + colour + above/below placement — drawn as a text
+            // glyph anchored to the candle's high/low. Plain markers fall through
+            // to the single-shape path below.
+            if (this.marker_rule) { this.draw_symbol_markers(ctx, layout, data, r); return }
             ctx.lineWidth = this.line_width
             ctx.strokeStyle = this.stroke
             ctx.font = this.new_font
@@ -36,6 +41,40 @@ export default {
                     ctx.fillText(String(label), x, y - r - 4)
                 }
             }
+        },
+        // Per-point glyph markers. Row: [ts, y, label, glyph, color, dir] where
+        // `y` is the OWNING candle's anchor price (high for above, low for below),
+        // `glyph` is drawn as a literal text character in its own `color`, and
+        // `dir` ('above'|'below') offsets it clear of the candle. label (col 2)
+        // renders further out when showLabel.
+        draw_symbol_markers(ctx, layout, data, r) {
+            ctx.font = this.glyph_font
+            ctx.textAlign = 'center'
+            const gap = r + 2
+            for (let k = 0, n = data.length; k < n; k++) {
+                const p = data[k]
+                const yv = p[1]
+                const glyph = p.length > 3 ? p[3] : null
+                if (yv == null || !Number.isFinite(Number(yv)) || glyph == null || glyph === '') continue
+                const above = p[5] !== 'below'
+                const x = layout.t2screen(p[0])
+                const y0 = layout.$2screen(Number(yv))
+                ctx.fillStyle = (p.length > 4 && p[4]) ? p[4] : this.color
+                ctx.textBaseline = above ? 'bottom' : 'top'
+                const gy = above ? y0 - gap : y0 + gap
+                ctx.fillText(String(glyph), x, gy)
+                // The glyph IS the marker; the descriptor's label (reversal name/id)
+                // is for the legend, NOT stamped on every candle — drawing it next
+                // to each glyph just clutters (e.g. an "o" with a "1" beside it).
+                // Opt in per layer via style.show_label='true' (or settings.showLabel).
+                const label = p.length > 2 ? p[2] : null
+                if (this.marker_show_label && label != null && label !== '') {
+                    ctx.fillStyle = this.label_color
+                    ctx.textBaseline = above ? 'bottom' : 'top'
+                    ctx.fillText(String(label), x, above ? gy - r - 2 : gy + r + 2)
+                }
+            }
+            ctx.textBaseline = 'alphabetic' // restore default for sibling overlays
         },
         draw_marker(ctx, x, y, r) {
             ctx.beginPath()
@@ -82,7 +121,20 @@ export default {
         },
         line_width() { return this.sett.lineWidth != null ? Number(this.sett.lineWidth) : 1 },
         shape() { return this.sett.shape || (this.sett.style && this.sett.style.shape) || 'circle' },
+        // Active when the layer carries a per-point symbol rule (e.g. SCMR).
+        marker_rule() { return this.sett.corkyMarkerRule || null },
+        // Glyph font scaled to the marker size so single chars (o/x/z) read clearly.
+        glyph_font() {
+            const px = Math.max(10, Math.round(this.marker_size * 2))
+            return `${px}px ` + this.$props.font.split('px').pop()
+        },
         show_label() { return this.sett.showLabel !== false },
+        // Per-point marker labels are OFF by default (glyph-only); opt in with the
+        // descriptor's style.show_label='true' or an explicit settings.showLabel.
+        marker_show_label() {
+            const s = this.sett
+            return s.showLabel === true || !!(s.style && s.style.show_label === 'true')
+        },
         label_color() {
             return this.sett.labelColor || (this.$props.colors && this.$props.colors.text) || '#999'
         },

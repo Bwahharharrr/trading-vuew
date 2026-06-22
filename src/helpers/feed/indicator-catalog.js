@@ -388,3 +388,70 @@ export function signedSlopeColor(value, slope, colors = {}) {
   if (v >= 0) return (s >= 0 ? pr : pf) || null
   return (s < 0 ? nf : nr) || null
 }
+
+/**
+ * Parse a `marker` layer's SYMBOL rule from its `style` (the SCMR reversal form,
+ * `style.marker_rule`). The wire carries a numeric type-id in `value_field`; the
+ * glyph / colour / placement for each id live ENTIRELY in the style map as
+ * `symbol_{id}` / `color_{id}` / `placement_{id}`, scanned dynamically. Anchors
+ * (`above_anchor`/`below_anchor`, default candle_high/candle_low) say which candle
+ * price a marker sits at. NOTHING is hardcoded — the SCMR / SCMR(INV) tables are
+ * server DEFAULTS; this obeys whatever the descriptor sends. Returns null when
+ * `style` is not a marker rule (no `marker_rule`, `value_field`, or `symbol_{id}`).
+ *
+ * @param {Record<string,string>} [style]
+ * @returns {{ rule:string, valueField:string, labelField:string|null,
+ *   zeroValue:string, hideZero:boolean, aboveAnchor:string, belowAnchor:string,
+ *   symbols:Record<string,string>, colors:Record<string,string>,
+ *   placements:Record<string,string> }|null}
+ */
+export function markerSymbolRule(style) {
+  const s = style || {}
+  if (!s.marker_rule) return null
+  const valueField = s.value_field
+  if (!valueField) return null
+  const symbols = {}; const colors = {}; const placements = {}
+  let hasSymbol = false
+  for (const k in s) {
+    let m = /^symbol_(\d+)$/.exec(k)
+    if (m) { symbols[m[1]] = s[k]; hasSymbol = true; continue }
+    m = /^color_(\d+)$/.exec(k)
+    if (m) { colors[m[1]] = s[k]; continue }
+    m = /^placement_(\d+)$/.exec(k)
+    if (m) placements[m[1]] = s[k]
+  }
+  if (!hasSymbol) return null
+  return {
+    rule: s.marker_rule,
+    valueField,
+    labelField: s.label_field || null,
+    zeroValue: s.zero_value != null ? String(s.zero_value) : '0',
+    hideZero: s.hide_zero == null ? true : (s.hide_zero === 'true' || s.hide_zero === true),
+    aboveAnchor: s.above_anchor || 'candle_high',
+    belowAnchor: s.below_anchor || 'candle_low',
+    symbols, colors, placements,
+  }
+}
+
+/**
+ * Resolve the marker for a raw type-id value under a {@link markerSymbolRule}.
+ * Returns null (draw nothing) when the value is the zero value (and `hideZero`),
+ * empty, missing, non-numeric, or has no `symbol_{id}` entry. Otherwise
+ * `{ id, glyph, color, placement }` straight from the descriptor — the id is the
+ * value TRUNCATED to an integer (matching paletteColorOf).
+ *
+ * @param {string|number|null|undefined} value
+ * @param {ReturnType<typeof markerSymbolRule>} rule
+ * @returns {{ id:string, glyph:string, color:string|null, placement:string }|null}
+ */
+export function markerSymbolOf(value, rule) {
+  if (!rule || value == null || value === '') return null
+  const n = Number(value)
+  if (!Number.isFinite(n)) return null
+  if (rule.hideZero && n === Number(rule.zeroValue)) return null
+  const id = String(Math.trunc(n))
+  const glyph = rule.symbols[id]
+  if (glyph == null || glyph === '') return null
+  return { id, glyph, color: rule.colors[id] != null ? rule.colors[id] : null,
+    placement: rule.placements[id] || 'above_candle' }
+}

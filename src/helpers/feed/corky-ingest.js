@@ -17,7 +17,8 @@ import {
   indicatorPlacement, layerKindToOverlay, styleToSettings, candleColorOf, candleColorOpts,
   signedSlopeColor, candleColorPalette, paletteColorOf, paletteLabelOf,
   candleColorBullBear, bullBearColorOf,
-  detectionBoxRule, detectionSet, hexToRgba
+  detectionBoxRule, detectionSet, hexToRgba,
+  markerSymbolRule, markerSymbolOf
 } from './indicator-catalog.js'
 
 // ─────────────────────────────────────────────────────────── primitives ──
@@ -324,6 +325,45 @@ export function detectionBoxCountAt(boxes, ts, tf, side = null) {
     (!side || b.side === side) && b.t0 <= ts && b.t1 >= ts + tf).length
 }
 
+// Resolve a marker-rule anchor name to a price off an ohlcv tuple
+// ([ts, open, high, low, close, volume]). Defaults to the high.
+export function anchorYFromCandle(candle, anchor) {
+  if (!candle) return null
+  switch (anchor) {
+    case 'candle_low': return candle[3]
+    case 'candle_open': return candle[1]
+    case 'candle_close': return candle[4]
+    case 'candle_high':
+    default: return candle[2]
+  }
+}
+
+// Build per-point marker rows for a marker-rule layer (e.g. SCMR reversal
+// symbols). Each non-zero/known type-id becomes a row:
+//   [ts, y, label, glyph, color, dir]
+// where y is the OWNING candle's anchor price (high for above_candle, low for
+// below_candle), `dir` ('above'|'below') tells the overlay which way to offset
+// the glyph, and glyph/color come straight from the descriptor. Markers anchored
+// to a candle the loaded window doesn't carry are skipped (no y).
+export function buildSymbolMarkers(rule, outputsMap, ohlcv) {
+  const valSeries = outputsMap.get(rule.valueField)
+  const labelSeries = rule.labelField ? outputsMap.get(rule.labelField) : null
+  const labelByTs = new Map(labelSeries ? labelSeries.raw : [])
+  const candleByTs = new Map((ohlcv || []).map((c) => [c[0], c]))
+  const data = []; const raw = []
+  if (valSeries) for (const [ts, rawVal] of valSeries.raw) {
+    const m = markerSymbolOf(rawVal, rule)
+    if (!m) continue                                    // 0 / unknown id / non-numeric → no marker
+    const above = m.placement === 'above_candle'
+    const y = anchorYFromCandle(candleByTs.get(ts), above ? rule.aboveAnchor : rule.belowAnchor)
+    if (y == null || !Number.isFinite(Number(y))) continue
+    const label = labelByTs.has(ts) ? labelByTs.get(ts) : null
+    data.push([ts, Number(y), label, m.glyph, m.color, above ? 'above' : 'below'])
+    raw.push([ts, rawVal])
+  }
+  return { data, raw }
+}
+
 // Build overlays for ONE indicator instance from its view.layers. Returns
 // { onchart, offchart, candleColorByTs }. candle_color/marker produce no overlay
 // (candle_color stamps the candle colour slot; raw values stay in the pivot).
@@ -416,8 +456,41 @@ export function buildLayerOverlays(instanceKey, kind, outputsMap, view, paneReso
       candleColor.push({ instanceKey, field, byTs, opts, palette, byTsLabel, layerId: layer.id })
       continue
     }
+    // marker layers with a SYMBOL rule (e.g. SCMR reversal symbols): per-point
+    // glyph/colour/anchor resolved from the descriptor, not the generic
+    // [ts, value] mapping below (which would plot the type-id as a price). The
+    // overlay is price-surface — markers anchor to candle high/low. Live updates
+    // recompute these wholesale (see applyLiveUpdate), so they're excluded from
+    // the generic column-write (viewOverlaysFor).
+    if (layer.kind === 'marker') {
+      const mRule = markerSymbolRule(layer.style)
+      if (mRule) {
+        const built = buildSymbolMarkers(mRule, outputsMap, ohlcv || [])
+        const visible = layer.visible_by_default !== false
+        onchart.push({
+          name: layer.label || layer.id,
+          type: 'Markers',
+          data: built.data,
+          settings: Object.assign(styleToSettings(layer.style), {
+            corkyKey: instanceKey + '#' + layer.id,
+            corkyKind: kind,
+            corkyInstance: instanceKey,
+            corkyLayerId: layer.id,
+            corkyView: true,
+            corkyVisibleDefault: visible,
+            display: visible,
+            corkyMarkerRule: mRule.rule,
+            corkyMarkerSpec: mRule,
+            corkyFields: [mRule.valueField, mRule.labelField].filter(Boolean),
+            legend: false,
+          }),
+          raw: built.raw,
+        })
+        continue
+      }
+    }
     const overlayType = layerKindToOverlay(layer.kind, fields.length)
-    if (!overlayType) continue // marker / unknown: no declarative renderer
+    if (!overlayType) continue // unknown: no declarative renderer
     const style = layer.style || {}
     let data, raw, extra
     if (layer.kind === 'histogram' && style.color_rule === 'signed_slope_histogram') {
@@ -844,8 +917,45 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
     }
   }
 
+  // marker-rule overlays (e.g. SCMR reversal symbols): recompute the marker for
+  // ts wholesale from the indicator value + the (now-updated) candle's anchor
+  // price. A tick that resolves to no marker (0 / unknown id / no field) REMOVES
+  // any marker previously placed at ts — so a transient reversal that flips back
+  // to 0 on the forming bar disappears. Excluded from the generic column-write.
+  for (const pane of ['onchart', 'offchart']) {
+    for (const ov of (chartDataObj[pane] || [])) {
+      const s = ov.settings
+      if (!s || !s.corkyMarkerRule) continue
+      const rule = s.corkyMarkerSpec
+      const oinds = inds[s.corkyInstance]
+      // Only an update that PROVIDES the value field is authoritative; a pure
+      // price/volume refinement leaves the existing marker untouched.
+      if (!rule || !oinds || !(rule.valueField in oinds)) continue
+      const m = markerSymbolOf(oinds[rule.valueField], rule)
+      if (!m) { removeByTs(ov.data, ts); if (ov.raw) removeByTs(ov.raw, ts); continue }
+      let candle = null
+      const arr = chartDataObj.chart.data
+      for (let i = arr.length - 1; i >= 0; i--) { if (arr[i][0] === ts) { candle = arr[i]; break } }
+      const above = m.placement === 'above_candle'
+      const y = anchorYFromCandle(candle, above ? rule.aboveAnchor : rule.belowAnchor)
+      if (y == null || !Number.isFinite(Number(y))) {
+        removeByTs(ov.data, ts); if (ov.raw) removeByTs(ov.raw, ts); continue
+      }
+      const label = (rule.labelField && rule.labelField in oinds) ? oinds[rule.labelField] : null
+      upsertByTs(ov.data, [ts, Number(y), label, m.glyph, m.color, above ? 'above' : 'below'])
+      if (ov.raw) upsertByTs(ov.raw, [ts, oinds[rule.valueField]])
+    }
+  }
+
   lastSeqBySub[sub] = seq
   return { chart: chartDataObj, applied: true, sequence: seq }
+}
+
+// Remove the row at `ts` from a [ts, ...] array (markers are sparse → linear).
+function removeByTs(data, ts) {
+  for (let i = data.length - 1; i >= 0; i--) {
+    if (data[i][0] === ts) { data.splice(i, 1); return }
+  }
 }
 
 // View overlays (built from view.layers) that consume `output` of `instanceKey`.
@@ -856,9 +966,11 @@ function viewOverlaysFor(chartDataObj, instanceKey, output) {
     if (!arr) continue
     for (const ov of arr) {
       const s = ov.settings
-      // signed_slope histograms are recomputed wholesale (value+slope+colour),
-      // not column-written field-by-field — handled in applyLiveUpdate.
-      if (s && s.corkyView && !s.corkyColorRule && s.corkyInstance === instanceKey &&
+      // signed_slope histograms AND marker-rule overlays are recomputed wholesale
+      // (value+slope+colour / glyph+anchor), not column-written field-by-field —
+      // both are handled in applyLiveUpdate.
+      if (s && s.corkyView && !s.corkyColorRule && !s.corkyMarkerRule &&
+          s.corkyInstance === instanceKey &&
           Array.isArray(s.corkyFields) && s.corkyFields.includes(output)) {
         out.push(ov)
       }

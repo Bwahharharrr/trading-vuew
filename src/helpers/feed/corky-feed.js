@@ -411,8 +411,17 @@ export class CorkyFeed extends FeedSource {
         // Match kind case-INSENSITIVELY: kindOf/resolveView/_applyCandleColor all
         // tolerate the display-label wire form ('SMA(20)' → 'SMA'), so an exact
         // === would silently match zero overlays for that form.
-        const overlays = [...built.onchart, ...built.offchart]
-            .filter(ov => ov.settings && kindEq(ov.settings.corkyKind, kind))
+        // Match this kind's overlays, SCOPED to the unique INSTANCE when given.
+        // Two instances of the same kind (SCMR + SCMR(INV) both report corkyKind
+        // 'SCMR') share layer ids, so a kind-only match toggled BOTH siblings'
+        // line/marker/diagnostic overlays — enabling SCMR also drew SCMR(INV)'s
+        // reversal markers, and disabling SCMR(INV) tore down SCMR's. (The
+        // candle_color path and setLayerEnabled already scope this way.) Fallback
+        // overlays carry no corkyInstance → kind match (legacy single-instance).
+        const matchOv = (ov) => ov.settings && kindEq(ov.settings.corkyKind, kind) &&
+            (instance == null || ov.settings.corkyInstance == null ||
+                ov.settings.corkyInstance === instance)
+        const overlays = [...built.onchart, ...built.offchart].filter(matchOv)
 
         // For view-driven overlays, auto-add ONLY visible_by_default layers that
         // the user has not explicitly hidden; a hidden view layer is opt-in via
@@ -431,7 +440,7 @@ export class CorkyFeed extends FeedSource {
         if (on) {
             for (const pane of ['onchart', 'offchart']) {
                 for (const ov of built[pane]) {
-                    if (ov.settings && kindEq(ov.settings.corkyKind, kind) && autoVisible(ov) &&
+                    if (matchOv(ov) && autoVisible(ov) &&
                         !handle.addedOverlays.has(ov)) {
                         this._addOverlay(dc, pane, ov)
                         handle.addedOverlays.add(ov)

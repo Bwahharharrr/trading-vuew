@@ -342,6 +342,143 @@ describe('CorkyFeed — selective overlays + live freshness (two kinds)', () => 
     })
 })
 
+// ── same-kind instances must not toggle each other ─────────────────────────
+// SCMR and SCMR(INV) are distinct indicator INSTANCES that share kind 'SCMR'
+// (kindOf collapses them) AND share layer ids ('scmr_levels', 'scmr_reversal_
+// markers', …). setIndicatorEnabled used to match overlays by kind alone, so
+// enabling SCMR also drew SCMR(INV)'s overlays (the load-time double-render) and
+// disabling SCMR(INV) tore down SCMR's (the cross-disable). It must scope by the
+// unique corkyInstance — like setLayerEnabled and the candle_color path do.
+describe('CorkyFeed — same-kind instances (SCMR + SCMR(INV)) toggle independently', () => {
+    const lineView = () => ({ kind: 'scmr', view: { version: 1, layers: [
+        { id: 'scmr_levels', label: 'Levels', kind: 'line', target: { surface: 'price' }, fields: ['lvl'], visible_by_default: true },
+    ] } })
+    const scmrRow = (ts) => ({
+        timeframe: '1D',
+        candle: { timestamp_ms: ts, open: '10', high: '12', low: '9', close: '11', volume: '1' },
+        indicators: { SCMR: { lvl: '100' }, 'SCMR(INV)': { lvl: '200' } },
+    })
+    async function primed() {
+        const handle = await feed.subscribe({
+            venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1D',
+            views: { SCMR: lineView(), 'SCMR(INV)': lineView() },
+        })
+        const sid = handle.subscription_id
+        client.emit(sid, chunkEvent(sid, [scmrRow(1), scmrRow(2)]))
+        client.emit(sid, { type: 'historical_complete' })
+        return handle
+    }
+    const shown = () => [...dc.data.onchart, ...dc.data.offchart]
+        .map(o => o.settings.corkyInstance).sort()
+
+    it('built carries BOTH instances: same corkyKind, distinct corkyInstance, shared layer id', async () => {
+        const handle = await primed()
+        const ovs = [...handle.built.onchart, ...handle.built.offchart]
+            .filter(o => o.settings.corkyLayerId === 'scmr_levels')
+        expect(ovs).toHaveLength(2)
+        expect(ovs.every(o => o.settings.corkyKind === 'SCMR')).toBe(true)
+        expect(ovs.map(o => o.settings.corkyInstance).sort()).toEqual(['SCMR', 'SCMR(INV)'])
+    })
+
+    it('enabling SCMR adds ONLY SCMR overlays, not SCMR(INV) (load-time double-render)', async () => {
+        const handle = await primed()
+        feed.setIndicatorEnabled(handle, 'SCMR', true, 'SCMR')
+        expect(shown()).toEqual(['SCMR'])
+    })
+
+    it('disabling SCMR(INV) leaves SCMR shown (cross-disable)', async () => {
+        const handle = await primed()
+        feed.setIndicatorEnabled(handle, 'SCMR', true, 'SCMR')
+        feed.setIndicatorEnabled(handle, 'SCMR', true, 'SCMR(INV)')
+        expect(shown()).toEqual(['SCMR', 'SCMR(INV)'])
+        feed.setIndicatorEnabled(handle, 'SCMR', false, 'SCMR(INV)')
+        expect(shown()).toEqual(['SCMR'])
+    })
+})
+
+// ── live SCMR candle_color + reversal markers must apply on live ticks ──────
+// The gateway now ships SCMR in live_update rows (candle_type_color + reversal_type);
+// applyLiveUpdate must re-stamp the candle colour AND extend the reversal-marker
+// overlay in place, exactly as a history reload would. Mirrors the real SCMR
+// descriptor (palette candle_color + scmr_reversal_symbols marker).
+describe('CorkyFeed — SCMR candle_color + reversal markers on LIVE ticks', () => {
+    const scmrView = () => ({ kind: 'scmr', view: { version: 1, layers: [
+        { id: 'scmr_candle_color', label: 'C', kind: 'candle_color', target: { surface: 'price' },
+          fields: ['candle_type_color'],
+          style: { color_field: 'candle_type_color', label_field: 'candle_type_name',
+                   color_0: '#9FB4B4', color_5: '#0066FF', color_11: '#FF0000' },
+          visible_by_default: true },
+        { id: 'scmr_reversal_markers', label: 'M', kind: 'marker', target: { surface: 'price' },
+          fields: ['reversal_type', 'reversal_type_name'],
+          style: { marker_rule: 'scmr_reversal_symbols', value_field: 'reversal_type',
+                   label_field: 'reversal_type_name', hide_zero: 'true',
+                   above_anchor: 'candle_high', below_anchor: 'candle_low',
+                   symbol_1: 'o', color_1: '#00FFFF', placement_1: 'below_candle',
+                   symbol_2: 'x', color_2: '#FF0000', placement_2: 'above_candle' },
+          visible_by_default: true },
+    ] } })
+    const scmrRow = (ts, color, rev) => ({
+        timeframe: '1m',
+        candle: { timestamp_ms: ts, open: '10', high: '12', low: '9', close: '11', volume: '1' },
+        indicators: { SCMR: { candle_type_color: String(color), reversal_type: String(rev),
+                              reversal_type_name: String(rev) } },
+    })
+    it('a live tick re-stamps the candle colour AND adds the reversal marker', async () => {
+        const handle = await feed.subscribe({
+            venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1m', views: { SCMR: scmrView() },
+        })
+        const sid = handle.subscription_id
+        client.emit(sid, chunkEvent(sid, [scmrRow(1, 5, 0), scmrRow(2, 5, 1)]))
+        client.emit(sid, { type: 'historical_complete' })
+        feed.setIndicatorEnabled(handle, 'SCMR', true, 'SCMR')
+
+        // history: candle 2 painted blue (#0066FF), marker 'o' at ts 2 (rev 1, below low 9)
+        const candles = dc.data.chart.data
+        expect(candles.find(c => c[0] === 2)[6]).toBe('#0066FF')
+        const mk = [...dc.data.onchart].find(o => o.settings.corkyMarkerRule)
+        expect(mk).toBeTruthy()
+        expect(mk.data.find(d => d[0] === 2)).toEqual([2, 9, '1', 'o', '#00FFFF', 'below'])
+
+        // LIVE new candle ts 3: color 5 (blue), rev 1 → must colour + add marker live
+        client.emit(sid, liveEvent(sid, 1, scmrRow(3, 5, 1)))
+        const c3 = dc.data.chart.data.find(c => c[0] === 3)
+        expect(c3[6]).toBe('#0066FF')                                   // live candle coloured
+        expect(mk.data.find(d => d[0] === 3)).toEqual([3, 9, '1', 'o', '#00FFFF', 'below']) // live marker
+
+        // LIVE candle 3 flips to color 11 (red), rev 0 → recolour, marker removed
+        client.emit(sid, liveEvent(sid, 2, scmrRow(3, 11, 0)))
+        expect(dc.data.chart.data.find(c => c[0] === 3)[6]).toBe('#FF0000')
+        expect(mk.data.find(d => d[0] === 3)).toBeUndefined()
+    })
+
+    it('a LATE confirmed row settles the EARLIER bar it belongs to (after the candle advanced)', async () => {
+        // Mirrors the gateway's settlement model: SCMR is provisional on the
+        // forming bar (status=forming) and a status=confirmed row is pushed LATER —
+        // often after the next bar has started. The confirmed row carries an OLDER
+        // ts; applyLiveUpdate must settle THAT bar, not the current one.
+        const handle = await feed.subscribe({
+            venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1m', views: { SCMR: scmrView() },
+        })
+        const sid = handle.subscription_id
+        client.emit(sid, chunkEvent(sid, [scmrRow(1, 5, 0)]))
+        client.emit(sid, { type: 'historical_complete' })
+        feed.setIndicatorEnabled(handle, 'SCMR', true, 'SCMR')
+        const mk = [...dc.data.onchart].find(o => o.settings.corkyMarkerRule)
+
+        // bar 2 forms (provisional, no reversal), then bar 3 forms → candle advanced
+        client.emit(sid, liveEvent(sid, 1, scmrRow(2, 0, 0)))
+        client.emit(sid, liveEvent(sid, 2, scmrRow(3, 0, 0)))
+        expect(dc.data.chart.data.map(c => c[0])).toEqual([1, 2, 3])
+        expect(mk.data.find(d => d[0] === 2)).toBeUndefined() // no marker yet (rev 0)
+
+        // LATE confirmed row for bar 2 (settled blue + reversal 1) lands while bar 3 is current
+        client.emit(sid, liveEvent(sid, 3, scmrRow(2, 5, 1)))
+        expect(dc.data.chart.data.find(c => c[0] === 2)[6]).toBe('#0066FF')                 // bar 2 settled colour
+        expect(mk.data.find(d => d[0] === 2)).toEqual([2, 9, '1', 'o', '#00FFFF', 'below'])  // bar 2 marker added
+        expect(dc.data.chart.data.find(c => c[0] === 3)[6]).toBe('#9FB4B4')                 // bar 3 (latest) untouched
+    })
+})
+
 describe('CorkyFeed.unsubscribe / destroy', () => {
     it('stops routing and sends unsubscribe; destroy closes the client', async () => {
         const handle = await feed.subscribe({
