@@ -100,7 +100,10 @@ function GridMaker(id, params, master_grid = null) {
 
     function calc_sidebar() {
 
-        if (sub.length < 2) {
+        // Only bail when the grid is truly EMPTY. A single visible point (e.g. a
+        // one-trade position histogram) still has a valid $_hi/$_lo from
+        // calc_$range, so it should get a real Y-axis instead of a stub sidebar.
+        if (sub.length < 1) {
             self.prec = 0
             self.sb = $p.config.SBMIN
             return

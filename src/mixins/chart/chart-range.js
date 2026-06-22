@@ -231,14 +231,34 @@ export default {
                     ),
                     this.ti_map.i2t_mode(this.range[1], d.indexSrc)
                 )
+                let arr = res[0] || []
+                let i0 = res[1]
+                // Index-based bracketing: include the data point immediately
+                // OUTSIDE each visible edge. Time-window filtering alone returns an
+                // empty/partial subset when the view sits in a SPARSE gap between
+                // two far-apart points (e.g. a position-size line whose only points
+                // are the entry and "now") — the overlay and its Y-axis then vanish
+                // as you scroll between them. Bracketing keeps a line/step/spline
+                // continuous across the window. `i0` (res[1]) is the original index
+                // of the first in-range point; keep it consistent with the prepend.
+                const full = d.data
+                if (Array.isArray(full) && full.length && i0 != null) {
+                    const end = i0 + arr.length          // one past the last in-range point
+                    const lead = i0 > 0 ? 1 : 0
+                    const tail = end < full.length ? 1 : 0
+                    if (lead || tail) {
+                        arr = full.slice(i0 - lead, end + tail)
+                        i0 = i0 - lead
+                    }
+                }
                 return {
                     type: d.type,
                     name: Utils.format_name(d),
-                    data: this.ti_map.parse(res[0] || [], d.indexSrc || 'map'),
+                    data: this.ti_map.parse(arr, d.indexSrc || 'map'),
                     settings: d.settings || this.settings_ov,
                     grid: d.grid || {},
                     tf: Utils.parse_tf(d.tf),
-                    i0: res[1],
+                    i0: i0,
                     loading: d.loading,
                     last: (this.last_values[side] || [])[i]
                 }

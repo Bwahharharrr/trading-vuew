@@ -806,30 +806,34 @@ export default {
                         // data watcher has applied the new candles first.
                         if (status && status.phase === 'history-complete') {
                             this.$nextTick(() => {
-                                if (this.$refs.tradingVue) {
-                                    this.$refs.tradingVue.resetChart(true)
+                                const tv = this.$refs.tradingVue
+                                // For a plotted position we ZOOM to its window so the
+                                // trades fill the pane AND the offchart bars get a
+                                // usable px_step (a 1-candle histogram bar is only
+                                // px_step·0.8 wide — at the default latest view that
+                                // collapses to ~1px and looks blank). resetChart(true)
+                                // re-inits to the latest view and a late setRange
+                                // RACES that remount, so the window never sticks.
+                                // Instead set the range FIRST, then resetChart(FALSE),
+                                // which remounts *preserving* the range via its own
+                                // proven double-nextTick restore.
+                                const pp = this.positionPlot
+                                const plotWindow = pp && pp.window && this.corkyCurrent &&
+                                    pp.symbol === this.corkyCurrent.symbol &&
+                                    pp.window.start != null && pp.window.end != null
+                                if (tv) {
+                                    if (plotWindow) {
+                                        tv.setRange(pp.window.start, pp.window.end)
+                                        tv.resetChart(false)   // remount, keep the window
+                                    } else {
+                                        tv.resetChart(true)    // discovery → latest view
+                                    }
                                 }
                                 // The gateway load wiped onchart — restore the
                                 // price-alarm renderer (same alarms array).
                                 if (this.priceAlarms.length) this.ensurePriceAlarmOverlay()
                                 // …and the plotted position's trades + detail panes.
                                 this.syncPositionOverlays()
-                                // For a plotted position, range to its window instead
-                                // of the default latest view (so its trades are on
-                                // screen). Double-nextTick: after the resetChart
-                                // remount settles (mirrors resetChart's own timing).
-                                const pp = this.positionPlot
-                                if (pp && pp.window && this.corkyCurrent &&
-                                    pp.symbol === this.corkyCurrent.symbol &&
-                                    pp.window.start != null && pp.window.end != null) {
-                                    this.$nextTick(() => {
-                                        this.$nextTick(() => {
-                                            if (this.$refs.tradingVue) {
-                                                this.$refs.tradingVue.setRange(pp.window.start, pp.window.end)
-                                            }
-                                        })
-                                    })
-                                }
                             })
                         }
                     },
@@ -1199,6 +1203,9 @@ export default {
                     settings: {
                         $positionOverlay: true, $uuid: 'pos-hist', legend: true,
                         colorUp: '#23a776', colorDown: '#e54150', zeroLine: true,
+                        // Trades are sparse instants; floor the bar width so a single
+                        // trade stays visible even in a wide (open-position) window.
+                        minBarWidth: 6,
                     },
                 })
             }
@@ -1669,22 +1676,48 @@ export default {
             // subscribe wipes overlays). The symbol guard inside makes this safe.
             this.syncPositionOverlays()
             // Keep an OPEN position's plot live as new trades land.
-            if (audit && pos.closed_at_ms == null) this._startPositionAuditStream(pos)
+            if (audit && this._isOpenPosition(pos, audit)) this._startPositionAuditStream(pos)
         },
 
-        // The position's chart window, framed around its ACTUAL activity so the
-        // overlays sit inside the visible range. START: audit.position.opened_at_ms
-        // (gateway infers it) else first trade/fee ts; END: closed_at_ms ??
-        // updated_at_ms ?? last trade/fee ts. We deliberately do NOT stretch an open
-        // position to "now": a months-old position would make an 18-month / ~13k
-        // candle window that the chart can't range to, pushing the data off-screen
-        // (only the tail point stayed in view). `now` is a last resort only when
-        // nothing else is known. enforces a minimum visible span for a tiny window.
+        // Is the position still OPEN (held)? Open ⇒ the window stretches to "now"
+        // (the lines continue to the right edge) and we keep a live audit stream.
+        // Decisive signals first (row source, close stamp, audit status); with none
+        // present (e.g. a thin fixture) infer from the net holding — a flat (net ≈ 0)
+        // position is effectively closed even without a close stamp.
+        _isOpenPosition(pos, audit) {
+            const valid = (t) => typeof t === 'number' && Number.isFinite(t) && t > 0
+            if (pos && pos.source === 'historical') return false
+            if (pos && pos.source === 'current') return true
+            const p = (audit && audit.position) || {}
+            if (valid(p.closed_at_ms) || (pos && valid(pos.closed_at_ms))) return false
+            const status = p.status != null ? String(p.status).toLowerCase() : ''
+            if (status === 'flat' || status === 'closed') return false
+            if (status === 'long' || status === 'short' || status === 'open' || status === 'active') return true
+            let net = p.amount != null ? Number(p.amount) : NaN
+            if (!Number.isFinite(net)) {
+                net = 0
+                for (const t of (audit && audit.trades) || []) net += Number(t.amount) || 0
+            }
+            return Math.abs(net) > 1e-8
+        },
+
+        // The position's chart window. START: audit.position.opened_at_ms (gateway
+        // infers it) else first trade/fee ts. END: a CLOSED position ends at its
+        // close stamp; an OPEN position is STILL HELD, so we stretch the window to
+        // NOW — that is what makes the size/fees lines "continue on" to the right
+        // edge instead of stopping at the entry. (This relies on the history-complete
+        // handler actually ranging to the window via setRange + resetChart(false);
+        // before that fix a wide window pushed the data off-screen, which is why this
+        // had been clamped to the activity span.) Minimum visible span for a tiny
+        // window; `now` is also the last resort when nothing else is known.
         _plotWindow(pos, audit) {
             const valid = (t) => typeof t === 'number' && Number.isFinite(t) && t > 0
             const p = (audit && audit.position) || {}
+            const isOpen = this._isOpenPosition(pos, audit)
             let start = valid(p.opened_at_ms) ? p.opened_at_ms : null
-            let end = valid(p.closed_at_ms) ? p.closed_at_ms : (valid(p.updated_at_ms) ? p.updated_at_ms : null)
+            let end = valid(p.closed_at_ms) ? p.closed_at_ms
+                : (isOpen ? Date.now()
+                    : (valid(p.updated_at_ms) ? p.updated_at_ms : null))
             if (start == null || end == null) {
                 const ts = []
                 for (const t of (audit && audit.trades) || []) if (valid(t.execution_timestamp_ms)) ts.push(t.execution_timestamp_ms)

@@ -39,7 +39,7 @@ function mkCtx() {
     $nextTick: (fn) => fn && fn(),
     $refs: { tradingVue: { refreshOffchartOverlays: vi.fn(), setRange: vi.fn(), resetChart: vi.fn() } },
   }
-  for (const m of ['onPositionSelect', '_plotWindow', '_startPositionAuditStream', '_stopPositionAuditStream',
+  for (const m of ['onPositionSelect', '_plotWindow', '_isOpenPosition', '_startPositionAuditStream', '_stopPositionAuditStream',
     'syncPositionOverlays', '_removePositionOverlays', '_computePositionSeries',
     '_ensureCandleState', '_candleStateHas', '_corkyRuntimeId', 'clearPositionPlot']) {
     ctx[m] = M[m]
@@ -100,14 +100,15 @@ describe('onPositionSelect → audit-first, trade-derived window', () => {
     const openZero = { ...pos, opened_at_ms: 0, closed_at_ms: null }
     await ctx.onPositionSelect(openZero)
     const arg = ctx.corkySelect.mock.calls[0][0]
-    // window is framed around the (real) Dec-2024 trades — never the epoch, never
-    // stretched to an 18-month "now" window
+    // The two trades net to 0 (a buy then an equal sell) → the position is FLAT,
+    // i.e. effectively closed despite the missing close stamp → window framed
+    // around the (real) Dec-2024 trades, never the epoch, never stretched to now.
     expect(ctx.positionPlot.window.start).toBe(TRADE_MIN)
     expect(ctx.positionPlot.window.end).toBe(TRADE_MAX)
     expect(arg.range.start_ms).toBeGreaterThan(Date.UTC(2020, 0, 1))   // sane, not 1970
     expect(arg.range.start_ms).toBeLessThan(TRADE_MIN)
     expect(arg.range.end_ms).toBeGreaterThan(TRADE_MAX)
-    expect(ctx.positionsFeed.subscribeAudit).toHaveBeenCalledTimes(1)   // open → live stream
+    expect(ctx.positionsFeed.subscribeAudit).not.toHaveBeenCalled()    // flat → no live stream
   })
 
   test('_plotWindow enforces a minimum span for a CLOSED single-instant position', () => {
@@ -144,25 +145,29 @@ describe('onPositionSelect → audit-first, trade-derived window', () => {
     expect(ctx.corkySelect.mock.calls[0][0].timeframe).toBe('1h')
   })
 
-  test('OPEN single-trade position: window framed around the entry; size/fees draw 2-pt lines', async () => {
+  test('OPEN single-trade position: window stretches to now; size/fees lines continue to the right edge', async () => {
     const entry = 1735126384704   // Dec 2024
     ctx.positionsFeed.getAudit = vi.fn(async () => ({
-      // open: closed null, updated == entry (the gateway-inferred trade stamp)
+      // open: closed null, a single held buy (net 0.01 → still in the position)
       position: { opened_at_ms: entry, closed_at_ms: null, updated_at_ms: entry, base_price: '98837' },
       orders: [{ order_id: 1, created_at_ms: entry, price: '98837', order_type: 'MARKET' }],
       trades: [{ execution_timestamp_ms: entry, amount: '0.01', price: '98837', fee: '-0.6', fee_currency: 'USD' }],
     }))
     const openPos = { ...pos, opened_at_ms: entry, closed_at_ms: null }
+    const before = Date.now()
     await ctx.onPositionSelect(openPos)
     const w = ctx.positionPlot.window
-    // window is a BOUNDED span around the entry (MIN_SPAN), NOT stretched to now
-    expect(w.start).toBeLessThan(entry)
-    expect(w.end).toBeGreaterThan(entry)
-    expect(w.end - w.start).toBe(12 * 60 * 60 * 1000)   // single-instant → MIN_SPAN
-    expect(w.end).toBeLessThan(entry + 24 * 60 * 60 * 1000)   // not "now" (18 months out)
-    // single-event size + fees series get a trailing point at window.end → drawable line
+    // OPEN ⇒ window starts at the entry and STRETCHES to now (still held), so the
+    // size/fees lines continue to the right edge instead of stopping at the entry.
+    expect(w.start).toBe(entry)
+    expect(w.end).toBeGreaterThan(entry + 300 * 24 * 60 * 60 * 1000)   // far past entry → toward now
+    expect(w.end).toBeGreaterThanOrEqual(before)
+    expect(w.end).toBeLessThanOrEqual(Date.now())
+    // single-event size + fees series carry the last value flat to window.end (now)
+    // → a continuous line across the whole held duration.
     expect(ctx.positionPlot.series.size).toEqual([[entry, 0.01], [w.end, 0.01]])
     expect(ctx.positionPlot.series.fees.series.length).toBe(2)
+    expect(ctx.positionPlot.series.fees.series[1]).toEqual([w.end, -0.6])
     expect(ctx.positionsFeed.subscribeAudit).toHaveBeenCalledTimes(1)  // open → live stream
   })
 })

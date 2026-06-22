@@ -14,7 +14,11 @@ export default {
 
             if (data.length < 1) return
 
-            const barWidth = Math.max(1, layout.px_step * this.bar_width_ratio)
+            // `minBarWidth` (opt-in, default 1px) keeps sparse bars visible when the
+            // candle spacing is tiny — e.g. a single position trade in a months-long
+            // window, where px_step·ratio collapses below a pixel.
+            const minBarWidth = this.sett.minBarWidth || 1
+            const barWidth = Math.max(minBarWidth, layout.px_step * this.bar_width_ratio)
             // Optional per-bar colour column (e.g. signed_slope_histogram stores a
             // precomputed colour at data[k][colorIndex]); else fall back to up/down.
             const ci = this.sett.colorIndex

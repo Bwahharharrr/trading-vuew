@@ -146,6 +146,9 @@ export default {
         // before it is defined on the instance.
         this._ohlcvCacheKey = null
         this._ohlcvCache = null
+        // Same reason: the indicator-value formatter memo (format()) is read
+        // during render, so it must exist up-front rather than be created lazily.
+        this._formatCache = new Map()
     },
     computed: {
         ohlcv() {
