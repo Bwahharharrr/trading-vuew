@@ -248,27 +248,70 @@ function buildSignedSlopeHistogram(layer, fields, outputsMap) {
 
 const MAX_DETECTION_BOXES = 2048 // mirror the indicator's bounded history
 
+// Group the chart's base candles into the SOURCE candles a box layer is quantised
+// to. A higher source timeframe (MTF, e.g. 2h on a 1h chart) repeats its state
+// across the base rows it spans; `rule.sourceTimestampField` (tf_2h_timestamp)
+// names the owning source bar, so we collapse those rows into ONE synthetic source
+// candle ([ts, o, h, l, c, v]) and expose a rawOf(field) that reads the SETTLED
+// (last base row in the group) value keyed by source ts. Returns null when there
+// is no source field (legacy single-tf) → caller uses the base candles 1:1.
+export function buildSourceCandles(rule, outputsMap, ohlcv) {
+  const stf = rule.sourceTimestampField
+  if (!stf) return null
+  const tsSer = outputsMap.get(stf)
+  if (!tsSer || !tsSer.raw.length) return null
+  const srcByBase = new Map(tsSer.raw.map(([bt, v]) => [bt, Number(v)]))
+  const groups = new Map() // srcTs -> { o, h, l, c, v, firstBt, lastBt }
+  for (const bar of ohlcv) {
+    const st = srcByBase.get(bar[0])
+    if (!Number.isFinite(st)) continue
+    let g = groups.get(st)
+    if (!g) { g = { o: bar[1], h: -Infinity, l: Infinity, c: bar[4], v: 0, firstBt: Infinity, lastBt: -Infinity }; groups.set(st, g) }
+    if (bar[0] < g.firstBt) { g.firstBt = bar[0]; g.o = bar[1] }
+    if (bar[0] >= g.lastBt) { g.lastBt = bar[0]; g.c = bar[4] }
+    if (bar[2] > g.h) g.h = bar[2]
+    if (bar[3] < g.l) g.l = bar[3]
+    g.v += Number(bar[5]) || 0
+  }
+  const tsList = [...groups.keys()].sort((a, b) => a - b)
+  const candles = tsList.map((ts) => { const g = groups.get(ts); return [ts, g.o, g.h, g.l, g.c, g.v] })
+  const rawOf = (field) => {
+    const m = new Map()
+    const ser = field ? outputsMap.get(field) : null
+    if (!ser) return m
+    const byBase = new Map(ser.raw)
+    for (const ts of tsList) { const v = byBase.get(groups.get(ts).lastBt); if (v !== undefined) m.set(ts, v) }
+    return m
+  }
+  return { candles, rawOf }
+}
+
 export function buildDetectionBoxes(rule, outputsMap, ohlcv) {
-  // tf from candle spacing (boxes are bar-quantised; left/right edges are
-  // close times = ts + tf)
+  // Candles the boxes are quantised to: the chart's own (base-tf / legacy) OR the
+  // GROUPED source candles (MTF higher tf — deduped by source timestamp).
+  const src = buildSourceCandles(rule, outputsMap, ohlcv)
+  const candles = src ? src.candles : ohlcv
+  const rawOf = src ? src.rawOf : (f) => {
+    const ser = f ? outputsMap.get(f) : null
+    return ser ? new Map(ser.raw) : new Map()
+  }
+
+  // tf from (source) candle spacing — boxes are bar-quantised; edges are close
+  // times = ts + tf.
   let tf = Infinity
-  for (let i = 1; i < ohlcv.length; i++) {
-    const d = ohlcv[i][0] - ohlcv[i - 1][0]
+  for (let i = 1; i < candles.length; i++) {
+    const d = candles[i][0] - candles[i - 1][0]
     if (d > 0 && d < tf) tf = d
   }
   if (!Number.isFinite(tf)) tf = 0
 
-  const rawOf = (f) => {
-    const ser = f ? outputsMap.get(f) : null
-    return ser ? new Map(ser.raw) : new Map()
-  }
   const bullRaw = rawOf(rule.bullField)
   const bearRaw = rawOf(rule.bearField)
   const boxes = []
 
   // SEED boxes: history starts inside boxes anchored left of the window.
-  if (ohlcv.length) {
-    const t0 = ohlcv[0][0]
+  if (candles.length) {
+    const t0 = candles[0][0]
     for (const side of ['bull', 'bear']) {
       const count = Number(rawOf(rule.countFields[side]).get(t0))
       if (!(Number.isFinite(count) && count >= 1)) continue
@@ -282,8 +325,8 @@ export function buildDetectionBoxes(rule, outputsMap, ohlcv) {
     }
   }
 
-  for (let i = 0; i < ohlcv.length; i++) {
-    const bar = ohlcv[i]
+  for (let i = 0; i < candles.length; i++) {
+    const bar = candles[i]
     const ts = bar[0]
     const closeTime = ts + tf
     // 1) coverage + invalidation for boxes anchored at EARLIER bars
@@ -303,7 +346,16 @@ export function buildDetectionBoxes(rule, outputsMap, ohlcv) {
     }
   }
   if (boxes.length > MAX_DETECTION_BOXES) boxes.splice(0, boxes.length - MAX_DETECTION_BOXES)
-  return { boxes, tf, lastTs: ohlcv.length ? ohlcv[ohlcv.length - 1][0] : null }
+  const li = candles.length - 1
+  // Live seed (only meaningful for a grouped/source layer): the last source bar's
+  // accumulated candle + settled detection flags, so applyLiveUpdate can continue
+  // the source-bar lifecycle across the history→live seam.
+  const srcSeed = (src && li >= 0) ? {
+    lastSrcTs: candles[li][0],
+    srcAccum: { ts: candles[li][0], high: candles[li][2], low: candles[li][3], close: candles[li][4] },
+    lastSrcVals: { bull: bullRaw.get(candles[li][0]), bear: bearRaw.get(candles[li][0]) },
+  } : null
+  return { boxes, tf, lastTs: li >= 0 ? candles[li][0] : null, usedSource: !!src, srcSeed }
 }
 
 /** Zones settings-format rows ([x1, y1, x2, y2, rgba]) — one row per box. */
@@ -398,11 +450,23 @@ export function buildLayerOverlays(instanceKey, kind, outputsMap, view, paneReso
           raw: [],
         }
         onchart.push(overlay)   // price surface
+        // A layer is GROUPED (MTF) when its source bar is coarser than the chart's
+        // base candle — then the live path advances the box lifecycle per SOURCE
+        // bar (via source_timestamp_field), not per base row.
+        let baseTf = Infinity
+        for (let i = 1; i < (ohlcv || []).length; i++) { const d = ohlcv[i][0] - ohlcv[i - 1][0]; if (d > 0 && d < baseTf) baseTf = d }
+        const grouped = builtBoxes.usedSource && Number.isFinite(baseTf) && builtBoxes.tf > baseTf
+        const seed = grouped ? (builtBoxes.srcSeed || {}) : {}
         detectionBoxes.push({
           instanceKey, layerId: layer.id, rule: boxRule,
           boxes: builtBoxes.boxes, tf: builtBoxes.tf,
           evaluatedThrough: builtBoxes.lastTs,
           lastLiveTs: null, lastVals: null,
+          // MTF source-bar live state (seeded from the history build)
+          grouped,
+          lastSrcTs: grouped ? (seed.lastSrcTs ?? null) : null,
+          srcAccum: grouped ? (seed.srcAccum ?? null) : null,
+          lastSrcVals: grouped ? (seed.lastSrcVals ?? null) : null,
           overlay,
         })
         continue
@@ -841,6 +905,50 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
     for (const db of dbMeta) {
       const vals = inds[db.instanceKey]
       const tf = db.tf || 0
+
+      // GROUPED (MTF) layer: advance the box lifecycle per SOURCE bar. A higher
+      // source tf repeats its state across base rows; box closes/anchors happen
+      // when the source bar (source_timestamp_field) advances, using the source
+      // candle's accumulated high/low (built from the base rows it spans).
+      if (db.grouped) {
+        const srcTs = vals ? Number(vals[db.rule.sourceTimestampField]) : NaN
+        if (Number.isFinite(srcTs)) {
+          let candle = null
+          for (let i = arr.length - 1; i >= 0; i--) { if (arr[i][0] === ts) { candle = arr[i]; break } }
+          // NEW source bar → the previous source bar closed: kill/anchor from it.
+          if (db.lastSrcTs != null && srcTs > db.lastSrcTs && db.srcAccum &&
+              (db.evaluatedThrough == null || db.lastSrcTs > db.evaluatedThrough)) {
+            const closeTime = db.lastSrcTs + tf
+            const acc = db.srcAccum
+            for (const b of db.boxes) {
+              if (!b.alive || b.t0 > db.lastSrcTs) continue
+              b.t1 = closeTime
+              if (b.side === 'bull' && acc.close < b.bottom) b.alive = false
+              else if (b.side === 'bear' && acc.close > b.top) b.alive = false
+            }
+            const lv = db.lastSrcVals || {}
+            if (detectionSet(lv.bull)) db.boxes.push({ side: 'bull', top: acc.high, bottom: acc.low, t0: closeTime, t1: closeTime, alive: true })
+            if (detectionSet(lv.bear)) db.boxes.push({ side: 'bear', top: acc.high, bottom: acc.low, t0: closeTime, t1: closeTime, alive: true })
+            if (db.boxes.length > 2048) db.boxes.splice(0, db.boxes.length - 2048)
+            db.evaluatedThrough = db.lastSrcTs
+          }
+          // accumulate the live base candle into the (forming) source candle
+          if (candle) {
+            if (!db.srcAccum || db.srcAccum.ts !== srcTs) {
+              db.srcAccum = { ts: srcTs, high: candle[2], low: candle[3], close: candle[4] }
+            } else {
+              if (candle[2] > db.srcAccum.high) db.srcAccum.high = candle[2]
+              if (candle[3] < db.srcAccum.low) db.srcAccum.low = candle[3]
+              db.srcAccum.close = candle[4]
+            }
+          }
+          db.lastSrcTs = srcTs
+          if (vals) db.lastSrcVals = { bull: vals[db.rule.bullField], bear: vals[db.rule.bearField] }
+          for (const b of db.boxes) { if (b.alive && b.t0 <= srcTs) b.t1 = srcTs + tf }
+          db.overlay.settings.zones = detectionBoxRows(db.boxes, db.rule)
+        }
+        continue
+      }
       // NEW BAR → the bar at db.lastLiveTs just closed. Guard on
       // evaluatedThrough: the build walk already consumed the last HISTORY
       // bar's close (idempotence across the history→live seam).

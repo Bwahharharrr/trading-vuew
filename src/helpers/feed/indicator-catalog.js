@@ -327,18 +327,28 @@ export function detectionBoxRule(style) {
     const n = Number(s.fill_opacity)
     return Number.isFinite(n) && n > 0 && n <= 1 ? n : 0.15
   })()
+  // Field names are STYLE-DRIVEN (CRUP_MTF publishes per-source-timeframe fields,
+  // e.g. tf_1h_bull_detected_now / tf_2h_bull_box_top). Fall back to the legacy
+  // single-tf keys (bull_field + unprefixed box fields) so older descriptors and
+  // the existing single-tf CRUP keep rendering unchanged.
   return {
-    bullField: s.bull_field || 'bull_detected_now',
-    bearField: s.bear_field || 'bear_detected_now',
+    bullField: s.bull_open_field || s.bull_field || 'bull_detected_now',
+    bearField: s.bear_open_field || s.bear_field || 'bear_detected_now',
     bullFill: s.bull_fill_color || s.bull_color || CANDLE_COLOR_ENUM.bull,
     bearFill: s.bear_fill_color || s.bear_color || CANDLE_COLOR_ENUM.bear,
     fillOpacity: opacity,
     // seed-box alpha is count-multiplied but capped so a deep stack of
     // off-window anchors can't render an opaque slab
     seedAlphaCap: 0.6,
-    countFields: { bull: 'bull_box_count', bear: 'bear_box_count' },
-    topFields: { bull: 'bull_box_top', bear: 'bear_box_top' },
-    bottomFields: { bull: 'bull_box_bottom', bear: 'bear_box_bottom' },
+    countFields: { bull: s.bull_count_field || 'bull_box_count', bear: s.bear_count_field || 'bear_box_count' },
+    topFields: { bull: s.bull_top_field || 'bull_box_top', bear: s.bear_top_field || 'bear_box_top' },
+    bottomFields: { bull: s.bull_bottom_field || 'bull_box_bottom', bear: s.bear_bottom_field || 'bear_box_bottom' },
+    // MTF projection: a higher source timeframe (e.g. 2h) repeats its state across
+    // the base-tf rows it spans. `sourceTimestampField` (e.g. tf_2h_timestamp)
+    // identifies the owning source candle so boxes are deduped + anchored to the
+    // source bar, not every base row. Null for a base-tf (1:1) layer.
+    sourceTimeframe: s.source_timeframe || null,
+    sourceTimestampField: s.source_timestamp_field || null,
   }
 }
 
