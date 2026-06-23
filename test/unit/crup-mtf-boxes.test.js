@@ -101,3 +101,36 @@ describe('CRUP_MTF detection boxes — descriptor-driven, source-tf dedup', () =
     expect(newBox[1]).toBe(120); expect(newBox[3]).toBe(109) // C high=max(113,120), low=min(109,111)
   })
 })
+
+// Confluence counts (bull/bear/net_box_timeframe_count): the gateway ships these as
+// their OWN line layers (NOT box_count). The descriptor-driven pipeline renders them
+// like any other line — these tests pin that, plus the contract's "missing field =
+// not updated yet, NOT zero" rule. Distinct from the box layers' tf_*box_count.
+describe('CRUP confluence counts — box_timeframe_count line layers', () => {
+  const lineLayer = (id, field) => ({
+    id, label: id, kind: 'line', target: { surface: 'pane', pane: 'CRUP Counts' },
+    fields: [field], visible_by_default: true,
+  })
+  it('renders bull/net_box_timeframe_count as line overlays carrying the row values', () => {
+    const rows = [
+      row(0, [100, 105, 98, 102], { bull_box_timeframe_count: '2', bear_box_timeframe_count: '1', net_box_timeframe_count: '1' }),
+      row(1, [102, 110, 101, 108], { bull_box_timeframe_count: '2', bear_box_timeframe_count: '2', net_box_timeframe_count: '0' }),
+    ]
+    const cd = buildChartData(rows, { views: crupView([
+      lineLayer('crup_mtf_value_bull_box_timeframe_count', 'bull_box_timeframe_count'),
+      lineLayer('crup_mtf_value_net_box_timeframe_count', 'net_box_timeframe_count'),
+    ]) })
+    const bull = cd.offchart.find((o) => o.settings.corkyLayerId === 'crup_mtf_value_bull_box_timeframe_count')
+    const net = cd.offchart.find((o) => o.settings.corkyLayerId === 'crup_mtf_value_net_box_timeframe_count')
+    expect(bull.type).toBe('Spline')
+    expect(bull.data).toEqual([[T0, 2], [T0 + H, 2]])
+    expect(net.data).toEqual([[T0, 1], [T0 + H, 0]])
+  })
+  it('a MISSING confluence field draws no line (not updated yet, NOT a zero line)', () => {
+    // CRUP present (other output) but the confluence field absent from the rows
+    const rows = [row(0, [100, 105, 98, 102], { bullcount: '5' })]
+    const cd = buildChartData(rows, { views: crupView([lineLayer('crup_mtf_value_net_box_timeframe_count', 'net_box_timeframe_count')]) })
+    const net = cd.offchart.find((o) => o.settings.corkyLayerId === 'crup_mtf_value_net_box_timeframe_count')
+    expect(net == null || net.data.length === 0).toBe(true) // empty → no line, never a 0 baseline
+  })
+})
