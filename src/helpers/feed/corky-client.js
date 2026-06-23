@@ -298,6 +298,29 @@ export class CorkyClient {
         return this._request({ type: 'unsubscribe', subscription_id })
     }
 
+    // ── historical indicator search ──────────────────────────────────────────
+    // Search is a STREAM keyed by `search_id` (NOT subscription_id): the gateway
+    // emits search_accepted → search_progress* → search_match* → one terminal
+    // (search_complete / search_cancelled / search_failed / error). Those events
+    // carry `event.search_id` and (per the contract) request_id: null, so they
+    // are NOT request-correlated and NOT in STREAM_EVENT_TYPES — callers observe
+    // them via on('search_*') and route by search_id (see CorkySearchFeed). These
+    // senders therefore just fire the frame (no pending-terminal correlation);
+    // _send still queues while CONNECTING and throws only when truly unsendable.
+    searchCandles(query) {
+        if (!query || !query.search_id) throw new Error('searchCandles: query.search_id is required')
+        const request_id = this._nextRequestId()
+        this._send({ schema_version: SCHEMA_VERSION, request_id, command: { type: 'search_candles', query } })
+        return request_id
+    }
+
+    cancelSearch(search_id) {
+        if (!search_id) throw new Error('cancelSearch: search_id is required')
+        const request_id = this._nextRequestId()
+        this._send({ schema_version: SCHEMA_VERSION, request_id, command: { type: 'cancel_search', search_id } })
+        return request_id
+    }
+
     upsertCandleState(opts = {}) {
         const { venue, symbol, timeframes, target_runtime_id, funding_period, indicators, buffer } = opts
         const command = { type: 'upsert_candle_state', venue, symbol, timeframes: timeframes || [] }

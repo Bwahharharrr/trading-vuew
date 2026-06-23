@@ -117,6 +117,8 @@
             :history-has-more="positionsHistoryCursor != null"
             :history-total="positionsHistoryTotal"
             :current-symbol-key="positionsCurrentSymbolKey"
+            :search-tabs="searchTabs"
+            :search-context="searchContext"
             @update:open="togglePositionsDock"
             @update:active-tab="setPositionsTab"
             @update:active-account="setPositionsAccount"
@@ -124,6 +126,10 @@
             @audit-position="openAudit"
             @load-more="loadHistoryPage(false)"
             @refresh="refreshPositions"
+            @run-search="onRunSearch"
+            @cancel-search="onCancelSearch"
+            @close-search-tab="onCloseSearchTab"
+            @select-result="onSearchResultSelect"
             @resize-start="startPositionsDockResize" />
     </div>
 
@@ -345,6 +351,8 @@ import DataCube from '../src/helpers/datacube.js'
 import { CorkyClient } from '../src/helpers/feed/corky-client.js'
 import { CorkyFeed } from '../src/helpers/feed/corky-feed.js'
 import { CorkyPositionsFeed } from '../src/helpers/feed/corky-positions-feed.js'
+import { CorkySearchFeed } from '../src/helpers/feed/corky-search-feed.js'
+import { buildSearchQuery, buildCondition } from '../src/helpers/feed/search-query.js'
 import { pickTimeframe, paddedCandleRange, coarsenTimeframe } from '../src/helpers/feed/pick-timeframe.js'
 import {
     tradeMarkers, positionSizeSeries, buySellHistogram, cumulativeFees, positionWindow,
@@ -442,11 +450,19 @@ export default {
             historicalPositions: [],       // closed/historical rows (paged)
             positionsAccounts: [],         // [{ venue, account_id }] derived from rows
             positionsActiveAccount: null,  // { venue, account_id } for history/audit
-            positionsActiveTab: 'open',    // 'open' | 'historical'
+            positionsActiveTab: 'open',    // 'open' | 'historical' | 'search' | a search-tab id
             positionsLoading: false,
             positionsError: null,
             positionsHistoryCursor: null,  // opaque next_cursor (null = exhausted)
             positionsHistoryTotal: 0,
+
+            // ── Historical indicator search (dock tabs) ──
+            searchFeed: null,              // CorkySearchFeed over corkyClient
+            // One reactive tab per search: { id, n, search_id, title, status,
+            // running, progress, matches:[], error, summary, query }. Transient —
+            // not persisted (results are query output, not state).
+            searchTabs: [],
+            searchTabSeq: 0,               // increments per created tab → "Search Results N"
 
             // ── Selected position plotted on the chart (trades + detail panes) ──
             // { venue, symbol, position_id, window:{start,end},
@@ -484,6 +500,33 @@ export default {
                 { key: 'hist', name: 'Buy / Sell Histogram' },
                 { key: 'fees', name: cur ? `Fees (${cur})` : 'Fees' },
             ]
+        },
+        // Form context for SearchSignalsForm: the charted symbol's venue/symbol,
+        // its available timeframes, and its indicators (display label + the output
+        // fields a condition may compare). Derived from the discovery descriptors
+        // for the current stream (falls back to the first catalog state).
+        searchContext() {
+            const cur = this.corkyCurrent
+            const states = this.corkyStates || []
+            const state = cur
+                ? states.find((s) => s && s.venue === cur.venue && s.symbol === cur.symbol)
+                : states[0]
+            const venue = (cur && cur.venue) || (state && state.venue) || ''
+            const symbol = (cur && cur.symbol) || (state && state.symbol) || ''
+            const timeframe = cur && cur.timeframe
+            const timeframes = (state && state.available_timeframes) || []
+            // Collapse duplicate display_labels (published once per timeframe);
+            // union their output fields so any tf's outputs are searchable.
+            const byLabel = new Map()
+            for (const ind of ((state && state.indicators) || [])) {
+                if (!ind || !ind.display_label) continue
+                let set = byLabel.get(ind.display_label)
+                if (!set) { set = new Set(); byLabel.set(ind.display_label, set) }
+                for (const o of (ind.outputs || [])) set.add(o)
+            }
+            const indicators = Array.from(byLabel.entries())
+                .map(([label, set]) => ({ label, fields: Array.from(set).sort() }))
+            return { venue, symbol, timeframe, timeframes, indicators }
         },
     },
     watch: {
@@ -680,6 +723,9 @@ export default {
                 // Positions ride the SAME socket; they are not chart data so they
                 // get their own feed (no DataCube), surfaced in the bottom dock.
                 this.positionsFeed = new CorkyPositionsFeed({ client: this.corkyClient })
+                // Historical search also rides the same socket (its own feed; not
+                // chart data — results are a transient query surface in the dock).
+                this.searchFeed = new CorkySearchFeed({ client: this.corkyClient })
             }
             // Load the open-positions snapshot up front so the dock's tab badge is
             // populated even before the user expands it.
@@ -821,14 +867,24 @@ export default {
                                 const plotWindow = pp && pp.window && this.corkyCurrent &&
                                     pp.symbol === this.corkyCurrent.symbol &&
                                     pp.window.start != null && pp.window.end != null
+                                // A search-result click zooms to result.chart_window
+                                // (one-shot — consumed here so a later reload doesn't
+                                // re-zoom). Takes precedence over the latest view.
+                                const navRange = this._corkyPendingRange
+                                const navWindow = navRange &&
+                                    navRange.start != null && navRange.end != null
                                 if (tv) {
-                                    if (plotWindow) {
+                                    if (navWindow) {
+                                        tv.setRange(navRange.start, navRange.end)
+                                        tv.resetChart(false)   // remount, keep the window
+                                    } else if (plotWindow) {
                                         tv.setRange(pp.window.start, pp.window.end)
                                         tv.resetChart(false)   // remount, keep the window
                                     } else {
                                         tv.resetChart(true)    // discovery → latest view
                                     }
                                 }
+                                this._corkyPendingRange = null   // consume once
                                 // The gateway load wiped onchart — restore the
                                 // price-alarm renderer (same alarms array).
                                 if (this.priceAlarms.length) this.ensurePriceAlarmOverlay()
@@ -1553,6 +1609,108 @@ export default {
             this.saveStateToStorage()
         },
 
+        // ── Historical indicator search ─────────────────────────────────────────
+
+        // Run a search from the SearchSignalsForm payload. Builds the gateway
+        // query (deriving indicators[] from the charted symbol's descriptors),
+        // spawns a "Search Results N" tab, and streams matches into it. A build
+        // error (e.g. an indicator with no descriptor) surfaces as a failed tab
+        // rather than a thrown — the user sees why it can't run.
+        onRunSearch(form) {
+            if (!this.searchFeed) return
+            const venue = form.venue
+            // Descriptors come from the venue/symbol state (first symbol of the
+            // set); falls back to any state on the venue.
+            const firstSymbol = String(form.symbol || '').split(',')[0].trim()
+            const states = this.corkyStates || []
+            const state = states.find(s => s && s.venue === venue && s.symbol === firstSymbol)
+                || states.find(s => s && s.venue === venue)
+            const descriptors = (state && state.indicators) || []
+
+            this.searchTabSeq += 1
+            const n = this.searchTabSeq
+            const search_id = this.searchFeed.nextSearchId('corky-search')
+            // Push the tab first, then grab the REACTIVE proxy Vue stored in the
+            // array — mutating the raw object would bypass reactivity.
+            this.searchTabs.push({
+                id: `search-${n}`, n, search_id, title: `Search Results ${n}`,
+                status: 'pending', running: true, progress: null,
+                matches: [], error: null, summary: null, query: null,
+            })
+            const tab = this.searchTabs[this.searchTabs.length - 1]
+            // Surface this tab immediately (open the dock if needed).
+            if (!this.positionsDockOpen) this.togglePositionsDock(true)
+            this.setPositionsTab(tab.id)
+
+            let built
+            try {
+                const condition = buildCondition(form.conditionRows)
+                if (!condition) throw new Error('Add at least one complete condition.')
+                built = buildSearchQuery({
+                    search_id, venue, symbols: form.symbol, range: form.range,
+                    timeframes: form.timeframes, condition, descriptors,
+                    result_window: form.result_window, max_results: form.max_results,
+                })
+            } catch (err) {
+                tab.status = 'failed'
+                tab.running = false
+                tab.error = { message: (err && err.message) || String(err) }
+                return
+            }
+            tab.query = built.query
+
+            this.searchFeed.startSearch(built.query, {
+                onAccepted: () => { tab.status = 'running'; tab.running = true },
+                onProgress: (p) => { tab.progress = p },
+                onMatch: (row) => { tab.matches.push(row) },
+                onComplete: (s) => { tab.status = 'complete'; tab.running = false; tab.summary = s },
+                onCancelled: () => { tab.status = 'cancelled'; tab.running = false },
+                onFailed: (e) => { tab.status = 'failed'; tab.running = false; tab.error = e },
+            })
+        },
+
+        // Stop a running search (the × in the body / a deliberate halt) — keeps
+        // the tab and its partial matches; the terminal search_cancelled finalises.
+        onCancelSearch(tabId) {
+            const tab = this.searchTabs.find(t => t.id === tabId)
+            if (tab && this.searchFeed) this.searchFeed.cancel(tab.search_id)
+        },
+
+        // Close a Search Results tab: cancels it if still running (per the spec),
+        // forgets it in the feed, and moves focus to a sensible neighbour.
+        onCloseSearchTab(tabId) {
+            const idx = this.searchTabs.findIndex(t => t.id === tabId)
+            if (idx === -1) return
+            const tab = this.searchTabs[idx]
+            if (this.searchFeed) this.searchFeed.forget(tab.search_id)  // cancels if running
+            this.searchTabs.splice(idx, 1)
+            if (this.positionsActiveTab === tabId) {
+                const next = this.searchTabs[idx] || this.searchTabs[idx - 1]
+                this.setPositionsTab(next ? next.id : 'search')
+            }
+        },
+
+        // Click a match → navigate the chart to result.chart_window. Ensures the
+        // symbol's candle state exists first (a search may hit a symbol that isn't
+        // currently charted), then selects with a start_end range so the matched
+        // bar lands in view (one-shot zoom via _corkyPendingRange).
+        async onSearchResultSelect(row) {
+            if (!row) return
+            const cw = row.chart_window || null
+            const venue = row.venue
+            const symbol = row.ticker
+            const timeframe = (cw && cw.timeframe) || row.timeframe
+            if (!venue || !symbol || !timeframe) return
+            let range
+            if (cw && cw.start_ms != null && cw.end_ms != null) {
+                range = { type: 'start_end', start_ms: cw.start_ms, end_ms: cw.end_ms }
+                this._corkyPendingRange = { start: cw.start_ms, end: cw.end_ms }
+            }
+            // Provision the state if needed (no-op when already charted).
+            try { await this._ensureCandleState(venue, symbol, timeframe) } catch (_) { /* best effort */ }
+            this.corkySelect({ venue, symbol, timeframe, range })
+        },
+
         setPositionsAccount(acct) {
             this.positionsActiveAccount = acct
             // History is per-account — reset and reload for the new account.
@@ -1868,8 +2026,14 @@ export default {
             if (this.positionsFeed) {
                 try { this.positionsFeed.destroy() } catch (_) { /* already gone */ }
             }
+            if (this.searchFeed) {
+                try { this.searchFeed.destroy() } catch (_) { /* already gone */ }
+            }
             this.corkyFeed = null
             this.positionsFeed = null
+            this.searchFeed = null
+            this.searchTabs = []
+            this.searchTabSeq = 0
             this.corkyClient = null
             this.corkyStates = []
             this.corkyCurrent = null

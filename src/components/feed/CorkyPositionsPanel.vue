@@ -16,6 +16,23 @@
                     @click="selectTab('historical')">
                 Historical<span v-if="historyTotal" class="pd-count">{{ historyTotal }}</span>
             </button>
+            <button class="pd-tab" role="tab" :aria-selected="activeTab === 'search'"
+                    :class="{ active: activeTab === 'search' }"
+                    @click="selectTab('search')">
+                Search Signals
+            </button>
+            <button v-for="t in searchTabs" :key="t.id"
+                    class="pd-tab pd-tab-search" role="tab"
+                    :aria-selected="activeTab === t.id"
+                    :class="{ active: activeTab === t.id }"
+                    @click="selectTab(t.id)">
+                <span class="pd-search-dot" :class="t.status"></span>
+                {{ t.title }}<span v-if="t.matches.length" class="pd-count">{{ t.matches.length }}</span>
+                <span class="pd-tab-close" role="button" tabindex="0"
+                      title="Close (cancels a running search)"
+                      @click.stop="$emit('close-search-tab', t.id)"
+                      @keydown.enter.stop.prevent="$emit('close-search-tab', t.id)">×</span>
+            </button>
         </div>
         <div class="pd-header-right">
             <select v-if="accounts.length > 1" class="pd-account"
@@ -30,8 +47,20 @@
         </div>
     </div>
 
-    <!-- Body -->
-    <div v-if="open" class="pd-body">
+    <!-- Body: Search Signals form -->
+    <div v-if="open && activeTab === 'search'" class="pd-body">
+        <search-signals-form :context="searchContext" @run="$emit('run-search', $event)" />
+    </div>
+
+    <!-- Body: one Search Results tab -->
+    <div v-else-if="open && activeSearchTab" class="pd-body">
+        <search-results :tab="activeSearchTab"
+                        @select="$emit('select-result', $event)"
+                        @cancel="$emit('cancel-search', activeSearchTab.id)" />
+    </div>
+
+    <!-- Body: positions (open / historical) -->
+    <div v-else-if="open" class="pd-body">
         <div v-if="error" class="pd-msg pd-error">{{ error }}</div>
         <div v-else-if="loading && !rows.length" class="pd-msg">Loading…</div>
         <div v-else-if="!rows.length" class="pd-msg">
@@ -85,12 +114,16 @@
 
 <script>
 import { isNeg, positionKey } from '../../helpers/feed/corky-positions.js'
+import SearchSignalsForm from './SearchSignalsForm.vue'
+import SearchResults from './SearchResults.vue'
 
 export default {
     name: 'CorkyPositionsPanel',
+    components: { SearchSignalsForm, SearchResults },
     props: {
         height: { type: Number, default: 34 },
         open: { type: Boolean, default: false },
+        // 'open' | 'historical' | 'search' | a Search Results tab id.
         activeTab: { type: String, default: 'open' },
         openPositions: { type: Array, default: () => [] },
         historicalPositions: { type: Array, default: () => [] },
@@ -102,14 +135,24 @@ export default {
         historyTotal: { type: Number, default: 0 },
         // `venue|symbol` (lowercased) currently charted — highlights the row.
         currentSymbolKey: { type: String, default: '' },
+        // Dynamic Search Results tabs: [{ id, title, status, running, matches, … }].
+        searchTabs: { type: Array, default: () => [] },
+        // Form context: { venue, symbol, timeframe, timeframes:[], indicators:[…] }.
+        searchContext: { type: Object, default: null },
     },
     emits: [
         'update:open', 'update:active-tab', 'update:active-account',
         'select-position', 'audit-position', 'load-more', 'refresh', 'resize-start',
+        'run-search', 'cancel-search', 'close-search-tab', 'select-result',
     ],
     computed: {
         rows() {
-            return this.activeTab === 'open' ? this.openPositions : this.historicalPositions
+            if (this.activeTab === 'open') return this.openPositions
+            if (this.activeTab === 'historical') return this.historicalPositions
+            return []
+        },
+        activeSearchTab() {
+            return this.searchTabs.find((t) => t.id === this.activeTab) || null
         },
         activeAccountKey() {
             return this.activeAccount ? this.accountKey(this.activeAccount) : ''
@@ -217,6 +260,32 @@ export default {
     color: #d1d4dc;
     font-size: 10px;
 }
+
+/* Search Results tabs: status dot + inline close (×) */
+.pd-tab-search { display: inline-flex; align-items: center; gap: 6px; }
+.pd-search-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #5c6470; flex: 0 0 auto;
+}
+.pd-search-dot.running, .pd-search-dot.pending, .pd-search-dot.cancelling {
+    background: #35a776; box-shadow: 0 0 0 0 rgba(53,167,118,0.6);
+    animation: pd-pulse 1.4s ease-out infinite;
+}
+.pd-search-dot.complete { background: #35a776; }
+.pd-search-dot.cancelled { background: #5c6470; }
+.pd-search-dot.failed { background: #e54150; }
+@keyframes pd-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(53,167,118,0.5); }
+    70% { box-shadow: 0 0 0 5px rgba(53,167,118,0); }
+    100% { box-shadow: 0 0 0 0 rgba(53,167,118,0); }
+}
+.pd-tab-close {
+    margin-left: 4px;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 16px; height: 16px; border-radius: 3px;
+    color: #5c6470; font-size: 14px; line-height: 1;
+}
+.pd-tab-close:hover { color: #e54150; background: rgba(229,65,80,0.12); }
 
 .pd-header-right { display: flex; align-items: center; gap: 6px; }
 .pd-account {

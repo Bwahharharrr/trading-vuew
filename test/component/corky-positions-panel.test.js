@@ -32,13 +32,15 @@ function mountPanel(props = {}) {
 }
 
 describe('CorkyPositionsPanel — rendering', () => {
-    test('shows both tabs with counts', () => {
+    test('shows the base tabs (Open / Historical / Search Signals) with counts', () => {
         const w = mountPanel()
         const tabs = w.findAll('.pd-tab')
-        expect(tabs).toHaveLength(2)
+        // Open Positions, Historical, Search Signals (no Search Results tabs yet).
+        expect(tabs).toHaveLength(3)
         expect(tabs[0].text()).toContain('Open Positions')
         expect(tabs[0].text()).toContain(String(openRows.length))
         expect(tabs[1].text()).toContain('Historical')
+        expect(tabs[2].text()).toContain('Search Signals')
     })
 
     test('renders open rows with the ticker symbol', () => {
@@ -189,5 +191,57 @@ describe('onPositionSelect — switch ticker + timeframe rule', () => {
         await runSelect(ctx, pos)
         expect(ctx.corkyDiscover).toHaveBeenCalledWith('BITFINEX')
         expect(corkySelect).toHaveBeenCalledWith({ venue: 'BITFINEX', symbol: 'tETHUSD', timeframe: '1h' })
+    })
+})
+
+describe('CorkyPositionsPanel — search tabs', () => {
+    const searchContext = {
+        venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1h',
+        timeframes: ['1h', '2h'],
+        indicators: [{ label: 'CRUP', fields: ['score'] }],
+    }
+    const matchRow = {
+        ticker: 'tBTCUSD', venue: 'BITFINEX', timeframe: '1h', side: 'bull', signal: '1h bull',
+        timestamp_ms: 1781953200000, close: '63664', boxes: [], boxesText: '2h bull box',
+        chart_window: { timeframe: '1h', start_ms: 1, end_ms: 2 },
+    }
+    const searchTab = {
+        id: 'search-1', n: 1, search_id: 'corky-search-1', title: 'Search Results 1',
+        status: 'running', running: true, progress: { message: 'scanning…' },
+        matches: [matchRow], error: null, summary: null, query: {},
+    }
+
+    test('renders a Search Results tab with a close button; close emits close-search-tab', async () => {
+        const w = mountPanel({ searchTabs: [searchTab], searchContext })
+        const tab = w.findAll('.pd-tab-search')
+        expect(tab).toHaveLength(1)
+        expect(tab[0].text()).toContain('Search Results 1')
+        expect(tab[0].text()).toContain('1')          // match-count badge
+        await tab[0].find('.pd-tab-close').trigger('click')
+        expect(w.emitted('close-search-tab')[0]).toEqual(['search-1'])
+    })
+
+    test('the Search Signals tab renders the form with timeframe chips from context', () => {
+        const w = mountPanel({ activeTab: 'search', searchContext, searchTabs: [] })
+        expect(w.find('.ssf').exists()).toBe(true)
+        expect(w.findAll('.ssf-chip').map((c) => c.text())).toEqual(['1h', '2h'])
+    })
+
+    test('an active Search Results tab renders matches; row click → select-result, Stop → cancel-search', async () => {
+        const w = mountPanel({ activeTab: 'search-1', searchTabs: [searchTab], searchContext })
+        expect(w.find('.sr').exists()).toBe(true)
+        const rows = w.findAll('.sr-row')
+        expect(rows).toHaveLength(1)
+        expect(rows[0].text()).toContain('tBTCUSD')
+        expect(rows[0].text()).toContain('2h bull box')
+        await rows[0].trigger('click')
+        expect(w.emitted('select-result')[0][0]).toEqual(matchRow)
+        await w.find('.sr-stop').trigger('click')
+        expect(w.emitted('cancel-search')[0]).toEqual(['search-1'])
+    })
+
+    test('does not render the positions table while a search tab is active', () => {
+        const w = mountPanel({ activeTab: 'search-1', searchTabs: [searchTab], searchContext })
+        expect(w.find('.pd-table').exists()).toBe(false)
     })
 })

@@ -555,6 +555,108 @@ export interface SubscribeAuthPositionAuditCommand {
   include_trades?: boolean
 }
 
+// ───────────────────────────────────────────────── historical search ──────
+//
+// One-shot historical indicator search: stream every bar in a window that
+// satisfies an alert-style condition over computed indicators. NOT a live
+// subscription — each search is keyed by `search_id` and terminates. Events
+// carry `event.search_id` (and `request_id: null`); route by search_id, never
+// by request correlation.
+
+/** Comparison operator in a {@link SearchConditionCompare}. */
+export type SearchCompareOp = 'gt' | 'gte' | 'lt' | 'lte' | 'eq' | 'ne'
+
+/**
+ * A reference to one indicator output at a bar offset. `indicator` is the
+ * DISPLAY LABEL (e.g. `"MACD(12,26,9)"`, `"CRUP"`) — NOT the canonical kind.
+ */
+export interface SearchConditionField {
+  indicator: string
+  field: string
+  /** Bars back from the candidate bar; 0 = the bar itself. Default 0. */
+  bar_offset?: number
+}
+
+/** Leaf predicate: `field <op> value`. */
+export interface SearchConditionCompare {
+  type: 'compare'
+  field: SearchConditionField
+  op: SearchCompareOp
+  value: number
+}
+
+/** All child conditions must hold. */
+export interface SearchConditionAll {
+  type: 'all'
+  conditions: SearchCondition[]
+}
+
+/** Any child condition must hold. */
+export interface SearchConditionAny {
+  type: 'any'
+  conditions: SearchCondition[]
+}
+
+/** Alert-style condition tree evaluated per candidate bar (`SearchCondition`). */
+export type SearchCondition =
+  | SearchConditionCompare
+  | SearchConditionAll
+  | SearchConditionAny
+
+/** The set of symbols a search scans. */
+export interface SearchSymbolSet {
+  type: 'symbols'
+  symbols: string[]
+}
+
+/**
+ * An indicator the gateway must COMPUTE for the search. The `indicators` array
+ * is REQUIRED and non-empty — omitting it makes the search accept then STALL
+ * (nothing is computed to match on). Mirrors a discovery descriptor's
+ * `{kind, timeframe, source, params}` (read those off {@link ChartIndicatorDescriptor}).
+ */
+export interface SearchIndicatorSpec {
+  kind: string
+  timeframe?: Timeframe
+  source?: string
+  params?: Record<string, DecimalString>
+}
+
+/** Bars to return on each side of a match (`SearchResultWindow`). */
+export interface SearchResultWindow {
+  before_bars: number
+  after_bars: number
+}
+
+/** The full query carried by a {@link SearchCandlesCommand}. */
+export interface SearchQuery {
+  /** Caller-minted, unique; echoed on every event as `event.search_id`. */
+  search_id: string
+  venue: string
+  symbols: SearchSymbolSet
+  /** Reuses the subscribe range shapes (latest / start_end / since_inception). */
+  range: ChartHistoryRange
+  timeframes: Timeframe[]
+  /** Indicators to compute; REQUIRED and non-empty (see {@link SearchIndicatorSpec}). */
+  indicators: SearchIndicatorSpec[]
+  condition: SearchCondition
+  result_window?: SearchResultWindow
+  /** Cap on returned matches; the gateway stops scanning once reached. */
+  max_results?: number
+}
+
+/** Start a historical indicator search (streamed, keyed by `query.search_id`). */
+export interface SearchCandlesCommand {
+  type: 'search_candles'
+  query: SearchQuery
+}
+
+/** Cancel an in-flight search by its `search_id`. */
+export interface CancelSearchCommand {
+  type: 'cancel_search'
+  search_id: string
+}
+
 /** Discriminated union of client commands (`ChartClientCommand`). */
 export type ChartClientCommand =
   | ListCandleStatesCommand
@@ -567,6 +669,8 @@ export type ChartClientCommand =
   | ListAuthPositionHistoryCommand
   | GetAuthPositionAuditCommand
   | SubscribeAuthPositionAuditCommand
+  | SearchCandlesCommand
+  | CancelSearchCommand
 
 /** Discriminant of {@link ChartClientCommand}. */
 export type ChartClientCommandType = ChartClientCommand['type']
@@ -709,6 +813,108 @@ export interface AuthPositionAuditUpdateEvent {
   audit: ChartAuthPositionAudit
 }
 
+// ──────────────────────────────────────────────── historical search ──────
+
+/** A single field comparison the gateway evaluated to produce a match. */
+export interface SearchObservation {
+  indicator: string
+  field: string
+  bar_offset: number
+  value: number
+}
+
+/** Detection-box context attached to a CRUP-style match (`crup_context`). */
+export interface SearchCrupContext {
+  anchor_timeframe: Timeframe
+  bull_confluence_timeframe_count: number
+  bear_confluence_timeframe_count: number
+  detection_box_timeframes: Array<{
+    timeframe: Timeframe
+    side: string
+    box_count: number
+  }>
+}
+
+/** The chart window to load when the user opens a match (`chart_window`). */
+export interface SearchChartWindow {
+  timeframe: Timeframe
+  start_ms: TimestampMs
+  end_ms: TimestampMs
+  before_bars: number
+  after_bars: number
+}
+
+/** A matched bar carried by {@link SearchMatchEvent} (`result`). */
+export interface SearchMatchResult {
+  venue: string
+  symbol: string
+  timeframe: Timeframe
+  timestamp_ms: TimestampMs
+  candle: CandleSnapshot
+  /** Indicator outputs at the match bar, keyed by DISPLAY LABEL. */
+  indicators: RowIndicators
+  observations: SearchObservation[]
+  /** `bull` / `bear` / `neutral` (open string). */
+  side: string
+  crup_context?: SearchCrupContext | null
+  chart_window: SearchChartWindow
+}
+
+/** First event after `search_candles`: the query was accepted, the scan begins. */
+export interface SearchAcceptedEvent {
+  type: 'search_accepted'
+  search_id: string
+  venue: string
+  symbols: string[]
+  timeframes: Timeframe[]
+  range: HistoricalCandleRange
+  result_window?: SearchResultWindow
+}
+
+/** Progress during a search scan. */
+export interface SearchProgressEvent {
+  type: 'search_progress'
+  search_id: string
+  phase: string
+  current: number
+  total?: number | null
+  message?: string
+}
+
+/** One bar that satisfied the condition; apply in `sequence` order. */
+export interface SearchMatchEvent {
+  type: 'search_match'
+  search_id: string
+  sequence: number
+  result: SearchMatchResult
+}
+
+/** Terminal: the scan finished (possibly with 0 matches). */
+export interface SearchCompleteEvent {
+  type: 'search_complete'
+  search_id: string
+  matches: number
+  scanned_rows: number
+  symbols: string[]
+  timeframes: Timeframe[]
+}
+
+/** Terminal: the search was cancelled (`cancel_search` / tab close). */
+export interface SearchCancelledEvent {
+  type: 'search_cancelled'
+  search_id: string
+  /** Matches emitted before cancellation, when reported. */
+  matches?: number
+}
+
+/** Terminal: the search failed; any partial matches already streamed are kept. */
+export interface SearchFailedEvent {
+  type: 'search_failed'
+  search_id: string
+  code?: ErrorCode
+  message?: string
+}
+
 /** Discriminated union of gateway event payloads (`ChartFeedEventKind`). */
 export type ChartFeedEventKind =
   | CandleStatesEvent
@@ -725,6 +931,12 @@ export type ChartFeedEventKind =
   | AuthPositionHistoryEvent
   | AuthPositionAuditEvent
   | AuthPositionAuditUpdateEvent
+  | SearchAcceptedEvent
+  | SearchProgressEvent
+  | SearchMatchEvent
+  | SearchCompleteEvent
+  | SearchCancelledEvent
+  | SearchFailedEvent
 
 /** Discriminant of {@link ChartFeedEventKind}. */
 export type ChartFeedEventType = ChartFeedEventKind['type']
