@@ -227,6 +227,17 @@ describe('CorkyPositionsPanel — search tabs', () => {
         expect(w.findAll('.ssf-chip').map((c) => c.text())).toEqual(['1h', '2h'])
     })
 
+    test('keeps the form mounted (state survives) when switching tabs away and back', async () => {
+        const w = mountPanel({ activeTab: 'search', searchContext, searchTabs: [searchTab] })
+        const symbol = w.findAll('.ssf-grid2 input')[1]
+        await symbol.setValue('tFOOUSD')
+        // switch to a results tab, then back to the form
+        await w.setProps({ activeTab: 'search-1' })
+        await w.setProps({ activeTab: 'search' })
+        // same form instance → the edited value is retained (not reset to default)
+        expect(w.findAll('.ssf-grid2 input')[1].element.value).toBe('tFOOUSD')
+    })
+
     test('an active Search Results tab renders matches; row click → select-result, Stop → cancel-search', async () => {
         const w = mountPanel({ activeTab: 'search-1', searchTabs: [searchTab], searchContext })
         expect(w.find('.sr').exists()).toBe(true)

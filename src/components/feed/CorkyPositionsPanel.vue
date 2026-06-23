@@ -47,26 +47,29 @@
         </div>
     </div>
 
-    <!-- Body: Search Signals form -->
-    <div v-if="open && activeTab === 'search'" class="pd-body">
-        <search-signals-form :context="searchContext" @run="$emit('run-search', $event)" />
-    </div>
+    <!-- Body -->
+    <div v-if="open" class="pd-body">
+        <!-- Search Signals form: kept MOUNTED (v-show, not v-if) so the user's
+             fields + conditions survive switching to a results tab and back —
+             running a search switches the active tab away from this form. -->
+        <search-signals-form v-show="activeTab === 'search'"
+                             :context="searchContext"
+                             @run="$emit('run-search', $event)" />
 
-    <!-- Body: one Search Results tab -->
-    <div v-else-if="open && activeSearchTab" class="pd-body">
-        <search-results :tab="activeSearchTab" :nav="searchNav"
+        <!-- One Search Results tab -->
+        <search-results v-if="activeSearchTab && activeTab !== 'search'"
+                        :tab="activeSearchTab" :nav="searchNav"
                         @select="$emit('select-result', { tabId: activeSearchTab.id, ...$event })"
                         @cancel="$emit('cancel-search', activeSearchTab.id)" />
-    </div>
 
-    <!-- Body: positions (open / historical) -->
-    <div v-else-if="open" class="pd-body">
-        <div v-if="error" class="pd-msg pd-error">{{ error }}</div>
-        <div v-else-if="loading && !rows.length" class="pd-msg">Loading…</div>
-        <div v-else-if="!rows.length" class="pd-msg">
-            No {{ activeTab === 'open' ? 'open' : 'historical' }} positions
-        </div>
-        <template v-else>
+        <!-- Positions (open / historical) -->
+        <template v-else-if="activeTab === 'open' || activeTab === 'historical'">
+            <div v-if="error" class="pd-msg pd-error">{{ error }}</div>
+            <div v-else-if="loading && !rows.length" class="pd-msg">Loading…</div>
+            <div v-else-if="!rows.length" class="pd-msg">
+                No {{ activeTab === 'open' ? 'open' : 'historical' }} positions
+            </div>
+            <template v-else>
             <table class="pd-table">
                 <thead>
                     <tr>
@@ -107,6 +110,7 @@
                     Load more ({{ rows.length }}/{{ historyTotal }})
                 </button>
             </div>
+            </template>
         </template>
     </div>
 </div>
