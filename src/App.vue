@@ -508,32 +508,34 @@ export default {
                 { key: 'fees', name: cur ? `Fees (${cur})` : 'Fees' },
             ]
         },
-        // Form context for SearchSignalsForm: the charted symbol's venue/symbol,
-        // its available timeframes, and its indicators (display label + the output
-        // fields a condition may compare). Derived from the discovery descriptors
-        // for the current stream (falls back to the first catalog state).
+        // Form context for SearchSignalsForm. Carries the charted symbol's
+        // venue/symbol/timeframe as DEFAULTS, plus a per-symbol option set
+        // (timeframes + indicator labels/fields) for EVERY discovered state — so
+        // the form's indicator/timeframe choices follow the symbol the user is
+        // actually searching, not just the charted one. (Only some symbols carry
+        // indicator descriptors; the rest list none, which the form reflects.)
         searchContext() {
             const cur = this.corkyCurrent
             const states = this.corkyStates || []
-            const state = cur
+            const symbols = states.map((s) => ({
+                venue: s.venue,
+                symbol: s.symbol,
+                timeframes: s.available_timeframes || [],
+                indicators: this._indicatorOptions(s),
+            }))
+            const curState = cur
                 ? states.find((s) => s && s.venue === cur.venue && s.symbol === cur.symbol)
-                : states[0]
-            const venue = (cur && cur.venue) || (state && state.venue) || ''
-            const symbol = (cur && cur.symbol) || (state && state.symbol) || ''
-            const timeframe = cur && cur.timeframe
-            const timeframes = (state && state.available_timeframes) || []
-            // Collapse duplicate display_labels (published once per timeframe);
-            // union their output fields so any tf's outputs are searchable.
-            const byLabel = new Map()
-            for (const ind of ((state && state.indicators) || [])) {
-                if (!ind || !ind.display_label) continue
-                let set = byLabel.get(ind.display_label)
-                if (!set) { set = new Set(); byLabel.set(ind.display_label, set) }
-                for (const o of (ind.outputs || [])) set.add(o)
+                : null
+            const def = curState || states[0] || null
+            return {
+                venue: (cur && cur.venue) || (def && def.venue) || '',
+                symbol: (cur && cur.symbol) || (def && def.symbol) || '',
+                timeframe: cur && cur.timeframe,
+                // Charted-symbol fallbacks (used before the user picks a symbol).
+                timeframes: (def && def.available_timeframes) || [],
+                indicators: this._indicatorOptions(def),
+                symbols,
             }
-            const indicators = Array.from(byLabel.entries())
-                .map(([label, set]) => ({ label, fields: Array.from(set).sort() }))
-            return { venue, symbol, timeframe, timeframes, indicators }
         },
     },
     watch: {
@@ -1678,21 +1680,40 @@ export default {
 
         // ── Historical indicator search ─────────────────────────────────────────
 
-        // Run a search from the SearchSignalsForm payload. Builds the gateway
-        // query (deriving indicators[] from the charted symbol's descriptors),
-        // spawns a "Search Results N" tab, and streams matches into it. A build
-        // error (e.g. an indicator with no descriptor) surfaces as a failed tab
-        // rather than a thrown — the user sees why it can't run.
+        // Collapse a state's per-timeframe indicator descriptors into
+        // [{ label, fields }] (display_label + union of output names). Used by
+        // searchContext to offer the right indicators/fields per symbol.
+        _indicatorOptions(state) {
+            if (!state || !Array.isArray(state.indicators)) return []
+            const byLabel = new Map()
+            for (const ind of state.indicators) {
+                if (!ind || !ind.display_label) continue
+                let set = byLabel.get(ind.display_label)
+                if (!set) { set = new Set(); byLabel.set(ind.display_label, set) }
+                for (const o of (ind.outputs || [])) set.add(o)
+            }
+            return Array.from(byLabel.entries())
+                .map(([label, set]) => ({ label, fields: Array.from(set).sort() }))
+        },
+
+        // Run a search from the SearchSignalsForm payload. Resolves the searched
+        // symbol's state (case-insensitive venue — the gateway reports it
+        // lowercase), derives indicators[] from THAT symbol's descriptors, spawns
+        // a "Search Results N" tab, and streams matches into it. Build errors
+        // (e.g. a symbol with no descriptors) surface as a failed tab, not a throw.
         onRunSearch(form) {
             if (!this.searchFeed) return
-            const venue = form.venue
-            // Descriptors come from the venue/symbol state (first symbol of the
-            // set); falls back to any state on the venue.
+            // First symbol of the set drives descriptor + venue resolution.
             const firstSymbol = String(form.symbol || '').split(',')[0].trim()
             const states = this.corkyStates || []
-            const state = states.find(s => s && s.venue === venue && s.symbol === firstSymbol)
-                || states.find(s => s && s.venue === venue)
+            const vlc = String(form.venue || '').toLowerCase()
+            const slc = firstSymbol.toLowerCase()
+            const state = states.find(
+                s => s && String(s.venue).toLowerCase() === vlc && String(s.symbol).toLowerCase() === slc)
             const descriptors = (state && state.indicators) || []
+            // Send the venue exactly as the gateway canonicalises it (its state),
+            // so we never depend on the user's free-text casing.
+            const venue = state ? state.venue : form.venue
 
             this.searchTabSeq += 1
             const n = this.searchTabSeq
@@ -1711,6 +1732,11 @@ export default {
 
             let built
             try {
+                if (!descriptors.length) {
+                    throw new Error(
+                        `No indicator descriptors for ${firstSymbol || 'this symbol'} — ` +
+                        'chart it (or a symbol that has indicators) first.')
+                }
                 const condition = buildCondition(form.conditionRows)
                 if (!condition) throw new Error('Add at least one complete condition.')
                 built = buildSearchQuery({

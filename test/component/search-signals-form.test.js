@@ -52,6 +52,36 @@ describe('SearchSignalsForm', () => {
         expect(w.findAll('.ssf-chip.on')).toHaveLength(2)
     })
 
+    test('auto-syncs venue/symbol to the charted context until the user edits them', async () => {
+        const w = mountForm()
+        const sym = () => w.findAll('.ssf-grid2 input')[1]
+        expect(sym().element.value).toBe('tBTCUSD')
+        // charted symbol changes → the form follows (not yet edited)
+        await w.setProps({ context: { ...context, symbol: 'tETHUSD' } })
+        expect(sym().element.value).toBe('tETHUSD')
+        // user edits the symbol → it pins, later context changes don't clobber it
+        await sym().setValue('tMANUAL')
+        await w.setProps({ context: { ...context, symbol: 'tXRPUSD' } })
+        expect(sym().element.value).toBe('tMANUAL')
+    })
+
+    test('indicator options follow the searched symbol (context.symbols)', async () => {
+        const ctx = {
+            ...context,
+            symbols: [
+                { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframes: ['1h'], indicators: [{ label: 'MACD(12,26,9)', fields: ['histogram'] }] },
+                { venue: 'BITFINEX', symbol: 'tETHF0:BTCF0', timeframes: ['1h'], indicators: [{ label: 'SWINGRSI(7)', fields: ['rsi'] }] },
+            ],
+        }
+        const w = mountForm({ context: ctx })
+        const indOpts = () => w.findAll('.ssf-cond')[0].findAll('select')[0].findAll('option').map((o) => o.text())
+        expect(indOpts()).toContain('MACD(12,26,9)')
+        expect(indOpts()).not.toContain('SWINGRSI(7)')
+        await w.findAll('.ssf-grid2 input')[1].setValue('tETHF0:BTCF0')
+        expect(indOpts()).toContain('SWINGRSI(7)')
+        expect(indOpts()).not.toContain('MACD(12,26,9)')
+    })
+
     test('field options follow the chosen indicator', async () => {
         const w = mountForm()
         const cond = w.findAll('.ssf-cond')[0]

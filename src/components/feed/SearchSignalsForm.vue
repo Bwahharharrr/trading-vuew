@@ -3,11 +3,13 @@
     <div class="ssf-row ssf-grid2">
         <label class="ssf-field">
             <span class="ssf-label">Venue</span>
-            <input class="ssf-input" v-model.trim="venue" placeholder="BITFINEX" />
+            <input class="ssf-input" v-model.trim="venue" placeholder="BITFINEX"
+                   @input="venueDirty = true" />
         </label>
         <label class="ssf-field">
             <span class="ssf-label">Symbol(s)</span>
-            <input class="ssf-input" v-model.trim="symbol" placeholder="tBTCUSD, tETHUSD" />
+            <input class="ssf-input" v-model.trim="symbol" placeholder="tBTCUSD, tETHUSD"
+                   @input="symbolDirty = true" />
         </label>
     </div>
 
@@ -116,6 +118,10 @@ export default {
             OPS,
             venue: '',
             symbol: '',
+            // Once the user edits venue/symbol we stop auto-syncing them to the
+            // charted symbol (so a deliberate choice sticks).
+            venueDirty: false,
+            symbolDirty: false,
             tfs: [],
             rangeMode: 'latest',
             latestLimit: 500,
@@ -129,28 +135,52 @@ export default {
         }
     },
     computed: {
+        // The per-symbol option set for the symbol currently in the form (first
+        // of a comma list), matched case-insensitively against context.symbols;
+        // null when that symbol has no discovered state.
+        symbolOptions() {
+            const list = (this.context && this.context.symbols) || []
+            if (!list.length) return null
+            const sym = String(this.symbol || '').split(',')[0].trim().toLowerCase()
+            if (!sym) return null
+            const ven = String(this.venue || '').trim().toLowerCase()
+            return list.find((s) => String(s.symbol).toLowerCase() === sym &&
+                (!ven || String(s.venue).toLowerCase() === ven)) || null
+        },
+        // Timeframes / indicators follow the SEARCHED symbol when it has its own
+        // discovered descriptors; otherwise fall back to the charted defaults.
         availableTimeframes() {
+            if (this.symbolOptions) return this.symbolOptions.timeframes || []
             return (this.context && this.context.timeframes) || []
         },
         indicators() {
+            if (this.symbolOptions) return this.symbolOptions.indicators || []
             return (this.context && this.context.indicators) || []
         },
     },
     watch: {
         context: { handler: 'applyDefaults', immediate: true },
+        // When the searched symbol changes, drop timeframes it doesn't offer.
+        availableTimeframes() { this.reconcileTimeframes() },
     },
     methods: {
         blankRow() {
             return { indicator: '', field: '', op: 'gt', value: '', bar_offset: 0 }
         },
-        // Seed venue/symbol/timeframe from the charted context, but never clobber
-        // edits the user already made (only fill blanks / drop stale timeframes).
+        // Keep venue/symbol synced to the charted context UNTIL the user edits
+        // them (then dirty flags pin their choice). This stops the form showing a
+        // stale symbol while the indicator dropdown reflects a different one.
         applyDefaults() {
             const c = this.context || {}
-            if (!this.venue && c.venue) this.venue = c.venue
-            if (!this.symbol && c.symbol) this.symbol = c.symbol
-            const tfs = c.timeframes || []
+            if (!this.venueDirty && c.venue) this.venue = c.venue
+            if (!this.symbolDirty && c.symbol) this.symbol = c.symbol
+            this.reconcileTimeframes()
+        },
+        // Drop selected timeframes no longer offered; seed one when none remain.
+        reconcileTimeframes() {
+            const tfs = this.availableTimeframes
             this.tfs = this.tfs.filter((t) => tfs.includes(t))
+            const c = this.context || {}
             if (!this.tfs.length && c.timeframe && tfs.includes(c.timeframe)) this.tfs = [c.timeframe]
             if (!this.tfs.length && tfs.length) this.tfs = [tfs[0]]
         },
