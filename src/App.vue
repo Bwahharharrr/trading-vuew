@@ -119,6 +119,7 @@
             :current-symbol-key="positionsCurrentSymbolKey"
             :search-tabs="searchTabs"
             :search-context="searchContext"
+            :search-nav="searchNav"
             @update:open="togglePositionsDock"
             @update:active-tab="setPositionsTab"
             @update:active-account="setPositionsAccount"
@@ -363,6 +364,7 @@ import Balance from './components/overlays/Balance.js'
 import LineTracker from './components/overlays/LineTracker.js'
 import OrderBox from './components/overlays/OrderBox.vue'
 import PriceAlarms from './components/overlays/PriceAlarms.vue'
+import SignalMarker from './components/overlays/SignalMarker.js'
 import { AlarmSound, updateAlarms } from './helpers/alarm-sound.js'
 
 // Resolve the Corky chart-feed gateway WS URL (opt-in "Gateway" source).
@@ -408,7 +410,7 @@ export default {
             chart: new DataCube(),
             // markRaw: overlay component definitions must not be made reactive
             // (Vue warns + needless overhead) when held in component data.
-            overlays: [BuysAndSells, Balance, LineTracker, OrderBox, PriceAlarms].map(c => markRaw(c)),
+            overlays: [BuysAndSells, Balance, LineTracker, OrderBox, PriceAlarms, SignalMarker].map(c => markRaw(c)),
             // Price alarms (Y-axis click): App owns the list; the PriceAlarms
             // overlay renders THIS array by reference (survives DataCube wipes
             // because ensurePriceAlarmOverlay re-adds the overlay pointing at it).
@@ -463,6 +465,11 @@ export default {
             // not persisted (results are query output, not state).
             searchTabs: [],
             searchTabSeq: 0,               // increments per created tab → "Search Results N"
+            // The result row currently being navigated to / shown on the chart:
+            // { tabId, index, loading, message, error, target:{venue,symbol,timeframe},
+            //   signal:{ ts, low, label } }. Drives the row highlight + "loading onto
+            //   chart" feedback and the on-chart vertical signal marker. Null = none.
+            searchNav: null,
 
             // ── Selected position plotted on the chart (trades + detail panes) ──
             // { venue, symbol, position_id, window:{start,end},
@@ -834,6 +841,11 @@ export default {
                     onStatus: (status) => {
                         if (gen !== this._corkyGen) return   // superseded stream
                         this.corkyProgress = status
+                        // Reflect load phases on the active search result row.
+                        if (this.searchNav && this.searchNav.loading && status &&
+                            status.phase !== 'history-complete' && status.phase !== 'live') {
+                            this.searchNav.message = this._navStatusLabel(status)
+                        }
                         if (status && (status.phase === 'history-complete' ||
                                        status.phase === 'live')) {
                             this.corkyLoading = false
@@ -890,12 +902,25 @@ export default {
                                 if (this.priceAlarms.length) this.ensurePriceAlarmOverlay()
                                 // …and the plotted position's trades + detail panes.
                                 this.syncPositionOverlays()
+                                // …and the active search match's vertical marker.
+                                this.syncSignalMarker()
                             })
+                            // The chart for the active search result has loaded —
+                            // clear its row's "loading onto chart" feedback.
+                            if (this.searchNav && this.searchNav.loading) {
+                                this.searchNav.loading = false
+                                this.searchNav.message = ''
+                            }
                         }
                     },
                     onError: (err) => {
                         if (gen !== this._corkyGen) return   // superseded stream
                         this.corkyError = this._corkyErr(err)
+                        if (this.searchNav && this.searchNav.loading) {
+                            this.searchNav.loading = false
+                            this.searchNav.error = true
+                            this.searchNav.message = 'Failed to load on chart'
+                        }
                     },
                 })
                 // A superseded select (the feed returns null) or a newer epoch
@@ -920,6 +945,11 @@ export default {
                 this._corkySelectRetries = 0
                 this.corkyError = mapped
                 this.corkyCurrent = null
+                if (this.searchNav && this.searchNav.loading) {
+                    this.searchNav.loading = false
+                    this.searchNav.error = true
+                    this.searchNav.message = 'Failed to load on chart'
+                }
             } finally {
                 // Keep the spinner up only during the brief FAST retry window;
                 // once we surface a clear error (slow phase) the spinner goes off.
@@ -986,6 +1016,7 @@ export default {
         onCorkySelect(opts) {
             this._corkyCancelSelectRetry()   // a manual pick supersedes any pending retry
             this.clearPositionPlot()         // a discovery pick drops any plotted position
+            this._clearSearchNav()           // …and the active search-result highlight/marker
             this.corkySelect(opts)
         },
 
@@ -1195,6 +1226,42 @@ export default {
                 }
             }
             if (changed && typeof dc.update_ids === 'function') dc.update_ids()
+        },
+
+        // Remove the search signal marker (identity via settings flag).
+        _removeSignalMarker(dc) {
+            const arr = dc.data && dc.data.onchart
+            if (!Array.isArray(arr)) return
+            let changed = false
+            for (let i = arr.length - 1; i >= 0; i--) {
+                if (arr[i] && arr[i].settings && arr[i].settings.$signalMarker) {
+                    arr.splice(i, 1); changed = true
+                }
+            }
+            if (changed && typeof dc.update_ids === 'function') dc.update_ids()
+        },
+
+        // Reconcile the on-chart vertical signal marker to `searchNav`. Called
+        // after every history-complete (the candle feed wipes onchart) and when
+        // the active result changes/clears. Only drawn for the charted symbol.
+        syncSignalMarker() {
+            const dc = this.chart
+            if (!dc || !dc.data || typeof dc.add !== 'function') return
+            this._removeSignalMarker(dc)
+            const nav = this.searchNav
+            if (!nav || !nav.signal || nav.signal.ts == null || !this.corkyCurrent) return
+            const tgt = nav.target || {}
+            if (tgt.symbol !== this.corkyCurrent.symbol || tgt.venue !== this.corkyCurrent.venue) return
+            const low = nav.signal.low != null && Number.isFinite(Number(nav.signal.low))
+                ? Number(nav.signal.low) : null
+            dc.add('onchart', {
+                name: 'Signal', type: 'SignalMarker', grid: { id: 0 },
+                data: [[nav.signal.ts, low, nav.signal.label || null]],
+                settings: {
+                    $signalMarker: true, $uuid: 'search-signal', 'z-index': 130,
+                    legend: false, color: '#f5c518', lineWidth: 1.5,
+                },
+            })
         },
 
         // Reconcile the chart's position overlays to `positionPlot` + its toggles.
@@ -1683,6 +1750,8 @@ export default {
             if (idx === -1) return
             const tab = this.searchTabs[idx]
             if (this.searchFeed) this.searchFeed.forget(tab.search_id)  // cancels if running
+            // If the active result lived in this tab, drop its highlight + marker.
+            if (this.searchNav && this.searchNav.tabId === tabId) this._clearSearchNav()
             this.searchTabs.splice(idx, 1)
             if (this.positionsActiveTab === tabId) {
                 const next = this.searchTabs[idx] || this.searchTabs[idx - 1]
@@ -1690,25 +1759,83 @@ export default {
             }
         },
 
-        // Click a match → navigate the chart to result.chart_window. Ensures the
-        // symbol's candle state exists first (a search may hit a symbol that isn't
-        // currently charted), then selects with a start_end range so the matched
-        // bar lands in view (one-shot zoom via _corkyPendingRange).
-        async onSearchResultSelect(row) {
+        // Click a match → navigate the chart to result.chart_window. Marks the
+        // row active + "loading onto chart" immediately (synchronous feedback),
+        // ensures the symbol's candle state exists (a search may hit a symbol that
+        // isn't currently charted — this can take a few seconds), then selects
+        // with a start_end range so the matched bar lands in view (one-shot zoom
+        // via _corkyPendingRange). corkySelect's onStatus/onError/history-complete
+        // drive the row's progress + the on-chart vertical signal marker.
+        async onSearchResultSelect({ tabId, row, index } = {}) {
             if (!row) return
             const cw = row.chart_window || null
             const venue = row.venue
             const symbol = row.ticker
             const timeframe = (cw && cw.timeframe) || row.timeframe
             if (!venue || !symbol || !timeframe) return
+
+            // Active + loading state on THIS row, set before any await so the user
+            // sees instant feedback. Carries the signal info for the chart marker.
+            this.searchNav = {
+                tabId, index, loading: true, error: false, message: 'Preparing…',
+                target: { venue, symbol, timeframe },
+                signal: { ts: row.timestamp_ms, low: row.low, label: row.signal },
+            }
+
             let range
             if (cw && cw.start_ms != null && cw.end_ms != null) {
                 range = { type: 'start_end', start_ms: cw.start_ms, end_ms: cw.end_ms }
                 this._corkyPendingRange = { start: cw.start_ms, end: cw.end_ms }
             }
-            // Provision the state if needed (no-op when already charted).
-            try { await this._ensureCandleState(venue, symbol, timeframe) } catch (_) { /* best effort */ }
+
+            // Provision the candle state if needed (no-op when already charted).
+            this._setNavMessage(tabId, index, 'Provisioning symbol…')
+            let ok = true
+            try { ok = await this._ensureCandleState(venue, symbol, timeframe) } catch (_) { ok = false }
+            // A newer result click during the await supersedes this one.
+            if (!this._isActiveNav(tabId, index)) return
+            if (!ok) {
+                this.searchNav.loading = false
+                this.searchNav.error = true
+                this.searchNav.message = 'Symbol unavailable to chart'
+                return
+            }
+            this._setNavMessage(tabId, index, 'Loading onto chart…')
             this.corkySelect({ venue, symbol, timeframe, range })
+        },
+
+        // Is (tabId,index) the row the active search nav points at?
+        _isActiveNav(tabId, index) {
+            const n = this.searchNav
+            return !!n && n.tabId === tabId && n.index === index
+        },
+        _setNavMessage(tabId, index, message) {
+            if (this._isActiveNav(tabId, index) && this.searchNav.loading) {
+                this.searchNav.message = message
+            }
+        },
+        // Human-readable progress for a corkyFeed status while loading a result.
+        _navStatusLabel(status) {
+            if (!status) return 'Loading onto chart…'
+            switch (status.phase) {
+                case 'accepted': return 'Connecting…'
+                case 'history':
+                    return status.chunk_index != null
+                        ? `Loading history… (chunk ${status.chunk_index + 1})`
+                        : 'Loading history…'
+                default: return status.message || 'Loading onto chart…'
+            }
+        },
+        // Drop the active-result highlight + the on-chart signal marker (called
+        // when navigation leaves the search-result context).
+        _clearSearchNav() {
+            if (!this.searchNav) return
+            this.searchNav = null
+            const dc = this.chart
+            if (dc && dc.data) {
+                this._removeSignalMarker(dc)
+                if (typeof dc.touchData === 'function') dc.touchData()
+            }
         },
 
         setPositionsAccount(acct) {
@@ -1755,6 +1882,7 @@ export default {
         // lowest available (pickTimeframe). Discovers the venue first if unknown.
         async onPositionSelect(pos) {
             if (!pos || !pos.symbol) return
+            this._clearSearchNav()   // a position pick drops any active search-result marker
             const { venue, symbol } = pos
             let state = (this.corkyStates || []).find(
                 (s) => s && s.venue === venue && s.symbol === symbol)
@@ -2034,6 +2162,7 @@ export default {
             this.searchFeed = null
             this.searchTabs = []
             this.searchTabSeq = 0
+            this.searchNav = null
             this.corkyClient = null
             this.corkyStates = []
             this.corkyCurrent = null

@@ -216,6 +216,7 @@ export function projectMatchRow(result) {
         }))
         : []
     const signal = [result.timeframe, result.side].filter(Boolean).join(' ')
+    const candle = result.candle || null
     return {
         ticker: result.symbol,
         venue: result.venue,
@@ -223,7 +224,11 @@ export function projectMatchRow(result) {
         side: result.side,
         signal,
         timestamp_ms: result.timestamp_ms,
-        close: result.candle ? result.candle.close : null,
+        close: candle ? candle.close : null,
+        // Raw decimal OHLC kept as strings; the signal marker anchors its top to
+        // `low` (the bottom of the candle).
+        low: candle ? candle.low : null,
+        high: candle ? candle.high : null,
         boxes,
         boxesText: boxes.map((b) => b.text).join(', '),
         observations: Array.isArray(result.observations) ? result.observations : [],

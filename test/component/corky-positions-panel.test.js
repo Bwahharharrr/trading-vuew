@@ -235,7 +235,7 @@ describe('CorkyPositionsPanel — search tabs', () => {
         expect(rows[0].text()).toContain('tBTCUSD')
         expect(rows[0].text()).toContain('2h bull box')
         await rows[0].trigger('click')
-        expect(w.emitted('select-result')[0][0]).toEqual(matchRow)
+        expect(w.emitted('select-result')[0][0]).toEqual({ tabId: 'search-1', row: matchRow, index: 0 })
         await w.find('.sr-stop').trigger('click')
         expect(w.emitted('cancel-search')[0]).toEqual(['search-1'])
     })
@@ -243,5 +243,25 @@ describe('CorkyPositionsPanel — search tabs', () => {
     test('does not render the positions table while a search tab is active', () => {
         const w = mountPanel({ activeTab: 'search-1', searchTabs: [searchTab], searchContext })
         expect(w.find('.pd-table').exists()).toBe(false)
+    })
+
+    test('highlights the active result row and shows the loading sub-row', () => {
+        const w = mountPanel({
+            activeTab: 'search-1', searchTabs: [searchTab], searchContext,
+            searchNav: { tabId: 'search-1', index: 0, loading: true, error: false, message: 'Loading history…' },
+        })
+        expect(w.find('.sr-row.active').exists()).toBe(true)
+        const status = w.find('.sr-status-row')
+        expect(status.exists()).toBe(true)
+        expect(status.text()).toContain('Loading history…')
+    })
+
+    test('nav for a different tab does not highlight this tab', () => {
+        const w = mountPanel({
+            activeTab: 'search-1', searchTabs: [searchTab], searchContext,
+            searchNav: { tabId: 'search-2', index: 0, loading: true, message: 'x' },
+        })
+        expect(w.find('.sr-row.active').exists()).toBe(false)
+        expect(w.find('.sr-status-row').exists()).toBe(false)
     })
 })

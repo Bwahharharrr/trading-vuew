@@ -184,6 +184,7 @@ describe('projectMatchRow', () => {
         expect(row.ticker).toBe('tBTCUSD')
         expect(row.signal).toBe('1h bull')
         expect(row.close).toBe('63664')           // decimal kept as a string
+        expect(row.low).toBe('63597')             // anchors the signal marker top
         expect(row.boxesText).toBe('2h bull box ×2')
         expect(row.chart_window).toBe(result.chart_window)
     })

@@ -54,8 +54,8 @@
 
     <!-- Body: one Search Results tab -->
     <div v-else-if="open && activeSearchTab" class="pd-body">
-        <search-results :tab="activeSearchTab"
-                        @select="$emit('select-result', $event)"
+        <search-results :tab="activeSearchTab" :nav="searchNav"
+                        @select="$emit('select-result', { tabId: activeSearchTab.id, ...$event })"
                         @cancel="$emit('cancel-search', activeSearchTab.id)" />
     </div>
 
@@ -139,6 +139,8 @@ export default {
         searchTabs: { type: Array, default: () => [] },
         // Form context: { venue, symbol, timeframe, timeframes:[], indicators:[…] }.
         searchContext: { type: Object, default: null },
+        // Active/loading search result: { tabId, index, loading, message, error, … }.
+        searchNav: { type: Object, default: null },
     },
     emits: [
         'update:open', 'update:active-tab', 'update:active-account',

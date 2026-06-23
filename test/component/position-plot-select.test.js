@@ -41,7 +41,7 @@ function mkCtx() {
   }
   for (const m of ['onPositionSelect', '_plotWindow', '_isOpenPosition', '_startPositionAuditStream', '_stopPositionAuditStream',
     'syncPositionOverlays', '_removePositionOverlays', '_computePositionSeries',
-    '_ensureCandleState', '_candleStateHas', '_corkyRuntimeId', 'clearPositionPlot']) {
+    '_ensureCandleState', '_candleStateHas', '_corkyRuntimeId', 'clearPositionPlot', '_clearSearchNav', '_removeSignalMarker']) {
     ctx[m] = M[m]
   }
   return ctx
