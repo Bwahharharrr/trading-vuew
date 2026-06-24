@@ -737,6 +737,57 @@ export function assembleChunks(chunkEvents) {
   return order.map((k) => byKey.get(k))
 }
 
+/**
+ * Reconstruct a row-format historical chunk from a `historical_chunk_columnar`
+ * event so the rest of the pipeline (assembleChunks → buildChartData) stays
+ * format-agnostic. The gateway sends parallel column arrays; we rebuild one
+ * `ChartCandleRow` per index. Decimal values are kept as STRINGS (rowToOhlcv /
+ * decimalToNumber convert downstream). A `null`/absent indicator field value
+ * means that field is absent for that row and is omitted (NOT coerced to 0).
+ *
+ * @param {object} event - the `historical_chunk_columnar` event
+ * @param {string} [fallbackTimeframe] - used when the event omits `timeframe`
+ * @returns {{ type:'historical_chunk', subscription_id, chunk_index, timeframe, rows }}
+ */
+export function columnarChunkToRows(event, fallbackTimeframe) {
+  const cols = (event && event.columns) || {}
+  const ts = cols.timestamp_ms || []
+  const tf = event && event.timeframe != null ? event.timeframe : fallbackTimeframe
+  const indLabels = cols.indicators ? Object.keys(cols.indicators) : []
+  const at = (arr, i) => (arr ? arr[i] : undefined)
+  const rows = []
+  for (let i = 0; i < ts.length; i++) {
+    const candle = {
+      timestamp_ms: ts[i],
+      open: at(cols.open, i),
+      high: at(cols.high, i),
+      low: at(cols.low, i),
+      close: at(cols.close, i),
+      volume: at(cols.volume, i),
+    }
+    const indicators = {}
+    for (const label of indLabels) {
+      const fields = cols.indicators[label] || {}
+      let bag = null
+      for (const f of Object.keys(fields)) {
+        const v = at(fields[f], i)
+        if (v == null) continue // null = field absent for this row
+        if (!bag) bag = {}
+        bag[f] = v
+      }
+      if (bag) indicators[label] = bag
+    }
+    rows.push({ timeframe: tf, candle, indicators })
+  }
+  return {
+    type: 'historical_chunk',
+    subscription_id: event && event.subscription_id,
+    chunk_index: event ? event.chunk_index : 0,
+    timeframe: tf,
+    rows,
+  }
+}
+
 // ─────────────────────────────────────────────────────────── live merge ──
 
 /** Locate an overlay (across onchart+offchart) by its corky series key. */

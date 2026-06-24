@@ -450,6 +450,18 @@ export interface SubscribeCandlesCommand {
   indicators?: PublicIndicatorSpec[]
   /** Rows per historical chunk. Defaults to null (gateway chooses). */
   chunk_rows?: number | null
+  /**
+   * `'summary'` → gateway returns the lightweight {@link SubscriptionAcceptedSummaryEvent}
+   * instead of the full {@link SubscriptionAcceptedEvent} descriptor (use discovery
+   * for descriptor metadata). Omitted → full `subscription_accepted` (back-compat).
+   */
+  ack_mode?: 'summary' | 'full'
+  /**
+   * `'columnar'` → historical rows arrive as compact {@link HistoricalChunkColumnarEvent}s
+   * instead of row-based {@link HistoricalChunkEvent}s. Omitted → row chunks
+   * (back-compat). Live updates are unchanged regardless.
+   */
+  historical_format?: 'columnar' | 'rows'
 }
 
 /** Stop live updates for a subscription (idempotent; runtime state stays). */
@@ -701,6 +713,23 @@ export interface SubscriptionAcceptedEvent {
   range: ChartHistoryRange
 }
 
+/**
+ * Lightweight accept (when `ack_mode:'summary'`): identity + served range only,
+ * WITHOUT the full {@link ChartCandleStateDescriptor}. Read descriptor metadata
+ * from discovery / `list_candle_states` instead.
+ */
+export interface SubscriptionAcceptedSummaryEvent {
+  type: 'subscription_accepted_summary'
+  subscription_id: string
+  runtime_id: string
+  state_id: string
+  venue: string
+  symbol: string
+  funding_period?: string | null
+  timeframe: Timeframe
+  range: ChartHistoryRange
+}
+
 /** Acknowledges the historical query and the range that will be served. */
 export interface HistoricalAckEvent {
   type: 'historical_ack'
@@ -729,6 +758,33 @@ export interface HistoricalChunkEvent {
   chunk_index: number
   timeframe: Timeframe
   rows: ChartCandleRow[]
+}
+
+/**
+ * Columnar form of {@link HistoricalChunkEvent} (when `historical_format:'columnar'`).
+ * Parallel arrays indexed `[i]`; reconstruct a {@link ChartCandleRow} per `i`.
+ * A `null` indicator field value means that field is absent for that row.
+ * Decimal columns (OHLCV + indicator fields) are {@link DecimalString}s.
+ */
+export interface HistoricalChunkColumnarEvent {
+  type: 'historical_chunk_columnar'
+  subscription_id: string
+  chunk_index: number
+  timeframe: Timeframe
+  columns: {
+    timestamp_ms: TimestampMs[]
+    open: DecimalString[]
+    high: DecimalString[]
+    low: DecimalString[]
+    close: DecimalString[]
+    volume: DecimalString[]
+    status?: string[]
+    source?: string[]
+    updated_at_ms?: (TimestampMs | null)[]
+    confirmed_at_ms?: (TimestampMs | null)[]
+    /** `indicators[display_label][field][i]` → value (or null = absent). */
+    indicators?: Record<string, Record<string, (DecimalString | null)[]>>
+  }
 }
 
 /** Terminal historical event: backfill is done, live updates follow. */
@@ -919,9 +975,11 @@ export interface SearchFailedEvent {
 export type ChartFeedEventKind =
   | CandleStatesEvent
   | SubscriptionAcceptedEvent
+  | SubscriptionAcceptedSummaryEvent
   | HistoricalAckEvent
   | HistoricalProgressEvent
   | HistoricalChunkEvent
+  | HistoricalChunkColumnarEvent
   | HistoricalCompleteEvent
   | LiveUpdateEvent
   | ControlAckEvent

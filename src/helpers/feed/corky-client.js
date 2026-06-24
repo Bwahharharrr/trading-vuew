@@ -278,6 +278,7 @@ export class CorkyClient {
             subscription_id, venue, symbol, timeframe,
             target_runtime_id, funding_period, range,
             include_indicators, indicators, chunk_rows,
+            ack_mode, historical_format,
             onEvent,
         } = opts
         if (!subscription_id) throw new Error('subscribeCandles: subscription_id is required')
@@ -289,6 +290,11 @@ export class CorkyClient {
         if (include_indicators != null) command.include_indicators = include_indicators
         if (indicators != null) command.indicators = indicators
         if (chunk_rows != null) command.chunk_rows = chunk_rows
+        // Optional perf modes (back-compat: omitted ⇒ gateway uses the old shapes).
+        // 'summary' → lightweight subscription_accepted_summary; 'columnar' →
+        // compact historical_chunk_columnar. Live updates are unaffected.
+        if (ack_mode != null) command.ack_mode = ack_mode
+        if (historical_format != null) command.historical_format = historical_format
 
         return this._request(command, { subscription_id, onEvent })
     }

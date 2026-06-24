@@ -17,7 +17,7 @@
 //      discipline the existing ws-manager live path uses).
 
 import { CorkyClient } from './corky-client.js'
-import { assembleChunks, buildChartData, applyLiveUpdate } from './corky-ingest.js'
+import { assembleChunks, buildChartData, applyLiveUpdate, columnarChunkToRows } from './corky-ingest.js'
 import { FeedSource } from './feed-source.js'
 
 // Case-insensitive indicator-kind equality. The wire/UI may carry a display
@@ -107,7 +107,15 @@ export class CorkyFeed extends FeedSource {
      * @returns {Promise<object>} a handle (carries the subscription_id).
      */
     async subscribe(opts = {}, handlers = {}) {
-        const { venue, symbol, timeframe, indicators, range, views, enabled, target_runtime_id, chunk_rows } = opts
+        const {
+            venue, symbol, timeframe, indicators, range, views, enabled,
+            target_runtime_id, chunk_rows,
+            // Optimized chart-load path by DEFAULT (the gateway is back-compat and
+            // this feed accepts both the old and new response shapes). 'summary'
+            // skips resending the full state descriptor; 'columnar' ships compact
+            // historical chunks. Callers can override per subscribe.
+            ack_mode = 'summary', historical_format = 'columnar',
+        } = opts
         const onStatus = handlers.onStatus || (() => {})
         const onError = handlers.onError || (() => {})
 
@@ -139,6 +147,7 @@ export class CorkyFeed extends FeedSource {
                 range,
                 chunk_rows,          // gateway chunk size (position windows use 500)
                 target_runtime_id,   // re-targeted on reconnect re-issue (spread below)
+                ack_mode, historical_format, // preserved across reconnect re-issue
             },
             onStatus, onError,     // retained so reconnect/exhaustion can report
             subscribePending: true, // original subscribe() still awaiting (cleared in finally)
@@ -185,6 +194,7 @@ export class CorkyFeed extends FeedSource {
                 include_indicators: indicators != null ? true : undefined,
                 range,
                 chunk_rows,
+                ack_mode, historical_format,
             })
             // Race a timeout so a silent gateway/runtime hang surfaces cleanly.
             if (this.subscribeTimeoutMs > 0) {
@@ -235,20 +245,32 @@ export class CorkyFeed extends FeedSource {
     _onSubscriptionEvent(handle, event, onStatus, onError) {
         if (!event || !event.type) return
         switch (event.type) {
+            // Both accept shapes settle the same way (the request still resolves on
+            // historical_complete). 'summary' omits the full descriptor — we read
+            // descriptor metadata from discovery, so nothing else is needed here.
             case 'subscription_accepted':
+            case 'subscription_accepted_summary':
                 onStatus({ phase: 'accepted', subscription_id: handle.subscription_id })
                 break
+            // Row chunks and columnar chunks feed the SAME pipeline: a columnar
+            // chunk is reconstructed into the row-chunk shape, then handled
+            // identically (assembleChunks → buildChartData).
             case 'historical_chunk':
+            case 'historical_chunk_columnar': {
                 // Ignore late chunks once history is built: they have no consumer
                 // and would only grow handle.chunks unboundedly (memory leak).
                 if (handle.history_complete) break
-                handle.chunks.push(event)
+                const chunk = event.type === 'historical_chunk_columnar'
+                    ? columnarChunkToRows(event, handle.timeframe)
+                    : event
+                handle.chunks.push(chunk)
                 onStatus({
                     phase: 'history',
                     subscription_id: handle.subscription_id,
                     chunk_index: event.chunk_index,
                 })
                 break
+            }
             case 'historical_complete':
                 if (this._finishHistory(handle, onError)) {
                     onStatus({ phase: 'history-complete', subscription_id: handle.subscription_id })
