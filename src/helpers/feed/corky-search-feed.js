@@ -192,8 +192,7 @@ export class CorkySearchFeed {
     _onFailed(payload) {
         const rec = this._recordFor(payload)
         if (!rec || rec.closed || TERMINAL.has(rec.status)) return
-        const ev = payload.event
-        this._fail(rec, { code: ev.code, message: ev.message })
+        this._fail(rec, this._failInfo(payload.event, 'search_failed'))
     }
 
     _onError(payload) {
@@ -201,8 +200,19 @@ export class CorkySearchFeed {
         // search; a request-correlated parse/control error is handled elsewhere.
         const rec = this._recordFor(payload)
         if (!rec || rec.closed || TERMINAL.has(rec.status)) return
-        const ev = payload.event
-        this._fail(rec, { code: ev.code, message: ev.message })
+        this._fail(rec, this._failInfo(payload.event, 'search_error'))
+    }
+
+    // Normalize a terminal failure event into { code, message }. The gateway is
+    // inconsistent: an `error` event uses code+message, but `search_failed` puts
+    // the human detail in `event.error` (and may omit code/message). Surface
+    // whatever is present so the UI never shows a blank "Search failed".
+    _failInfo(ev, fallbackCode) {
+        ev = ev || {}
+        return {
+            code: ev.code || fallbackCode,
+            message: ev.message || ev.error || ev.code || 'search failed',
+        }
     }
 
     // Socket dropped: no resume for searches — fail every in-flight one but KEEP

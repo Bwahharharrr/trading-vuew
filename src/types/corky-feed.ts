@@ -1089,6 +1089,8 @@ export interface SearchFailedEvent {
   search_id: string
   code?: ErrorCode
   message?: string
+  /** The gateway puts the human-readable failure detail here (code/message may be absent). */
+  error?: string
 }
 
 /** Discriminated union of gateway event payloads (`ChartFeedEventKind`). */

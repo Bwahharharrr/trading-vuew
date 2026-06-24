@@ -130,6 +130,22 @@ describe('failure preserves partial results', () => {
         expect(failed).toEqual({ code: 'historical_query_failed', message: 'boom' })
     })
 
+    it('surfaces search_failed.error when code/message are absent (gateway shape)', () => {
+        let failed = null
+        feed.startSearch({ search_id: 'S1' }, { onFailed: (e) => { failed = e } })
+        // The live gateway puts the detail in `error`, with no code/message.
+        client._emit({ type: 'search_failed', search_id: 'S1', error: 'local candle cache is incomplete …' })
+        expect(failed.message).toBe('local candle cache is incomplete …')
+        expect(failed.code).toBe('search_failed')         // fallback code so it's classifiable
+    })
+
+    it('never reports a blank failure (defaults message when nothing is present)', () => {
+        let failed = null
+        feed.startSearch({ search_id: 'S1' }, { onFailed: (e) => { failed = e } })
+        client._emit({ type: 'search_failed', search_id: 'S1' })
+        expect(failed.message).toBe('search failed')
+    })
+
     it('a socket close fails every in-flight search (partials kept)', () => {
         let failed = null
         feed.startSearch({ search_id: 'S1' }, { onFailed: (e) => { failed = e } })
