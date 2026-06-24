@@ -24,7 +24,8 @@ function mkCtx() {
         _ensureCandleState: vi.fn(async () => true),
     }
     for (const m of ['onSearchResultSelect', '_isActiveNav', '_setNavMessage', '_navStatusLabel',
-        'syncSignalMarker', '_removeSignalMarker', '_clearSearchNav']) {
+        'syncSignalMarker', '_removeSignalMarker', '_clearSearchNav',
+        'syncBarrierOverlay', '_removeBarrierOverlay']) {
         ctx[m] = M[m]
     }
     return ctx
@@ -129,5 +130,66 @@ describe('_clearSearchNav', () => {
         ctx._clearSearchNav()
         expect(ctx.searchNav).toBeNull()
         expect(marker(ctx)).toBeUndefined()
+    })
+})
+
+const barrierOv = (ctx) => ctx.chart.data.onchart.find((o) => o.settings && o.settings.$barrierPlan)
+
+describe('syncBarrierOverlay', () => {
+    function navWith(barrier) {
+        return {
+            tabId: 'search-1', index: 0,
+            target: { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1h' },
+            signal: { ts: 1000, low: '63597', label: '1h bull', side: 'bull' },
+            barrier,
+        }
+    }
+    const maturedBarrier = {
+        pending: false, hash: 'h1',
+        plan: { entry_price: '70125', take_up_price: '71783.72', stop_up_price: '68466.28', take_dn_price: '68466.28', stop_dn_price: '71783.72', expiry_timestamp_ms: 1720137600000 },
+        outcome: { bull_hit: true, bear_hit: false },
+    }
+
+    test('adds a BarrierPlan overlay with numeric levels + matured outcome', () => {
+        ctx.searchNav = navWith(maturedBarrier)
+        ctx.syncBarrierOverlay()
+        const ov = barrierOv(ctx)
+        expect(ov.type).toBe('BarrierPlan')
+        const p = ov.settings.plan
+        expect(p.entry).toBe(70125)        // decimal string → number
+        expect(p.take_up).toBe(71783.72)
+        expect(p.expiryTs).toBe(1720137600000)
+        expect(p.outcome).toBe('bull ✓')
+        expect(p.pending).toBe(false)
+    })
+
+    test('pending barrier draws what is present and labels "pending"', () => {
+        ctx.searchNav = navWith({ pending: true, plan: { entry_price: '63160', expiry_timestamp_ms: 1781931600000 } })
+        ctx.syncBarrierOverlay()
+        const p = barrierOv(ctx).settings.plan
+        expect(p.entry).toBe(63160)
+        expect(p.take_up).toBeNull()        // band absent → null, not 0
+        expect(p.outcome).toBe('pending')
+    })
+
+    test('no barrier on the nav → no overlay', () => {
+        ctx.searchNav = navWith(null)
+        ctx.syncBarrierOverlay()
+        expect(barrierOv(ctx)).toBeUndefined()
+    })
+
+    test('foreign symbol → no overlay', () => {
+        ctx.corkyCurrent = { venue: 'BITFINEX', symbol: 'tETHUSD', timeframe: '1h' }
+        ctx.searchNav = navWith(maturedBarrier)
+        ctx.syncBarrierOverlay()
+        expect(barrierOv(ctx)).toBeUndefined()
+    })
+
+    test('_clearSearchNav removes the barrier overlay too', () => {
+        ctx.searchNav = navWith(maturedBarrier)
+        ctx.syncBarrierOverlay()
+        expect(barrierOv(ctx)).toBeTruthy()
+        ctx._clearSearchNav()
+        expect(barrierOv(ctx)).toBeUndefined()
     })
 })

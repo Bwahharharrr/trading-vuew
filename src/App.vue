@@ -353,7 +353,7 @@ import { CorkyClient } from '../src/helpers/feed/corky-client.js'
 import { CorkyFeed } from '../src/helpers/feed/corky-feed.js'
 import { CorkyPositionsFeed } from '../src/helpers/feed/corky-positions-feed.js'
 import { CorkySearchFeed } from '../src/helpers/feed/corky-search-feed.js'
-import { buildSearchQuery, buildCondition } from '../src/helpers/feed/search-query.js'
+import { buildSearchQuery, buildCondition, barrierTargetSpec } from '../src/helpers/feed/search-query.js'
 import { pickTimeframe, paddedCandleRange, coarsenTimeframe } from '../src/helpers/feed/pick-timeframe.js'
 import {
     tradeMarkers, positionSizeSeries, buySellHistogram, cumulativeFees, positionWindow,
@@ -365,6 +365,7 @@ import LineTracker from './components/overlays/LineTracker.js'
 import OrderBox from './components/overlays/OrderBox.vue'
 import PriceAlarms from './components/overlays/PriceAlarms.vue'
 import SignalMarker from './components/overlays/SignalMarker.js'
+import BarrierPlan from './components/overlays/BarrierPlan.js'
 import { AlarmSound, updateAlarms } from './helpers/alarm-sound.js'
 
 // Resolve the Corky chart-feed gateway WS URL (opt-in "Gateway" source).
@@ -410,7 +411,7 @@ export default {
             chart: new DataCube(),
             // markRaw: overlay component definitions must not be made reactive
             // (Vue warns + needless overhead) when held in component data.
-            overlays: [BuysAndSells, Balance, LineTracker, OrderBox, PriceAlarms, SignalMarker].map(c => markRaw(c)),
+            overlays: [BuysAndSells, Balance, LineTracker, OrderBox, PriceAlarms, SignalMarker, BarrierPlan].map(c => markRaw(c)),
             // Price alarms (Y-axis click): App owns the list; the PriceAlarms
             // overlay renders THIS array by reference (survives DataCube wipes
             // because ensurePriceAlarmOverlay re-adds the overlay pointing at it).
@@ -904,8 +905,10 @@ export default {
                                 if (this.priceAlarms.length) this.ensurePriceAlarmOverlay()
                                 // …and the plotted position's trades + detail panes.
                                 this.syncPositionOverlays()
-                                // …and the active search match's vertical marker.
+                                // …and the active search match's vertical marker
+                                // + Barrier Symmetric target plan (if enriched).
                                 this.syncSignalMarker()
+                                this.syncBarrierOverlay()
                             })
                             // The chart for the active search result has loaded —
                             // clear its row's "loading onto chart" feedback.
@@ -1262,6 +1265,54 @@ export default {
                 settings: {
                     $signalMarker: true, $uuid: 'search-signal', 'z-index': 130,
                     legend: false, color: '#f5c518', lineWidth: 1.5,
+                },
+            })
+        },
+
+        _removeBarrierOverlay(dc) {
+            const arr = dc.data && dc.data.onchart
+            if (!Array.isArray(arr)) return
+            let changed = false
+            for (let i = arr.length - 1; i >= 0; i--) {
+                if (arr[i] && arr[i].settings && arr[i].settings.$barrierPlan) {
+                    arr.splice(i, 1); changed = true
+                }
+            }
+            if (changed && typeof dc.update_ids === 'function') dc.update_ids()
+        },
+
+        // Reconcile the on-chart Barrier Symmetric target plan to `searchNav`
+        // (the plan/outcome already arrived with the match — no separate fetch).
+        // Pending plans still draw whatever levels are present; outcome shows
+        // "pending" rather than a miss. Only for the charted symbol.
+        syncBarrierOverlay() {
+            const dc = this.chart
+            if (!dc || !dc.data || typeof dc.add !== 'function') return
+            this._removeBarrierOverlay(dc)
+            const nav = this.searchNav
+            if (!nav || !nav.barrier || !nav.signal || nav.signal.ts == null || !this.corkyCurrent) return
+            const tgt = nav.target || {}
+            if (tgt.symbol !== this.corkyCurrent.symbol || tgt.venue !== this.corkyCurrent.venue) return
+            const b = nav.barrier
+            const plan = b.plan || {}
+            const num = (x) => { const n = Number(x); return (x != null && Number.isFinite(n)) ? n : null }
+            const entry = num(plan.entry_price)
+            if (entry == null) return
+            const outcome = b.pending ? 'pending'
+                : (b.outcome ? (b.outcome.bull_hit ? 'bull ✓' : b.outcome.bear_hit ? 'bear ✓' : 'no hit') : null)
+            dc.add('onchart', {
+                name: 'Target', type: 'BarrierPlan', grid: { id: 0 },
+                data: [[nav.signal.ts, entry]],
+                settings: {
+                    $barrierPlan: true, $uuid: 'search-barrier', 'z-index': 129, legend: false,
+                    plan: {
+                        entryTs: nav.signal.ts,
+                        expiryTs: plan.expiry_timestamp_ms != null ? Number(plan.expiry_timestamp_ms) : null,
+                        entry,
+                        take_up: num(plan.take_up_price), stop_up: num(plan.stop_up_price),
+                        take_dn: num(plan.take_dn_price), stop_dn: num(plan.stop_dn_price),
+                        pending: b.pending, outcome,
+                    },
                 },
             })
         },
@@ -1739,10 +1790,17 @@ export default {
                 }
                 const condition = buildCondition(form.conditionRows)
                 if (!condition) throw new Error('Add at least one complete condition.')
+                // Optional Barrier Symmetric target enrichment (causal-only search;
+                // target plans/outcomes ride along on matched rows). tf defaults to
+                // the first search timeframe when the form left it blank.
+                const target_specs = form.target
+                    ? [barrierTargetSpec({ ...form.target, timeframe: form.target.timeframe || form.timeframes[0] })]
+                    : undefined
                 built = buildSearchQuery({
                     search_id, venue, symbols: form.symbol, range: form.range,
                     timeframes: form.timeframes, condition, descriptors,
                     result_window: form.result_window, max_results: form.max_results,
+                    target_specs,
                 })
             } catch (err) {
                 tab.status = 'failed'
@@ -1805,7 +1863,10 @@ export default {
             this.searchNav = {
                 tabId, index, loading: true, error: false, message: 'Preparing…',
                 target: { venue, symbol, timeframe },
-                signal: { ts: row.timestamp_ms, low: row.low, label: row.signal },
+                signal: { ts: row.timestamp_ms, low: row.low, label: row.signal, side: row.side },
+                // Barrier Symmetric plan/outcome already arrived with the match —
+                // overlaid on the chart after load (no separate fetch).
+                barrier: row.barrier || null,
             }
 
             let range
@@ -1860,6 +1921,7 @@ export default {
             const dc = this.chart
             if (dc && dc.data) {
                 this._removeSignalMarker(dc)
+                this._removeBarrierOverlay(dc)
                 if (typeof dc.touchData === 'function') dc.touchData()
             }
         },

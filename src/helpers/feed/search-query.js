@@ -52,6 +52,20 @@ export function conditionIndicatorLabels(condition) {
     return out
 }
 
+/** Collect every compare leaf's `field` ref ({indicator, field, bar_offset}). */
+export function conditionFields(condition) {
+    const out = []
+    const visit = (node) => {
+        if (!node || typeof node !== 'object') return
+        if (node.type === 'compare') { if (node.field) out.push(node.field); return }
+        if ((node.type === 'all' || node.type === 'any') && Array.isArray(node.conditions)) {
+            for (const c of node.conditions) visit(c)
+        }
+    }
+    visit(condition)
+    return out
+}
+
 /**
  * Build the gateway-ready `query.indicators[]` from the referenced display
  * labels × the search timeframes. Each entry copies `{kind, source, params}`
@@ -132,16 +146,49 @@ export function isValidRow(row) {
 
 const OPS = new Set(['gt', 'gte', 'lt', 'lte', 'eq', 'ne'])
 
+// Barrier Symmetric FUTURE-OUTCOME fields. These are research/target labels, NOT
+// causal indicator outputs — a search `condition` that references one is rejected
+// by the runtime as `invalid_search_query`. We guard against ever building such a
+// condition (the form can't offer them either, since they aren't in any indicator
+// descriptor). See docs/prompts/barrier-symmetric-search-charting-agent.md.
+const BARRIER_OUTCOME_FIELDS = new Set([
+    'bull_hit', 'bear_hit', 'strength_up', 'strength_dn', 'mae_up', 'mae_dn',
+    'time_up', 'time_dn', 'quality_up', 'quality_dn', 'evaluable_outcome',
+])
+
+/**
+ * Build a `{ type:'barrier_symmetric', spec }` target spec from form-ish values.
+ * Only non-empty fields are sent; the gateway applies documented defaults for the
+ * rest. Numeric fields are coerced; `version` defaults to 1.
+ */
+export function barrierTargetSpec(opts = {}) {
+    const spec = { version: 1 }
+    const num = (k) => { const v = Number(opts[k]); if (opts[k] != null && opts[k] !== '' && Number.isFinite(v)) spec[k] = v }
+    if (opts.timeframe) spec.timeframe = opts.timeframe
+    num('window_fwd'); num('window_atr'); num('k_take'); num('k_stop')
+    num('fees_bps'); num('slippage_bps'); num('half_spread_bps')
+    num('guard_min_consecutive_closes')
+    if (opts.post_hit_policy) spec.post_hit_policy = opts.post_hit_policy
+    if (opts.guard_use_close != null) spec.guard_use_close = !!opts.guard_use_close
+    if (opts.timeout_requires_final != null) spec.timeout_requires_final = !!opts.timeout_requires_final
+    if (opts.version != null && Number.isFinite(Number(opts.version))) spec.version = Number(opts.version)
+    return { type: 'barrier_symmetric', spec }
+}
+
 /**
  * Assemble a full, gateway-ready search query. Throws when the inputs can't
  * produce a runnable search (no symbols / timeframes / condition, or a
  * referenced indicator has no descriptor — which would silently stall).
  *
+ * `target_specs` (optional) requests result ENRICHMENT (e.g. Barrier Symmetric
+ * plans/outcomes) attached to rows that already matched the causal condition; it
+ * never changes which rows match.
+ *
  * @returns {{ query: object }}
  */
 export function buildSearchQuery({
     search_id, venue, symbols, range, timeframes, condition,
-    descriptors, result_window, max_results,
+    descriptors, result_window, max_results, target_specs,
 }) {
     if (!search_id) throw new Error('buildSearchQuery: search_id is required')
     if (!venue) throw new Error('buildSearchQuery: venue is required')
@@ -150,6 +197,17 @@ export function buildSearchQuery({
     const tfs = (Array.isArray(timeframes) ? timeframes : []).filter(Boolean)
     if (!tfs.length) throw new Error('buildSearchQuery: at least one timeframe is required')
     if (!condition) throw new Error('buildSearchQuery: a condition is required')
+
+    // Causal-only guard: a condition must never reference a Barrier Symmetric
+    // future-outcome field (the runtime rejects it as invalid_search_query).
+    const badField = conditionFields(condition).find((f) => BARRIER_OUTCOME_FIELDS.has(f.field))
+    if (badField) {
+        throw new Error(
+            `buildSearchQuery: '${badField.field}' is a Barrier Symmetric outcome ` +
+            'field and cannot be searched on — conditions must stay causal. ' +
+            'Use target enrichment (target_specs) to read outcomes instead.',
+        )
+    }
 
     const labels = conditionIndicatorLabels(condition)
     if (!labels.length) throw new Error('buildSearchQuery: the condition references no indicator')
@@ -180,6 +238,9 @@ export function buildSearchQuery({
     if (max_results != null && Number.isFinite(Number(max_results))) {
         query.max_results = toInt(max_results, 0)
     }
+    const specs = (Array.isArray(target_specs) ? target_specs : (target_specs ? [target_specs] : []))
+        .filter(Boolean)
+    if (specs.length) query.target_specs = specs
     return { query }
 }
 
@@ -217,6 +278,8 @@ export function projectMatchRow(result) {
         : []
     const signal = [result.timeframe, result.side].filter(Boolean).join(' ')
     const candle = result.candle || null
+    const targets = Array.isArray(result.target_evaluations)
+        ? result.target_evaluations.map(projectTargetEvaluation).filter(Boolean) : []
     return {
         ticker: result.symbol,
         venue: result.venue,
@@ -234,6 +297,32 @@ export function projectMatchRow(result) {
         observations: Array.isArray(result.observations) ? result.observations : [],
         crup_context: ctx,
         chart_window: result.chart_window || null,
+        // Target enrichment (e.g. Barrier Symmetric). `barrier` is the first
+        // barrier_symmetric evaluation for convenience.
+        targets,
+        barrier: targets.find((t) => t.type === 'barrier_symmetric') || null,
+    }
+}
+
+/**
+ * Normalize one `target_evaluations[]` entry. Keeps plan/outcome/analytics raw
+ * (decimal strings) for display + charting. `pending` is true when the outcome
+ * hasn't matured (outcome absent OR plan.evaluable_outcome === false) — render
+ * that as unavailable, NEVER as a miss (per the contract).
+ */
+export function projectTargetEvaluation(entry) {
+    if (!entry || !entry.evaluation) return null
+    const ev = entry.evaluation
+    const plan = ev.plan || null
+    const outcome = ev.outcome || null
+    const evaluable = !!(plan && plan.evaluable_outcome) && !!outcome
+    return {
+        type: entry.type || (plan && (plan.kind || '').toLowerCase()) || 'unknown',
+        hash: ev.target_spec_hash || (plan && plan.target_spec_hash) || null,
+        plan,
+        outcome,
+        analytics: ev.analytics_summary || null,
+        pending: !evaluable,
     }
 }
 

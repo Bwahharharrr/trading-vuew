@@ -640,6 +640,39 @@ export interface SearchResultWindow {
   after_bars: number
 }
 
+/**
+ * Barrier Symmetric target-enrichment spec (`SearchBarrierSymmetricTargetSpec`).
+ * All fields optional — the runtime applies documented defaults. This requests a
+ * forward target/stop plan + (when matured) outcome attached to matched rows; it
+ * is NOT a causal indicator and must never be referenced by a `condition`.
+ */
+export interface SearchBarrierSymmetricTargetSpec {
+  timeframe?: Timeframe | null
+  window_fwd?: number
+  window_atr?: number
+  /** Take-profit ATR multiple (default 0.9). */
+  k_take?: number
+  /** Stop ATR multiple (default = k_take). */
+  k_stop?: number | null
+  fees_bps?: number
+  slippage_bps?: number
+  half_spread_bps?: number
+  giveback_eps_bps?: number
+  post_hit_stop_relax_bps?: number
+  timeout_requires_final?: boolean
+  /** e.g. `'stop'`. */
+  post_hit_policy?: string
+  guard_use_close?: boolean
+  guard_min_consecutive_closes?: number
+  version?: number
+}
+
+/** A tagged target-enrichment spec for {@link SearchQuery.target_specs}. */
+export interface SearchTargetSpec {
+  type: 'barrier_symmetric'
+  spec: SearchBarrierSymmetricTargetSpec
+}
+
 /** The full query carried by a {@link SearchCandlesCommand}. */
 export interface SearchQuery {
   /** Caller-minted, unique; echoed on every event as `event.search_id`. */
@@ -655,6 +688,12 @@ export interface SearchQuery {
   result_window?: SearchResultWindow
   /** Cap on returned matches; the gateway stops scanning once reached. */
   max_results?: number
+  /**
+   * Optional result ENRICHMENT (Barrier Symmetric plans/outcomes). Does NOT
+   * change which rows match — plans/outcomes are attached to rows that already
+   * satisfied the causal `condition`. (Alias on the wire: `outcome_specs`.)
+   */
+  target_specs?: SearchTargetSpec[]
 }
 
 /** Start a historical indicator search (streamed, keyed by `query.search_id`). */
@@ -900,6 +939,85 @@ export interface SearchChartWindow {
   after_bars: number
 }
 
+/**
+ * Causal Barrier Symmetric PLAN for a matched row (`SearchBarrierSymmetricPlan`):
+ * chartable forward target/stop levels computed from data up to the row. Prices
+ * are {@link DecimalString}s. Band prices may be absent when ATR can't be formed.
+ */
+export interface SearchBarrierSymmetricPlan {
+  kind: 'BARRIER_SYMMETRIC'
+  target_spec_hash: string
+  timeframe: Timeframe
+  window_fwd: number
+  window_atr: number
+  k_take: number
+  k_stop: number
+  fees_bps: number
+  slippage_bps: number
+  half_spread_bps: number
+  entry_price: DecimalString
+  atr?: DecimalString
+  atr_pct?: DecimalString
+  sigma_log?: DecimalString
+  cost_log?: DecimalString
+  take_up_price?: DecimalString
+  stop_up_price?: DecimalString
+  take_dn_price?: DecimalString
+  stop_dn_price?: DecimalString
+  reward_risk_ratio?: number
+  expiry_timestamp_ms?: TimestampMs
+  /** When false, the outcome can't mature yet — render pending, NOT a miss. */
+  evaluable_outcome: boolean
+}
+
+/** Matured Barrier Symmetric OUTCOME (`SearchBarrierSymmetricOutcome`), optional. */
+export interface SearchBarrierSymmetricOutcome {
+  target_spec_hash: string
+  matured_at_ms: TimestampMs
+  evaluable_outcome: boolean
+  bull_hit: boolean
+  bear_hit: boolean
+  strength_up?: number | null
+  strength_dn?: number | null
+  mae_up?: number | null
+  mae_dn?: number | null
+  time_up?: number | null
+  time_dn?: number | null
+  quality_up?: number | null
+  quality_dn?: number | null
+}
+
+/** Cohort analytics for the spec (`SearchBarrierSymmetricAnalyticsSummary`), optional. */
+export interface SearchBarrierSymmetricAnalyticsSummary {
+  target_spec_hash: string
+  sample_count: number
+  bull_hit_count: number
+  bear_hit_count: number
+  bull_hit_rate?: number
+  bear_hit_rate?: number
+  bull_wilson_lower_bound?: number
+  bear_wilson_lower_bound?: number
+  reward_risk_ratio?: number
+  bull_expected_value?: number
+  bear_expected_value?: number
+  bull_full_kelly?: number
+  bear_full_kelly?: number
+}
+
+/** Barrier Symmetric evaluation attached to a match (`SearchBarrierSymmetricEvaluation`). */
+export interface SearchBarrierSymmetricEvaluation {
+  target_spec_hash: string
+  plan: SearchBarrierSymmetricPlan
+  outcome?: SearchBarrierSymmetricOutcome | null
+  analytics_summary?: SearchBarrierSymmetricAnalyticsSummary | null
+}
+
+/** One entry of {@link SearchMatchResult.target_evaluations}. */
+export interface SearchTargetEvaluation {
+  type: 'barrier_symmetric'
+  evaluation: SearchBarrierSymmetricEvaluation
+}
+
 /** A matched bar carried by {@link SearchMatchEvent} (`result`). */
 export interface SearchMatchResult {
   venue: string
@@ -914,6 +1032,8 @@ export interface SearchMatchResult {
   side: string
   crup_context?: SearchCrupContext | null
   chart_window: SearchChartWindow
+  /** Target enrichment requested via {@link SearchQuery.target_specs}. */
+  target_evaluations?: SearchTargetEvaluation[]
 }
 
 /** First event after `search_candles`: the query was accepted, the scan begins. */

@@ -106,6 +106,21 @@ describe('SearchSignalsForm', () => {
             conditionRows: [{ indicator: 'MACD(12,26,9)', field: 'histogram', op: 'gt', value: 0, bar_offset: 0 }],
             result_window: { before_bars: 200, after_bars: 600 },
             max_results: 100,
+            target: null, // Barrier Symmetric enrichment off by default
+        })
+    })
+
+    test('emits a Barrier Symmetric target spec when enrichment is enabled', async () => {
+        const w = mountForm()
+        await fillCondition(w, { indicator: 'MACD(12,26,9)', field: 'histogram', value: '0' })
+        // enable the target section (first checkbox after the condition rows)
+        const toggle = w.find('.ssf-target-head input[type="checkbox"]')
+        await toggle.setValue(true)
+        await w.find('.ssf-run').trigger('click')
+        const payload = w.emitted('run')[0][0]
+        expect(payload.target).toMatchObject({
+            window_fwd: 12, window_atr: 14, k_take: 0.9, k_stop: 0.9,
+            post_hit_policy: 'stop', guard_use_close: true, guard_min_consecutive_closes: 1,
         })
     })
 

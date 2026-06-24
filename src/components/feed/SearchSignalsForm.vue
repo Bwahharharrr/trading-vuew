@@ -82,6 +82,39 @@
         </label>
     </div>
 
+    <div class="ssf-row">
+        <label class="ssf-target-head">
+            <input type="checkbox" v-model="targetEnabled" />
+            <span class="ssf-label">Barrier Symmetric target enrichment</span>
+            <span class="ssf-hint">forward take/stop plan + matured outcome on each match</span>
+        </label>
+        <div v-if="targetEnabled" class="ssf-target ssf-grid4">
+            <label class="ssf-field"><span class="ssf-sublabel">Target TF</span>
+                <select class="ssf-input" v-model="target.timeframe">
+                    <option value="">(search tf)</option>
+                    <option v-for="tf in availableTimeframes" :key="tf" :value="tf">{{ tf }}</option>
+                </select></label>
+            <label class="ssf-field"><span class="ssf-sublabel">Fwd bars</span>
+                <input class="ssf-input" type="number" min="1" v-model.number="target.window_fwd" /></label>
+            <label class="ssf-field"><span class="ssf-sublabel">ATR bars</span>
+                <input class="ssf-input" type="number" min="1" v-model.number="target.window_atr" /></label>
+            <label class="ssf-field"><span class="ssf-sublabel">k take</span>
+                <input class="ssf-input" type="number" step="any" min="0" v-model.number="target.k_take" /></label>
+            <label class="ssf-field"><span class="ssf-sublabel">k stop</span>
+                <input class="ssf-input" type="number" step="any" min="0" v-model.number="target.k_stop" /></label>
+            <label class="ssf-field"><span class="ssf-sublabel">Post-hit</span>
+                <select class="ssf-input" v-model="target.post_hit_policy">
+                    <option value="stop">stop</option>
+                    <option value="continue">continue</option>
+                </select></label>
+            <label class="ssf-field"><span class="ssf-sublabel">Guard closes</span>
+                <input class="ssf-input" type="number" min="0" v-model.number="target.guard_min_consecutive_closes" /></label>
+            <label class="ssf-target-check">
+                <input type="checkbox" v-model="target.guard_use_close" /> Guard use close
+            </label>
+        </div>
+    </div>
+
     <div v-if="error" class="ssf-error">{{ error }}</div>
 
     <div class="ssf-actions">
@@ -131,6 +164,12 @@ export default {
             beforeBars: 200,
             afterBars: 600,
             maxResults: 100,
+            // Barrier Symmetric target enrichment (off by default; opt-in).
+            targetEnabled: false,
+            target: {
+                timeframe: '', window_fwd: 12, window_atr: 14, k_take: 0.9, k_stop: 0.9,
+                post_hit_policy: 'stop', guard_use_close: true, guard_min_consecutive_closes: 1,
+            },
             error: '',
         }
     },
@@ -236,6 +275,9 @@ export default {
                     after_bars: Math.max(0, Math.trunc(Number(this.afterBars)) || 0),
                 },
                 max_results: Math.max(1, Math.trunc(Number(this.maxResults)) || 1),
+                // Target enrichment: a Barrier Symmetric spec (or null when off).
+                // timeframe blank ⇒ omit so the gateway uses the search timeframe.
+                target: this.targetEnabled ? { ...this.target } : null,
             })
         },
     },
@@ -247,6 +289,15 @@ export default {
 .ssf-row { display: flex; flex-direction: column; gap: 6px; }
 .ssf-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .ssf-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.ssf-grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.ssf-target-head { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.ssf-target {
+    margin-top: 8px; padding: 10px;
+    background: rgba(53,167,118,0.05); border: 1px solid #233; border-radius: 6px;
+    align-items: end;
+}
+.ssf-sublabel { font-size: 10px; color: #808a9d; text-transform: uppercase; letter-spacing: 0.03em; }
+.ssf-target-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #d1d4dc; }
 .ssf-field { display: flex; flex-direction: column; gap: 4px; }
 .ssf-label { font-size: 11px; color: #808a9d; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 .ssf-hint { font-size: 11px; color: #5c6470; text-transform: none; font-weight: 400; }

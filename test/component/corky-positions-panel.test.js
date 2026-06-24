@@ -275,4 +275,34 @@ describe('CorkyPositionsPanel — search tabs', () => {
         expect(w.find('.sr-row.active').exists()).toBe(false)
         expect(w.find('.sr-status-row').exists()).toBe(false)
     })
+
+    // ── Barrier Symmetric target enrichment in results ──
+    const barrierTab = {
+        id: 'search-2', n: 2, search_id: 'cs-2', title: 'Search Results 2',
+        status: 'complete', running: false, progress: null, error: null, summary: null, query: {},
+        matches: [
+            { ...matchRow, barrier: { pending: false, hash: 'h', plan: { reward_risk_ratio: 1 }, outcome: { bull_hit: true, bear_hit: false }, analytics: { sample_count: 1840, bull_hit_rate: 0.563, bull_wilson_lower_bound: 0.54, bull_expected_value: 0.08, bull_full_kelly: 0.08, bear_hit_rate: 0.397, bear_wilson_lower_bound: 0.375, bear_expected_value: -0.25, bear_full_kelly: 0 } } },
+            { ...matchRow, barrier: { pending: true, hash: 'h', plan: {}, outcome: null, analytics: { sample_count: 95 } } },
+        ],
+    }
+
+    test('shows the Target column only when matches carry barrier enrichment', () => {
+        const plain = mountPanel({ activeTab: 'search-1', searchTabs: [searchTab], searchContext })
+        expect(plain.findAll('th').some((t) => t.text() === 'Target')).toBe(false)
+        const enriched = mountPanel({ activeTab: 'search-2', searchTabs: [barrierTab], searchContext })
+        expect(enriched.findAll('th').some((t) => t.text() === 'Target')).toBe(true)
+    })
+
+    test('renders matured outcome (bull ✓) and pending separately (never a miss)', () => {
+        const w = mountPanel({ activeTab: 'search-2', searchTabs: [barrierTab], searchContext })
+        const cells = w.findAll('.sr-tgt')
+        expect(cells).toHaveLength(2)
+        expect(cells[0].text()).toBe('bull ✓')
+        expect(cells[0].classes()).toContain('bull')
+        expect(cells[1].text()).toBe('pending')
+        expect(cells[1].classes()).toContain('pending')
+        // analytics ride along as the hover title
+        expect(cells[0].attributes('title')).toMatch(/n=1840/)
+        expect(cells[0].attributes('title')).toMatch(/bull 56\.3%/)
+    })
 })

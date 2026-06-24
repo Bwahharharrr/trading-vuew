@@ -25,6 +25,7 @@
             <tr>
                 <th>Ticker</th><th>Signal</th><th>Detection boxes</th>
                 <th class="num">Close</th><th>Date</th>
+                <th v-if="hasBarrier">Target</th>
             </tr>
         </thead>
         <tbody>
@@ -39,12 +40,15 @@
                     <td class="sr-boxes">{{ m.boxesText || '—' }}</td>
                     <td class="num">{{ m.close == null ? '—' : m.close }}</td>
                     <td class="time">{{ fmtDate(m.timestamp_ms) }}</td>
+                    <td v-if="hasBarrier" class="sr-target">
+                        <span class="sr-tgt" :class="barrierCell(m).cls" :title="barrierCell(m).title">{{ barrierCell(m).label }}</span>
+                    </td>
                 </tr>
                 <tr v-if="isActive(i) && activeNav.loading" class="sr-status-row">
-                    <td colspan="5"><span class="sr-spinner"></span>{{ activeNav.message || 'Loading onto chart…' }}</td>
+                    <td :colspan="hasBarrier ? 6 : 5"><span class="sr-spinner"></span>{{ activeNav.message || 'Loading onto chart…' }}</td>
                 </tr>
                 <tr v-else-if="isActive(i) && activeNav.error" class="sr-status-row is-error">
-                    <td colspan="5">⚠ {{ activeNav.message || 'Failed to load on chart' }}</td>
+                    <td :colspan="hasBarrier ? 6 : 5">⚠ {{ activeNav.message || 'Failed to load on chart' }}</td>
                 </tr>
             </template>
         </tbody>
@@ -74,6 +78,10 @@ export default {
             const n = this.nav
             return (n && n.tabId === this.tab.id) ? n : null
         },
+        // Show the Target column only when this search requested enrichment.
+        hasBarrier() {
+            return (this.tab.matches || []).some((m) => m && m.barrier)
+        },
         statusLabel() {
             switch (this.tab.status) {
                 case 'pending': return 'Starting…'
@@ -94,6 +102,33 @@ export default {
     },
     methods: {
         isActive(i) { return !!this.activeNav && this.activeNav.index === i },
+        // Compact Barrier Symmetric outcome cell. Pending/unavailable is its OWN
+        // state — never rendered as a miss (per the contract). The analytics
+        // cohort summary rides along as a hover title.
+        barrierCell(m) {
+            const b = m && m.barrier
+            if (!b) return { label: '—', cls: '', title: '' }
+            if (b.pending) return { label: 'pending', cls: 'pending', title: this.analyticsTitle(b) }
+            const o = b.outcome || {}
+            let label = 'no hit', cls = 'neutral'
+            if (o.bull_hit && o.bear_hit) { label = 'both'; cls = 'both' }
+            else if (o.bull_hit) { label = 'bull ✓'; cls = 'bull' }
+            else if (o.bear_hit) { label = 'bear ✓'; cls = 'bear' }
+            return { label, cls, title: this.analyticsTitle(b) }
+        },
+        analyticsTitle(b) {
+            const pct = (x) => (x == null ? '—' : (Number(x) * 100).toFixed(1) + '%')
+            const num = (x) => (x == null ? '—' : Number(x).toFixed(2))
+            const parts = []
+            if (b.plan && b.plan.reward_risk_ratio != null) parts.push(`R:R ${b.plan.reward_risk_ratio}`)
+            const a = b.analytics
+            if (a) {
+                parts.push(`n=${a.sample_count}`)
+                parts.push(`bull ${pct(a.bull_hit_rate)} (WLB ${pct(a.bull_wilson_lower_bound)}) EV ${num(a.bull_expected_value)} K ${num(a.bull_full_kelly)}`)
+                parts.push(`bear ${pct(a.bear_hit_rate)} (WLB ${pct(a.bear_wilson_lower_bound)}) EV ${num(a.bear_expected_value)} K ${num(a.bear_full_kelly)}`)
+            }
+            return parts.join('  |  ')
+        },
         sideClass(side) {
             const s = String(side || '').toLowerCase()
             if (s === 'bull' || s === 'long') return 'bull'
@@ -174,4 +209,11 @@ export default {
 .sr-side.bear { color: #e54150; }
 .sr-boxes { color: #b0b6c0; }
 .time { color: #808a9d; }
+.sr-target { white-space: nowrap; }
+.sr-tgt { font-size: 11px; padding: 1px 7px; border-radius: 9px; background: #2a2e39; color: #b0b6c0; cursor: help; }
+.sr-tgt.pending { background: #2a2e39; color: #808a9d; font-style: italic; }
+.sr-tgt.bull { background: rgba(35,167,118,0.18); color: #23a776; }
+.sr-tgt.bear { background: rgba(229,65,80,0.18); color: #e54150; }
+.sr-tgt.both { background: rgba(245,197,24,0.18); color: #f5c518; }
+.sr-tgt.neutral { background: #2a2e39; color: #808a9d; }
 </style>
