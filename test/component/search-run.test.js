@@ -54,6 +54,22 @@ describe('onRunSearch', () => {
         ])
     })
 
+    test('threads a Barrier Symmetric target spec onto the query when the form enables it', () => {
+        ctx.onRunSearch(form({ target: { window_fwd: 12, window_atr: 14, k_take: 0.9, k_stop: 0.9, post_hit_policy: 'stop', guard_use_close: true, guard_min_consecutive_closes: 1 } }))
+        const [query] = ctx.searchFeed.startSearch.mock.calls[0]
+        expect(query.target_specs).toHaveLength(1)
+        expect(query.target_specs[0].type).toBe('barrier_symmetric')
+        // tf defaulted to the first search timeframe
+        expect(query.target_specs[0].spec.timeframe).toBe('1h')
+        expect(query.target_specs[0].spec.window_fwd).toBe(12)
+    })
+
+    test('omits target_specs when the form leaves enrichment off (target null)', () => {
+        ctx.onRunSearch(form({ target: null }))
+        const [query] = ctx.searchFeed.startSearch.mock.calls[0]
+        expect('target_specs' in query).toBe(false)
+    })
+
     test('a symbol with no descriptors fails the tab with a clear message (no send)', () => {
         ctx.onRunSearch(form({ symbol: 'tETHUSD' }))
         const tab = ctx.searchTabs[0]
