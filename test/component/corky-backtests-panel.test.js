@@ -64,6 +64,29 @@ describe('CorkyBacktestsPanel', () => {
     expect(w.emitted('select-run')[0][0].run_id).toContain('ema')
   })
 
+  test('selecting a strategy also emits list-runs (one action)', async () => {
+    const w = mountPanel()
+    await w.findAll('select')[0].setValue('ema_cross_all_in_v1')
+    expect(w.emitted('list-runs')).toBeTruthy()
+  })
+
+  test('columns are sortable: clicking a header reorders the rows', async () => {
+    const twoRuns = [
+      { run_id: 'a', strategy: 'b_strat', symbols: ['tBTCUSD'], trade_timeframe: '1h', status: 'completed', completed_at_ms: 200 },
+      { run_id: 'b', strategy: 'a_strat', symbols: ['tETHUSD'], trade_timeframe: '1h', status: 'failed', completed_at_ms: 100 },
+    ]
+    const w = mountPanel({ runs: twoRuns })
+    // default sort = completed desc → run 'a' (200) first
+    expect(w.findAll('.bt-runs .bt-row')[0].text()).toContain('b_strat')
+    // click "Strategy" header → asc by strategy → 'a_strat' first
+    const stratHeader = w.findAll('.bt-sortable th')[0]
+    await stratHeader.trigger('click')
+    expect(w.findAll('.bt-runs .bt-row')[0].text()).toContain('a_strat')
+    // click again → desc → 'b_strat' first
+    await stratHeader.trigger('click')
+    expect(w.findAll('.bt-runs .bt-row')[0].text()).toContain('b_strat')
+  })
+
   test('selected run shows metrics + progress; plot-run + select-trade emit', async () => {
     const w = mountPanel({
       selectedRun: runs[0],

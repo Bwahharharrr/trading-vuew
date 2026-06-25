@@ -45,17 +45,24 @@
         <!-- Runs list -->
         <div class="bt-runs">
             <div v-if="loading && !runs.length" class="bt-msg">Loading…</div>
-            <div v-else-if="!runs.length" class="bt-msg">No runs. Pick filters and Load runs.</div>
-            <table v-else class="bt-table">
-                <thead><tr><th>Strategy</th><th>Symbols</th><th>TF</th><th>Status</th><th>Completed</th></tr></thead>
+            <div v-else-if="!runs.length" class="bt-msg">No backtest runs in the store yet.</div>
+            <table v-else class="bt-table bt-sortable">
+                <thead><tr>
+                    <th v-for="c in columns" :key="c.key" @click="sortBy(c.key)" :class="{ sorted: sortKey === c.key }">
+                        {{ c.label }}<span v-if="sortKey === c.key" class="bt-sort">{{ sortDir === 1 ? '▲' : '▼' }}</span>
+                    </th>
+                </tr></thead>
                 <tbody>
-                    <tr v-for="r in runs" :key="r.run_id" class="bt-row"
+                    <tr v-for="r in sortedRuns" :key="r.run_id" class="bt-row"
                         :class="{ active: selectedRun && selectedRun.run_id === r.run_id }"
-                        @click="$emit('select-run', r)">
+                        tabindex="0" role="button"
+                        @click="$emit('select-run', r)"
+                        @keydown.enter.prevent="$emit('select-run', r)">
                         <td>{{ r.strategy }}</td>
                         <td class="sym">{{ (r.symbols||[]).join(',') }}</td>
                         <td>{{ r.trade_timeframe }}</td>
                         <td><span class="bt-badge" :class="r.status">{{ r.status }}</span></td>
+                        <td class="time">{{ fmtTime(r.started_at_ms) }}</td>
                         <td class="time">{{ fmtTime(r.completed_at_ms) }}</td>
                     </tr>
                 </tbody>
@@ -151,7 +158,37 @@ export default {
         error: { type: String, default: null },
     },
     emits: ['refresh-strategies', 'update:filter', 'list-runs', 'inspect-strategy', 'select-run', 'plot-run', 'select-trade'],
+    data() {
+        return {
+            // Default newest-first by completion.
+            sortKey: 'completed_at_ms',
+            sortDir: -1,   // 1 asc, -1 desc
+            columns: [
+                { key: 'strategy', label: 'Strategy' },
+                { key: 'symbols', label: 'Symbols' },
+                { key: 'trade_timeframe', label: 'TF' },
+                { key: 'status', label: 'Status' },
+                { key: 'started_at_ms', label: 'Started' },
+                { key: 'completed_at_ms', label: 'Completed' },
+            ],
+        }
+    },
     computed: {
+        // Client-side sortable run list (the backend returns the full set; the
+        // user orders by any column). Symbols sort by their joined string.
+        sortedRuns() {
+            const key = this.sortKey
+            const dir = this.sortDir
+            const val = (r) => {
+                const v = key === 'symbols' ? (r.symbols || []).join(',') : r[key]
+                return v == null ? '' : v
+            }
+            return this.runs.slice().sort((a, b) => {
+                const av = val(a); const bv = val(b)
+                if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir
+                return String(av).localeCompare(String(bv)) * dir
+            })
+        },
         selectedStrategy() {
             const n = this.filters.strategy
             return n ? this.strategies.find((s) => s.name === n) || null : null
@@ -170,9 +207,15 @@ export default {
         periodReturns() { return (this.detail && this.detail.report && this.detail.report.period_returns) || [] },
     },
     methods: {
+        sortBy(key) {
+            if (this.sortKey === key) this.sortDir = -this.sortDir
+            else { this.sortKey = key; this.sortDir = 1 }
+        },
         onStrategy(name) {
             this.$emit('update:filter', { strategy: name })
+            // Selecting a strategy reloads its runs in one action (and inspects it).
             if (name) this.$emit('inspect-strategy', name)
+            this.$emit('list-runs')
         },
         indLabel(i) {
             const p = i.params && Object.values(i.params).join(',')
@@ -221,6 +264,10 @@ export default {
 .bt-msg { padding: 16px; color: #808a9d; text-align: center; }
 .bt-table { width: 100%; border-collapse: collapse; }
 .bt-table th { position: sticky; top: 0; background: #131722; color: #808a9d; font-weight: 500; text-align: left; padding: 6px 10px; border-bottom: 1px solid #2a2e39; white-space: nowrap; }
+.bt-sortable th { cursor: pointer; user-select: none; }
+.bt-sortable th:hover { color: #d1d4dc; }
+.bt-sortable th.sorted { color: #35a776; }
+.bt-sort { margin-left: 4px; font-size: 9px; }
 .bt-table td { padding: 5px 10px; border-bottom: 1px solid #1c212e; white-space: nowrap; }
 .bt-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .bt-row { cursor: pointer; }

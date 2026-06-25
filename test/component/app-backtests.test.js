@@ -77,6 +77,34 @@ describe('strategy + run loading', () => {
   })
 })
 
+describe('auto-load runs on opening the Backtests tab', () => {
+  function tabCtx() {
+    const c = {
+      positionsActiveTab: 'open', backtests: { runs: [], loading: false },
+      backtestsFeed: { listRuns: vi.fn(async () => []) },
+      _ensureHistoryLoaded: vi.fn(), _positionsSyncStreams: vi.fn(), saveStateToStorage: vi.fn(),
+      btListRuns: vi.fn(),
+    }
+    c.setPositionsTab = M.setPositionsTab
+    return c
+  }
+  test('switching to backtests loads all runs once', () => {
+    const c = tabCtx()
+    c.setPositionsTab('backtests')
+    expect(c.btListRuns).toHaveBeenCalledTimes(1)
+  })
+  test('does not reload if runs already present', () => {
+    const c = tabCtx(); c.backtests.runs = [{ run_id: 'r1' }]
+    c.setPositionsTab('backtests')
+    expect(c.btListRuns).not.toHaveBeenCalled()
+  })
+  test('other tabs do not trigger a run load', () => {
+    const c = tabCtx()
+    c.setPositionsTab('open')
+    expect(c.btListRuns).not.toHaveBeenCalled()
+  })
+})
+
 describe('btSelectRun progress', () => {
   test('completed run → one-shot progress, no live subscribe', async () => {
     await ctx.btSelectRun(RUN)

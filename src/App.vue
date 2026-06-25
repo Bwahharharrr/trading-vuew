@@ -1752,6 +1752,11 @@ export default {
         setPositionsTab(tab) {
             this.positionsActiveTab = tab
             if (tab === 'historical') this._ensureHistoryLoaded()
+            // Open the Backtests tab → load ALL runs once (no strategy filter),
+            // so the user sees the run list without clicking "Load runs".
+            if (tab === 'backtests' && !this.backtests.runs.length && !this.backtests.loading) {
+                this.btListRuns()
+            }
             this._positionsSyncStreams()
             this.saveStateToStorage()
         },
