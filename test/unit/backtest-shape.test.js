@@ -7,10 +7,12 @@ import { detectRunShape, runShapeLabel, RUN_SHAPES } from '../../src/helpers/fee
 
 describe('detectRunShape — fast path (run_id + summary)', () => {
   it('normal single-symbol backtest', () => {
-    const s = detectRunShape({ run_id: 'ema_cross_all_in_v1:BITFINEX:tBTCUSD:1h:0:100', symbols: ['tBTCUSD'] })
+    // trailing :N here is an END TIMESTAMP, not a candidate count.
+    const s = detectRunShape({ run_id: 'ema_cross_all_in_v1:BITFINEX:tBTCUSD:1h:1388534400000:1782352800000', symbols: ['tBTCUSD'] })
     expect(s.kind).toBe('normal')
     expect(s.chartable).toBe(true)
     expect(s.multiCandidate).toBe(false)
+    expect(s.candidateCount).toBe(null)   // not the end timestamp
   })
   it('portfolio = multi-symbol normal run', () => {
     const s = detectRunShape({ run_id: 'strat:BITFINEX:multi:1h:0:100', symbols: ['tBTCUSD', 'tETHUSD'] })

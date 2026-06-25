@@ -56,10 +56,13 @@ export function detectRunShape(run = {}, artifact = null) {
   }
 
   const multiCandidate = kind === 'sweep' || kind === 'optimize' || kind === 'universe'
+  // Candidate count only applies to multi-candidate studies; for normal/portfolio
+  // runs the run_id's trailing :N is an END TIMESTAMP, not a count.
   let candidateCount = null
-  const gridCount = artifact && artifact.plan ? Number(artifact.plan.parameter_grid_count) : NaN
-  if (Number.isFinite(gridCount) && gridCount > 1) candidateCount = gridCount
-  else candidateCount = trailingCount(id)
+  if (multiCandidate) {
+    const gridCount = artifact && artifact.plan ? Number(artifact.plan.parameter_grid_count) : NaN
+    candidateCount = (Number.isFinite(gridCount) && gridCount > 1) ? gridCount : trailingCount(id)
+  }
 
   // Universe = a compact metric study: it stores candidate rankings + aggregate
   // robustness + per-symbol metrics, NOT full fill/equity timelines, so its
