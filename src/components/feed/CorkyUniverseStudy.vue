@@ -87,31 +87,47 @@ function pick(obj, keys) {
     return undefined
 }
 // Flatten a candidate/symbol's nested metrics up so pick() finds fields at the
-// top level regardless of nesting (artifact.runs[] nest under report.metrics;
-// universe rows may nest under metrics; some flatten).
+// top level regardless of nesting: sweep runs nest under report.metrics; UNIVERSE
+// candidates nest robustness metrics under `aggregate`; per-symbol rows under
+// `metrics`; some flatten. Merge all so the column `names` resolve either way.
 function look(o) {
     if (!o || typeof o !== 'object') return {}
-    return { ...o, ...(o.metrics || {}), ...((o.report && o.report.metrics) || {}) }
+    return { ...o, ...(o.metrics || {}), ...((o.report && o.report.metrics) || {}), ...(o.aggregate || {}) }
 }
 
-// Candidate columns (sweep + universe). Absent metrics render "—".
-const CANDIDATE_COLS = [
+// SWEEP / optimize candidates carry a single backtest's metrics (report.metrics).
+const SWEEP_COLS = [
     { key: 'rank', label: 'Rank', fmt: 'count', names: ['rank'] },
     { key: 'netprofit', label: 'Net P/L', fmt: 'money', sign: true, names: ['total_net_profit'] },
-    { key: 'ret', label: 'Return', fmt: 'pct', sign: true, names: ['strategy_return_pct', 'median_return_pct', 'return_pct'] },
-    { key: 'pf', label: 'PF', fmt: 'ratio', names: ['profit_factor', 'median_profit_factor'] },
+    { key: 'ret', label: 'Return', fmt: 'pct', sign: true, names: ['strategy_return_pct', 'return_pct'] },
+    { key: 'pf', label: 'PF', fmt: 'ratio', names: ['profit_factor'] },
     { key: 'recovery', label: 'Recovery', fmt: 'ratio', names: ['recovery_factor'] },
+    { key: 'sharpe', label: 'Sharpe', fmt: 'ratio', names: ['sharpe_ratio'] },
     { key: 'dd', label: 'Max DD', fmt: 'money', names: ['max_equity_drawdown'] },
     { key: 'trades', label: 'Trades', fmt: 'count', names: ['total_trades'] },
-    { key: 'score', label: 'Score', fmt: 'ratio', title: 'Robustness score (universe)', names: ['robust_cross_symbol_score_v1', 'robust_score', 'robustness_score', 'score'] },
-    { key: 'profitable', label: 'Profitable', fmt: 'count', title: 'Profitable symbol count (universe)', names: ['profitable_symbol_count', 'profitable_symbols', 'num_profitable_symbols'] },
+]
+// UNIVERSE candidates carry CROSS-SYMBOL ROBUSTNESS aggregates (median_*/score/
+// counts) — there is no single Net P/L (mixed currencies), by design.
+const UNIVERSE_COLS = [
+    { key: 'rank', label: 'Rank', fmt: 'count', names: ['rank'] },
+    { key: 'score', label: 'Score', fmt: 'ratio', title: 'Robust cross-symbol score', names: ['score', 'robust_cross_symbol_score_v1', 'robust_score'] },
+    { key: 'medreturn', label: 'Med Return', fmt: 'ratio', sign: true, title: 'Median per-symbol return', names: ['median_return'] },
+    { key: 'medpf', label: 'Med PF', fmt: 'ratio', title: 'Median profit factor', names: ['median_pf', 'median_profit_factor'] },
+    { key: 'medrecovery', label: 'Med Recovery', fmt: 'ratio', title: 'Median recovery factor', names: ['median_recovery'] },
+    { key: 'medsharpe', label: 'Med Sharpe', fmt: 'ratio', title: 'Median Sharpe ratio', names: ['median_sharpe'] },
+    { key: 'medsortino', label: 'Med Sortino', fmt: 'ratio', title: 'Median Sortino ratio', names: ['median_sortino'] },
+    { key: 'medvsbh', label: 'vs B&H', fmt: 'pct', sign: true, title: 'Median strategy vs buy & hold return', names: ['median_strategy_vs_buy_hold_return_pct'] },
+    { key: 'profitable', label: 'Profitable', fmt: 'count', title: 'Profitable symbols', names: ['profitable'] },
+    { key: 'beatbh', label: 'Beat B&H', fmt: 'count', title: 'Symbols beating buy & hold', names: ['beat_buy_hold'] },
+    { key: 'trades', label: 'Trades', fmt: 'count', names: ['total_trades'] },
 ]
 const PER_SYMBOL_COLS = [
-    { key: 'ret', label: 'Return', fmt: 'pct', sign: true, names: ['return_pct', 'total_return_pct', 'net_return_pct'] },
+    { key: 'ret', label: 'Return', fmt: 'pct', sign: true, names: ['strategy_return_pct', 'return_pct', 'total_return_pct'] },
     { key: 'netprofit', label: 'Net P/L', fmt: 'money', sign: true, names: ['total_net_profit'] },
     { key: 'pf', label: 'PF', fmt: 'ratio', names: ['profit_factor'] },
-    { key: 'dd', label: 'Max DD', fmt: 'money', names: ['max_equity_drawdown', 'max_drawdown_pct'] },
-    { key: 'trades', label: 'Trades', fmt: 'count', names: ['total_trades', 'trades', 'trade_count'] },
+    { key: 'sharpe', label: 'Sharpe', fmt: 'ratio', names: ['sharpe_ratio'] },
+    { key: 'dd', label: 'Max DD', fmt: 'money', names: ['max_equity_drawdown'] },
+    { key: 'trades', label: 'Trades', fmt: 'count', names: ['total_trades'] },
 ]
 
 export default {
@@ -128,12 +144,16 @@ export default {
     emits: ['select-candidate'],
     data() { return { expanded: -1, showRaw: false } },
     computed: {
-        candidateCols() { return CANDIDATE_COLS },
+        // Universe candidates carry cross-symbol robustness aggregates; sweep/
+        // optimize candidates carry a single backtest's metrics.
+        candidateCols() { return this.chartable ? SWEEP_COLS : UNIVERSE_COLS },
         perSymbolCols() { return PER_SYMBOL_COLS },
-        // The sub-object the rankings live under (feature-detected).
+        // The sub-object the rankings live under (feature-detected). NB: an
+        // `optimization` object is METADATA, not the ranking container — don't
+        // route candidate lookup through it.
         study() {
             const a = this.artifact || {}
-            return a.universe || a.study || a.metric_study || a.optimization || a
+            return a.universe || a.study || a.metric_study || a
         },
         // Feature-detected, normalized candidate rows.
         candidates() {
@@ -143,13 +163,13 @@ export default {
                 || a.runs || (a.summary && a.summary.runs) || a.candidates || a.rankings || []
             if (!Array.isArray(raw)) return []
             return raw.map((c) => {
-                const lk = look(c)
+                const lk = look(c)   // merges metrics / report.metrics / aggregate
                 const row = {
                     runIndex: pick(c, ['run_index', 'index', 'candidate_index']),
                     params: pick(c, ['parameters', 'params', 'parameter_set', 'parameter_values']) || {},
                     perSymbol: this._perSymbol(c),
                 }
-                for (const col of CANDIDATE_COLS) row[col.key] = pick(lk, col.names)
+                for (const col of this.candidateCols) row[col.key] = pick(lk, col.names)
                 return row
             })
         },

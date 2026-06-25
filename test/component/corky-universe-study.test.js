@@ -9,58 +9,70 @@ import { test, expect, describe } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CorkyUniverseStudy from '../../src/components/feed/CorkyUniverseStudy.vue'
 
+// The REAL universe artifact shape (confirmed live): candidates under
+// artifact.runs[], cross-symbol robustness aggregates under `aggregate`, and
+// per-symbol standard metrics under symbols[].metrics.
 const ARTIFACT = {
-  optimization: { sampler: 'adaptive_tpe', objective: 'robust_cross_symbol_score_v1' },
-  universe: {
-    candidates: [
-      { run_index: 0, parameters: { fast: 10, slow: 50 }, robust_cross_symbol_score_v1: '0.82', profitable_symbol_count: 7, median_return_pct: '0.34', max_drawdown_pct: '0.18', recovery_factor: '2.1', profit_factor: '1.6',
-        per_symbol: [{ symbol: 'tBTCUSD', return_pct: '0.5', profit_factor: '1.8', max_drawdown_pct: '0.12', total_trades: 30 }] },
-      { run_index: 1, parameters: { fast: 12, slow: 60 }, robust_cross_symbol_score_v1: '0.71', profitable_symbol_count: 5, median_return_pct: '-0.05', max_drawdown_pct: '0.30', recovery_factor: '0.9', profit_factor: '0.95',
-        per_symbol: { tETHUSD: { return_pct: '-0.1', profit_factor: '0.8' } } },   // MAP form, not array
-    ],
-  },
+  optimization: { sampler: 'low_discrepancy', objective: 'robust_cross_symbol_score_v1', candidate_count: 60 },
+  runs: [
+    { run_index: 52, rank: 1, parameters: { values: { fast_period: 20, slow_period: 150 } },
+      aggregate: { score: '1414.6', median_pf: '1.40', median_recovery: '0.866', median_sharpe: '0.505', median_sortino: '1.75', median_return: '2.256', median_strategy_vs_buy_hold_return_pct: '1.847', profitable: 14, beat_buy_hold: 13, total_trades: 1412 },
+      symbols: [{ symbol: 'tAAVE:USD', metrics: { strategy_return_pct: '0.1617', total_net_profit: '1617.08', profit_factor: '1.045', sharpe_ratio: '0.3', max_equity_drawdown: '1694.6', total_trades: 90 } }] },
+    { run_index: 7, rank: 2, parameters: { values: { fast_period: 25, slow_period: 200 } },
+      aggregate: { score: '1200.1', median_pf: '1.10', median_recovery: '0.5', median_sharpe: '0.31', median_sortino: '1.1', median_return: '-0.05', profitable: 9, beat_buy_hold: 6, total_trades: 980 },
+      symbols: { tETHBTC: { metrics: { strategy_return_pct: '-0.1', profit_factor: '0.8' } } } },   // MAP form
+  ],
 }
 
-const mountStudy = (props = {}) => mount(CorkyUniverseStudy, { props: { run: { run_id: 'universe:x' }, artifact: ARTIFACT, ...props } })
+const mountStudy = (props = {}) => mount(CorkyUniverseStudy, { props: { run: { run_id: 'optimize-universe:x' }, artifact: ARTIFACT, chartable: false, ...props } })
 
 describe('CorkyUniverseStudy', () => {
   test('shows the metric-study-only note + optimization metadata', () => {
     const w = mountStudy()
     expect(w.find('.us-note').text()).toContain('Metric study only')
     const meta = w.find('.us-meta').text()
-    expect(meta).toContain('adaptive_tpe')
+    expect(meta).toContain('low_discrepancy')
     expect(meta).toContain('robust_cross_symbol_score_v1')
   })
 
-  test('renders ranked candidate rows with detected metrics + params', () => {
+  test('renders universe robustness aggregates (score, med PF/recovery/Sharpe/Sortino, counts)', () => {
     const w = mountStudy()
+    const headers = w.findAll('.us-table thead th').map((h) => h.text())
+    expect(headers).toContain('Med Sharpe')      // the requested Sharpe column
+    expect(headers).toContain('Med Sortino')
+    expect(headers).toContain('Score')
     const rows = w.findAll('.us-table tbody .bt-row')
     expect(rows).toHaveLength(2)
     const r0 = rows[0].text()
-    expect(r0).toContain('0.82')      // robustness score
-    expect(r0).toContain('7')         // profitable symbols
-    expect(r0).toContain('34.00%')    // median_return_pct fraction → %
-    expect(r0).toContain('1.60')      // profit factor
-    expect(r0).toContain('fast=10')   // params
+    expect(r0).toContain('1414.60')    // score (aggregate, ratio)
+    expect(r0).toContain('1.40')       // median_pf
+    expect(r0).toContain('0.87')       // median_recovery (2dp)
+    expect(r0).toContain('0.51')       // median_sharpe
+    expect(r0).toContain('1.75')       // median_sortino
+    expect(r0).toContain('14')         // profitable count
+    expect(r0).toContain('13')         // beat_buy_hold count
+    expect(r0).toContain('fast_period=20')   // parameters.values
   })
 
   test('expanding a candidate shows the per-symbol breakdown (array + map forms)', async () => {
     const w = mountStudy()
     const rows = w.findAll('.us-table tbody .bt-row')
     await rows[0].trigger('click')
-    expect(w.find('.us-subtable').text()).toContain('tBTCUSD')
-    expect(w.find('.us-subtable').text()).toContain('50.00%')   // per-symbol return
-    await rows[1].trigger('click')                              // map-form per_symbol
-    expect(w.find('.us-subtable').text()).toContain('tETHUSD')
+    const sub = w.find('.us-subtable').text()
+    expect(sub).toContain('tAAVE:USD')
+    expect(sub).toContain('16.17%')    // per-symbol strategy_return_pct fraction → %
+    expect(sub).toContain('1,617.08')  // per-symbol net profit
+    await rows[1].trigger('click')     // map-form symbols
+    expect(w.find('.us-subtable').text()).toContain('tETHBTC')
   })
 
-  test('feature-detects an alternate artifact shape (rankings / score)', () => {
-    const alt = { rankings: [{ index: 0, params: { p: 1 }, score: '0.5', return_pct: '0.2', profit_factor: '1.1' }] }
+  test('feature-detects an alternate candidate container (rankings)', () => {
+    const alt = { rankings: [{ run_index: 0, parameters: { values: { p: 1 } }, aggregate: { score: '0.5', median_pf: '1.1' } }] }
     const w = mountStudy({ artifact: alt })
     const r = w.find('.us-table tbody .bt-row')
     expect(r.exists()).toBe(true)
-    expect(r.text()).toContain('0.50')    // score under a different key
-    expect(r.text()).toContain('20.00%')  // return
+    expect(r.text()).toContain('0.50')   // score (aggregate) under the rankings container
+    expect(r.text()).toContain('p=1')    // params.values
   })
 
   test('raw JSON fallback is always available', async () => {
