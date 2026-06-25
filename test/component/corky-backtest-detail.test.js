@@ -12,10 +12,13 @@ const RUN = {
   venue: 'BITFINEX', symbols: ['tBTCUSD'], trade_timeframe: '1h', status: 'completed',
   started_at_ms: 3600000, completed_at_ms: 7200000,
   metrics: {
-    total_net_profit: '1250.50', gross_profit: '2000', gross_loss: '749.50',
+    total_net_profit: '1250.50', strategy_return_pct: '0.125', gross_profit: '2000', gross_loss: '749.50',
     profit_factor: '1.3282', recovery_factor: '1.5622', max_equity_drawdown: '800.25',
-    total_trades: 34, top_1_trade_profit_share: '0.32',
-    equity_curve_r2: '0.91', custom_extra_metric: '7',
+    sharpe_ratio: '1.8', sortino_ratio: '2.4',
+    strategy_vs_buy_hold_return_pct: '0.04', strategy_beat_buy_hold: true, buy_hold_quantity: '0.25000000',
+    total_trades: 34, positive_trade_pct: '0.58', top_1_trade_profit_share: '0.32', top_5_trade_profit_share: '0.61',
+    positive_period_pct: '0.55', period_return_consistency: '0.50', equity_curve_r2: '0.91',
+    custom_extra_metric: '7',
   },
 }
 const DETAIL = {
@@ -28,6 +31,10 @@ const DETAIL = {
       { name: 'total_net_profit', unit: 'currency', precision: 2, description: 'Net' },
       { name: 'profit_factor', unit: 'ratio', precision: 4, description: 'PF' },
       { name: 'top_1_trade_profit_share', unit: 'percent', precision: 2, description: 'Top-1' },
+      { name: 'strategy_vs_buy_hold_return_pct', unit: 'percent', precision: 2, description: 'vs B&H' },
+      { name: 'strategy_beat_buy_hold', unit: 'boolean', description: 'Beat?' },
+      { name: 'buy_hold_quantity', unit: 'quantity', precision: 8, description: 'B&H qty' },
+      { name: 'sharpe_ratio', unit: 'ratio', precision: 2, description: 'Sharpe' },
     ],
   },
 }
@@ -37,26 +44,38 @@ function mountDetail(props = {}) {
 }
 
 describe('CorkyBacktestDetail', () => {
-  test('renders grouped metric sections', () => {
+  test('renders grouped metric sections (per the gateway display groups)', () => {
     const w = mountDetail()
     const titles = w.findAll('.btd-msection').map((t) => t.text())
-    expect(titles).toContain('P&L')
-    expect(titles).toContain('Ratios / Risk')
-    expect(titles).toContain('Trades')
-    expect(titles).toContain('Equity Curve')
+    expect(titles).toContain('Performance')
+    expect(titles).toContain('Risk / Drawdown')
+    expect(titles).toContain('Buy & Hold')
+    expect(titles).toContain('Profit Distribution')
+    expect(titles).toContain('Period Consistency')
     // unknown metric → trailing "Other" group (never dropped)
     expect(titles).toContain('Other')
   })
 
-  test('grid uses descriptor formatting (percent is a fraction; ratio precision)', () => {
+  test('grid uses descriptor formatting (percent fraction, ratio precision, boolean, quantity)', () => {
     const w = mountDetail()
     const text = w.find('.btd-mtable').text()
     expect(text).toContain('Profit Factor')
-    expect(text).toContain('1.3282')   // ratio precision 4
-    expect(text).toContain('32.00%')   // 0.32 fraction → 32%
+    expect(text).toContain('1.3282')      // ratio precision 4
+    expect(text).toContain('32.00%')      // 0.32 fraction → 32%
+    expect(text).toContain('4.00%')       // strategy_vs_buy_hold_return_pct 0.04 → 4%
+    expect(text).toContain('✓ Yes')       // strategy_beat_buy_hold boolean true
+    expect(text).toContain('Sharpe')
+    expect(text).toContain('1.80')        // sharpe ratio precision 2
+    expect(text).toContain('0.25')        // buy_hold_quantity
     // short labels, not the long descriptor sentences
     expect(text).toContain('Net Profit')
-    expect(text).not.toContain('Final account equity')
+  })
+
+  test('beat-buy-hold boolean cell is coloured green when true', () => {
+    const w = mountDetail()
+    const beatCell = w.findAll('.btd-mval').find((c) => c.text() === '✓ Yes')
+    expect(beatCell).toBeTruthy()
+    expect(beatCell.classes()).toContain('pos')
   })
 
   test('each rendered metric has a label + value cell, in one aligned table', () => {

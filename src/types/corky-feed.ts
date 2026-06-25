@@ -1273,7 +1273,9 @@ export interface ChartBacktestEquityCurvePoint {
  */
 export interface ChartBacktestMetricDescriptor {
   name: string
-  unit: 'currency' | 'ratio' | 'percent' | 'count' | 'bps' | (string & {})
+  // `quantity` = a decimal quantity; `boolean` = a real JS boolean value (e.g.
+  // strategy_beat_buy_hold). Unknown units fall through (string & {}).
+  unit: 'currency' | 'ratio' | 'percent' | 'count' | 'quantity' | 'boolean' | 'bps' | (string & {})
   precision?: number
   description?: string
 }

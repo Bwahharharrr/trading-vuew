@@ -97,23 +97,35 @@
 // long-form sentence; the grid wants a compact column header). Unknown keys fall
 // back to a humanized version of the metric name.
 const SHORT_LABELS = {
-    total_net_profit: 'Net Profit', gross_profit: 'Gross Profit', gross_loss: 'Gross Loss',
-    expected_payoff: 'Expected Payoff', initial_deposit: 'Initial Dep.', ending_equity: 'Ending Eq.',
-    profit_factor: 'Profit Factor', recovery_factor: 'Recovery Fac.',
-    max_equity_drawdown: 'Max DD', absolute_drawdown: 'Absolute DD',
-    total_trades: 'Total Trades', largest_winner: 'Largest Win', largest_loser: 'Largest Loss',
-    top_1_trade_profit_share: 'Top-1 Share',
+    // Performance
+    total_net_profit: 'Net Profit', strategy_return_pct: 'Strategy Return',
+    ending_equity: 'Ending Eq.', initial_deposit: 'Initial Dep.', expected_payoff: 'Expected Payoff',
+    gross_profit: 'Gross Profit', gross_loss: 'Gross Loss', profit_factor: 'Profit Factor',
+    // Risk / Drawdown
+    max_equity_drawdown: 'Max DD', absolute_drawdown: 'Absolute DD', recovery_factor: 'Recovery Fac.',
+    sharpe_ratio: 'Sharpe', sortino_ratio: 'Sortino',
+    // Buy & Hold
+    strategy_vs_buy_hold_return_pct: 'vs B&H Return', strategy_beat_buy_hold: 'Beat B&H?',
+    strategy_vs_buy_hold_profit: 'vs B&H Profit', buy_hold_return_pct: 'B&H Return',
+    buy_hold_net_profit: 'B&H Net Profit', buy_hold_ending_equity: 'B&H End Equity',
+    buy_hold_start_price: 'B&H Start Px', buy_hold_end_price: 'B&H End Px', buy_hold_quantity: 'B&H Qty',
+    // Profit distribution
+    total_trades: 'Total Trades', positive_trade_pct: 'Win %',
+    top_1_trade_profit_share: 'Top-1 Share', top_5_trade_profit_share: 'Top-5 Share',
+    profit_concentration_hhi: 'Concentration', largest_winner: 'Largest Win', largest_loser: 'Largest Loss',
     equity_curve_slope: 'Slope', equity_curve_r2: 'R²',
-    period_return_consistency: 'Pos. Periods', period_return_count: '# Periods',
+    // Period consistency
+    positive_period_pct: 'Positive Periods', period_return_consistency: 'Period Consistency', period_return_count: '# Periods',
 }
 
-// Logical grouping of the known metrics. Any metric NOT listed here falls into a
-// trailing "Other" group so nothing is ever silently dropped.
+// Logical grouping (per the gateway's display guidance). Any metric NOT listed
+// here falls into a trailing "Other" group so nothing is ever silently dropped.
 const GROUPS = [
-    { title: 'P&L', keys: ['total_net_profit', 'gross_profit', 'gross_loss', 'expected_payoff', 'initial_deposit', 'ending_equity'] },
-    { title: 'Ratios / Risk', keys: ['profit_factor', 'recovery_factor', 'max_equity_drawdown', 'absolute_drawdown'] },
-    { title: 'Trades', keys: ['total_trades', 'largest_winner', 'largest_loser', 'top_1_trade_profit_share'] },
-    { title: 'Equity Curve', keys: ['equity_curve_slope', 'equity_curve_r2', 'period_return_consistency', 'period_return_count'] },
+    { title: 'Performance', keys: ['total_net_profit', 'strategy_return_pct', 'ending_equity', 'initial_deposit', 'expected_payoff', 'gross_profit', 'gross_loss', 'profit_factor'] },
+    { title: 'Risk / Drawdown', keys: ['max_equity_drawdown', 'absolute_drawdown', 'recovery_factor', 'sharpe_ratio', 'sortino_ratio'] },
+    { title: 'Buy & Hold', keys: ['strategy_vs_buy_hold_return_pct', 'strategy_beat_buy_hold', 'strategy_vs_buy_hold_profit', 'buy_hold_return_pct', 'buy_hold_net_profit', 'buy_hold_ending_equity', 'buy_hold_start_price', 'buy_hold_end_price', 'buy_hold_quantity'] },
+    { title: 'Profit Distribution', keys: ['total_trades', 'positive_trade_pct', 'top_1_trade_profit_share', 'top_5_trade_profit_share', 'profit_concentration_hhi', 'largest_winner', 'largest_loser', 'equity_curve_slope', 'equity_curve_r2'] },
+    { title: 'Period Consistency', keys: ['positive_period_pct', 'period_return_consistency', 'period_return_count'] },
 ]
 
 const humanize = (k) => String(k).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -145,12 +157,17 @@ export default {
             const cell = (key) => {
                 const raw = m[key]
                 const d = desc[key]
+                let sign = ''
+                if (raw != null && raw !== '') {
+                    if (d && d.unit === 'boolean') sign = this._truthy(raw) ? 'pos' : 'neg'
+                    else if (String(raw).trim().startsWith('-')) sign = 'neg'
+                }
                 return {
                     key,
                     label: SHORT_LABELS[key] || humanize(key),
                     value: (raw == null || raw === '') ? '—' : this.formatMetric(raw, d),
                     raw,
-                    sign: String(raw).trim().startsWith('-') ? 'neg' : '',
+                    sign,
                 }
             }
             const groups = GROUPS
@@ -199,15 +216,19 @@ export default {
         // Format a decimal-string metric per its descriptor. Number() is DISPLAY
         // ONLY (never calculations); the exact string rides along as the hover
         // title. NB: percent values are FRACTIONS (0.32 = 32%).
+        _truthy(raw) { return raw === true || raw === 'true' || raw === 1 || raw === '1' },
         formatMetric(raw, d) {
             if (raw == null || raw === '') return '—'
-            if (!d || !d.unit) return String(raw)
+            const unit = d && d.unit
+            if (unit === 'boolean') return this._truthy(raw) ? '✓ Yes' : '✗ No'
+            if (!unit) return String(raw)
             const n = Number(raw)
             if (!Number.isFinite(n)) return String(raw)   // don't lie about a bad value
             const p = d.precision != null ? d.precision : 2
-            switch (d.unit) {
+            switch (unit) {
                 case 'currency': return n.toLocaleString(undefined, { minimumFractionDigits: p, maximumFractionDigits: p })
-                case 'percent': return (n * 100).toFixed(p) + '%'
+                case 'quantity': return n.toLocaleString(undefined, { maximumFractionDigits: Math.max(p, 0) })
+                case 'percent': return (n * 100).toFixed(p) + '%'   // value is a FRACTION
                 case 'bps': return n.toFixed(p) + ' bps'
                 case 'ratio': return n.toFixed(p)
                 case 'count': return n.toLocaleString(undefined, { maximumFractionDigits: 0 })

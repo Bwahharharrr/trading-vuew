@@ -125,6 +125,35 @@ describe('CorkyBacktestsPanel', () => {
     expect(rows[1].text()).toContain('—')   // missing metric renders an em dash
   })
 
+  test('shows the new metric columns (return / B&H / beat / sharpe / sortino)', () => {
+    const r = { ...runs[0], metrics: { ...runs[0].metrics, strategy_return_pct: '0.125', buy_hold_return_pct: '0.08', strategy_vs_buy_hold_return_pct: '0.045', strategy_beat_buy_hold: true, sharpe_ratio: '1.8', sortino_ratio: '2.4', total_net_profit: '1250.50' } }
+    const w = mountPanel({ runs: [r] })
+    const headers = w.findAll('.bt-sortable th').map((h) => h.text().replace(/[▲▼]/g, '').trim())
+    for (const h of ['Net P/L', 'Return', 'B&H Ret', 'vs B&H', 'Beat', 'Sharpe', 'Sortino', 'PF', 'RF']) {
+      expect(headers).toContain(h)
+    }
+    const row = w.find('.bt-runs .bt-row').text()
+    expect(row).toContain('12.50%')   // strategy_return_pct 0.125 → 12.50% (fraction)
+    expect(row).toContain('4.50%')    // strategy_vs_buy_hold_return_pct 0.045
+    expect(row).toContain('✓')        // strategy_beat_buy_hold true
+    expect(row).toContain('1.80')     // sharpe_ratio
+  })
+
+  test('vs-B&H cell colours green when the run beat buy-and-hold', () => {
+    const r = { ...runs[0], metrics: { ...runs[0].metrics, strategy_vs_buy_hold_return_pct: '0.045', strategy_beat_buy_hold: true } }
+    const w = mountPanel({ runs: [r] })
+    const cell = w.findAll('.bt-row td.num').find((c) => c.text() === '4.50%')
+    expect(cell).toBeTruthy()
+    expect(cell.classes()).toContain('pos')
+  })
+
+  test('new metric columns render — when the run lacks the field (old artifact)', () => {
+    const w = mountPanel()   // runs[0] has no new fields
+    const row = w.find('.bt-runs .bt-row')
+    // Net P/L populates from the existing total_net_profit; the new ones are —
+    expect(row.text()).toContain('1,250.5')   // total_net_profit money-formatted
+  })
+
   test('clicking a run still emits select-run (details open in their own tab)', async () => {
     const w = mountPanel()
     await w.find('.bt-runs .bt-row').trigger('click')

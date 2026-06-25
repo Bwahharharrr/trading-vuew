@@ -71,8 +71,7 @@
                         <td class="sym">{{ (r.symbols||[]).join(',') }}</td>
                         <td>{{ r.trade_timeframe }}</td>
                         <td><span class="bt-badge" :class="r.status">{{ r.status }}</span></td>
-                        <td class="num" :class="ratioSign(r, 'profit_factor')" :title="metric(r, 'profit_factor')">{{ fmtRatio(metric(r, 'profit_factor')) }}</td>
-                        <td class="num" :class="ratioSign(r, 'recovery_factor')" :title="metric(r, 'recovery_factor')">{{ fmtRatio(metric(r, 'recovery_factor')) }}</td>
+                        <td v-for="c in metricCols" :key="c.key" class="num" :class="cellSign(r, c)" :title="cellTitle(r, c)">{{ cellText(r, c) }}</td>
                         <td class="time bt-dur" :title="durationTitle(r)">{{ fmtDuration(r) }}</td>
                     </tr>
                 </tbody>
@@ -103,18 +102,35 @@ export default {
             // Default longest-period first.
             sortKey: 'duration',
             sortDir: -1,   // 1 asc, -1 desc
-            columns: [
-                { key: 'strategy', label: 'Strategy' },
-                { key: 'symbols', label: 'Symbols' },
-                { key: 'trade_timeframe', label: 'TF' },
-                { key: 'status', label: 'Status' },
-                { key: 'profit_factor', label: 'PF', metric: 'profit_factor', title: 'Profit factor (gross profit ÷ gross loss)' },
-                { key: 'recovery_factor', label: 'RF', metric: 'recovery_factor', title: 'Recovery factor (net profit ÷ max drawdown)' },
-                { key: 'duration', label: 'Duration', title: 'Backtest data period (start – end, days, bars)' },
+            // Compact metric columns (the gateway's suggested run-list set). Each
+            // sorts numerically (booleans → 1/0); `fmt` drives display, `signMode`
+            // the colour. New fields are blank ("—") until a run is regenerated.
+            metricCols: [
+                { key: 'total_net_profit', label: 'Net P/L', metric: 'total_net_profit', fmt: 'money', signMode: 'sign' },
+                { key: 'strategy_return_pct', label: 'Return', metric: 'strategy_return_pct', fmt: 'pct', signMode: 'sign' },
+                { key: 'buy_hold_return_pct', label: 'B&H Ret', metric: 'buy_hold_return_pct', fmt: 'pct', signMode: 'sign' },
+                { key: 'strategy_vs_buy_hold_return_pct', label: 'vs B&H', metric: 'strategy_vs_buy_hold_return_pct', fmt: 'pct', signMode: 'beat', beat: 'strategy_beat_buy_hold' },
+                { key: 'strategy_beat_buy_hold', label: 'Beat', metric: 'strategy_beat_buy_hold', fmt: 'bool', signMode: 'bool', title: 'Strategy beat buy & hold?' },
+                { key: 'sharpe_ratio', label: 'Sharpe', metric: 'sharpe_ratio', fmt: 'ratio2', signMode: 'sign' },
+                { key: 'sortino_ratio', label: 'Sortino', metric: 'sortino_ratio', fmt: 'ratio2', signMode: 'sign' },
+                { key: 'profit_factor', label: 'PF', metric: 'profit_factor', fmt: 'ratio2', signMode: 'gte1', title: 'Profit factor (gross profit ÷ gross loss)' },
+                { key: 'recovery_factor', label: 'RF', metric: 'recovery_factor', fmt: 'ratio2', signMode: 'gte1', title: 'Recovery factor (net profit ÷ max drawdown)' },
             ],
         }
     },
     computed: {
+        // Header/sort column set: fixed identity columns, the metric columns, then
+        // the data-period Duration column.
+        columns() {
+            return [
+                { key: 'strategy', label: 'Strategy' },
+                { key: 'symbols', label: 'Symbols' },
+                { key: 'trade_timeframe', label: 'TF' },
+                { key: 'status', label: 'Status' },
+                ...this.metricCols,
+                { key: 'duration', label: 'Duration', title: 'Backtest data period (start – end, days, bars)' },
+            ]
+        },
         // Client-side sortable run list (the backend returns the full set; the
         // user orders by any column). Symbols sort by their joined string; metric
         // columns (PF/RF) sort numerically with missing values always last.
@@ -167,19 +183,55 @@ export default {
         },
         // Raw decimal-string metric value off a run summary (or undefined).
         metric(r, key) { return (r.metrics || {})[key] },
-        // Compact ratio for the list column (PF/RF). Number() is DISPLAY ONLY;
-        // the exact decimal string rides along as the cell's hover title.
+        _truthy(raw) { return raw === true || raw === 'true' || raw === 1 || raw === '1' },
+        // Number() is DISPLAY ONLY; the exact decimal string rides along as the
+        // cell's hover title (cellTitle). Percent values are FRACTIONS (0.32=32%).
         fmtRatio(raw) {
-            if (raw == null || raw === '') return '—'
             const n = Number(raw)
             return Number.isFinite(n) ? n.toFixed(2) : String(raw)
         },
-        // ≥1 reads as healthy (PF>1 profitable, RF>1 profit exceeds max drawdown);
-        // <1 weak. Missing → no colour.
-        ratioSign(r, key) {
-            const n = Number(this.metric(r, key))
-            if (!Number.isFinite(n)) return ''
-            return n >= 1 ? 'pos' : 'neg'
+        fmtPct(raw) {
+            const n = Number(raw)
+            return Number.isFinite(n) ? `${(n * 100).toFixed(2)}%` : String(raw)
+        },
+        fmtMoney(raw) {
+            const n = Number(raw)
+            return Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : String(raw)
+        },
+        // Display text for a metric column cell.
+        cellText(r, c) {
+            const raw = this.metric(r, c.metric)
+            if (raw == null || raw === '') return '—'
+            switch (c.fmt) {
+                case 'money': return this.fmtMoney(raw)
+                case 'pct': return this.fmtPct(raw)
+                case 'ratio2': return this.fmtRatio(raw)
+                case 'bool': return this._truthy(raw) ? '✓' : '✗'
+                default: return String(raw)
+            }
+        },
+        // pos/neg colour for a metric column cell, per its signMode.
+        cellSign(r, c) {
+            if (c.signMode === 'beat') {
+                const b = this.metric(r, c.beat)
+                if (b != null && b !== '') return this._truthy(b) ? 'pos' : 'neg'
+            }
+            const raw = this.metric(r, c.metric)
+            if (raw == null || raw === '') return ''
+            if (c.signMode === 'bool') return this._truthy(raw) ? 'pos' : 'neg'
+            const n = Number(raw)
+            if (c.signMode === 'gte1') return Number.isFinite(n) ? (n >= 1 ? 'pos' : 'neg') : ''
+            if (Number.isFinite(n)) return n > 0 ? 'pos' : (n < 0 ? 'neg' : '')
+            return String(raw).trim().startsWith('-') ? 'neg' : ''
+        },
+        cellTitle(r, c) {
+            const raw = this.metric(r, c.metric)
+            let t = (raw == null || raw === '') ? '' : String(raw)
+            if (c.beat) {
+                const b = this.metric(r, c.beat)
+                if (b != null && b !== '') t += `${t ? ' · ' : ''}beat B&H: ${this._truthy(b) ? 'yes' : 'no'}`
+            }
+            return t || (c.title || '')
         },
         fmtTime(ms) {
             if (!(ms > 0)) return '—'
