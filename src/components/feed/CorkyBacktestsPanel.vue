@@ -22,6 +22,7 @@
     <!-- Selected strategy info (params + indicators) -->
     <div v-if="selectedStrategy" class="bt-strategy">
         <div class="bt-strat-head">
+            <span class="bt-tag">STRATEGY</span>
             <strong>{{ selectedStrategy.display_name || selectedStrategy.name }}</strong>
             <span class="bt-dim">trade tf {{ selectedStrategy.default_trade_timeframe }}</span>
             <span v-if="(selectedStrategy.default_context_timeframes||[]).length" class="bt-dim">
@@ -44,8 +45,15 @@
     <div class="bt-body">
         <!-- Runs list -->
         <div class="bt-runs">
+            <div class="bt-runs-head">
+                Runs<span class="bt-count">{{ runs.length }}</span>
+                <span v-if="filters.strategy" class="bt-dim">· {{ filters.strategy }}</span>
+            </div>
             <div v-if="loading && !runs.length" class="bt-msg">Loading…</div>
-            <div v-else-if="!runs.length" class="bt-msg">No backtest runs in the store yet.</div>
+            <div v-else-if="!runs.length" class="bt-msg">
+                No backtest runs{{ filters.strategy ? ` for ${filters.strategy}` : '' }} in the store yet.
+                <div class="bt-dim bt-hint">A run appears here once the backend executes &amp; saves a backtest. (Strategy details above are NOT a run.)</div>
+            </div>
             <table v-else class="bt-table bt-sortable">
                 <thead><tr>
                     <th v-for="c in columns" :key="c.key" @click="sortBy(c.key)" :class="{ sorted: sortKey === c.key }">
@@ -252,8 +260,12 @@ export default {
 .bt-icon { background: #131722; color: #808a9d; border: 1px solid #2a2e39; border-radius: 4px; width: 26px; height: 26px; cursor: pointer; }
 .bt-icon:hover { color: #35a776; border-color: #35a776; }
 .bt-strategy { padding: 8px 12px; border-bottom: 1px solid #1c212e; background: rgba(53,167,118,0.04); }
-.bt-strat-head { display: flex; gap: 10px; align-items: baseline; }
+.bt-strat-head { display: flex; gap: 10px; align-items: center; }
+.bt-tag { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; color: #35a776; background: rgba(53,167,118,0.14); border-radius: 3px; padding: 1px 6px; }
 .bt-dim { color: #808a9d; }
+.bt-hint { font-size: 11px; margin-top: 6px; }
+.bt-runs-head { display: flex; align-items: center; gap: 6px; padding: 6px 10px; font-weight: 600; color: #808a9d; border-bottom: 1px solid #1c212e; position: sticky; top: 0; background: #121827; }
+.bt-count { background: #2a2e39; color: #d1d4dc; border-radius: 8px; padding: 0 6px; font-size: 10px; }
 .bt-params { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; }
 .bt-param { font-size: 11px; }
 .bt-inds { margin-top: 4px; font-size: 11px; }
