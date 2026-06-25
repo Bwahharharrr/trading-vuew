@@ -2298,14 +2298,19 @@ export default {
                 tv.setRange(trade.timestamp_ms - 60 * tfMs, trade.timestamp_ms + 60 * tfMs)
                 return
             }
-            // Out of the loaded window → load a window around the trade, and
-            // re-fetch the WINDOWED report so the equity/markers match it.
-            const start = trade.timestamp_ms - 200 * tfMs
-            const end = trade.timestamp_ms + 200 * tfMs
+            // Out of the loaded window → load a context window around the trade.
+            // Prefer the gateway's chart_window for this trade (it respects
+            // before_bars/after_bars and per-trade gaps); fall back to a client
+            // ±BEFORE/AFTER-bar window. Then re-fetch the WINDOWED report so the
+            // equity/markers match.
+            const BEFORE = 200; const AFTER = 200
+            const runIndex = (this._btPlot && this._btPlot.runIndex != null) ? this._btPlot.runIndex : this._btRunIndex()
+            let win = await this._btTradeChartWindow(run, trade, timeframe, runIndex, BEFORE, AFTER)
+            if (!win) win = { start: trade.timestamp_ms - BEFORE * tfMs, end: trade.timestamp_ms + AFTER * tfMs }
+            const start = win.start; const end = win.end
             if (run) {
                 this._btSetDetail({ plotting: true })
                 try {
-                    const runIndex = (this._btPlot && this._btPlot.runIndex != null) ? this._btPlot.runIndex : this._btRunIndex()
                     const report = await this.backtestsFeed.getReportOverlays(
                         { run_id: run.run_id, start_ms: start, end_ms: end, max_points: 2000, run_index: runIndex })
                     this._btPlot = { ...(this._btPlot || {}), runId: run.run_id, venue, symbol, timeframe, report, window: { start, end }, runIndex }
@@ -2314,6 +2319,32 @@ export default {
             this._corkyPendingRange = { start, end }
             try { await this._ensureCandleState(venue, symbol, timeframe) } catch (_) { /* best effort */ }
             this.corkySelect({ venue, symbol, timeframe, range: { type: 'start_end', start_ms: start, end_ms: end }, chunk_rows: 500 })
+        },
+
+        // The gateway's per-trade candle window via get_backtest_chart_overlays
+        // (respects before_bars/after_bars). Returns { start, end } for the
+        // overlay matching this trade's timestamp, or null on miss/error so the
+        // caller can fall back to a client-computed window.
+        async _btTradeChartWindow(run, trade, timeframe, runIndex, beforeBars, afterBars) {
+            if (!run || !this.backtestsFeed || trade.timestamp_ms == null) return null
+            const tfMs = this._tfToMs(timeframe)
+            try {
+                const ev = await this.backtestsFeed.getChartOverlays({
+                    run_id: run.run_id, run_index: runIndex, timeframe,
+                    before_bars: beforeBars, after_bars: afterBars,
+                    // Narrow the gateway's work to this trade's neighbourhood.
+                    start_ms: trade.timestamp_ms - beforeBars * tfMs,
+                    end_ms: trade.timestamp_ms + afterBars * tfMs,
+                })
+                const overlays = (ev && ev.overlays) || []
+                const match = overlays.find((o) => o && o.trade && o.trade.timestamp_ms === trade.timestamp_ms)
+                    || overlays[0]
+                const cw = match && match.chart_window
+                if (cw && cw.start_ms != null && cw.end_ms != null) {
+                    return { start: Number(cw.start_ms), end: Number(cw.end_ms) }
+                }
+            } catch (_) { /* fall back to the client window */ }
+            return null
         },
 
         _tfToMs(tf) {

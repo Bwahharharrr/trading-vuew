@@ -48,6 +48,7 @@ function mkCtx() {
       listRuns: vi.fn(async () => [RUN]),
       getProgress: vi.fn(async () => [{ kind: 'completed', completed_steps: 1, total_steps: 1 }]),
       getReportOverlays: vi.fn(async () => REPORT),
+      getChartOverlays: vi.fn(async () => ({ overlays: [] })),   // default: no per-trade window → client fallback
       subscribeProgress: vi.fn(() => ({ subscription_id: 'backtest-progress' })),
       unsubscribe: vi.fn(),
     },
@@ -55,7 +56,7 @@ function mkCtx() {
     _ensureCandleState: vi.fn(async () => true),
   }
   for (const m of ['btLoadStrategies', 'btUpdateFilter', 'btInspectStrategy', 'btListRuns',
-    'btSelectRun', 'btCloseDetail', 'btSelectCandidate', '_btLoadOverview', '_btLoadArtifact', '_withTimeout', '_btRunIndex', '_btSubscribeProgress', '_btStopProgress', 'btPlotRun', 'btSelectTrade',
+    'btSelectRun', 'btCloseDetail', 'btSelectCandidate', '_btLoadOverview', '_btLoadArtifact', '_withTimeout', '_btRunIndex', '_btSubscribeProgress', '_btStopProgress', 'btPlotRun', 'btSelectTrade', '_btTradeChartWindow',
     '_btPlotWindow', '_tfToMs', '_removeBacktestOverlays', 'syncBacktestOverlays', '_btErr', '_btSetDetail',
     '_canonicalVenue', '_loadedCandleRange']) {
     ctx[m] = M[m]
@@ -260,6 +261,22 @@ describe('btSelectTrade', () => {
     const [opts] = ctx.corkySelect.mock.calls[0]
     const H = 3600000
     expect(opts.range).toEqual({ type: 'start_end', start_ms: 3600000 - 200 * H, end_ms: 3600000 + 200 * H })
+  })
+
+  test('uses the gateway chart_window (before/after_bars) for the trade when available', async () => {
+    ctx.backtests.selectedRun = RUN
+    ctx._btPlot = { venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1h', report: REPORT, runIndex: 4 }
+    ctx.backtestsFeed.getChartOverlays = vi.fn(async () => ({
+      overlays: [{ trade: { timestamp_ms: 3600000 }, chart_window: { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1h', start_ms: 1000, end_ms: 5000 } }],
+    }))
+    await ctx.btSelectTrade(REPORT.trades[0])   // ts 3600000
+    // chart_overlays requested with before/after_bars + the candidate's run_index
+    expect(ctx.backtestsFeed.getChartOverlays).toHaveBeenCalledWith(
+      expect.objectContaining({ run_id: 'r1', run_index: 4, timeframe: '1h', before_bars: 200, after_bars: 200 }))
+    // navigation uses the gateway's chart_window, not the client ±200-bar window
+    const [opts] = ctx.corkySelect.mock.calls[0]
+    expect(opts.range).toEqual({ type: 'start_end', start_ms: 1000, end_ms: 5000 })
+    expect(ctx._corkyPendingRange).toEqual({ start: 1000, end: 5000 })
   })
 
   test('INSTANT: re-ranges (no reload) when the trade is within the loaded candles', async () => {
