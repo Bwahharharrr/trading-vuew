@@ -490,7 +490,6 @@ export default {
                 strategies: [], runs: [], filters: { strategy: '', symbol: '', status: '' },
                 selectedRun: null, detail: {}, loading: false, error: null,
             },
-            _btProgressSub: null,
 
             // ── Selected position plotted on the chart (trades + detail panes) ──
             // { venue, symbol, position_id, window:{start,end},
