@@ -21,6 +21,11 @@
                     @click="selectTab('search')">
                 Search Signals
             </button>
+            <button class="pd-tab" role="tab" :aria-selected="activeTab === 'backtests'"
+                    :class="{ active: activeTab === 'backtests' }"
+                    @click="selectTab('backtests')">
+                Backtests
+            </button>
             <button v-for="t in searchTabs" :key="t.id"
                     class="pd-tab pd-tab-search" role="tab"
                     :aria-selected="activeTab === t.id"
@@ -55,6 +60,23 @@
         <search-signals-form v-show="activeTab === 'search'"
                              :context="searchContext"
                              @run="$emit('run-search', $event)" />
+
+        <!-- Backtests / Strategy Results -->
+        <corky-backtests-panel v-if="activeTab === 'backtests'"
+                        :strategies="backtests.strategies || []"
+                        :runs="backtests.runs || []"
+                        :filters="backtests.filters || {}"
+                        :selected-run="backtests.selectedRun || null"
+                        :detail="backtests.detail || {}"
+                        :loading="!!backtests.loading"
+                        :error="backtests.error || null"
+                        @refresh-strategies="$emit('bt-refresh-strategies')"
+                        @update:filter="$emit('bt-update-filter', $event)"
+                        @list-runs="$emit('bt-list-runs')"
+                        @inspect-strategy="$emit('bt-inspect-strategy', $event)"
+                        @select-run="$emit('bt-select-run', $event)"
+                        @plot-run="$emit('bt-plot-run', $event)"
+                        @select-trade="$emit('bt-select-trade', $event)" />
 
         <!-- One Search Results tab -->
         <search-results v-if="activeSearchTab && activeTab !== 'search'"
@@ -120,10 +142,11 @@
 import { isNeg, positionKey } from '../../helpers/feed/corky-positions.js'
 import SearchSignalsForm from './SearchSignalsForm.vue'
 import SearchResults from './SearchResults.vue'
+import CorkyBacktestsPanel from './CorkyBacktestsPanel.vue'
 
 export default {
     name: 'CorkyPositionsPanel',
-    components: { SearchSignalsForm, SearchResults },
+    components: { SearchSignalsForm, SearchResults, CorkyBacktestsPanel },
     props: {
         height: { type: Number, default: 34 },
         open: { type: Boolean, default: false },
@@ -145,11 +168,16 @@ export default {
         searchContext: { type: Object, default: null },
         // Active/loading search result: { tabId, index, loading, message, error, … }.
         searchNav: { type: Object, default: null },
+        // Strategies/Backtests state bundle: { strategies, runs, filters,
+        // selectedRun, detail, loading, error }.
+        backtests: { type: Object, default: () => ({}) },
     },
     emits: [
         'update:open', 'update:active-tab', 'update:active-account',
         'select-position', 'audit-position', 'load-more', 'refresh', 'resize-start',
         'run-search', 'cancel-search', 'close-search-tab', 'select-result',
+        'bt-refresh-strategies', 'bt-update-filter', 'bt-list-runs', 'bt-inspect-strategy',
+        'bt-select-run', 'bt-plot-run', 'bt-select-trade',
     ],
     computed: {
         rows() {

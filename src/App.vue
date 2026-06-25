@@ -120,6 +120,14 @@
             :search-tabs="searchTabs"
             :search-context="searchContext"
             :search-nav="searchNav"
+            :backtests="backtests"
+            @bt-refresh-strategies="btLoadStrategies"
+            @bt-update-filter="btUpdateFilter"
+            @bt-list-runs="btListRuns"
+            @bt-inspect-strategy="btInspectStrategy"
+            @bt-select-run="btSelectRun"
+            @bt-plot-run="btPlotRun"
+            @bt-select-trade="btSelectTrade"
             @update:open="togglePositionsDock"
             @update:active-tab="setPositionsTab"
             @update:active-account="setPositionsAccount"
@@ -353,7 +361,9 @@ import { CorkyClient } from '../src/helpers/feed/corky-client.js'
 import { CorkyFeed } from '../src/helpers/feed/corky-feed.js'
 import { CorkyPositionsFeed } from '../src/helpers/feed/corky-positions-feed.js'
 import { CorkySearchFeed } from '../src/helpers/feed/corky-search-feed.js'
+import { CorkyBacktestsFeed } from '../src/helpers/feed/corky-backtests-feed.js'
 import { buildSearchQuery, buildCondition, barrierTargetSpec } from '../src/helpers/feed/search-query.js'
+import { backtestSeriesOverlays, backtestTradeMarkers } from '../src/helpers/feed/backtest-overlays.js'
 import { pickTimeframe, paddedCandleRange, coarsenTimeframe } from '../src/helpers/feed/pick-timeframe.js'
 import {
     tradeMarkers, positionSizeSeries, buySellHistogram, cumulativeFees, positionWindow,
@@ -471,6 +481,16 @@ export default {
             //   signal:{ ts, low, label } }. Drives the row highlight + "loading onto
             //   chart" feedback and the on-chart vertical signal marker. Null = none.
             searchNav: null,
+
+            // ── Strategies / Backtests (read-only via the gateway) ──
+            backtestsFeed: null,
+            // One reactive bundle passed to CorkyBacktestsPanel. detail =
+            // { progress:[], live, report, reportLoading, plottedRunId }.
+            backtests: {
+                strategies: [], runs: [], filters: { strategy: '', symbol: '', status: '' },
+                selectedRun: null, detail: {}, loading: false, error: null,
+            },
+            _btProgressSub: null,
 
             // ── Selected position plotted on the chart (trades + detail panes) ──
             // { venue, symbol, position_id, window:{start,end},
@@ -736,7 +756,11 @@ export default {
                 // Historical search also rides the same socket (its own feed; not
                 // chart data — results are a transient query surface in the dock).
                 this.searchFeed = new CorkySearchFeed({ client: this.corkyClient })
+                // Strategies/backtests: read-only over the same socket.
+                this.backtestsFeed = new CorkyBacktestsFeed({ client: this.corkyClient })
             }
+            // Preload the strategy catalog so the Backtests tab is populated.
+            this.btLoadStrategies()
             // Load the open-positions snapshot up front so the dock's tab badge is
             // populated even before the user expands it.
             this.refreshPositions()
@@ -909,6 +933,9 @@ export default {
                                 // + Barrier Symmetric target plan (if enriched).
                                 this.syncSignalMarker()
                                 this.syncBarrierOverlay()
+                                // …and a plotted backtest's equity/drawdown panes
+                                // + trade markers.
+                                this.syncBacktestOverlays()
                             })
                             // The chart for the active search result has loaded —
                             // clear its row's "loading onto chart" feedback.
@@ -1926,6 +1953,192 @@ export default {
             }
         },
 
+        // ── Strategies / Backtests ──────────────────────────────────────────────
+
+        _btErr(err) { return err ? (err.message || err.code || String(err)) : null },
+        _btSetDetail(patch) { this.backtests.detail = { ...this.backtests.detail, ...patch } },
+
+        async btLoadStrategies() {
+            if (!this.backtestsFeed) return
+            this.backtests.loading = true; this.backtests.error = null
+            try {
+                this.backtests.strategies = await this.backtestsFeed.listStrategies() || []
+            } catch (err) { this.backtests.error = this._btErr(err) }
+            finally { this.backtests.loading = false }
+        },
+
+        btUpdateFilter(patch) {
+            this.backtests.filters = { ...this.backtests.filters, ...patch }
+        },
+
+        async btInspectStrategy(name) {
+            if (!this.backtestsFeed || !name) return
+            try {
+                const s = await this.backtestsFeed.getStrategy(name)
+                // Merge the fuller descriptor into the catalog list (so the panel's
+                // inspect view shows params/indicators even if the list was terse).
+                const i = this.backtests.strategies.findIndex((x) => x && x.name === name)
+                if (i >= 0) this.backtests.strategies.splice(i, 1, s)
+                else this.backtests.strategies.push(s)
+            } catch (err) { this.backtests.error = this._btErr(err) }
+        },
+
+        async btListRuns() {
+            if (!this.backtestsFeed) return
+            const f = this.backtests.filters || {}
+            const filters = {}
+            if (f.strategy) filters.strategy = f.strategy
+            if (f.symbol) filters.symbol = String(f.symbol).trim()
+            if (f.status) filters.status = f.status
+            this.backtests.loading = true; this.backtests.error = null
+            try {
+                this.backtests.runs = await this.backtestsFeed.listRuns(filters) || []
+            } catch (err) { this.backtests.error = this._btErr(err) }
+            finally { this.backtests.loading = false }
+        },
+
+        async btSelectRun(run) {
+            if (!run) return
+            this.backtests.selectedRun = run
+            this._btStopProgress()
+            this._btSetDetail({ progress: [], live: false, report: null, plottedRunId: this.backtests.detail.plottedRunId })
+            // One-shot progress, then go live while a run is still executing.
+            try {
+                const events = await this.backtestsFeed.getProgress(run.run_id)
+                if (this.backtests.selectedRun !== run) return
+                this._btSetDetail({ progress: events })
+            } catch (err) { this.backtests.error = this._btErr(err) }
+            if (run.status === 'running' || run.status === 'queued') this._btSubscribeProgress(run)
+        },
+
+        _btSubscribeProgress(run) {
+            if (!this.backtestsFeed || !this.backtestsFeed.streamingSupported) return
+            this._btProgressSub = this.backtestsFeed.subscribeProgress(
+                { subscription_id: 'backtest-progress', run_id: run.run_id }, {
+                    onData: (events) => {
+                        if (this.backtests.selectedRun && this.backtests.selectedRun.run_id === run.run_id) {
+                            this._btSetDetail({ progress: events, live: true })
+                        }
+                    },
+                    onError: () => { /* keep last-good progress */ },
+                })
+        },
+
+        _btStopProgress() {
+            if (this._btProgressSub && this.backtestsFeed) {
+                try { this.backtestsFeed.unsubscribe(this._btProgressSub) } catch (_) { /* gone */ }
+            }
+            this._btProgressSub = null
+        },
+
+        // Plot a run: fetch its normalized report overlays, navigate the chart to
+        // the run's symbol/timeframe over the equity-curve span, and draw the
+        // descriptor-driven equity/drawdown series + trade markers after load.
+        async btPlotRun(run) {
+            if (!run || !this.backtestsFeed) return
+            const venue = run.venue
+            const symbol = (run.symbols || [])[0]
+            const timeframe = run.trade_timeframe
+            if (!venue || !symbol || !timeframe) return
+            this._btSetDetail({ reportLoading: true })
+            let report
+            try {
+                report = await this.backtestsFeed.getReportOverlays({ run_id: run.run_id })
+            } catch (err) {
+                this.backtests.error = this._btErr(err)
+                this._btSetDetail({ reportLoading: false })
+                return
+            }
+            this._btSetDetail({ reportLoading: false, report })
+            this._btPlot = { runId: run.run_id, venue, symbol, timeframe, report }
+            // Window: the equity-curve span (fallback to trade span).
+            const span = this._btSpan(report)
+            let range
+            if (span) {
+                range = { type: 'start_end', start_ms: span.start, end_ms: span.end }
+                this._corkyPendingRange = { start: span.start, end: span.end }
+            }
+            try { await this._ensureCandleState(venue, symbol, timeframe) } catch (_) { /* best effort */ }
+            this.corkySelect({ venue, symbol, timeframe, range, chunk_rows: 500 })
+        },
+
+        // Click a trade → centre the chart on it (re-plotting the run's overlays).
+        async btSelectTrade(trade) {
+            if (!trade || trade.timestamp_ms == null) return
+            const plot = this._btPlot
+            const run = this.backtests.selectedRun
+            const venue = (plot && plot.venue) || (run && run.venue)
+            const symbol = trade.symbol || (plot && plot.symbol) || (run && (run.symbols || [])[0])
+            const timeframe = (plot && plot.timeframe) || (run && run.trade_timeframe)
+            if (!venue || !symbol || !timeframe) return
+            const tfMs = this._tfToMs(timeframe)
+            const start = trade.timestamp_ms - 200 * tfMs
+            const end = trade.timestamp_ms + 200 * tfMs
+            this._corkyPendingRange = { start, end }
+            try { await this._ensureCandleState(venue, symbol, timeframe) } catch (_) { /* best effort */ }
+            this.corkySelect({ venue, symbol, timeframe, range: { type: 'start_end', start_ms: start, end_ms: end }, chunk_rows: 500 })
+        },
+
+        _btSpan(report) {
+            const ts = []
+            for (const p of (report && report.equity_curve) || []) if (p.timestamp_ms != null) ts.push(p.timestamp_ms)
+            for (const t of (report && report.trades) || []) if (t.timestamp_ms != null) ts.push(t.timestamp_ms)
+            if (!ts.length) return null
+            return { start: Math.min(...ts), end: Math.max(...ts) }
+        },
+
+        _tfToMs(tf) {
+            const m = String(tf).match(/^(\d+)\s*([mhdwM])$/)
+            if (!m) return 3600000
+            const n = Number(m[1])
+            const u = { m: 60000, h: 3600000, d: 86400000, w: 604800000, M: 2592000000 }[m[2]] || 3600000
+            return n * u
+        },
+
+        _removeBacktestOverlays(dc) {
+            for (const side of ['onchart', 'offchart']) {
+                const arr = dc.data && dc.data[side]
+                if (!Array.isArray(arr)) continue
+                for (let i = arr.length - 1; i >= 0; i--) {
+                    if (arr[i] && arr[i].settings && arr[i].settings.$backtestOverlay) arr.splice(i, 1)
+                }
+            }
+            if (typeof dc.update_ids === 'function') dc.update_ids()
+        },
+
+        // Reconcile the backtest equity/drawdown panes + trade markers to `_btPlot`.
+        // Called after every history-complete (the candle load wipes overlays).
+        syncBacktestOverlays() {
+            const dc = this.chart
+            if (!dc || !dc.data || typeof dc.add !== 'function') return
+            this._removeBacktestOverlays(dc)
+            const plot = this._btPlot
+            if (!plot || !plot.report || !this.corkyCurrent) return
+            if (plot.symbol !== this.corkyCurrent.symbol || plot.venue !== this.corkyCurrent.venue) return
+            // Descriptor-driven account/equity/drawdown series → offchart panes.
+            for (const ov of backtestSeriesOverlays(plot.report)) {
+                if (!ov.data.length) continue
+                dc.add('offchart', {
+                    name: ov.name, type: ov.type, data: ov.data,
+                    settings: { ...ov.settings, $backtestOverlay: true, $uuid: `bt-${ov.id}`, legend: true },
+                })
+            }
+            // Trade markers on the price pane (filtered to the charted symbol).
+            const trades = (plot.report.trades || []).filter(
+                (t) => !t.symbol || t.symbol === plot.symbol)
+            const markers = backtestTradeMarkers(trades)
+            if (markers.length) {
+                dc.add('onchart', {
+                    name: 'Backtest Trades', type: 'Trades', grid: { id: 0 }, data: markers,
+                    settings: {
+                        $backtestOverlay: true, $uuid: 'bt-trades', 'z-index': 140,
+                        legend: false, buyColor: '#23a776', sellColor: '#e54150', markerSize: 7, showLabel: false,
+                    },
+                })
+            }
+            this.backtests.detail = { ...this.backtests.detail, plottedRunId: plot.runId }
+        },
+
         setPositionsAccount(acct) {
             this.positionsActiveAccount = acct
             // History is per-account — reset and reload for the new account.
@@ -2245,9 +2458,19 @@ export default {
             if (this.searchFeed) {
                 try { this.searchFeed.destroy() } catch (_) { /* already gone */ }
             }
+            this._btStopProgress()
+            if (this.backtestsFeed) {
+                try { this.backtestsFeed.destroy() } catch (_) { /* already gone */ }
+            }
             this.corkyFeed = null
             this.positionsFeed = null
             this.searchFeed = null
+            this.backtestsFeed = null
+            this._btPlot = null
+            this.backtests = {
+                strategies: [], runs: [], filters: { strategy: '', symbol: '', status: '' },
+                selectedRun: null, detail: {}, loading: false, error: null,
+            }
             this.searchTabs = []
             this.searchTabSeq = 0
             this.searchNav = null

@@ -1,0 +1,87 @@
+// @vitest-environment jsdom
+//
+// CorkyBacktestsPanel — presentational Strategies/Backtests view. Renders the
+// strategy catalog + filters, the run list, and a selected-run detail (metrics,
+// progress, trades, period returns), and emits intents. Decimal strings shown
+// verbatim.
+import { test, expect, describe } from 'vitest'
+import { mount } from '@vue/test-utils'
+import CorkyBacktestsPanel from '../../src/components/feed/CorkyBacktestsPanel.vue'
+
+const strategies = [
+  { name: 'ema_cross_all_in_v1', display_name: 'EMA Cross', default_trade_timeframe: '1h', default_context_timeframes: [], default_indicators: [{ kind: 'ema', timeframe: '1h', params: { period: '50' } }], parameters: [{ name: 'fast_period', type: 'integer', default_value: 50, description: 'Fast EMA' }] },
+]
+const runs = [
+  { run_id: 'ema:BITFINEX:tBTCUSD:1h:0:1782320400000', strategy: 'ema_cross_all_in_v1', venue: 'BITFINEX', symbols: ['tBTCUSD'], trade_timeframe: '1h', status: 'completed', started_at_ms: 0, completed_at_ms: 1782320400000, metrics: { total_net_profit: '1250.50', total_trades: 34 } },
+]
+const report = {
+  trades: [{ symbol: 'tBTCUSD', timestamp_ms: 3600000, side: 'Buy', quantity: '0.25', price: '40000' }],
+  period_returns: [{ period: 'all', starting_equity: '10000', ending_equity: '10125.50', return_amount: '125.50', return_pct: '0.01255' }],
+}
+
+function mountPanel(props = {}) {
+  return mount(CorkyBacktestsPanel, {
+    props: { strategies, runs, filters: { strategy: '', symbol: '', status: '' }, selectedRun: null, detail: {}, ...props },
+  })
+}
+
+describe('CorkyBacktestsPanel', () => {
+  test('renders the strategy options + run rows', () => {
+    const w = mountPanel()
+    expect(w.findAll('select')[0].findAll('option').map((o) => o.text())).toContain('EMA Cross')
+    const rows = w.findAll('.bt-runs .bt-row')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].text()).toContain('tBTCUSD')
+    expect(rows[0].text()).toContain('completed')
+  })
+
+  test('Load runs + refresh + filter changes emit intents', async () => {
+    const w = mountPanel()
+    await w.find('.bt-btn').trigger('click')
+    expect(w.emitted('list-runs')).toBeTruthy()
+    await w.find('.bt-icon').trigger('click')
+    expect(w.emitted('refresh-strategies')).toBeTruthy()
+    await w.findAll('select')[1].setValue('completed')   // status filter (strategy=0, status=1)
+    expect(w.emitted('update:filter').pop()[0]).toEqual({ status: 'completed' })
+  })
+
+  test('selecting a strategy emits update:filter + inspect-strategy', async () => {
+    const w = mountPanel()
+    await w.findAll('select')[0].setValue('ema_cross_all_in_v1')
+    expect(w.emitted('update:filter').some((e) => e[0].strategy === 'ema_cross_all_in_v1')).toBe(true)
+    expect(w.emitted('inspect-strategy')[0]).toEqual(['ema_cross_all_in_v1'])
+  })
+
+  test('shows selected-strategy params + indicators', () => {
+    const w = mountPanel({ filters: { strategy: 'ema_cross_all_in_v1', symbol: '', status: '' } })
+    expect(w.find('.bt-strategy').text()).toContain('fast_period')
+    expect(w.find('.bt-strategy').text()).toContain('ema(50)@1h')
+  })
+
+  test('clicking a run emits select-run', async () => {
+    const w = mountPanel()
+    await w.find('.bt-runs .bt-row').trigger('click')
+    expect(w.emitted('select-run')[0][0].run_id).toContain('ema')
+  })
+
+  test('selected run shows metrics + progress; plot-run + select-trade emit', async () => {
+    const w = mountPanel({
+      selectedRun: runs[0],
+      detail: { progress: [{ kind: 'completed', completed_steps: 1, total_steps: 1, message: 'done' }], report, plottedRunId: null },
+    })
+    const detail = w.find('.bt-detail')
+    expect(detail.text()).toContain('total_net_profit')
+    expect(detail.text()).toContain('1250.50')                 // decimal string verbatim
+    expect(detail.text()).toContain('done')                    // progress message
+    await w.find('.bt-plot').trigger('click')
+    expect(w.emitted('plot-run')[0][0].run_id).toBe(runs[0].run_id)
+    // trade row click → select-trade
+    const tradeRow = w.findAll('.bt-trades .bt-row')
+    expect(tradeRow).toHaveLength(1)
+    expect(tradeRow[0].text()).toContain('40000')
+    await tradeRow[0].trigger('click')
+    expect(w.emitted('select-trade')[0][0].price).toBe('40000')
+    // period returns rendered
+    expect(w.find('.bt-periods').text()).toContain('0.01255')
+  })
+})

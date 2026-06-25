@@ -32,15 +32,21 @@ function mountPanel(props = {}) {
 }
 
 describe('CorkyPositionsPanel — rendering', () => {
-    test('shows the base tabs (Open / Historical / Search Signals) with counts', () => {
+    test('shows the base tabs (Open / Historical / Search Signals / Backtests) with counts', () => {
         const w = mountPanel()
         const tabs = w.findAll('.pd-tab')
-        // Open Positions, Historical, Search Signals (no Search Results tabs yet).
-        expect(tabs).toHaveLength(3)
+        // Open Positions, Historical, Search Signals, Backtests (no result tabs yet).
+        expect(tabs).toHaveLength(4)
         expect(tabs[0].text()).toContain('Open Positions')
         expect(tabs[0].text()).toContain(String(openRows.length))
         expect(tabs[1].text()).toContain('Historical')
         expect(tabs[2].text()).toContain('Search Signals')
+        expect(tabs[3].text()).toContain('Backtests')
+    })
+
+    test('the Backtests tab renders the backtests panel', () => {
+        const w = mountPanel({ activeTab: 'backtests', backtests: { strategies: [{ name: 'ema', display_name: 'EMA' }], runs: [], filters: {}, detail: {} } })
+        expect(w.find('.bt').exists()).toBe(true)
     })
 
     test('renders open rows with the ticker symbol', () => {
