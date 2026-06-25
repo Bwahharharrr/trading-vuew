@@ -15,6 +15,15 @@
             <option value="completed">completed</option>
             <option value="failed">failed</option>
         </select>
+        <!-- Client-side filters (the gateway list takes only strategy/symbol/status). -->
+        <select class="bt-input bt-tf" :value="filters.timeframe || ''" @change="$emit('update:filter', { timeframe: $event.target.value })">
+            <option value="">Any TF</option>
+            <option v-for="tf in timeframeOptions" :key="tf" :value="tf">{{ tf }}</option>
+        </select>
+        <select class="bt-input bt-type" :value="filters.runType || ''" @change="$emit('update:filter', { runType: $event.target.value })">
+            <option value="">Any type</option>
+            <option v-for="t in runTypeOptions" :key="t.kind" :value="t.kind">{{ t.label }}</option>
+        </select>
         <button class="bt-btn" :disabled="loading" @click="$emit('list-runs')">Load runs</button>
         <button class="bt-icon" title="Refresh strategies" @click="$emit('refresh-strategies')">⟳</button>
     </div>
@@ -46,7 +55,7 @@
         <!-- Runs list -->
         <div class="bt-runs">
             <div class="bt-runs-head">
-                Runs<span class="bt-count">{{ runs.length }}</span>
+                Runs<span class="bt-count">{{ filteredRuns.length }}</span>
                 <span v-if="filters.strategy" class="bt-dim">· {{ filters.strategy }}</span>
             </div>
             <div v-if="loading && !runs.length" class="bt-msg">Loading…</div>
@@ -64,7 +73,7 @@
                     </tr>
                     <!-- Aggregate totals/averages over every loaded run, glued below the header. -->
                     <tr class="bt-summary">
-                        <td class="bt-sum-label" colspan="4">Σ {{ runs.length }} run{{ runs.length === 1 ? '' : 's' }}</td>
+                        <td class="bt-sum-label" colspan="5">Σ {{ filteredRuns.length }} run{{ filteredRuns.length === 1 ? '' : 's' }}</td>
                         <td v-for="s in summaryCells" :key="s.key" class="num bt-sum-cell" :class="s.sign" :title="s.title">{{ s.text }}</td>
                         <td class="bt-sum-cell"></td>
                     </tr>
@@ -78,6 +87,7 @@
                         <td>{{ r.strategy }}</td>
                         <td class="sym">{{ (r.symbols||[]).join(',') }}</td>
                         <td>{{ r.trade_timeframe }}</td>
+                        <td><span class="bt-type" :class="'t-' + runShape(r).kind" :title="runShape(r).chartable ? '' : 'Metric study only — plot requires a materialized execution artifact'">{{ runShape(r).label }}</span></td>
                         <td><span class="bt-badge" :class="r.status">{{ r.status }}</span></td>
                         <td v-for="c in metricCols" :key="c.key" class="num" :class="cellSign(r, c)" :title="cellTitle(r, c)">{{ cellText(r, c) }}</td>
                         <td class="time bt-dur" :title="durationTitle(r)">{{ fmtDuration(r) }}</td>
@@ -93,8 +103,11 @@
 // CorkyBacktestsPanel — presentational Strategies/Backtests view rendered in the
 // bottom dock. App owns the feed + state; this emits intents. All money/quantity
 // values are DECIMAL STRINGS — displayed verbatim, never float-parsed here.
+import { detectRunShape } from '../../helpers/feed/backtest-shape.js'
+
 export default {
     name: 'CorkyBacktestsPanel',
+    created() { this._shapeCache = new Map() },   // run_id → detected shape
     props: {
         strategies: { type: Array, default: () => [] },
         runs: { type: Array, default: () => [] },
@@ -134,10 +147,35 @@ export default {
                 { key: 'strategy', label: 'Strategy' },
                 { key: 'symbols', label: 'Symbols' },
                 { key: 'trade_timeframe', label: 'TF' },
+                { key: 'runType', label: 'Type', title: 'Detected artifact shape' },
                 { key: 'status', label: 'Status' },
                 ...this.metricCols,
                 { key: 'duration', label: 'Duration', title: 'Backtest data period (start – end, days, bars)' },
             ]
+        },
+        // Distinct timeframes + run types present in the loaded runs (filter opts).
+        timeframeOptions() {
+            const set = new Set()
+            for (const r of this.runs) if (r.trade_timeframe) set.add(r.trade_timeframe)
+            return [...set].sort()
+        },
+        runTypeOptions() {
+            const seen = new Set()
+            const out = []
+            for (const r of this.runs) {
+                const s = this.runShape(r)
+                if (!seen.has(s.kind)) { seen.add(s.kind); out.push({ kind: s.kind, label: s.label }) }
+            }
+            return out
+        },
+        // Apply the CLIENT-side filters (timeframe + run type) the gateway list
+        // doesn't support; strategy/symbol/status were already applied server-side.
+        filteredRuns() {
+            const tf = this.filters.timeframe || ''
+            const rt = this.filters.runType || ''
+            if (!tf && !rt) return this.runs
+            return this.runs.filter((r) =>
+                (!tf || r.trade_timeframe === tf) && (!rt || this.runShape(r).kind === rt))
         },
         // Client-side sortable run list (the backend returns the full set; the
         // user orders by any column). Symbols sort by their joined string; metric
@@ -151,11 +189,13 @@ export default {
                 return Number.isFinite(n) ? n : null
             }
             const strVal = (r) => {
-                const v = this.sortKey === 'symbols' ? (r.symbols || []).join(',') : r[this.sortKey]
+                if (this.sortKey === 'symbols') return (r.symbols || []).join(',')
+                if (this.sortKey === 'runType') return this.runShape(r).kind
+                const v = r[this.sortKey]
                 return v == null ? '' : v
             }
             const span = (r) => (Number(r.completed_at_ms) || 0) - (Number(r.started_at_ms) || 0)
-            return this.runs.slice().sort((a, b) => {
+            return this.filteredRuns.slice().sort((a, b) => {
                 if (metric) {
                     const an = num(a); const bn = num(b)
                     if (an == null && bn == null) return 0
@@ -181,7 +221,7 @@ export default {
             return this.metricCols.map((c) => {
                 if (c.agg === 'beat') {
                     let yes = 0; let total = 0
-                    for (const r of this.runs) {
+                    for (const r of this.filteredRuns) {
                         const raw = this.metric(r, c.metric)
                         if (raw == null || raw === '') continue
                         total += 1; if (this._truthy(raw)) yes += 1
@@ -189,7 +229,7 @@ export default {
                     return { key: c.key, text: total ? `${yes}/${total}` : '—', sign: total && yes * 2 >= total ? 'pos' : (total ? 'neg' : ''), title: `Beat buy & hold: ${yes} of ${total} runs` }
                 }
                 const vals = []
-                for (const r of this.runs) {
+                for (const r of this.filteredRuns) {
                     const raw = this.metric(r, c.metric)
                     if (raw == null || raw === '') continue
                     const n = Number(raw); if (Number.isFinite(n)) vals.push(n)
@@ -219,6 +259,15 @@ export default {
         },
         // Raw decimal-string metric value off a run summary (or undefined).
         metric(r, key) { return (r.metrics || {})[key] },
+        // Detected artifact shape for a run (fast path, no artifact fetch),
+        // memoised per run_id so the list/sort/filter don't recompute it.
+        runShape(r) {
+            const id = r && r.run_id
+            if (id && this._shapeCache.has(id)) return this._shapeCache.get(id)
+            const s = detectRunShape(r)
+            if (id) this._shapeCache.set(id, s)
+            return s
+        },
         _truthy(raw) { return raw === true || raw === 'true' || raw === 1 || raw === '1' },
         // Number() is DISPLAY ONLY; the exact decimal string rides along as the
         // cell's hover title (cellTitle). Percent values are FRACTIONS (0.32=32%).
@@ -368,6 +417,13 @@ export default {
 .bt-badge.running { background: rgba(245,197,24,0.18); color: #f5c518; }
 .bt-badge.failed { background: rgba(229,65,80,0.18); color: #e54150; }
 .bt-badge.queued { background: #2a2e39; color: #808a9d; }
+/* Detected artifact-shape badge. */
+.bt-type { font-size: 10px; padding: 1px 7px; border-radius: 9px; background: #2a2e39; color: #b0b6c0; white-space: nowrap; }
+.bt-type.t-normal { background: rgba(53,167,118,0.14); color: #35a776; }
+.bt-type.t-portfolio { background: rgba(88,166,255,0.16); color: #58a6ff; }
+.bt-type.t-sweep { background: rgba(245,197,24,0.16); color: #f5c518; }
+.bt-type.t-optimize { background: rgba(187,134,252,0.18); color: #bb86fc; }
+.bt-type.t-universe { background: rgba(255,127,0,0.16); color: #ff9f40; }
 .pos { color: #23a776; }
 .neg { color: #e54150; }
 </style>

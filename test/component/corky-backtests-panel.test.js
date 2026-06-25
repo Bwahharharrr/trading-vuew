@@ -180,6 +180,46 @@ describe('CorkyBacktestsPanel', () => {
     expect(cells).toContain('2.00')    // avg PF over the ONE run that has it, not 1.0
   })
 
+  test('shows a Type column with the detected artifact shape', () => {
+    const mixed = [
+      { run_id: 'sweep:ema:BITFINEX:tBTCUSD:1h:0:100:56', strategy: 'ema', symbols: ['tBTCUSD'], trade_timeframe: '1h', status: 'completed', metrics: {} },
+      { run_id: 'universe:ema:BITFINEX:multi:4h:0:100:40', strategy: 'ema', symbols: ['tBTCUSD', 'tETHUSD'], trade_timeframe: '4h', status: 'completed', metrics: {} },
+    ]
+    const w = mountPanel({ runs: mixed })
+    const headers = w.findAll('.bt-sortable th').map((h) => h.text().replace(/[▲▼]/g, '').trim())
+    expect(headers).toContain('Type')
+    const types = w.findAll('.bt-runs .bt-row .bt-type').map((t) => t.text())
+    expect(types).toContain('Sweep')
+    expect(types).toContain('Universe')
+  })
+
+  test('client-side timeframe + run-type filters narrow the list', async () => {
+    const mixed = [
+      { run_id: 'sweep:ema:BITFINEX:tBTCUSD:1h:0:100:56', strategy: 'ema', symbols: ['tBTCUSD'], trade_timeframe: '1h', status: 'completed', metrics: {} },
+      { run_id: 'universe:ema:BITFINEX:multi:4h:0:100:40', strategy: 'ema', symbols: ['tBTCUSD', 'tETHUSD'], trade_timeframe: '4h', status: 'completed', metrics: {} },
+    ]
+    // timeframe filter
+    let w = mountPanel({ runs: mixed, filters: { strategy: '', symbol: '', status: '', timeframe: '4h', runType: '' } })
+    expect(w.findAll('.bt-runs .bt-row')).toHaveLength(1)
+    expect(w.find('.bt-runs .bt-row .bt-type').text()).toBe('Universe')
+    // run-type filter
+    w = mountPanel({ runs: mixed, filters: { strategy: '', symbol: '', status: '', timeframe: '', runType: 'sweep' } })
+    expect(w.findAll('.bt-runs .bt-row')).toHaveLength(1)
+    expect(w.find('.bt-runs .bt-row .bt-type').text()).toBe('Sweep')
+  })
+
+  test('timeframe/run-type filter changes emit update:filter', async () => {
+    const mixed = [
+      { run_id: 'sweep:ema:BITFINEX:tBTCUSD:1h:0:100:56', strategy: 'ema', symbols: ['tBTCUSD'], trade_timeframe: '1h', status: 'completed', metrics: {} },
+    ]
+    const w = mountPanel({ runs: mixed })
+    const selects = w.findAll('.bt-controls select')
+    await selects.find((s) => s.classes().includes('bt-tf')).setValue('1h')
+    expect(w.emitted('update:filter').some((e) => e[0].timeframe === '1h')).toBe(true)
+    await selects.find((s) => s.classes().includes('bt-type')).setValue('sweep')   // 'sweep' is an option (mixed has a sweep run)
+    expect(w.emitted('update:filter').some((e) => e[0].runType === 'sweep')).toBe(true)
+  })
+
   test('clicking a run still emits select-run (details open in their own tab)', async () => {
     const w = mountPanel()
     await w.find('.bt-runs .bt-row').trigger('click')

@@ -488,7 +488,7 @@ export default {
             // One reactive bundle passed to CorkyBacktestsPanel. detail =
             // { progress:[], live, report, reportLoading, plottedRunId }.
             backtests: {
-                strategies: [], runs: [], filters: { strategy: '', symbol: '', status: '' },
+                strategies: [], runs: [], filters: { strategy: '', symbol: '', status: '', timeframe: '', runType: '' },
                 selectedRun: null, detail: {}, loading: false, error: null,
             },
 
