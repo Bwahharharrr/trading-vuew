@@ -154,6 +154,32 @@ describe('CorkyBacktestsPanel', () => {
     expect(row.text()).toContain('1,250.5')   // total_net_profit money-formatted
   })
 
+  test('sticky summary row aggregates loaded runs (total P/L, avg PF/RF, beat count)', () => {
+    const twoRuns = [
+      { run_id: 'a', strategy: 's', symbols: ['tBTCUSD'], trade_timeframe: '1h', status: 'completed', started_at_ms: 1, completed_at_ms: 2, metrics: { total_net_profit: '1000', profit_factor: '2.0', recovery_factor: '3.0', strategy_beat_buy_hold: true } },
+      { run_id: 'b', strategy: 't', symbols: ['tETHUSD'], trade_timeframe: '1h', status: 'completed', started_at_ms: 1, completed_at_ms: 2, metrics: { total_net_profit: '500', profit_factor: '1.0', recovery_factor: '1.0', strategy_beat_buy_hold: false } },
+    ]
+    const w = mountPanel({ runs: twoRuns })
+    const sum = w.find('.bt-summary')
+    expect(sum.exists()).toBe(true)
+    expect(sum.find('.bt-sum-label').text()).toContain('2 runs')
+    const cells = sum.findAll('.bt-sum-cell').map((c) => c.text())
+    expect(cells).toContain('1,500')   // total_net_profit summed (1000 + 500)
+    expect(cells).toContain('1.50')    // PF averaged (2.0 + 1.0) / 2
+    expect(cells).toContain('2.00')    // RF averaged (3.0 + 1.0) / 2
+    expect(cells).toContain('1/2')     // beat: 1 of 2 runs
+  })
+
+  test('summary row skips runs missing a metric (no drag toward zero)', () => {
+    const twoRuns = [
+      { run_id: 'a', strategy: 's', symbols: ['tBTCUSD'], trade_timeframe: '1h', status: 'completed', metrics: { profit_factor: '2.0' } },
+      { run_id: 'b', strategy: 't', symbols: ['tETHUSD'], trade_timeframe: '1h', status: 'completed', metrics: {} },   // no PF
+    ]
+    const w = mountPanel({ runs: twoRuns })
+    const cells = w.find('.bt-summary').findAll('.bt-sum-cell').map((c) => c.text())
+    expect(cells).toContain('2.00')    // avg PF over the ONE run that has it, not 1.0
+  })
+
   test('clicking a run still emits select-run (details open in their own tab)', async () => {
     const w = mountPanel()
     await w.find('.bt-runs .bt-row').trigger('click')

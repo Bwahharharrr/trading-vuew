@@ -55,12 +55,20 @@
                 <div class="bt-dim bt-hint">A run appears here once the backend executes &amp; saves a backtest. (Strategy details above are NOT a run.)</div>
             </div>
             <table v-else class="bt-table bt-sortable">
-                <thead><tr>
-                    <th v-for="c in columns" :key="c.key" @click="sortBy(c.key)" :title="c.title || ''"
-                        :class="{ sorted: sortKey === c.key, num: !!c.metric }">
-                        {{ c.label }}<span v-if="sortKey === c.key" class="bt-sort">{{ sortDir === 1 ? '▲' : '▼' }}</span>
-                    </th>
-                </tr></thead>
+                <thead>
+                    <tr>
+                        <th v-for="c in columns" :key="c.key" @click="sortBy(c.key)" :title="c.title || ''"
+                            :class="{ sorted: sortKey === c.key, num: !!c.metric }">
+                            {{ c.label }}<span v-if="sortKey === c.key" class="bt-sort">{{ sortDir === 1 ? '▲' : '▼' }}</span>
+                        </th>
+                    </tr>
+                    <!-- Aggregate totals/averages over every loaded run, glued below the header. -->
+                    <tr class="bt-summary">
+                        <td class="bt-sum-label" colspan="4">Σ {{ runs.length }} run{{ runs.length === 1 ? '' : 's' }}</td>
+                        <td v-for="s in summaryCells" :key="s.key" class="num bt-sum-cell" :class="s.sign" :title="s.title">{{ s.text }}</td>
+                        <td class="bt-sum-cell"></td>
+                    </tr>
+                </thead>
                 <tbody>
                     <tr v-for="r in sortedRuns" :key="r.run_id" class="bt-row"
                         :class="{ active: selectedRun && selectedRun.run_id === r.run_id }"
@@ -106,15 +114,15 @@ export default {
             // sorts numerically (booleans → 1/0); `fmt` drives display, `signMode`
             // the colour. New fields are blank ("—") until a run is regenerated.
             metricCols: [
-                { key: 'total_net_profit', label: 'Net P/L', metric: 'total_net_profit', fmt: 'money', signMode: 'sign' },
-                { key: 'strategy_return_pct', label: 'Return', metric: 'strategy_return_pct', fmt: 'pct', signMode: 'sign' },
-                { key: 'buy_hold_return_pct', label: 'B&H Ret', metric: 'buy_hold_return_pct', fmt: 'pct', signMode: 'sign' },
-                { key: 'strategy_vs_buy_hold_return_pct', label: 'vs B&H', metric: 'strategy_vs_buy_hold_return_pct', fmt: 'pct', signMode: 'beat', beat: 'strategy_beat_buy_hold' },
-                { key: 'strategy_beat_buy_hold', label: 'Beat', metric: 'strategy_beat_buy_hold', fmt: 'bool', signMode: 'bool', title: 'Strategy beat buy & hold?' },
-                { key: 'sharpe_ratio', label: 'Sharpe', metric: 'sharpe_ratio', fmt: 'ratio2', signMode: 'sign' },
-                { key: 'sortino_ratio', label: 'Sortino', metric: 'sortino_ratio', fmt: 'ratio2', signMode: 'sign' },
-                { key: 'profit_factor', label: 'PF', metric: 'profit_factor', fmt: 'ratio2', signMode: 'gte1', title: 'Profit factor (gross profit ÷ gross loss)' },
-                { key: 'recovery_factor', label: 'RF', metric: 'recovery_factor', fmt: 'ratio2', signMode: 'gte1', title: 'Recovery factor (net profit ÷ max drawdown)' },
+                { key: 'total_net_profit', label: 'Net P/L', metric: 'total_net_profit', fmt: 'money', signMode: 'sign', agg: 'sum' },
+                { key: 'strategy_return_pct', label: 'Return', metric: 'strategy_return_pct', fmt: 'pct', signMode: 'sign', agg: 'avg' },
+                { key: 'buy_hold_return_pct', label: 'B&H Ret', metric: 'buy_hold_return_pct', fmt: 'pct', signMode: 'sign', agg: 'avg' },
+                { key: 'strategy_vs_buy_hold_return_pct', label: 'vs B&H', metric: 'strategy_vs_buy_hold_return_pct', fmt: 'pct', signMode: 'beat', beat: 'strategy_beat_buy_hold', agg: 'avg' },
+                { key: 'strategy_beat_buy_hold', label: 'Beat', metric: 'strategy_beat_buy_hold', fmt: 'bool', signMode: 'bool', title: 'Strategy beat buy & hold?', agg: 'beat' },
+                { key: 'sharpe_ratio', label: 'Sharpe', metric: 'sharpe_ratio', fmt: 'ratio2', signMode: 'sign', agg: 'avg' },
+                { key: 'sortino_ratio', label: 'Sortino', metric: 'sortino_ratio', fmt: 'ratio2', signMode: 'sign', agg: 'avg' },
+                { key: 'profit_factor', label: 'PF', metric: 'profit_factor', fmt: 'ratio2', signMode: 'gte1', title: 'Profit factor (gross profit ÷ gross loss)', agg: 'avg' },
+                { key: 'recovery_factor', label: 'RF', metric: 'recovery_factor', fmt: 'ratio2', signMode: 'gte1', title: 'Recovery factor (net profit ÷ max drawdown)', agg: 'avg' },
             ],
         }
     },
@@ -164,6 +172,34 @@ export default {
         selectedStrategy() {
             const n = this.filters.strategy
             return n ? this.strategies.find((s) => s.name === n) || null : null
+        },
+        // Sticky totals row, aggregated over ALL loaded runs (order-independent):
+        // `sum` for money, `avg` for ratios/percents, `beat` → "won/total".
+        // Parallel to metricCols so the cells align under their columns. Missing
+        // metric values are skipped (don't drag an average toward 0).
+        summaryCells() {
+            return this.metricCols.map((c) => {
+                if (c.agg === 'beat') {
+                    let yes = 0; let total = 0
+                    for (const r of this.runs) {
+                        const raw = this.metric(r, c.metric)
+                        if (raw == null || raw === '') continue
+                        total += 1; if (this._truthy(raw)) yes += 1
+                    }
+                    return { key: c.key, text: total ? `${yes}/${total}` : '—', sign: total && yes * 2 >= total ? 'pos' : (total ? 'neg' : ''), title: `Beat buy & hold: ${yes} of ${total} runs` }
+                }
+                const vals = []
+                for (const r of this.runs) {
+                    const raw = this.metric(r, c.metric)
+                    if (raw == null || raw === '') continue
+                    const n = Number(raw); if (Number.isFinite(n)) vals.push(n)
+                }
+                if (!vals.length) return { key: c.key, text: '—', sign: '', title: '' }
+                const val = c.agg === 'sum' ? vals.reduce((a, b) => a + b, 0) : vals.reduce((a, b) => a + b, 0) / vals.length
+                const text = c.fmt === 'pct' ? this.fmtPct(val) : c.fmt === 'money' ? this.fmtMoney(val) : this.fmtRatio(val)
+                const sign = c.signMode === 'gte1' ? (val >= 1 ? 'pos' : 'neg') : (val > 0 ? 'pos' : (val < 0 ? 'neg' : ''))
+                return { key: c.key, text, sign, title: `${c.agg === 'sum' ? 'Total' : 'Average'} ${c.label} over ${vals.length} run${vals.length === 1 ? '' : 's'}` }
+            })
         },
     },
     methods: {
@@ -307,12 +343,20 @@ export default {
 .bt-msg { padding: 16px; color: #808a9d; text-align: center; }
 .bt-table { width: 100%; border-collapse: collapse; }
 .bt-table th { position: sticky; top: 0; background: #131722; color: #808a9d; font-weight: 500; text-align: left; padding: 6px 10px; border-bottom: 1px solid #2a2e39; white-space: nowrap; }
+/* Fixed header-row height so the totals row can stick flush beneath it. */
+.bt-table thead tr:first-child th { height: 29px; box-sizing: border-box; z-index: 3; }
 .bt-sortable th { cursor: pointer; user-select: none; }
 .bt-sortable th:hover { color: #d1d4dc; }
 .bt-sortable th.sorted { color: #35a776; }
 .bt-sort { margin-left: 4px; font-size: 9px; }
 .bt-table td { padding: 5px 10px; border-bottom: 1px solid #1c212e; white-space: nowrap; }
 .bt-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+/* Sticky aggregate totals row, glued just below the header. */
+.bt-summary td { position: sticky; top: 29px; z-index: 2; background: #161d2b; border-bottom: 1px solid #2a2e39; font-weight: 600; }
+.bt-sum-label { color: #808a9d; font-weight: 700; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; }
+.bt-sum-cell { font-variant-numeric: tabular-nums; }
+.bt-summary td.pos { color: #23a776; }
+.bt-summary td.neg { color: #e54150; }
 .bt-row { cursor: pointer; }
 .bt-row:nth-child(even) { background: rgba(255, 255, 255, 0.025); }   /* zebra striping */
 .bt-row:hover { background: #1e222d; }
