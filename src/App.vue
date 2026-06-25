@@ -2110,17 +2110,15 @@ export default {
                 this._btSetDetail(patch)
             } catch (err) { this.backtests.error = this._btErr(err) }
             if (run.status === 'running' || run.status === 'queued') this._btSubscribeProgress(run)
-            // Universe studies are COMPACT metric-study artifacts (no fill/equity
-            // timelines) — fetch the raw artifact to render the ranking/per-symbol
-            // tables. (We do NOT fetch the artifact for normal/sweep runs: those can
-            // be enormous and the gateway drops the socket while serializing them.)
-            if (shape.kind === 'universe') this._btLoadArtifact(run)
-            else {
-                // Downsampled full-run OVERVIEW (full range, capped equity): powers
-                // the panel — metric_descriptors (format the metrics table),
-                // period_returns, and the trades list — without the whole curve.
-                this._btLoadOverview(run)
-            }
+            // Multi-candidate studies (sweep/optimize/universe/walk-forward): fetch
+            // the COMPACT artifact for the candidate rankings + optimization
+            // metadata. compact:true is bounded (heavy report arrays → *_count), so
+            // it's safe even for long sweeps that a full read can't serialize.
+            if (shape.multiCandidate) this._btLoadArtifact(run)
+            // Chartable runs also get the downsampled full-run OVERVIEW (powers the
+            // metrics table / period returns / trades). Universe studies carry no
+            // equity timeline, so there is nothing to overview/plot.
+            if (shape.chartable) this._btLoadOverview(run)
         },
 
         // Race a promise against a timeout so a hung/oversized gateway response
@@ -2137,7 +2135,10 @@ export default {
             if (!this.backtestsFeed) return
             this._btSetDetail({ artifact: null, artifactError: null, artifactLoading: true })
             try {
-                const res = await this._withTimeout(this.backtestsFeed.getRun(run.run_id), 20000)
+                // compact:true → plan/scenario/optimization/rankings/parameters/
+                // metrics, with heavy report arrays replaced by *_count fields, so
+                // this never trips the gateway's backtest_artifact_too_large guard.
+                const res = await this._withTimeout(this.backtestsFeed.getRun(run.run_id, { compact: true }), 20000)
                 if (this.backtests.selectedRun !== run) return
                 const artifact = (res && res.artifact) || res || null
                 const shape = detectRunShape(run, artifact)   // authoritative refine

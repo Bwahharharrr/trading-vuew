@@ -37,6 +37,33 @@ describe('detectRunShape — fast path (run_id + summary)', () => {
   })
 })
 
+describe('detectRunShape — v2 summary fields (authoritative)', () => {
+  it('run.run_kind wins over the run_id pattern', () => {
+    // run_id looks normal, but run_kind says portfolio_sweep
+    const s = detectRunShape({ run_id: 'ema:BITFINEX:tBTCUSD:1h:0:100', symbols: ['tBTCUSD'], run_kind: 'portfolio_sweep' })
+    expect(s.kind).toBe('portfolio_sweep')
+    expect(s.label).toBe('Portfolio Sweep')
+    expect(s.klass).toBe('sweep')          // CSS bucket
+    expect(s.multiCandidate).toBe(true)
+    expect(s.chartable).toBe(true)
+  })
+  it('walk_forward kind is recognised + chartable', () => {
+    const s = detectRunShape({ run_id: 'wf:x', symbols: ['tBTCUSD'], run_kind: 'walk_forward' })
+    expect(s.kind).toBe('walk_forward')
+    expect(s.multiCandidate).toBe(true)
+    expect(s.chartable).toBe(true)
+    expect(s.klass).toBe('walk')
+  })
+  it('candidate count from run.optimization.candidate_count', () => {
+    const s = detectRunShape({ run_id: 'sweep:x:0:100:7', symbols: ['tBTCUSD'], run_kind: 'sweep', optimization: { candidate_count: 24, full_grid_count: 100 } })
+    expect(s.candidateCount).toBe(24)      // optimization wins over the run_id :7
+  })
+  it('candidate count falls back to artifact.runs length', () => {
+    const s = detectRunShape({ run_id: 'sweep:x', symbols: ['tBTCUSD'], run_kind: 'sweep' }, { runs: [{}, {}, {}] })
+    expect(s.candidateCount).toBe(3)
+  })
+})
+
 describe('detectRunShape — artifact-first (authoritative)', () => {
   it('plan.mode=sweep + parameter_grid_count drives sweep + count', () => {
     const s = detectRunShape({ run_id: 'x:1h:0:1', symbols: ['tBTCUSD'] }, { plan: { mode: 'sweep', parameter_grid_count: 24 } })
@@ -62,6 +89,8 @@ describe('labels', () => {
   it('every shape has a label', () => {
     for (const k of RUN_SHAPES) expect(typeof runShapeLabel(k)).toBe('string')
     expect(runShapeLabel('universe')).toBe('Universe')
-    expect(runShapeLabel('bogus')).toBe('Backtest')   // fallback
+    expect(runShapeLabel('portfolio_sweep')).toBe('Portfolio Sweep')
+    expect(runShapeLabel('walk_forward')).toBe('Walk-Forward')
+    expect(runShapeLabel('some_new_kind')).toBe('Some New Kind')   // humanized fallback
   })
 })

@@ -4,7 +4,7 @@
         <span class="bt-badge" :class="run.status">{{ run.status }}</span>
         <span class="btd-title">{{ run.strategy }}</span>
         <span class="btd-sub">{{ run.venue }} · {{ (run.symbols||[]).join(',') }} · {{ run.trade_timeframe }}</span>
-        <span v-if="shape" class="bt-type" :class="'t-' + shape.kind">{{ shape.label }}</span>
+        <span v-if="shape" class="bt-type" :class="'t-' + (shape.klass || shape.kind)">{{ shape.label }}</span>
         <span class="btd-spacer"></span>
         <button class="btd-close" title="Close run details" @click="$emit('close')">×</button>
     </div>
@@ -14,24 +14,22 @@
         <span v-if="run.completed_at_ms"> · completed {{ fmtTime(run.completed_at_ms) }}</span>
     </div>
 
-    <!-- Universe optimization = a compact metric study (no chartable timelines). -->
-    <corky-universe-study v-if="isUniverse"
-                          :run="run" :artifact="detail.artifact || null"
-                          :loading="!!detail.artifactLoading" :error="detail.artifactError || null" />
+    <!-- Candidate ranking (sweep / optimize / universe / walk-forward). -->
+    <template v-if="showStudy">
+        <div v-if="chartable" class="btd-candidate">
+            <span class="btd-clabel">Candidate</span>
+            <span class="btd-dim">{{ runIndex != null ? '#' + runIndex : 'top-ranked (default)' }}</span>
+            <button v-if="runIndex != null" class="btd-reset" @click="$emit('select-candidate', null)">↺ Top-ranked</button>
+            <span v-if="candidateCount" class="btd-dim">· {{ candidateCount }} candidates</span>
+        </div>
+        <corky-universe-study :run="run" :artifact="detail.artifact || null"
+                              :loading="!!detail.artifactLoading" :error="detail.artifactError || null"
+                              :chartable="chartable" :selected-run-index="runIndex"
+                              @select-candidate="$emit('select-candidate', $event)" />
+    </template>
 
-    <template v-else>
-    <!-- Candidate (run_index) selector for sweep / optimization studies. -->
-    <div v-if="multiCandidate" class="btd-candidate">
-        <span class="btd-clabel">Candidate</span>
-        <select class="btd-cselect" :value="runIndex == null ? '' : String(runIndex)"
-                @change="$emit('select-candidate', $event.target.value === '' ? null : Number($event.target.value))">
-            <option value="">Top-ranked (default)</option>
-            <option v-for="i in candidateOptions" :key="i" :value="String(i)">#{{ i }}</option>
-        </select>
-        <span v-if="activeCandidate != null" class="btd-dim">plotting #{{ activeCandidate }}</span>
-        <span class="btd-dim">· {{ candidateCount }} candidates</span>
-    </div>
-
+    <!-- Chartable body (plot + equity metrics + trades + period returns). -->
+    <template v-if="chartable">
     <!-- Plot action -->
     <div class="btd-actions">
         <button class="bt-btn bt-plot" :disabled="plotBusy" @click="$emit('plot-run', run)">
@@ -165,22 +163,14 @@ export default {
     computed: {
         // Detected artifact shape + candidate (run_index) selection, supplied by App.
         shape() { return (this.detail && this.detail.shape) || null },
-        isUniverse() { return !!(this.shape && this.shape.kind === 'universe') },
+        // Chartable runs have a plot/metrics body; universe studies don't.
+        chartable() { const s = this.shape; return !s || s.chartable !== false },
+        // Multi-candidate studies show the candidate ranking table.
+        showStudy() { return !!(this.shape && this.shape.multiCandidate) },
         candidateCount() { return Number((this.detail && this.detail.candidateCount) || 0) },
-        multiCandidate() { return !!(this.shape && this.shape.multiCandidate) && this.candidateCount > 1 },
-        candidateOptions() {
-            const n = this.candidateCount
-            return n > 1 ? Array.from({ length: n }, (_, i) => i) : []
-        },
         runIndex() {
             const ri = this.detail && this.detail.runIndex
             return (ri == null || ri === '') ? null : Number(ri)
-        },
-        // Which candidate the gateway actually returned (echoed on the report).
-        activeCandidate() {
-            const r = this.detail && this.detail.report
-            const i = r && r.parameter_run_index
-            return (i == null) ? null : Number(i)
         },
         // metric name → descriptor (from the OVERVIEW report's metric_descriptors).
         metricDescriptors() {
@@ -312,6 +302,8 @@ export default {
 .btd-candidate { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; }
 .btd-clabel { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #bb86fc; }
 .btd-cselect { background: #0e1320; color: #d1d4dc; border: 1px solid #2a2e39; border-radius: 4px; padding: 3px 6px; font-size: 11px; }
+.btd-reset { background: #131722; color: #808a9d; border: 1px solid #2a2e39; border-radius: 4px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
+.btd-reset:hover { color: #35a776; border-color: #35a776; }
 .bt-type { font-size: 10px; padding: 1px 7px; border-radius: 9px; background: #2a2e39; color: #b0b6c0; }
 .bt-type.t-normal { background: rgba(53,167,118,0.14); color: #35a776; }
 .bt-type.t-portfolio { background: rgba(88,166,255,0.16); color: #58a6ff; }

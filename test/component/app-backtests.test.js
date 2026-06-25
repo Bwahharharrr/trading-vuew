@@ -140,7 +140,7 @@ describe('universe study artifact', () => {
     const uni = { ...RUN, run_id: 'universe:ema:BITFINEX:multi:1h:0:100:5', symbols: ['tBTCUSD', 'tETHUSD'] }
     await ctx.btSelectRun(uni)
     await new Promise((r) => setTimeout(r, 0))   // let the fire-and-forget artifact fetch resolve
-    expect(ctx.backtestsFeed.getRun).toHaveBeenCalledWith(uni.run_id)
+    expect(ctx.backtestsFeed.getRun).toHaveBeenCalledWith(uni.run_id, { compact: true })
     expect(ctx.backtests.detail.artifact).toBeTruthy()
     expect(ctx.backtests.detail.shape.kind).toBe('universe')
     expect(ctx.backtests.detail.shape.chartable).toBe(false)

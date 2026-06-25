@@ -467,10 +467,16 @@ export class CorkyClient {
         return this._request(command)
     }
 
-    /** Raw artifact for a run → resolves the pass-through `artifact` JSON. */
-    getBacktestRun(run_id) {
+    /** Raw artifact for a run → resolves the pass-through `artifact` JSON. Pass
+     *  { compact:true } to get plan/scenario/optimization/rankings/parameters/
+     *  metrics with heavy report arrays (fills/ledger/equity/period_returns/
+     *  rejected_orders) replaced by *_count fields — bounded, so it won't hit the
+     *  `backtest_artifact_too_large` error a full read raises on long sweeps. */
+    getBacktestRun(run_id, opts = {}) {
         if (!run_id) throw new Error('getBacktestRun: run_id is required')
-        return this._request({ type: 'get_backtest_run', run_id })
+        const command = { type: 'get_backtest_run', run_id }
+        if (opts.compact != null) command.compact = opts.compact
+        return this._request(command)
     }
 
     /** One-shot progress snapshot → resolves the `events` list. */

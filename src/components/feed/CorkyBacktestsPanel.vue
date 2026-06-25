@@ -87,7 +87,7 @@
                         <td>{{ r.strategy }}</td>
                         <td class="sym">{{ (r.symbols||[]).join(',') }}</td>
                         <td>{{ r.trade_timeframe }}</td>
-                        <td><span class="bt-type" :class="'t-' + runShape(r).kind" :title="runShape(r).chartable ? '' : 'Metric study only — plot requires a materialized execution artifact'">{{ runShape(r).label }}</span></td>
+                        <td><span class="bt-type" :class="'t-' + runShape(r).klass" :title="runShape(r).chartable ? '' : 'Metric study only — plot requires a materialized execution artifact'">{{ runShape(r).label }}</span></td>
                         <td><span class="bt-badge" :class="r.status">{{ r.status }}</span></td>
                         <td v-for="c in metricCols" :key="c.key" class="num" :class="cellSign(r, c)" :title="cellTitle(r, c)">{{ cellText(r, c) }}</td>
                         <td class="time bt-dur" :title="durationTitle(r)">{{ fmtDuration(r) }}</td>
@@ -338,20 +338,28 @@ export default {
             const u = { m: 60000, h: 3600000, d: 86400000, w: 604800000, M: 2592000000 }[m[2]] || 0
             return Number(m[1]) * u
         },
+        // The run's DATA period — prefer the v2 first_bar_ts_ms/last_bar_ts_ms,
+        // fall back to the execution started_at_ms/completed_at_ms (which match
+        // the data range for these artifacts).
+        _dataRange(r) {
+            const s = Number(r.first_bar_ts_ms != null ? r.first_bar_ts_ms : r.started_at_ms)
+            const e = Number(r.last_bar_ts_ms != null ? r.last_bar_ts_ms : r.completed_at_ms)
+            return { s, e }
+        },
         // { n, exact } bar count: EXACT when the run summary carries bar_count;
         // otherwise an estimate from the data span / timeframe (continuous bars).
         barCount(r) {
             const exact = r.bar_count != null ? Number(r.bar_count) : NaN
             if (Number.isFinite(exact)) return { n: exact, exact: true }
-            const s = Number(r.started_at_ms); const e = Number(r.completed_at_ms)
+            const { s, e } = this._dataRange(r)
             const tf = this._tfMs(r.trade_timeframe)
             if (!(e > s) || !(tf > 0)) return null
             return { n: Math.round((e - s) / tf), exact: false }
         },
-        // "2013-03-31 – 2026-06-25 (4,835 days, ~116,005 bars)" for the run's
-        // backtest data period (started_at_ms → completed_at_ms).
+        // "2013-03-31 – 2026-06-25 (4,835 days, 116,006 bars)" for the run's
+        // backtest data period.
         fmtDuration(r) {
-            const s = Number(r.started_at_ms); const e = Number(r.completed_at_ms)
+            const { s, e } = this._dataRange(r)
             if (!(s > 0) || !(e > 0) || e < s) return '—'
             const days = Math.round((e - s) / 86400000)
             const b = this.barCount(r)
@@ -424,6 +432,7 @@ export default {
 .bt-type.t-sweep { background: rgba(245,197,24,0.16); color: #f5c518; }
 .bt-type.t-optimize { background: rgba(187,134,252,0.18); color: #bb86fc; }
 .bt-type.t-universe { background: rgba(255,127,0,0.16); color: #ff9f40; }
+.bt-type.t-walk { background: rgba(56,189,248,0.16); color: #38bdf8; }
 .pos { color: #23a776; }
 .neg { color: #e54150; }
 </style>

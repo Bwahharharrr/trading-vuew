@@ -71,6 +71,35 @@ describe('CorkyUniverseStudy', () => {
     expect(w.find('.us-raw-pre').text()).toContain('weird_unknown_shape')
   })
 
+  test('renders the real sweep artifact.runs shape (parameters.values + report.metrics)', () => {
+    const sweep = { runs: [
+      { run_index: 0, rank: 1, parameters: { values: { fast_period: 50, slow_period: 260 } }, report: { metrics: { total_net_profit: '27000', profit_factor: '1.55', recovery_factor: '2.1', max_equity_drawdown: '10000', total_trades: 536 } } },
+      { run_index: 1, rank: 2, parameters: { values: { fast_period: 25, slow_period: 140 } }, report: { metrics: { total_net_profit: '12000', profit_factor: '1.2' } } },
+    ] }
+    const w = mount(CorkyUniverseStudy, { props: { run: { run_id: 'sweep:x' }, artifact: sweep, chartable: true } })
+    const rows = w.findAll('.us-table tbody .bt-row')
+    expect(rows).toHaveLength(2)
+    const r0 = rows[0].text()
+    expect(r0).toContain('27,000')          // total_net_profit (money) from report.metrics
+    expect(r0).toContain('1.55')            // profit factor
+    expect(r0).toContain('536')             // total_trades
+    expect(r0).toContain('fast_period=50')  // parameters.values
+  })
+
+  test('chartable: clicking a candidate emits select-candidate(run_index); active row highlighted', async () => {
+    const sweep = { runs: [{ run_index: 0, parameters: { values: {} } }, { run_index: 1, parameters: { values: {} } }] }
+    const w = mount(CorkyUniverseStudy, { props: { run: { run_id: 'x' }, artifact: sweep, chartable: true, selectedRunIndex: 1 } })
+    const rows = w.findAll('.us-table tbody .bt-row')
+    expect(rows[1].classes()).toContain('active')   // selectedRunIndex=1 highlighted
+    await rows[0].trigger('click')
+    expect(w.emitted('select-candidate')[0][0]).toBe(0)
+  })
+
+  test('the metric-study note only shows for non-chartable (universe) studies', () => {
+    expect(mount(CorkyUniverseStudy, { props: { artifact: ARTIFACT, chartable: false } }).find('.us-note').exists()).toBe(true)
+    expect(mount(CorkyUniverseStudy, { props: { artifact: { runs: [] }, chartable: true } }).find('.us-note').exists()).toBe(false)
+  })
+
   test('loading + error states', () => {
     expect(mountStudy({ loading: true, artifact: null }).text()).toContain('Loading study artifact')
     expect(mountStudy({ error: 'boom', artifact: null }).find('.us-err').text()).toContain('boom')

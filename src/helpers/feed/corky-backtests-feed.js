@@ -48,8 +48,9 @@ export class CorkyBacktestsFeed {
   /** Backtest runs (all filters optional). Resolves `ChartBacktestRunSummary[]`. */
   listRuns(filters = {}) { return this.client.listBacktestRuns(filters) }
 
-  /** Raw pass-through artifact for a run. Resolves `{ run_id, artifact }`. */
-  getRun(run_id) { return this.client.getBacktestRun(run_id) }
+  /** Raw pass-through artifact for a run. Resolves `{ run_id, artifact }`. Pass
+   *  { compact:true } for the bounded metadata/rankings shape. */
+  getRun(run_id, opts = {}) { return this.client.getBacktestRun(run_id, opts) }
 
   /** One-shot progress snapshot. Resolves the progress-event list (`[]` if none). */
   async getProgress(run_id) {

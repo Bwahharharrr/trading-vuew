@@ -3,20 +3,40 @@
 // (run_index), and which are compact metric-only universe studies.
 //
 // Detection is LAYERED and never hard-codes one schema (per the gateway
-// contract): a fast path from the run SUMMARY (run_id pattern + symbol count)
-// for the list, refined by the raw get_backtest_run.artifact when available.
-// Every probe is feature-detected and optional.
+// contract): the AUTHORITATIVE `run.run_kind` + `run.optimization` summary
+// fields first (v2 gateway), then the raw artifact, then a fast path from the
+// run_id pattern + symbol count for older runs that lack the new fields. Every
+// probe is feature-detected and optional.
 
-export const RUN_SHAPES = ['normal', 'portfolio', 'sweep', 'optimize', 'universe']
+export const RUN_SHAPES = [
+  'normal', 'portfolio', 'sweep', 'portfolio_sweep',
+  'optimize', 'portfolio_optimize', 'universe', 'walk_forward',
+]
 
 const RUN_SHAPE_LABELS = {
-  normal: 'Backtest', portfolio: 'Portfolio', sweep: 'Sweep',
-  optimize: 'Optimized', universe: 'Universe',
+  normal: 'Backtest', portfolio: 'Portfolio',
+  sweep: 'Sweep', portfolio_sweep: 'Portfolio Sweep',
+  optimize: 'Optimized', portfolio_optimize: 'Portfolio Opt.',
+  universe: 'Universe', walk_forward: 'Walk-Forward',
 }
-export function runShapeLabel(kind) { return RUN_SHAPE_LABELS[kind] || 'Backtest' }
+const humanize = (k) => String(k).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+export function runShapeLabel(kind) { return RUN_SHAPE_LABELS[kind] || humanize(kind || 'normal') }
 
-// Trailing ":<N>" candidate/grid count baked into sweep/optimize run_ids
-// (e.g. "sweep:…:1782388800000:56" → 56 candidates).
+// CSS-class slug for a kind badge (collapse portfolio_* / walk_forward variants).
+export function runShapeClass(kind) {
+  if (/universe/.test(kind)) return 'universe'
+  if (/optim/.test(kind)) return 'optimize'
+  if (/sweep/.test(kind)) return 'sweep'
+  if (/walk/.test(kind)) return 'walk'
+  if (/portfolio/.test(kind)) return 'portfolio'
+  return 'normal'
+}
+
+const num = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : null }
+
+// Trailing ":<N>" candidate/grid count baked into older sweep/optimize run_ids
+// (e.g. "sweep:…:1782388800000:56" → 56). NOT used for normal runs, where the
+// trailing segment is an END TIMESTAMP.
 function trailingCount(runId) {
   const m = /:(\d+)$/.exec(String(runId || ''))
   if (!m) return null
@@ -25,49 +45,49 @@ function trailingCount(runId) {
 }
 
 /**
- * @param {object} run        - run summary ({ run_id, symbols, ... }).
- * @param {object} [artifact] - raw get_backtest_run.artifact (authoritative).
- * @returns {{ kind:string, label:string, chartable:boolean,
+ * @param {object} run        - run summary ({ run_id, symbols, run_kind?, optimization?, … }).
+ * @param {object} [artifact] - raw get_backtest_run.artifact (authoritative for older runs).
+ * @returns {{ kind:string, label:string, klass:string, chartable:boolean,
  *            multiCandidate:boolean, candidateCount:(number|null) }}
  */
 export function detectRunShape(run = {}, artifact = null) {
   const id = String(run.run_id || '')
   const symbols = Array.isArray(run.symbols) ? run.symbols : []
-  let kind
+  let kind = (run.run_kind && String(run.run_kind)) || null   // v2 authoritative field
 
-  if (artifact && typeof artifact === 'object') {
-    // Artifact-first (authoritative).
+  if (!kind && artifact && typeof artifact === 'object') {
     const plan = artifact.plan || {}
     const opt = artifact.optimization || plan.optimization || null
     const universeMark = artifact.universe || artifact.metric_study
       || /universe/i.test(String(artifact.kind || plan.kind || (opt && (opt.kind || opt.objective)) || ''))
     if (universeMark) kind = 'universe'
-    else if (opt) kind = 'optimize'
-    else if (/sweep/i.test(String(plan.mode || '')) || Number(plan.parameter_grid_count) > 1) kind = 'sweep'
+    else if (opt) kind = symbols.length > 1 ? 'portfolio_optimize' : 'optimize'
+    else if (/sweep/i.test(String(plan.mode || '')) || Number(plan.parameter_grid_count) > 1) kind = symbols.length > 1 ? 'portfolio_sweep' : 'sweep'
     else if (symbols.length > 1) kind = 'portfolio'
     else kind = 'normal'
-  } else {
-    // Fast path from the run_id + summary (no artifact fetch).
+  }
+  if (!kind) {
+    // Fast path from the run_id + summary (no run_kind, no artifact).
     if (/universe/i.test(id)) kind = 'universe'
-    else if (/optimi[sz]e/i.test(id)) kind = 'optimize'
-    else if (/sweep/i.test(id)) kind = 'sweep'
+    else if (/optimi[sz]e/i.test(id)) kind = symbols.length > 1 ? 'portfolio_optimize' : 'optimize'
+    else if (/sweep/i.test(id)) kind = symbols.length > 1 ? 'portfolio_sweep' : 'sweep'
     else if (symbols.length > 1) kind = 'portfolio'
     else kind = 'normal'
   }
 
-  const multiCandidate = kind === 'sweep' || kind === 'optimize' || kind === 'universe'
-  // Candidate count only applies to multi-candidate studies; for normal/portfolio
-  // runs the run_id's trailing :N is an END TIMESTAMP, not a count.
+  // Universe = a compact metric study (rankings + aggregate robustness +
+  // per-symbol metrics, no fill/equity timelines) → nothing to plot.
+  const chartable = !/universe/i.test(kind)
+  const multiCandidate = /sweep|optim|universe|walk/i.test(kind)
+
   let candidateCount = null
   if (multiCandidate) {
-    const gridCount = artifact && artifact.plan ? Number(artifact.plan.parameter_grid_count) : NaN
-    candidateCount = (Number.isFinite(gridCount) && gridCount > 1) ? gridCount : trailingCount(id)
+    const opt = run.optimization || (artifact && (artifact.optimization || (artifact.plan && artifact.plan.optimization))) || {}
+    candidateCount = num(opt.candidate_count) || num(opt.full_grid_count) || num(opt.selected_parameter_set_count)
+      || (artifact && artifact.plan && num(artifact.plan.parameter_grid_count))
+      || (artifact && Array.isArray(artifact.runs) && artifact.runs.length > 1 ? artifact.runs.length : null)
+      || trailingCount(id)
   }
 
-  // Universe = a compact metric study: it stores candidate rankings + aggregate
-  // robustness + per-symbol metrics, NOT full fill/equity timelines, so its
-  // chart/report overlays won't plot unless a candidate is materialized.
-  const chartable = kind !== 'universe'
-
-  return { kind, label: runShapeLabel(kind), chartable, multiCandidate, candidateCount }
+  return { kind, label: runShapeLabel(kind), klass: runShapeClass(kind), chartable, multiCandidate, candidateCount }
 }

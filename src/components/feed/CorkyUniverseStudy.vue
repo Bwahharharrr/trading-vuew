@@ -1,6 +1,6 @@
 <template>
 <div class="us">
-    <div class="us-note">
+    <div v-if="!chartable" class="us-note">
         <span class="bt-type t-universe">Universe</span>
         Metric study only — candidate rankings + per-symbol metrics. Plotting an
         equity/trade chart requires a materialized execution artifact (rerun a
@@ -10,7 +10,7 @@
     <div v-if="loading" class="us-msg">Loading study artifact…</div>
     <div v-else-if="error" class="us-msg us-err">{{ error }}</div>
     <template v-else-if="artifact">
-        <!-- Optimization metadata (sampler / objective / etc.) when present. -->
+        <!-- Optimization metadata (sampler / objective / candidate count / …). -->
         <div v-if="optMetaRows.length" class="us-meta">
             <span v-for="m in optMetaRows" :key="m.key" class="us-meta-item">
                 <span class="us-meta-k">{{ m.label }}</span><span class="us-meta-v">{{ m.value }}</span>
@@ -19,7 +19,10 @@
 
         <!-- Candidate ranking table -->
         <template v-if="candidates.length">
-            <div class="us-sec">Candidates ({{ candidates.length }})</div>
+            <div class="us-sec">
+                Candidates ({{ candidates.length }})
+                <span v-if="chartable" class="us-dim">· click a row to plot it</span>
+            </div>
             <table class="bt-table us-table">
                 <thead><tr>
                     <th>#</th>
@@ -28,12 +31,13 @@
                 </tr></thead>
                 <tbody>
                     <template v-for="(cand, i) in candidates" :key="i">
-                        <tr class="bt-row" :class="{ open: expanded === i }" @click="toggle(i)">
+                        <tr class="bt-row" :class="{ open: expanded === i, active: selectedRunIndex != null && cand.runIndex === selectedRunIndex }"
+                            @click="onRowClick(cand, i)">
                             <td class="us-rank">{{ cand.runIndex != null ? cand.runIndex : i }}</td>
                             <td v-for="c in candidateCols" :key="c.key" class="num" :class="c.sign ? signOf(cand[c.key]) : ''">{{ fmtCell(cand[c.key], c) }}</td>
                             <td class="us-params" :title="paramStr(cand.params)">{{ paramStr(cand.params) || '—' }}</td>
                         </tr>
-                        <!-- Per-symbol breakdown for the expanded candidate -->
+                        <!-- Per-symbol breakdown for the expanded candidate (universe). -->
                         <tr v-if="expanded === i && cand.perSymbol.length" class="us-sub-row">
                             <td :colspan="candidateCols.length + 2">
                                 <table class="bt-table us-subtable">
@@ -54,12 +58,10 @@
                 </tbody>
             </table>
         </template>
-        <div v-else class="us-msg">
-            No ranked candidates found in this artifact's known fields.
-        </div>
+        <div v-else class="us-msg">No ranked candidates found in this artifact's known fields.</div>
 
-        <!-- Raw artifact (always available — the study schema is feature-detected,
-             so this guarantees the data is inspectable even if a field is renamed). -->
+        <!-- Raw artifact (always available — the schema is feature-detected, so
+             this guarantees the data is inspectable even if a field is renamed). -->
         <div class="us-raw">
             <button class="us-raw-toggle" @click="showRaw = !showRaw">{{ showRaw ? '▾' : '▸' }} Raw artifact JSON</button>
             <pre v-if="showRaw" class="us-raw-pre">{{ rawJson }}</pre>
@@ -70,38 +72,45 @@
 </template>
 
 <script>
-// CorkyUniverseStudy — renders a compact "universe optimization" artifact
-// (candidate rankings + aggregate robustness + per-symbol metrics). These
-// studies do NOT carry fill/equity timelines, so there is nothing to plot.
-//
-// The exact artifact schema is NOT hard-coded (per the gateway contract): every
-// field is feature-detected across a list of likely names, and a raw-JSON
-// fallback guarantees the data is always inspectable. All money/ratio/percent
-// values are treated as decimal strings (formatted for display only).
+// CorkyUniverseStudy — renders a multi-candidate study artifact (sweep /
+// optimize / universe / walk-forward): the candidate ranking table + per-symbol
+// breakdown (universe), optimization metadata, and a raw-JSON fallback. For
+// CHARTABLE studies (sweep/optimize) a row click selects that run_index (plots
+// it); for a UNIVERSE metric study (not chartable) it expands the per-symbol
+// metrics. The artifact schema is NOT hard-coded — every field is feature-
+// detected across likely names. Decimal values are display-formatted only.
 
 // First present (non-null) value among candidate keys on an object.
 function pick(obj, keys) {
     if (!obj || typeof obj !== 'object') return undefined
-    for (const k of keys) {
-        if (obj[k] != null && obj[k] !== '') return obj[k]
-        if (obj.metrics && obj.metrics[k] != null && obj.metrics[k] !== '') return obj.metrics[k]
-    }
+    for (const k of keys) if (obj[k] != null && obj[k] !== '') return obj[k]
     return undefined
 }
+// Flatten a candidate/symbol's nested metrics up so pick() finds fields at the
+// top level regardless of nesting (artifact.runs[] nest under report.metrics;
+// universe rows may nest under metrics; some flatten).
+function look(o) {
+    if (!o || typeof o !== 'object') return {}
+    return { ...o, ...(o.metrics || {}), ...((o.report && o.report.metrics) || {}) }
+}
 
-// Display columns for a candidate / per-symbol row. fmt: money|pct|ratio|count.
+// Candidate columns (sweep + universe). Absent metrics render "—".
 const CANDIDATE_COLS = [
-    { key: 'score', label: 'Score', fmt: 'ratio', sign: false, names: ['robust_cross_symbol_score_v1', 'robust_score', 'robustness_score', 'robustness', 'score'] },
-    { key: 'profitable', label: 'Profitable', fmt: 'count', names: ['profitable_symbol_count', 'profitable_symbols', 'profitable_count', 'num_profitable_symbols'] },
-    { key: 'ret', label: 'Return', fmt: 'pct', sign: true, names: ['median_return_pct', 'aggregate_return_pct', 'median_return', 'return_pct', 'mean_return_pct'] },
-    { key: 'dd', label: 'Max DD', fmt: 'pct', names: ['median_max_drawdown_pct', 'max_drawdown_pct', 'max_equity_drawdown', 'drawdown_pct', 'drawdown'] },
-    { key: 'recovery', label: 'Recovery', fmt: 'ratio', names: ['recovery_factor', 'median_recovery_factor'] },
+    { key: 'rank', label: 'Rank', fmt: 'count', names: ['rank'] },
+    { key: 'netprofit', label: 'Net P/L', fmt: 'money', sign: true, names: ['total_net_profit'] },
+    { key: 'ret', label: 'Return', fmt: 'pct', sign: true, names: ['strategy_return_pct', 'median_return_pct', 'return_pct'] },
     { key: 'pf', label: 'PF', fmt: 'ratio', names: ['profit_factor', 'median_profit_factor'] },
+    { key: 'recovery', label: 'Recovery', fmt: 'ratio', names: ['recovery_factor'] },
+    { key: 'dd', label: 'Max DD', fmt: 'money', names: ['max_equity_drawdown'] },
+    { key: 'trades', label: 'Trades', fmt: 'count', names: ['total_trades'] },
+    { key: 'score', label: 'Score', fmt: 'ratio', title: 'Robustness score (universe)', names: ['robust_cross_symbol_score_v1', 'robust_score', 'robustness_score', 'score'] },
+    { key: 'profitable', label: 'Profitable', fmt: 'count', title: 'Profitable symbol count (universe)', names: ['profitable_symbol_count', 'profitable_symbols', 'num_profitable_symbols'] },
 ]
 const PER_SYMBOL_COLS = [
     { key: 'ret', label: 'Return', fmt: 'pct', sign: true, names: ['return_pct', 'total_return_pct', 'net_return_pct'] },
+    { key: 'netprofit', label: 'Net P/L', fmt: 'money', sign: true, names: ['total_net_profit'] },
     { key: 'pf', label: 'PF', fmt: 'ratio', names: ['profit_factor'] },
-    { key: 'dd', label: 'Max DD', fmt: 'pct', names: ['max_drawdown_pct', 'max_equity_drawdown', 'drawdown_pct'] },
+    { key: 'dd', label: 'Max DD', fmt: 'money', names: ['max_equity_drawdown', 'max_drawdown_pct'] },
     { key: 'trades', label: 'Trades', fmt: 'count', names: ['total_trades', 'trades', 'trade_count'] },
 ]
 
@@ -112,58 +121,66 @@ export default {
         artifact: { type: Object, default: null },
         loading: { type: Boolean, default: false },
         error: { type: String, default: null },
+        // Sweep/optimize candidates are selectable (plot run_index); universe is not.
+        chartable: { type: Boolean, default: false },
+        selectedRunIndex: { type: Number, default: null },
     },
+    emits: ['select-candidate'],
     data() { return { expanded: -1, showRaw: false } },
     computed: {
         candidateCols() { return CANDIDATE_COLS },
         perSymbolCols() { return PER_SYMBOL_COLS },
-        // The universe sub-object the rankings live under (feature-detected).
+        // The sub-object the rankings live under (feature-detected).
         study() {
             const a = this.artifact || {}
             return a.universe || a.study || a.metric_study || a.optimization || a
         },
-        // Feature-detected candidate list, normalized to a stable row shape.
+        // Feature-detected, normalized candidate rows.
         candidates() {
-            const u = this.study
-            const raw = (u && (u.candidates || u.rankings || u.ranked_candidates || u.ranked_runs || u.results))
-                || (this.artifact && (this.artifact.candidates || this.artifact.rankings)) || []
+            const u = this.study; const a = this.artifact || {}
+            const raw = (u && (u.runs || u.candidates || u.rankings || u.ranked_candidates || u.ranked_runs || u.results))
+                || (u && u.summary && u.summary.runs)
+                || a.runs || (a.summary && a.summary.runs) || a.candidates || a.rankings || []
             if (!Array.isArray(raw)) return []
-            return raw.map((c, i) => {
+            return raw.map((c) => {
+                const lk = look(c)
                 const row = {
-                    runIndex: pick(c, ['run_index', 'index', 'rank', 'candidate_index']),
+                    runIndex: pick(c, ['run_index', 'index', 'candidate_index']),
                     params: pick(c, ['parameters', 'params', 'parameter_set', 'parameter_values']) || {},
                     perSymbol: this._perSymbol(c),
                 }
-                for (const col of CANDIDATE_COLS) row[col.key] = pick(c, col.names)
-                if (row.runIndex == null) row.runIndex = pick(c, ['run_index'])
+                for (const col of CANDIDATE_COLS) row[col.key] = pick(lk, col.names)
                 return row
             })
         },
-        // Optimization metadata key/value chips (sampler, objective, seed, etc.).
+        // Optimization metadata key/value chips (sampler, objective, counts, …).
         optMetaRows() {
             const a = this.artifact || {}
-            const o = a.optimization || (a.plan && a.plan.optimization) || (this.study && this.study.optimization) || null
+            const o = a.optimization || (a.plan && a.plan.optimization) || (a.summary && a.summary.optimization)
+                || (this.run && this.run.optimization) || null
             if (!o || typeof o !== 'object') return []
             const FIELDS = [
                 ['sampler', 'Sampler'], ['objective', 'Objective'], ['kind', 'Kind'],
+                ['candidate_count', 'Candidates'], ['full_grid_count', 'Grid'],
+                ['selected_parameter_set_count', 'Selected'], ['exhaustive', 'Exhaustive'],
                 ['seed', 'Seed'], ['iterations', 'Iterations'], ['n_trials', 'Trials'],
-                ['scoring', 'Scoring'], ['ranking', 'Ranking'],
             ]
             return FIELDS.filter(([k]) => o[k] != null && o[k] !== '').map(([k, label]) => ({ key: k, label, value: String(o[k]) }))
         },
         rawJson() { try { return JSON.stringify(this.artifact, null, 2) } catch (_) { return '(unserializable)' } },
     },
     methods: {
-        toggle(i) { this.expanded = this.expanded === i ? -1 : i },
+        onRowClick(cand, i) {
+            if (this.chartable && cand.runIndex != null) this.$emit('select-candidate', Number(cand.runIndex))
+            else this.expanded = this.expanded === i ? -1 : i
+        },
         _perSymbol(c) {
             const ps = pick(c, ['per_symbol', 'symbols', 'by_symbol', 'symbol_metrics', 'per_symbol_metrics'])
             if (!ps) return []
-            // Normalize each row to the per-symbol column keys (feature-detected),
-            // from either an array of {symbol, ...} or a map of symbol → metrics.
             const norm = (sym, obj) => {
-                const o = flat(obj)
+                const lk = look(obj)
                 const row = { symbol: sym }
-                for (const col of PER_SYMBOL_COLS) row[col.key] = pick(o, col.names)
+                for (const col of PER_SYMBOL_COLS) row[col.key] = pick(lk, col.names)
                 return row
             }
             if (Array.isArray(ps)) return ps.map((s) => norm(s.symbol || s.name, s))
@@ -188,17 +205,12 @@ export default {
             }
         },
         paramStr(params) {
-            if (!params || typeof params !== 'object') return ''
-            return Object.keys(params).map((k) => `${k}=${params[k]}`).join(', ')
+            // sweep params nest under { values: {...} }; universe may flatten.
+            const p = (params && typeof params === 'object' && params.values && typeof params.values === 'object') ? params.values : params
+            if (!p || typeof p !== 'object') return ''
+            return Object.keys(p).map((k) => `${k}=${p[k]}`).join(', ')
         },
     },
-}
-
-// Hoist a candidate/symbol's `metrics` sub-object up so pick() finds fields at
-// the top level too (some artifacts nest, some flatten).
-function flat(o) {
-    if (!o || typeof o !== 'object') return {}
-    return o.metrics && typeof o.metrics === 'object' ? { ...o.metrics, ...o } : o
 }
 </script>
 
@@ -207,6 +219,7 @@ function flat(o) {
 .us-note { background: rgba(255,127,0,0.08); border: 1px solid rgba(255,127,0,0.25); border-radius: 4px; padding: 8px 10px; margin-bottom: 10px; color: #c9b08a; line-height: 1.4; }
 .us-msg { padding: 14px 0; color: #808a9d; }
 .us-err { color: #e54150; }
+.us-dim { color: #808a9d; font-weight: 400; text-transform: none; letter-spacing: 0; }
 .us-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .us-meta-item { display: inline-flex; gap: 6px; background: #161d2b; border: 1px solid #2a2e39; border-radius: 4px; padding: 2px 8px; }
 .us-meta-k { color: #808a9d; }
@@ -217,8 +230,10 @@ function flat(o) {
 .us-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .us-table td { padding: 4px 8px; border-bottom: 1px solid #1c212e; white-space: nowrap; }
 .us-table .bt-row { cursor: pointer; }
+.us-table .bt-row:nth-child(even) { background: rgba(255,255,255,0.02); }
 .us-table .bt-row:hover { background: #1e222d; }
 .us-table .bt-row.open { background: rgba(187,134,252,0.10); }
+.us-table .bt-row.active { background: rgba(53,167,118,0.16); box-shadow: inset 3px 0 0 #35a776; }
 .us-rank { font-weight: 700; color: #bb86fc; }
 .us-params { color: #808a9d; max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
 .us-sub-row > td { padding: 0 8px 8px 24px; background: #11151f; }

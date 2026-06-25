@@ -71,21 +71,38 @@ describe('CorkyBacktestDetail', () => {
     expect(text).toContain('Net Profit')
   })
 
-  test('renders a candidate (run_index) selector for sweep studies + emits select-candidate', async () => {
-    const w = mountDetail({ detail: { ...DETAIL, shape: { kind: 'sweep', label: 'Sweep', multiCandidate: true, chartable: true }, candidateCount: 5, runIndex: null } })
-    expect(w.find('.btd-candidate').exists()).toBe(true)
-    const opts = w.find('.btd-cselect').findAll('option').map((o) => o.text())
-    expect(opts[0]).toContain('Top-ranked')
-    expect(opts).toContain('#3')
-    await w.find('.btd-cselect').setValue('3')
-    expect(w.emitted('select-candidate')[0][0]).toBe(3)
-    await w.find('.btd-cselect').setValue('')
-    expect(w.emitted('select-candidate')[1][0]).toBe(null)   // back to default
+  test('sweep study: candidate ranking table + plot body; clicking a row selects run_index', async () => {
+    const w = mountDetail({ detail: {
+      ...DETAIL,
+      shape: { kind: 'sweep', label: 'Sweep', klass: 'sweep', multiCandidate: true, chartable: true },
+      candidateCount: 3, runIndex: null,
+      artifact: { runs: [
+        { run_index: 0, rank: 1, parameters: { values: { fast: 50, slow: 260 } }, report: { metrics: { total_net_profit: '1000', profit_factor: '1.6' } } },
+        { run_index: 1, rank: 2, parameters: { values: { fast: 25, slow: 140 } }, report: { metrics: { total_net_profit: '500', profit_factor: '1.2' } } },
+      ] },
+    } })
+    expect(w.find('.btd-candidate').exists()).toBe(true)        // chartable control line
+    expect(w.find('.bt-plot').exists()).toBe(true)              // still chartable (plot body)
+    const rows = w.findAll('.us-table tbody .bt-row')
+    expect(rows.length).toBe(2)
+    expect(rows[0].text()).toContain('fast=50')                 // params shown
+    await rows[1].trigger('click')                              // click candidate #1 → select it
+    expect(w.emitted('select-candidate')[0][0]).toBe(1)
   })
 
-  test('no candidate selector for a normal single-candidate run', () => {
+  test('reset-to-top-ranked button emits select-candidate(null)', async () => {
+    const w = mountDetail({ detail: {
+      ...DETAIL, shape: { kind: 'sweep', klass: 'sweep', multiCandidate: true, chartable: true }, candidateCount: 3, runIndex: 1,
+      artifact: { runs: [{ run_index: 0 }, { run_index: 1 }] },
+    } })
+    await w.find('.btd-reset').trigger('click')
+    expect(w.emitted('select-candidate')[0][0]).toBe(null)
+  })
+
+  test('no candidate study for a normal single-candidate run', () => {
     const w = mountDetail()   // DETAIL has no shape/candidateCount
     expect(w.find('.btd-candidate').exists()).toBe(false)
+    expect(w.find('.us').exists()).toBe(false)
   })
 
   test('universe run renders the study view instead of the plot/metrics body', () => {
