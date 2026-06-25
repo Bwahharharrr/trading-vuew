@@ -182,6 +182,7 @@ export default {
 .sr-table td { padding: 6px 12px; border-bottom: 1px solid #1c212e; white-space: nowrap; }
 .sr-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .sr-row { cursor: pointer; }
+.sr-row:nth-child(even) { background: rgba(255, 255, 255, 0.025); }   /* zebra striping */
 .sr-row:hover { background: #1e222d; }
 .sr-row:focus { outline: none; background: rgba(53,167,118,0.12); }
 /* The clicked result stays highlighted while it's shown on the chart. */

@@ -275,6 +275,9 @@ export default {
     border-top: 1px solid #2a2e39;
     color: #d1d4dc;
     font-size: 12px;
+    /* Terminal-style monospace for the whole dock (tabs, tables, metrics) — set
+       once here and inherited by every child panel (none override font-family). */
+    font-family: 'JetBrains Mono', 'Cascadia Code', 'SF Mono', 'Menlo', 'DejaVu Sans Mono', 'Liberation Mono', 'Consolas', 'Roboto Mono', monospace;
     overflow: hidden;
     position: relative;
 }
@@ -389,6 +392,7 @@ export default {
 }
 .pd-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .pd-row { cursor: pointer; }
+.pd-row:nth-child(even) { background: rgba(255, 255, 255, 0.025); }   /* zebra striping */
 .pd-row:hover { background: #1e222d; }
 .pd-row.active { background: rgba(53, 167, 118, 0.12); }
 .pd-details-cell { text-align: right; width: 1%; }

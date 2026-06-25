@@ -225,6 +225,7 @@ export default {
 .bt-table td { padding: 5px 10px; border-bottom: 1px solid #1c212e; white-space: nowrap; }
 .bt-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .bt-row { cursor: pointer; }
+.bt-row:nth-child(even) { background: rgba(255, 255, 255, 0.025); }   /* zebra striping */
 .bt-row:hover { background: #1e222d; }
 .bt-row.active { background: rgba(53,167,118,0.12); }
 .sym { color: #fff; font-weight: 600; }

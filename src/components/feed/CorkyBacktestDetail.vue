@@ -221,13 +221,17 @@ export default {
 /* Metrics grid: 3 label + 3 value columns per row, grouped by section. */
 .btd-metrics { display: flex; flex-direction: column; gap: 12px; }
 .btd-mgroup-title { color: #35a776; font-weight: 700; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 5px; border-bottom: 1px solid #1c212e; padding-bottom: 3px; }
+/* Four [label | value] blocks per row; a vertical divider BETWEEN blocks (drawn
+   as the left border of every block except the first in its row), values left
+   aligned. 8 interleaved cells/row (label,value × 4) → first label = 8n+1. */
 .btd-mgrid {
     display: grid;
-    grid-template-columns: auto minmax(56px, 1fr) auto minmax(56px, 1fr) auto minmax(56px, 1fr);
-    column-gap: 16px; row-gap: 5px; align-items: baseline;
+    grid-template-columns: repeat(4, auto minmax(40px, 1fr));
+    column-gap: 0; row-gap: 6px; align-items: baseline;
 }
-.btd-mlabel { color: #808a9d; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.btd-mval { text-align: right; font-variant-numeric: tabular-nums; color: #d1d4dc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.btd-mlabel { color: #808a9d; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 1px solid #2a2e39; padding: 0 8px 0 14px; }
+.btd-mlabel:nth-of-type(8n+1) { border-left: none; padding-left: 0; }   /* first block in row: no leading divider */
+.btd-mval { text-align: left; font-variant-numeric: tabular-nums; color: #d1d4dc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 6px; }
 .btd-empty { color: #808a9d; padding: 16px 0; }
 
 /* Shared table / badge / progress styling (mirrors CorkyBacktestsPanel). */
@@ -253,6 +257,8 @@ export default {
 .bt-table td { padding: 5px 10px; border-bottom: 1px solid #1c212e; white-space: nowrap; }
 .bt-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .bt-row { cursor: pointer; }
+.bt-row:nth-child(even) { background: rgba(255, 255, 255, 0.025); }            /* zebra striping */
+.bt-periods tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.025); }
 .bt-row:hover { background: #1e222d; }
 .bt-side.buy { color: #23a776; }
 .bt-side.sell { color: #e54150; }
