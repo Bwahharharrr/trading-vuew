@@ -825,18 +825,58 @@ export default {
             const MAX_BARS = 1000
             if (tfMs > 0 && (end - start) / tfMs > MAX_BARS) start = end - MAX_BARS * tfMs
             const gen = this._corkyGen   // bumped by every select/teardown
+            // If a backtest is plotted for THIS stream, fetch its equity/trades
+            // for the same older window too, so the overlays extend with the
+            // candles (not just the candles). The chart report is windowed, so we
+            // merge each panned window into it on demand.
+            const plot = this._btPlot
+            const btActive = !!(plot && plot.runId && plot.report && this.backtestsFeed
+                && plot.venue === cur.venue && plot.symbol === cur.symbol && plot.timeframe === cur.timeframe)
             try {
-                const rows = await this.corkyFeed.fetchHistory({
-                    venue: cur.venue, symbol: cur.symbol, timeframe: cur.timeframe,
-                    start_ms: start, end_ms: end,
-                })
+                const [rows, windowReport] = await Promise.all([
+                    this.corkyFeed.fetchHistory({
+                        venue: cur.venue, symbol: cur.symbol, timeframe: cur.timeframe,
+                        start_ms: start, end_ms: end,
+                    }),
+                    btActive
+                        ? this.backtestsFeed.getReportOverlays(
+                            { run_id: plot.runId, start_ms: start, end_ms: end, max_points: 2000 }).catch(() => null)
+                        : Promise.resolve(null),
+                ])
                 // The user switched stream while the backfill was in flight — the
                 // candles belong to a symbol/tf no longer charted; drop them.
                 if (gen !== this._corkyGen) return []
+                // Extend the plotted report with the older window's equity/trades,
+                // then re-sync overlays AFTER the candle merge (the clip keys off
+                // the candle range, which only widens once these rows are merged).
+                if (btActive && windowReport && this._btPlot === plot) {
+                    plot.report = this._btMergeReportWindow(plot.report, windowReport)
+                    setTimeout(() => { if (this._btPlot === plot) this.syncBacktestOverlays() }, 0)
+                }
                 return rows
             } catch (err) {
                 console.warn('[Corky] history backfill failed:', (err && err.message) || err)
                 return []
+            }
+        },
+
+        // Merge an older windowed report's time-series (equity_curve + trades)
+        // into the plotted report so backtest overlays extend as the user pans
+        // back. Dedup by timestamp (newer window wins); descriptors / period
+        // returns are window-independent and kept from the base report.
+        _btMergeReportWindow(base, add) {
+            if (!base) return add
+            if (!add) return base
+            const mergeBy = (a, b, keyOf) => {
+                const map = new Map()
+                for (const x of (a || [])) map.set(keyOf(x), x)
+                for (const x of (b || [])) map.set(keyOf(x), x)
+                return [...map.values()].sort((p, q) => Number(p.timestamp_ms) - Number(q.timestamp_ms))
+            }
+            return {
+                ...base,
+                equity_curve: mergeBy(base.equity_curve, add.equity_curve, (p) => p.timestamp_ms),
+                trades: mergeBy(base.trades, add.trades, (t) => `${t.timestamp_ms}:${t.side}:${t.price}`),
             }
         },
 

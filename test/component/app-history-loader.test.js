@@ -53,3 +53,57 @@ describe('_corkyHistoryLoader', () => {
     expect(ctx.corkyFeed.fetchHistory).not.toHaveBeenCalled()
   })
 })
+
+describe('_corkyHistoryLoader — backtest overlay extension', () => {
+  function btCtx() {
+    const c = mkCtx([[1000, 1, 2, 0.5, 1.5, 10]])
+    c._btPlot = {
+      runId: 'r1', venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1h',
+      report: {
+        equity_curve: [{ timestamp_ms: 9000, equity: '110' }],
+        trades: [{ timestamp_ms: 9000, side: 'Sell', price: '41000' }],
+        series_descriptors: [{ id: 'backtest_equity' }],
+      },
+    }
+    c.backtestsFeed = {
+      getReportOverlays: vi.fn(async () => ({
+        equity_curve: [{ timestamp_ms: 3000, equity: '100' }, { timestamp_ms: 9000, equity: '110' }],
+        trades: [{ timestamp_ms: 3000, side: 'Buy', price: '40000' }],
+      })),
+    }
+    c.syncBacktestOverlays = vi.fn()
+    c._btMergeReportWindow = M._btMergeReportWindow
+    return c
+  }
+
+  test('fetches the report window, merges it into _btPlot.report, re-syncs overlays', async () => {
+    const c = btCtx()
+    const rows = await c._corkyHistoryLoader([2000, 9000])
+    expect(rows).toEqual([[1000, 1, 2, 0.5, 1.5, 10]])               // candles still returned
+    expect(c.backtestsFeed.getReportOverlays).toHaveBeenCalledWith(
+      expect.objectContaining({ run_id: 'r1', start_ms: 2000, end_ms: 9000, max_points: 2000 }))
+    // older equity point (3000) merged in ahead of the existing one (9000)
+    expect(c._btPlot.report.equity_curve.map((p) => p.timestamp_ms)).toEqual([3000, 9000])
+    expect(c._btPlot.report.trades.map((t) => t.timestamp_ms)).toEqual([3000, 9000])
+    expect(c._btPlot.report.series_descriptors).toBeTruthy()         // descriptors preserved
+    await new Promise((r) => setTimeout(r, 0))                        // let the post-merge re-sync fire
+    expect(c.syncBacktestOverlays).toHaveBeenCalled()
+  })
+
+  test('does not fetch the report when no backtest is plotted for this stream', async () => {
+    const c = btCtx()
+    c._btPlot.symbol = 'tETHUSD'                                      // different symbol → not active
+    await c._corkyHistoryLoader([2000, 9000])
+    expect(c.backtestsFeed.getReportOverlays).not.toHaveBeenCalled()
+    expect(c.syncBacktestOverlays).not.toHaveBeenCalled()
+  })
+
+  test('_btMergeReportWindow dedupes by timestamp (newer wins) and sorts ascending', () => {
+    const out = M._btMergeReportWindow(
+      { equity_curve: [{ timestamp_ms: 9000, equity: '110' }], trades: [], foo: 'keep' },
+      { equity_curve: [{ timestamp_ms: 3000, equity: '100' }, { timestamp_ms: 9000, equity: '999' }], trades: [] })
+    // 3000 from the added window; 9000 replaced by the added value (newer wins)
+    expect(out.equity_curve.map((p) => [p.timestamp_ms, p.equity])).toEqual([[3000, '100'], [9000, '999']])
+    expect(out.foo).toBe('keep')   // descriptors / period_returns preserved from base
+  })
+})
