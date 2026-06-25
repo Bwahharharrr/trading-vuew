@@ -26,6 +26,19 @@
                     @click="selectTab('backtests')">
                 Backtests
             </button>
+            <!-- Reusable single Run-Details tab: appears once a run is selected,
+                 re-targets to whichever run is clicked, closable. -->
+            <button v-if="backtests.selectedRun"
+                    class="pd-tab pd-tab-search" role="tab"
+                    :aria-selected="activeTab === 'bt-detail'"
+                    :class="{ active: activeTab === 'bt-detail' }"
+                    @click="selectTab('bt-detail')">
+                {{ runDetailTitle }}
+                <span class="pd-tab-close" role="button" tabindex="0"
+                      title="Close run details"
+                      @click.stop="$emit('bt-close-detail')"
+                      @keydown.enter.stop.prevent="$emit('bt-close-detail')">×</span>
+            </button>
             <button v-for="t in searchTabs" :key="t.id"
                     class="pd-tab pd-tab-search" role="tab"
                     :aria-selected="activeTab === t.id"
@@ -61,22 +74,27 @@
                              :context="searchContext"
                              @run="$emit('run-search', $event)" />
 
-        <!-- Backtests / Strategy Results -->
+        <!-- Backtests / Strategy Results — the run LIST (details open in their tab) -->
         <corky-backtests-panel v-if="activeTab === 'backtests'"
                         :strategies="backtests.strategies || []"
                         :runs="backtests.runs || []"
                         :filters="backtests.filters || {}"
                         :selected-run="backtests.selectedRun || null"
-                        :detail="backtests.detail || {}"
                         :loading="!!backtests.loading"
                         :error="backtests.error || null"
                         @refresh-strategies="$emit('bt-refresh-strategies')"
                         @update:filter="$emit('bt-update-filter', $event)"
                         @list-runs="$emit('bt-list-runs')"
                         @inspect-strategy="$emit('bt-inspect-strategy', $event)"
-                        @select-run="$emit('bt-select-run', $event)"
+                        @select-run="$emit('bt-select-run', $event)" />
+
+        <!-- One reusable Run-Details tab body -->
+        <corky-backtest-detail v-else-if="activeTab === 'bt-detail' && backtests.selectedRun"
+                        :run="backtests.selectedRun"
+                        :detail="backtests.detail || {}"
                         @plot-run="$emit('bt-plot-run', $event)"
-                        @select-trade="$emit('bt-select-trade', $event)" />
+                        @select-trade="$emit('bt-select-trade', $event)"
+                        @close="$emit('bt-close-detail')" />
 
         <!-- One Search Results tab -->
         <search-results v-if="activeSearchTab && activeTab !== 'search'"
@@ -143,10 +161,11 @@ import { isNeg, positionKey } from '../../helpers/feed/corky-positions.js'
 import SearchSignalsForm from './SearchSignalsForm.vue'
 import SearchResults from './SearchResults.vue'
 import CorkyBacktestsPanel from './CorkyBacktestsPanel.vue'
+import CorkyBacktestDetail from './CorkyBacktestDetail.vue'
 
 export default {
     name: 'CorkyPositionsPanel',
-    components: { SearchSignalsForm, SearchResults, CorkyBacktestsPanel },
+    components: { SearchSignalsForm, SearchResults, CorkyBacktestsPanel, CorkyBacktestDetail },
     props: {
         height: { type: Number, default: 34 },
         open: { type: Boolean, default: false },
@@ -177,7 +196,7 @@ export default {
         'select-position', 'audit-position', 'load-more', 'refresh', 'resize-start',
         'run-search', 'cancel-search', 'close-search-tab', 'select-result',
         'bt-refresh-strategies', 'bt-update-filter', 'bt-list-runs', 'bt-inspect-strategy',
-        'bt-select-run', 'bt-plot-run', 'bt-select-trade',
+        'bt-select-run', 'bt-plot-run', 'bt-select-trade', 'bt-close-detail',
     ],
     computed: {
         rows() {
@@ -187,6 +206,13 @@ export default {
         },
         activeSearchTab() {
             return this.searchTabs.find((t) => t.id === this.activeTab) || null
+        },
+        // Tab label for the selected run: "strategy · symbol · TF".
+        runDetailTitle() {
+            const r = this.backtests && this.backtests.selectedRun
+            if (!r) return 'Run'
+            const sym = (r.symbols || [])[0] || ''
+            return [r.strategy, sym, r.trade_timeframe].filter(Boolean).join(' · ')
         },
         activeAccountKey() {
             return this.activeAccount ? this.accountKey(this.activeAccount) : ''

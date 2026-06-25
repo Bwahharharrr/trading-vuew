@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 //
 // CorkyBacktestsPanel — presentational Strategies/Backtests view. Renders the
-// strategy catalog + filters, the run list, and a selected-run detail (metrics,
-// progress, trades, period returns), and emits intents. Decimal strings shown
-// verbatim.
+// strategy catalog + filters and the run LIST (with Profit/Recovery factor
+// columns), and emits intents. A run's full details open in their own dock tab
+// (CorkyBacktestDetail), not inline here. Decimal strings shown verbatim.
 import { test, expect, describe } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CorkyBacktestsPanel from '../../src/components/feed/CorkyBacktestsPanel.vue'
@@ -12,16 +12,12 @@ const strategies = [
   { name: 'ema_cross_all_in_v1', display_name: 'EMA Cross', default_trade_timeframe: '1h', default_context_timeframes: [], default_indicators: [{ kind: 'ema', timeframe: '1h', params: { period: '50' } }], parameters: [{ name: 'fast_period', type: 'integer', default_value: 50, description: 'Fast EMA' }] },
 ]
 const runs = [
-  { run_id: 'ema:BITFINEX:tBTCUSD:1h:0:1782320400000', strategy: 'ema_cross_all_in_v1', venue: 'BITFINEX', symbols: ['tBTCUSD'], trade_timeframe: '1h', status: 'completed', started_at_ms: 0, completed_at_ms: 1782320400000, metrics: { total_net_profit: '1250.50', total_trades: 34 } },
+  { run_id: 'ema:BITFINEX:tBTCUSD:1h:0:1782320400000', strategy: 'ema_cross_all_in_v1', venue: 'BITFINEX', symbols: ['tBTCUSD'], trade_timeframe: '1h', status: 'completed', started_at_ms: 0, completed_at_ms: 1782320400000, metrics: { total_net_profit: '1250.50', total_trades: 34, profit_factor: '1.3282', recovery_factor: '1.5622' } },
 ]
-const report = {
-  trades: [{ symbol: 'tBTCUSD', timestamp_ms: 3600000, side: 'Buy', quantity: '0.25', price: '40000' }],
-  period_returns: [{ period: 'all', starting_equity: '10000', ending_equity: '10125.50', return_amount: '125.50', return_pct: '0.01255' }],
-}
 
 function mountPanel(props = {}) {
   return mount(CorkyBacktestsPanel, {
-    props: { strategies, runs, filters: { strategy: '', symbol: '', status: '' }, selectedRun: null, detail: {}, ...props },
+    props: { strategies, runs, filters: { strategy: '', symbol: '', status: '' }, selectedRun: null, ...props },
   })
 }
 
@@ -87,24 +83,34 @@ describe('CorkyBacktestsPanel', () => {
     expect(w.findAll('.bt-runs .bt-row')[0].text()).toContain('b_strat')
   })
 
-  test('selected run shows metrics + progress; plot-run + select-trade emit', async () => {
-    const w = mountPanel({
-      selectedRun: runs[0],
-      detail: { progress: [{ kind: 'completed', completed_steps: 1, total_steps: 1, message: 'done' }], report, plottedRunId: null },
-    })
-    const detail = w.find('.bt-detail')
-    expect(detail.find('.bt-metrics-table').text()).toContain('Total Net Profit') // humanized label
-    expect(detail.text()).toContain('1250.50')                 // decimal string verbatim
-    expect(detail.text()).toContain('done')                    // progress message
-    await w.find('.bt-plot').trigger('click')
-    expect(w.emitted('plot-run')[0][0].run_id).toBe(runs[0].run_id)
-    // trade row click → select-trade
-    const tradeRow = w.findAll('.bt-trades .bt-row')
-    expect(tradeRow).toHaveLength(1)
-    expect(tradeRow[0].text()).toContain('40000')
-    await tradeRow[0].trigger('click')
-    expect(w.emitted('select-trade')[0][0].price).toBe('40000')
-    // period returns rendered
-    expect(w.find('.bt-periods').text()).toContain('0.01255')
+  test('shows Profit/Recovery factor columns from run.metrics', () => {
+    const w = mountPanel()
+    const headers = w.findAll('.bt-sortable th').map((h) => h.text().replace(/[▲▼]/g, '').trim())
+    expect(headers).toContain('PF')
+    expect(headers).toContain('RF')
+    const row = w.find('.bt-runs .bt-row')
+    expect(row.text()).toContain('1.33')   // profit_factor formatted to 2dp
+    expect(row.text()).toContain('1.56')   // recovery_factor formatted to 2dp
+  })
+
+  test('PF/RF show — when the metric is absent (missing sorts last)', async () => {
+    const twoRuns = [
+      { run_id: 'a', strategy: 'a', symbols: ['tBTCUSD'], trade_timeframe: '1h', status: 'completed', completed_at_ms: 200, metrics: { profit_factor: '2.50' } },
+      { run_id: 'b', strategy: 'b', symbols: ['tETHUSD'], trade_timeframe: '1h', status: 'completed', completed_at_ms: 100, metrics: {} },   // no PF
+    ]
+    const w = mountPanel({ runs: twoRuns })
+    const pfHeader = w.findAll('.bt-sortable th').find((h) => h.text().includes('PF'))
+    await pfHeader.trigger('click')   // asc → the run WITH a value first, missing last
+    const rows = w.findAll('.bt-runs .bt-row')
+    expect(rows[0].text()).toContain('2.50')
+    expect(rows[1].text()).toContain('—')   // missing metric renders an em dash
+  })
+
+  test('clicking a run still emits select-run (details open in their own tab)', async () => {
+    const w = mountPanel()
+    await w.find('.bt-runs .bt-row').trigger('click')
+    expect(w.emitted('select-run')[0][0].run_id).toBe(runs[0].run_id)
+    // No inline detail pane is rendered here anymore.
+    expect(w.find('.bt-detail').exists()).toBe(false)
   })
 })

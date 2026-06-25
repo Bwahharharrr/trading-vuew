@@ -128,6 +128,7 @@
             @bt-select-run="btSelectRun"
             @bt-plot-run="btPlotRun"
             @bt-select-trade="btSelectTrade"
+            @bt-close-detail="btCloseDetail"
             @update:open="togglePositionsDock"
             @update:active-tab="setPositionsTab"
             @update:active-account="setPositionsAccount"
@@ -2004,6 +2005,7 @@ export default {
         async btSelectRun(run) {
             if (!run) return
             this.backtests.selectedRun = run
+            this.positionsActiveTab = 'bt-detail'   // open this run's details in its tab
             this._btStopProgress()
             this._btSetDetail({ progress: [], live: false, report: null, plottedRunId: this.backtests.detail.plottedRunId })
             // One-shot progress, then go live while a run is still executing.
@@ -2030,6 +2032,15 @@ export default {
                 this.backtests.error = this._btErr(err)
                 this._btSetDetail({ overviewLoading: false })
             }
+        },
+
+        // Close the Run-Details tab: stop the live progress stream, drop the
+        // selection (hides the tab) and fall back to the runs list. Chart overlays
+        // are left as-is; the user can re-plot from another run.
+        btCloseDetail() {
+            this._btStopProgress()
+            this.backtests.selectedRun = null
+            if (this.positionsActiveTab === 'bt-detail') this.positionsActiveTab = 'backtests'
         },
 
         _btSubscribeProgress(run) {

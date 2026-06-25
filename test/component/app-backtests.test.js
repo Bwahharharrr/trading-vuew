@@ -55,7 +55,7 @@ function mkCtx() {
     _ensureCandleState: vi.fn(async () => true),
   }
   for (const m of ['btLoadStrategies', 'btUpdateFilter', 'btInspectStrategy', 'btListRuns',
-    'btSelectRun', '_btLoadOverview', '_btSubscribeProgress', '_btStopProgress', 'btPlotRun', 'btSelectTrade',
+    'btSelectRun', 'btCloseDetail', '_btLoadOverview', '_btSubscribeProgress', '_btStopProgress', 'btPlotRun', 'btSelectTrade',
     '_btPlotWindow', '_tfToMs', '_removeBacktestOverlays', 'syncBacktestOverlays', '_btErr', '_btSetDetail',
     '_canonicalVenue', '_loadedCandleRange']) {
     ctx[m] = M[m]
@@ -125,6 +125,28 @@ describe('btSelectRun progress', () => {
   test('running run → subscribes for live progress', async () => {
     await ctx.btSelectRun({ ...RUN, status: 'running' })
     expect(ctx.backtestsFeed.subscribeProgress).toHaveBeenCalled()
+  })
+  test('selecting a run opens its Run-Details tab', async () => {
+    await ctx.btSelectRun(RUN)
+    expect(ctx.backtests.selectedRun).toBe(RUN)
+    expect(ctx.positionsActiveTab).toBe('bt-detail')
+  })
+})
+
+describe('btCloseDetail', () => {
+  test('clears the selection + returns to the runs list', () => {
+    ctx.backtests.selectedRun = RUN
+    ctx.positionsActiveTab = 'bt-detail'
+    ctx.btCloseDetail()
+    expect(ctx.backtests.selectedRun).toBe(null)
+    expect(ctx.positionsActiveTab).toBe('backtests')
+  })
+  test('leaves the active tab alone when it is not the detail tab', () => {
+    ctx.backtests.selectedRun = RUN
+    ctx.positionsActiveTab = 'open'
+    ctx.btCloseDetail()
+    expect(ctx.backtests.selectedRun).toBe(null)
+    expect(ctx.positionsActiveTab).toBe('open')
   })
 })
 

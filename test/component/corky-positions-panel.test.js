@@ -49,6 +49,23 @@ describe('CorkyPositionsPanel — rendering', () => {
         expect(w.find('.bt').exists()).toBe(true)
     })
 
+    test('a selected run adds a Run-Details tab that renders the detail + closes', async () => {
+        const run = { run_id: 'r1', strategy: 'ema_cross_all_in_v1', venue: 'BITFINEX', symbols: ['tBTCUSD'], trade_timeframe: '1h', status: 'completed', metrics: { profit_factor: '1.33' } }
+        const w = mountPanel({ activeTab: 'bt-detail', backtests: { runs: [run], filters: {}, selectedRun: run, detail: {} } })
+        const tabs = w.findAll('.pd-tab')
+        expect(tabs).toHaveLength(5)                      // base 4 + Run-Details
+        expect(tabs[4].text()).toContain('ema_cross_all_in_v1 · tBTCUSD · 1h')
+        expect(w.find('.btd').exists()).toBe(true)        // the detail body
+        // closing the tab emits bt-close-detail
+        await tabs[4].find('.pd-tab-close').trigger('click')
+        expect(w.emitted('bt-close-detail')).toBeTruthy()
+    })
+
+    test('no Run-Details tab when no run is selected', () => {
+        const w = mountPanel({ activeTab: 'backtests', backtests: { runs: [], filters: {}, selectedRun: null, detail: {} } })
+        expect(w.findAll('.pd-tab')).toHaveLength(4)
+    })
+
     test('renders open rows with the ticker symbol', () => {
         const w = mountPanel()
         const trs = w.findAll('.pd-row')

@@ -56,7 +56,8 @@
             </div>
             <table v-else class="bt-table bt-sortable">
                 <thead><tr>
-                    <th v-for="c in columns" :key="c.key" @click="sortBy(c.key)" :class="{ sorted: sortKey === c.key }">
+                    <th v-for="c in columns" :key="c.key" @click="sortBy(c.key)" :title="c.title || ''"
+                        :class="{ sorted: sortKey === c.key, num: !!c.metric }">
                         {{ c.label }}<span v-if="sortKey === c.key" class="bt-sort">{{ sortDir === 1 ? '▲' : '▼' }}</span>
                     </th>
                 </tr></thead>
@@ -70,86 +71,13 @@
                         <td class="sym">{{ (r.symbols||[]).join(',') }}</td>
                         <td>{{ r.trade_timeframe }}</td>
                         <td><span class="bt-badge" :class="r.status">{{ r.status }}</span></td>
+                        <td class="num" :class="ratioSign(r, 'profit_factor')" :title="metric(r, 'profit_factor')">{{ fmtRatio(metric(r, 'profit_factor')) }}</td>
+                        <td class="num" :class="ratioSign(r, 'recovery_factor')" :title="metric(r, 'recovery_factor')">{{ fmtRatio(metric(r, 'recovery_factor')) }}</td>
                         <td class="time">{{ fmtTime(r.started_at_ms) }}</td>
                         <td class="time">{{ fmtTime(r.completed_at_ms) }}</td>
                     </tr>
                 </tbody>
             </table>
-        </div>
-
-        <!-- Selected run detail -->
-        <div v-if="selectedRun" class="bt-detail">
-            <div class="bt-detail-head">
-                <span class="bt-badge" :class="selectedRun.status">{{ selectedRun.status }}</span>
-                <span class="bt-runid" :title="selectedRun.run_id">{{ selectedRun.run_id }}</span>
-            </div>
-            <div class="bt-meta">
-                {{ selectedRun.venue }} · {{ (selectedRun.symbols||[]).join(',') }} · {{ selectedRun.trade_timeframe }}
-                <span v-if="selectedRun.started_at_ms"> · started {{ fmtTime(selectedRun.started_at_ms) }}</span>
-            </div>
-
-            <div v-if="metricRows.length" class="bt-metrics-wrap">
-                <div class="bt-sec-head">Metrics</div>
-                <table class="bt-table bt-metrics-table">
-                    <tbody>
-                        <tr v-for="m in metricRows" :key="m.key">
-                            <td class="bt-mkey" :title="m.key">{{ m.label }}</td>
-                            <td class="num" :class="m.sign" :title="m.raw">{{ m.value }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Progress -->
-            <div v-if="progress.length" class="bt-progress">
-                <div class="bt-prog-head">Progress<span v-if="progressLive" class="bt-live">● live</span></div>
-                <div v-for="(p, i) in progress" :key="i" class="bt-prog-row" :class="p.kind">
-                    <span class="bt-prog-kind">{{ p.kind }}</span>
-                    <span v-if="p.total_steps" class="bt-prog-steps">{{ p.completed_steps }}/{{ p.total_steps }}</span>
-                    <span class="bt-prog-msg">{{ p.message }}</span>
-                </div>
-            </div>
-
-            <div class="bt-actions">
-                <button class="bt-btn bt-plot" :disabled="plotBusy" @click="$emit('plot-run', selectedRun)">
-                    {{ plotBusy ? 'Loading onto chart…' : (plotted ? 'Re-plot equity / trades' : 'Plot equity / trades on chart') }}
-                </button>
-            </div>
-
-            <!-- Trades (click → navigate + markers) -->
-            <div v-if="trades.length" class="bt-trades">
-                <div class="bt-sec-head">Trades ({{ trades.length }})</div>
-                <table class="bt-table">
-                    <thead><tr><th>Side</th><th class="num">Qty</th><th class="num">Price</th><th>Time</th></tr></thead>
-                    <tbody>
-                        <tr v-for="(t, i) in trades" :key="i" class="bt-row"
-                            :title="`Open ${t.symbol} at ${fmtTime(t.timestamp_ms)}`"
-                            @click="$emit('select-trade', t)">
-                            <td><span class="bt-side" :class="String(t.side).toLowerCase()">{{ t.side }}</span></td>
-                            <td class="num">{{ t.quantity }}</td>
-                            <td class="num">{{ t.price }}</td>
-                            <td class="time">{{ fmtTime(t.timestamp_ms) }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Period returns -->
-            <div v-if="periodReturns.length" class="bt-periods">
-                <div class="bt-sec-head">Period returns</div>
-                <table class="bt-table">
-                    <thead><tr><th>Period</th><th class="num">Start eq</th><th class="num">End eq</th><th class="num">Return</th><th class="num">%</th></tr></thead>
-                    <tbody>
-                        <tr v-for="(p, i) in periodReturns" :key="i">
-                            <td>{{ p.period }}</td>
-                            <td class="num">{{ p.starting_equity }}</td>
-                            <td class="num">{{ p.ending_equity }}</td>
-                            <td class="num" :class="signClass(p.return_amount)">{{ p.return_amount }}</td>
-                            <td class="num" :class="signClass(p.return_pct)">{{ pctText(p.return_pct) }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
         </div>
     </div>
 </div>
@@ -165,13 +93,12 @@ export default {
         strategies: { type: Array, default: () => [] },
         runs: { type: Array, default: () => [] },
         filters: { type: Object, default: () => ({ strategy: '', symbol: '', status: '' }) },
+        // Highlights the active row; the run's details open in their own dock tab.
         selectedRun: { type: Object, default: null },
-        // { progress:[], live:bool, report:{trades,period_returns,...}, reportLoading, plottedRunId }
-        detail: { type: Object, default: () => ({}) },
         loading: { type: Boolean, default: false },
         error: { type: String, default: null },
     },
-    emits: ['refresh-strategies', 'update:filter', 'list-runs', 'inspect-strategy', 'select-run', 'plot-run', 'select-trade'],
+    emits: ['refresh-strategies', 'update:filter', 'list-runs', 'inspect-strategy', 'select-run'],
     data() {
         return {
             // Default newest-first by completion.
@@ -182,6 +109,8 @@ export default {
                 { key: 'symbols', label: 'Symbols' },
                 { key: 'trade_timeframe', label: 'TF' },
                 { key: 'status', label: 'Status' },
+                { key: 'profit_factor', label: 'PF', metric: 'profit_factor', title: 'Profit factor (gross profit ÷ gross loss)' },
+                { key: 'recovery_factor', label: 'RF', metric: 'recovery_factor', title: 'Recovery factor (net profit ÷ max drawdown)' },
                 { key: 'started_at_ms', label: 'Started' },
                 { key: 'completed_at_ms', label: 'Completed' },
             ],
@@ -189,16 +118,29 @@ export default {
     },
     computed: {
         // Client-side sortable run list (the backend returns the full set; the
-        // user orders by any column). Symbols sort by their joined string.
+        // user orders by any column). Symbols sort by their joined string; metric
+        // columns (PF/RF) sort numerically with missing values always last.
         sortedRuns() {
-            const key = this.sortKey
+            const col = this.columns.find((c) => c.key === this.sortKey)
+            const metric = col && col.metric
             const dir = this.sortDir
-            const val = (r) => {
-                const v = key === 'symbols' ? (r.symbols || []).join(',') : r[key]
+            const num = (r) => {
+                const n = Number((r.metrics || {})[metric])
+                return Number.isFinite(n) ? n : null
+            }
+            const strVal = (r) => {
+                const v = this.sortKey === 'symbols' ? (r.symbols || []).join(',') : r[this.sortKey]
                 return v == null ? '' : v
             }
             return this.runs.slice().sort((a, b) => {
-                const av = val(a); const bv = val(b)
+                if (metric) {
+                    const an = num(a); const bn = num(b)
+                    if (an == null && bn == null) return 0
+                    if (an == null) return 1       // missing metric → bottom
+                    if (bn == null) return -1
+                    return (an - bn) * dir
+                }
+                const av = strVal(a); const bv = strVal(b)
                 if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir
                 return String(av).localeCompare(String(bv)) * dir
             })
@@ -207,48 +149,6 @@ export default {
             const n = this.filters.strategy
             return n ? this.strategies.find((s) => s.name === n) || null : null
         },
-        // metric name → descriptor (from the report's metric_descriptors).
-        metricDescriptors() {
-            const ds = (this.detail && this.detail.report && this.detail.report.metric_descriptors) || []
-            const map = {}
-            for (const d of ds) if (d && d.name) map[d.name] = d
-            return map
-        },
-        metricRows() {
-            const m = (this.selectedRun && this.selectedRun.metrics) || {}
-            const desc = this.metricDescriptors
-            // Show the headline metrics first, then the rest alphabetically.
-            const PRIORITY = ['total_net_profit', 'profit_factor', 'total_trades', 'ending_equity',
-                'initial_deposit', 'max_equity_drawdown', 'absolute_drawdown', 'recovery_factor',
-                'expected_payoff', 'gross_profit', 'gross_loss', 'largest_winner', 'largest_loser']
-            const rank = (k) => { const i = PRIORITY.indexOf(k); return i === -1 ? PRIORITY.length : i }
-            const humanize = (k) => k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-            return Object.keys(m)
-                .sort((a, b) => (rank(a) - rank(b)) || a.localeCompare(b))
-                .map((key) => {
-                    const raw = m[key]
-                    const d = desc[key]
-                    const neg = String(raw).trim().startsWith('-')
-                    return {
-                        key,
-                        label: (d && d.description) || humanize(key),
-                        value: this.formatMetric(raw, d),   // formatted for display
-                        raw,                                 // exact decimal string (hover)
-                        unit: d ? d.unit : '',
-                        sign: neg ? 'neg' : '',
-                    }
-                })
-        },
-        progress() { return (this.detail && this.detail.progress) || [] },
-        progressLive() { return !!(this.detail && this.detail.live) },
-        reportLoading() { return !!(this.detail && this.detail.reportLoading) },
-        // Busy while the report fetch OR the chart load is in flight.
-        plotBusy() { return !!(this.detail && (this.detail.reportLoading || this.detail.plotting)) },
-        plotted() {
-            return !!(this.detail && this.selectedRun && this.detail.plottedRunId === this.selectedRun.run_id)
-        },
-        trades() { return (this.detail && this.detail.report && this.detail.report.trades) || [] },
-        periodReturns() { return (this.detail && this.detail.report && this.detail.report.period_returns) || [] },
     },
     methods: {
         sortBy(key) {
@@ -265,32 +165,21 @@ export default {
             const p = i.params && Object.values(i.params).join(',')
             return `${i.kind}${p ? '(' + p + ')' : ''}@${i.timeframe || ''}`
         },
-        // Format a decimal-string metric per its descriptor. Number() is used for
-        // DISPLAY ONLY (never calculations); the exact string rides along as the
-        // hover title. NB: percent values are FRACTIONS (0.32 = 32%).
-        formatMetric(raw, d) {
+        // Raw decimal-string metric value off a run summary (or undefined).
+        metric(r, key) { return (r.metrics || {})[key] },
+        // Compact ratio for the list column (PF/RF). Number() is DISPLAY ONLY;
+        // the exact decimal string rides along as the cell's hover title.
+        fmtRatio(raw) {
             if (raw == null || raw === '') return '—'
-            if (!d || !d.unit) return String(raw)
             const n = Number(raw)
-            if (!Number.isFinite(n)) return String(raw)   // don't lie about a bad value
-            const p = d.precision != null ? d.precision : 2
-            switch (d.unit) {
-                case 'currency': return n.toLocaleString(undefined, { minimumFractionDigits: p, maximumFractionDigits: p })
-                case 'percent': return (n * 100).toFixed(p) + '%'
-                case 'bps': return n.toFixed(p) + ' bps'
-                case 'ratio': return n.toFixed(p)
-                case 'count': return n.toLocaleString(undefined, { maximumFractionDigits: 0 })
-                default: return String(raw)
-            }
+            return Number.isFinite(n) ? n.toFixed(2) : String(raw)
         },
-        signClass(dec) {
-            if (dec == null || dec === '') return ''
-            return String(dec).trim().startsWith('-') ? 'neg' : 'pos'
-        },
-        pctText(dec) {
-            if (dec == null || dec === '') return '—'
-            // return_pct is a decimal fraction string (0.01255 = 1.255%); show raw.
-            return `${dec}`
+        // ≥1 reads as healthy (PF>1 profitable, RF>1 profit exceeds max drawdown);
+        // <1 weak. Missing → no colour.
+        ratioSign(r, key) {
+            const n = Number(this.metric(r, key))
+            if (!Number.isFinite(n)) return ''
+            return n >= 1 ? 'pos' : 'neg'
         },
         fmtTime(ms) {
             if (!(ms > 0)) return '—'
@@ -325,8 +214,7 @@ export default {
 .bt-inds { margin-top: 4px; font-size: 11px; }
 .bt-error { padding: 8px 12px; color: #e54150; }
 .bt-body { flex: 1 1 0; min-height: 0; display: flex; overflow: hidden; }
-.bt-runs { flex: 1 1 45%; overflow: auto; border-right: 1px solid #1c212e; }
-.bt-detail { flex: 1 1 55%; overflow: auto; padding: 10px 12px; }
+.bt-runs { flex: 1 1 100%; overflow: auto; }
 .bt-msg { padding: 16px; color: #808a9d; text-align: center; }
 .bt-table { width: 100%; border-collapse: collapse; }
 .bt-table th { position: sticky; top: 0; background: #131722; color: #808a9d; font-weight: 500; text-align: left; padding: 6px 10px; border-bottom: 1px solid #2a2e39; white-space: nowrap; }
@@ -346,26 +234,6 @@ export default {
 .bt-badge.running { background: rgba(245,197,24,0.18); color: #f5c518; }
 .bt-badge.failed { background: rgba(229,65,80,0.18); color: #e54150; }
 .bt-badge.queued { background: #2a2e39; color: #808a9d; }
-.bt-detail-head { display: flex; gap: 8px; align-items: center; }
-.bt-runid { font-size: 11px; color: #808a9d; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bt-meta { color: #808a9d; margin: 6px 0; font-size: 11px; }
-.bt-metrics-wrap { margin: 8px 0; }
-.bt-metrics-table { width: 100%; }
-.bt-metrics-table td { padding: 3px 10px; border-bottom: 1px solid #1c212e; }
-.bt-mkey { color: #808a9d; }
-.bt-metrics-table .num { font-variant-numeric: tabular-nums; color: #d1d4dc; max-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.bt-progress { margin: 8px 0; border: 1px solid #1c212e; border-radius: 4px; padding: 6px 8px; }
-.bt-prog-head { color: #808a9d; font-weight: 600; display: flex; gap: 8px; }
-.bt-live { color: #f5c518; }
-.bt-prog-row { display: flex; gap: 8px; font-size: 11px; padding: 2px 0; }
-.bt-prog-row.failed { color: #e54150; }
-.bt-prog-row.completed { color: #35a776; }
-.bt-prog-kind { width: 70px; color: #808a9d; }
-.bt-prog-steps { font-variant-numeric: tabular-nums; }
-.bt-actions { margin: 8px 0; }
-.bt-sec-head { color: #808a9d; font-weight: 600; margin: 10px 0 4px; }
-.bt-side.buy { color: #23a776; }
-.bt-side.sell { color: #e54150; }
 .pos { color: #23a776; }
 .neg { color: #e54150; }
 </style>
