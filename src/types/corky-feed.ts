@@ -72,6 +72,14 @@ export type KnownErrorCode =
   | 'auth_position_history_unavailable'
   | 'auth_position_audit_unavailable'
   | 'stateful_websocket_required'
+  // strategy / backtest read flows
+  | 'backtest_artifacts_disabled'
+  | 'strategy_not_found'
+  | 'backtest_not_found'
+  | 'backtest_artifact_not_ready'
+  | 'invalid_backtest_request'
+  | 'backtest_artifact_invalid'
+  | 'backtest_store_unavailable'
 
 /**
  * An error code on the wire: a {@link KnownErrorCode} or any future string the
@@ -708,6 +716,73 @@ export interface CancelSearchCommand {
   search_id: string
 }
 
+// ───────────────────────────────────────────── strategies / backtests ──────
+//
+// READ-ONLY strategy + backtest commands served by corky-chart-gateway over the
+// SAME WebSocket. The chart app never calls the legacy runner HTTP artifact API;
+// artifact writing stays runner-side. All money/quantity fields are
+// {@link DecimalString} — never float-parse them.
+
+export type BacktestRunStatus = 'queued' | 'running' | 'completed' | 'failed'
+
+/** List available strategies. */
+export interface ListStrategiesCommand { type: 'list_strategies' }
+
+/** Inspect one strategy by `name`. */
+export interface GetStrategyCommand {
+  type: 'get_strategy'
+  strategy: string
+}
+
+/** List backtest runs; all filters optional. */
+export interface ListBacktestRunsCommand {
+  type: 'list_backtest_runs'
+  strategy?: string
+  symbol?: string
+  venue?: string
+  status?: BacktestRunStatus
+}
+
+/** Raw pass-through artifact for a run (advanced details). */
+export interface GetBacktestRunCommand {
+  type: 'get_backtest_run'
+  run_id: string
+}
+
+/** One-shot progress snapshot for a run. */
+export interface GetBacktestProgressCommand {
+  type: 'get_backtest_progress'
+  run_id: string
+}
+
+/** Stream live progress for a run (full event list each update). */
+export interface SubscribeBacktestProgressCommand {
+  type: 'subscribe_backtest_progress'
+  subscription_id: string
+  run_id: string
+}
+
+/** Per-trade chart windows + markers for a run. */
+export interface GetBacktestChartOverlaysCommand {
+  type: 'get_backtest_chart_overlays'
+  run_id: string
+  timeframe?: Timeframe
+  before_bars?: number
+  after_bars?: number
+  /** Parameter-sweep run selector. */
+  run_index?: number | null
+  /** Walk-forward fold selector. */
+  fold_index?: number | null
+}
+
+/** Normalized report/account overlays for a run. */
+export interface GetBacktestReportOverlaysCommand {
+  type: 'get_backtest_report_overlays'
+  run_id: string
+  run_index?: number | null
+  fold_index?: number | null
+}
+
 /** Discriminated union of client commands (`ChartClientCommand`). */
 export type ChartClientCommand =
   | ListCandleStatesCommand
@@ -722,6 +797,14 @@ export type ChartClientCommand =
   | SubscribeAuthPositionAuditCommand
   | SearchCandlesCommand
   | CancelSearchCommand
+  | ListStrategiesCommand
+  | GetStrategyCommand
+  | ListBacktestRunsCommand
+  | GetBacktestRunCommand
+  | GetBacktestProgressCommand
+  | SubscribeBacktestProgressCommand
+  | GetBacktestChartOverlaysCommand
+  | GetBacktestReportOverlaysCommand
 
 /** Discriminant of {@link ChartClientCommand}. */
 export type ChartClientCommandType = ChartClientCommand['type']
@@ -1093,6 +1176,200 @@ export interface SearchFailedEvent {
   error?: string
 }
 
+// ───────────────────────────────────────────── strategies / backtests ──────
+
+/** One tunable strategy parameter (`ChartStrategyParameterDescriptor`). */
+export interface ChartStrategyParameterDescriptor {
+  name: string
+  /** e.g. `'integer'` | `'decimal'`. */
+  type: string
+  /** Default value — decimal params are {@link DecimalString}; may be null. */
+  default_value?: DecimalString | number | null
+  recommended_sweep?: { start: DecimalString | number; step: DecimalString | number; end: DecimalString | number } | null
+  description?: string | null
+}
+
+/** A strategy descriptor (`ChartStrategyDescriptor`). */
+export interface ChartStrategyDescriptor {
+  schema_version?: SchemaVersion
+  name: string
+  display_name: string
+  default_trade_timeframe: Timeframe
+  default_context_timeframes: Timeframe[]
+  /** `{kind, timeframe, source, params}` — same shape as a search indicator. */
+  default_indicators: SearchIndicatorSpec[]
+  parameters: ChartStrategyParameterDescriptor[]
+}
+
+/** A backtest run summary row (`ChartBacktestRunSummary`). */
+export interface ChartBacktestRunSummary {
+  run_id: string
+  strategy: string
+  venue: string
+  symbols: string[]
+  trade_timeframe: Timeframe
+  status: BacktestRunStatus
+  started_at_ms?: TimestampMs
+  completed_at_ms?: TimestampMs | null
+  /** Decimal-string (or numeric) metric values keyed by name. */
+  metrics?: Record<string, DecimalString | number>
+}
+
+/** One progress event item (`ChartBacktestProgressEvent`). */
+export interface ChartBacktestProgressItem {
+  run_id: string
+  kind: 'accepted' | 'progress' | 'completed' | 'failed'
+  completed_steps?: number
+  total_steps?: number
+  message?: string
+}
+
+/** A backtest trade marker (`ChartBacktestTradeOverlay`). Decimals as strings. */
+export interface ChartBacktestTradeOverlay {
+  symbol: string
+  timestamp_ms: TimestampMs
+  /** `'Buy'` | `'Sell'`. */
+  side: string
+  quantity: DecimalString
+  price: DecimalString
+  fee?: DecimalString
+}
+
+/** A stop-loss / take-profit level with lifecycle (`ChartBacktestPriceLevelOverlay`). */
+export interface ChartBacktestPriceLevelOverlay {
+  symbol: string
+  /** e.g. `'stop_loss'` | `'take_profit'`. */
+  kind: string
+  side: string
+  price: DecimalString
+  quantity?: DecimalString
+  activated_at_ms?: TimestampMs | null
+  cleared_at_ms?: TimestampMs | null
+  triggered_at_ms?: TimestampMs | null
+}
+
+/** One account/equity-curve sample (`ChartBacktestEquityCurvePoint`). Decimals as strings. */
+export interface ChartBacktestEquityCurvePoint {
+  timestamp_ms: TimestampMs
+  equity: DecimalString
+  cash: DecimalString
+  position_quantity: DecimalString
+  drawdown: DecimalString
+  drawdown_pct?: DecimalString | null
+}
+
+/** A period-return row (`ChartBacktestPeriodReturn`). Decimals as strings. */
+export interface ChartBacktestPeriodReturn {
+  period: string
+  start_ts_ms: TimestampMs
+  end_ts_ms: TimestampMs
+  starting_equity: DecimalString
+  ending_equity: DecimalString
+  return_amount: DecimalString
+  return_pct: DecimalString
+}
+
+/**
+ * An indicator-style plot descriptor for an account series
+ * (`ChartBacktestSeriesDescriptor`) — same descriptor-driven plotting as
+ * indicator `view.layers`.
+ */
+export interface ChartBacktestSeriesDescriptor {
+  id: string
+  display_name: string
+  /** e.g. `'line'` | `'histogram'`. */
+  kind: string
+  fields: string[]
+  target: { surface: string; pane?: string }
+  style?: Record<string, unknown>
+  visible_by_default?: boolean
+}
+
+/** A trade + its chart window (`ChartBacktestTradeChartOverlay`). */
+export interface ChartBacktestTradeChartOverlay {
+  trade: ChartBacktestTradeOverlay
+  chart_window: {
+    venue: string
+    symbol: string
+    timeframe: Timeframe
+    anchor_timestamp_ms?: TimestampMs
+    start_ms: TimestampMs
+    end_ms: TimestampMs
+    before_bars?: number
+    after_bars?: number
+  }
+}
+
+/** Response to `list_strategies`. */
+export interface StrategiesEvent {
+  type: 'strategies'
+  strategies: ChartStrategyDescriptor[]
+}
+
+/** Response to `get_strategy`. */
+export interface StrategyEvent {
+  type: 'strategy'
+  strategy: ChartStrategyDescriptor
+}
+
+/** Response to `list_backtest_runs`. */
+export interface BacktestRunsEvent {
+  type: 'backtest_runs'
+  runs: ChartBacktestRunSummary[]
+}
+
+/** Response to `get_backtest_run`: `artifact` is PASS-THROUGH JSON (feature-detect). */
+export interface BacktestRunEvent {
+  type: 'backtest_run'
+  run_id: string
+  artifact: unknown
+}
+
+/** Response to `get_backtest_progress` (one-shot). */
+export interface BacktestProgressEvent {
+  type: 'backtest_progress'
+  run_id: string
+  events: ChartBacktestProgressItem[]
+}
+
+/**
+ * Streamed progress for `subscribe_backtest_progress`. Each update carries the
+ * FULL current event list; apply per `subscription_id` by increasing `sequence`.
+ */
+export interface BacktestProgressUpdateEvent {
+  type: 'backtest_progress_update'
+  subscription_id: string
+  sequence: number
+  run_id: string
+  events: ChartBacktestProgressItem[]
+}
+
+/** Response to `get_backtest_chart_overlays`. */
+export interface BacktestChartOverlaysEvent {
+  type: 'backtest_chart_overlays'
+  run_id: string
+  parameter_run_index?: number | null
+  fold_index?: number | null
+  venue: string
+  timeframe: Timeframe
+  overlays: ChartBacktestTradeChartOverlay[]
+}
+
+/** Response to `get_backtest_report_overlays`. */
+export interface BacktestReportOverlaysEvent {
+  type: 'backtest_report_overlays'
+  run_id: string
+  parameter_run_index?: number | null
+  fold_index?: number | null
+  venue: string
+  trade_timeframe: Timeframe
+  trades: ChartBacktestTradeOverlay[]
+  price_levels: ChartBacktestPriceLevelOverlay[]
+  equity_curve: ChartBacktestEquityCurvePoint[]
+  period_returns: ChartBacktestPeriodReturn[]
+  series_descriptors: ChartBacktestSeriesDescriptor[]
+}
+
 /** Discriminated union of gateway event payloads (`ChartFeedEventKind`). */
 export type ChartFeedEventKind =
   | CandleStatesEvent
@@ -1117,6 +1394,14 @@ export type ChartFeedEventKind =
   | SearchCompleteEvent
   | SearchCancelledEvent
   | SearchFailedEvent
+  | StrategiesEvent
+  | StrategyEvent
+  | BacktestRunsEvent
+  | BacktestRunEvent
+  | BacktestProgressEvent
+  | BacktestProgressUpdateEvent
+  | BacktestChartOverlaysEvent
+  | BacktestReportOverlaysEvent
 
 /** Discriminant of {@link ChartFeedEventKind}. */
 export type ChartFeedEventType = ChartFeedEventKind['type']

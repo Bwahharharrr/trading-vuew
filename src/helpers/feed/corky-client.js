@@ -42,6 +42,16 @@ export const KNOWN_ERROR_CODES = {
     auth_position_history_unavailable: { retryable: true },
     auth_position_audit_unavailable:   { retryable: true },
     stateful_websocket_required:       { retryable: false },
+    // backtest / strategy read flows. Artifacts may still be writing → not-ready
+    // is retryable; the rest are deterministic client/config errors. store
+    // unavailability is transient (read backend hiccup) → retry.
+    backtest_artifacts_disabled:  { retryable: false },
+    strategy_not_found:           { retryable: false },
+    backtest_not_found:           { retryable: false },
+    backtest_artifact_not_ready:  { retryable: true },
+    invalid_backtest_request:     { retryable: false },
+    backtest_artifact_invalid:    { retryable: false },
+    backtest_store_unavailable:   { retryable: true },
 }
 
 // Resolve whether an error is retryable. The wire `retryable` flag wins when
@@ -66,6 +76,14 @@ const TERMINAL_EVENT = {
     list_auth_positions:        'auth_positions',
     list_auth_position_history: 'auth_position_history',
     get_auth_position_audit:    'auth_position_audit',
+    // strategy / backtest read flows (one-shot)
+    list_strategies:             'strategies',
+    get_strategy:                'strategy',
+    list_backtest_runs:          'backtest_runs',
+    get_backtest_run:            'backtest_run',
+    get_backtest_progress:       'backtest_progress',
+    get_backtest_chart_overlays: 'backtest_chart_overlays',
+    get_backtest_report_overlays:'backtest_report_overlays',
 }
 
 // Subscription-stream event types: carry a subscription_id and (usually) a null
@@ -77,6 +95,10 @@ const STREAM_EVENT_TYPES = new Set([
     'live_update',
     'auth_positions_update',
     'auth_position_audit_update',
+    // backtest progress stream: full event list each update, by subscription_id
+    // + increasing sequence; no separate accept event, so the FIRST update
+    // resolves the originating subscribe (mirrors the auth-position streams).
+    'backtest_progress_update',
 ])
 
 export class CorkyError extends Error {
@@ -421,6 +443,79 @@ export class CorkyClient {
         return this._request(command, { subscription_id, onEvent })
     }
 
+    // ── strategy / backtest senders (read-only, one-shot) ───────────────────────
+    // All resolve on their terminal event (see TERMINAL_EVENT); a backtest read
+    // failure arrives as a normal `error` event and rejects the promise.
+
+    /** List available strategies → resolves the `strategies` array. */
+    listStrategies() { return this._request({ type: 'list_strategies' }) }
+
+    /** Inspect one strategy → resolves the `strategy` descriptor. */
+    getStrategy(strategy) {
+        if (!strategy) throw new Error('getStrategy: strategy is required')
+        return this._request({ type: 'get_strategy', strategy })
+    }
+
+    /** List backtest runs (all filters optional) → resolves the `runs` array. */
+    listBacktestRuns(opts = {}) {
+        const { strategy, symbol, venue, status } = opts
+        const command = { type: 'list_backtest_runs' }
+        if (strategy != null) command.strategy = strategy
+        if (symbol != null) command.symbol = symbol
+        if (venue != null) command.venue = venue
+        if (status != null) command.status = status
+        return this._request(command)
+    }
+
+    /** Raw artifact for a run → resolves the pass-through `artifact` JSON. */
+    getBacktestRun(run_id) {
+        if (!run_id) throw new Error('getBacktestRun: run_id is required')
+        return this._request({ type: 'get_backtest_run', run_id })
+    }
+
+    /** One-shot progress snapshot → resolves the `events` list. */
+    getBacktestProgress(run_id) {
+        if (!run_id) throw new Error('getBacktestProgress: run_id is required')
+        return this._request({ type: 'get_backtest_progress', run_id })
+    }
+
+    /**
+     * Stream live progress. Resolves with the FIRST `backtest_progress_update`;
+     * register `onSubscription(subscription_id, …)` for ongoing updates (apply by
+     * increasing `sequence`; each update carries the FULL current event list).
+     */
+    subscribeBacktestProgress(opts = {}) {
+        const { subscription_id, run_id, onEvent } = opts
+        if (!subscription_id) throw new Error('subscribeBacktestProgress: subscription_id is required')
+        if (!run_id) throw new Error('subscribeBacktestProgress: run_id is required')
+        return this._request(
+            { type: 'subscribe_backtest_progress', subscription_id, run_id },
+            { subscription_id, onEvent })
+    }
+
+    /** Trade chart overlays (per chart_window) → resolves the full event. */
+    getBacktestChartOverlays(opts = {}) {
+        const { run_id, timeframe, before_bars, after_bars, run_index, fold_index } = opts
+        if (!run_id) throw new Error('getBacktestChartOverlays: run_id is required')
+        const command = { type: 'get_backtest_chart_overlays', run_id }
+        if (timeframe != null) command.timeframe = timeframe
+        if (before_bars != null) command.before_bars = before_bars
+        if (after_bars != null) command.after_bars = after_bars
+        if (run_index != null) command.run_index = run_index
+        if (fold_index != null) command.fold_index = fold_index
+        return this._request(command)
+    }
+
+    /** Normalized report/account overlays → resolves the full event. */
+    getBacktestReportOverlays(opts = {}) {
+        const { run_id, run_index, fold_index } = opts
+        if (!run_id) throw new Error('getBacktestReportOverlays: run_id is required')
+        const command = { type: 'get_backtest_report_overlays', run_id }
+        if (run_index != null) command.run_index = run_index
+        if (fold_index != null) command.fold_index = fold_index
+        return this._request(command)
+    }
+
     // ── outbound plumbing ──────────────────────────────────────────────────────
 
     _nextRequestId() {
@@ -587,6 +682,11 @@ export class CorkyClient {
     _resultFor(type, event) {
         // Return the most useful payload slice for each terminal event.
         if (type === 'candle_states') return event.states
+        if (type === 'strategies') return event.strategies
+        if (type === 'strategy') return event.strategy
+        if (type === 'backtest_runs') return event.runs
+        // backtest_run keeps {run_id, artifact}; progress/overlays keep the full
+        // event (callers read .events / .overlays / .trades / series_descriptors).
         return event
     }
 
