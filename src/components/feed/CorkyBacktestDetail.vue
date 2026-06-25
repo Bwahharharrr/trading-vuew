@@ -14,6 +14,12 @@
         <span v-if="run.completed_at_ms"> · completed {{ fmtTime(run.completed_at_ms) }}</span>
     </div>
 
+    <!-- Universe optimization = a compact metric study (no chartable timelines). -->
+    <corky-universe-study v-if="isUniverse"
+                          :run="run" :artifact="detail.artifact || null"
+                          :loading="!!detail.artifactLoading" :error="detail.artifactError || null" />
+
+    <template v-else>
     <!-- Candidate (run_index) selector for sweep / optimization studies. -->
     <div v-if="multiCandidate" class="btd-candidate">
         <span class="btd-clabel">Candidate</span>
@@ -97,6 +103,7 @@
             </tbody>
         </table>
     </div>
+    </template>
 </div>
 </template>
 
@@ -143,8 +150,11 @@ const GROUPS = [
 
 const humanize = (k) => String(k).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 
+import CorkyUniverseStudy from './CorkyUniverseStudy.vue'
+
 export default {
     name: 'CorkyBacktestDetail',
+    components: { CorkyUniverseStudy },
     props: {
         run: { type: Object, required: true },
         // { progress:[], live, report:{trades,period_returns,metric_descriptors,...},
@@ -155,6 +165,7 @@ export default {
     computed: {
         // Detected artifact shape + candidate (run_index) selection, supplied by App.
         shape() { return (this.detail && this.detail.shape) || null },
+        isUniverse() { return !!(this.shape && this.shape.kind === 'universe') },
         candidateCount() { return Number((this.detail && this.detail.candidateCount) || 0) },
         multiCandidate() { return !!(this.shape && this.shape.multiCandidate) && this.candidateCount > 1 },
         candidateOptions() {

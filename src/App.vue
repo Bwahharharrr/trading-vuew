@@ -2110,10 +2110,45 @@ export default {
                 this._btSetDetail(patch)
             } catch (err) { this.backtests.error = this._btErr(err) }
             if (run.status === 'running' || run.status === 'queued') this._btSubscribeProgress(run)
-            // Downsampled full-run OVERVIEW (full range, capped equity): powers the
-            // panel — metric_descriptors (format the metrics table), period_returns,
-            // and the trades list — without pulling the whole equity curve.
-            this._btLoadOverview(run)
+            // Universe studies are COMPACT metric-study artifacts (no fill/equity
+            // timelines) — fetch the raw artifact to render the ranking/per-symbol
+            // tables. (We do NOT fetch the artifact for normal/sweep runs: those can
+            // be enormous and the gateway drops the socket while serializing them.)
+            if (shape.kind === 'universe') this._btLoadArtifact(run)
+            else {
+                // Downsampled full-run OVERVIEW (full range, capped equity): powers
+                // the panel — metric_descriptors (format the metrics table),
+                // period_returns, and the trades list — without the whole curve.
+                this._btLoadOverview(run)
+            }
+        },
+
+        // Race a promise against a timeout so a hung/oversized gateway response
+        // (e.g. a giant artifact) surfaces as a clean error instead of spinning.
+        _withTimeout(promise, ms) {
+            let t
+            const timeout = new Promise((_, reject) => { t = setTimeout(() => reject(new Error('timed out')), ms) })
+            return Promise.race([promise, timeout]).finally(() => clearTimeout(t))
+        },
+
+        // Lazily fetch a run's RAW artifact (get_backtest_run) for the universe
+        // study view. Refines the detected shape with the authoritative artifact.
+        async _btLoadArtifact(run) {
+            if (!this.backtestsFeed) return
+            this._btSetDetail({ artifact: null, artifactError: null, artifactLoading: true })
+            try {
+                const res = await this._withTimeout(this.backtestsFeed.getRun(run.run_id), 20000)
+                if (this.backtests.selectedRun !== run) return
+                const artifact = (res && res.artifact) || res || null
+                const shape = detectRunShape(run, artifact)   // authoritative refine
+                this._btSetDetail({
+                    artifact, artifactLoading: false, shape,
+                    candidateCount: shape.candidateCount || this.backtests.detail.candidateCount,
+                })
+            } catch (err) {
+                if (this.backtests.selectedRun !== run) return
+                this._btSetDetail({ artifactLoading: false, artifactError: this._btErr(err) })
+            }
         },
 
         // Active sweep/optimization candidate (run_index); undefined ⇒ the gateway

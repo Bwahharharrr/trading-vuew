@@ -88,6 +88,16 @@ describe('CorkyBacktestDetail', () => {
     expect(w.find('.btd-candidate').exists()).toBe(false)
   })
 
+  test('universe run renders the study view instead of the plot/metrics body', () => {
+    const w = mountDetail({ detail: {
+      ...DETAIL, shape: { kind: 'universe', label: 'Universe', multiCandidate: true, chartable: false },
+      artifact: { universe: { candidates: [{ run_index: 0, robust_cross_symbol_score_v1: '0.8' }] } },
+    } })
+    expect(w.find('.us').exists()).toBe(true)            // universe study rendered
+    expect(w.find('.bt-plot').exists()).toBe(false)      // no plot button (not chartable)
+    expect(w.findAll('.btd-mtable')).toHaveLength(0)     // no equity metrics grid
+  })
+
   test('beat-buy-hold boolean cell is coloured green when true', () => {
     const w = mountDetail()
     const beatCell = w.findAll('.btd-mval').find((c) => c.text() === '✓ Yes')

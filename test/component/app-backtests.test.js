@@ -55,7 +55,7 @@ function mkCtx() {
     _ensureCandleState: vi.fn(async () => true),
   }
   for (const m of ['btLoadStrategies', 'btUpdateFilter', 'btInspectStrategy', 'btListRuns',
-    'btSelectRun', 'btCloseDetail', 'btSelectCandidate', '_btLoadOverview', '_btRunIndex', '_btSubscribeProgress', '_btStopProgress', 'btPlotRun', 'btSelectTrade',
+    'btSelectRun', 'btCloseDetail', 'btSelectCandidate', '_btLoadOverview', '_btLoadArtifact', '_withTimeout', '_btRunIndex', '_btSubscribeProgress', '_btStopProgress', 'btPlotRun', 'btSelectTrade',
     '_btPlotWindow', '_tfToMs', '_removeBacktestOverlays', 'syncBacktestOverlays', '_btErr', '_btSetDetail',
     '_canonicalVenue', '_loadedCandleRange']) {
     ctx[m] = M[m]
@@ -130,6 +130,28 @@ describe('btSelectRun progress', () => {
     await ctx.btSelectRun(RUN)
     expect(ctx.backtests.selectedRun).toBe(RUN)
     expect(ctx.positionsActiveTab).toBe('bt-detail')
+  })
+})
+
+describe('universe study artifact', () => {
+  test('selecting a universe run fetches the RAW artifact (not the overview) + refines the shape', async () => {
+    ctx.backtestsFeed.getRun = vi.fn(async () => ({ artifact: { universe: { candidates: [{ run_index: 0 }] }, plan: {} } }))
+    const uni = { ...RUN, run_id: 'universe:ema:BITFINEX:multi:1h:0:100:5', symbols: ['tBTCUSD', 'tETHUSD'] }
+    await ctx.btSelectRun(uni)
+    await new Promise((r) => setTimeout(r, 0))   // let the fire-and-forget artifact fetch resolve
+    expect(ctx.backtestsFeed.getRun).toHaveBeenCalledWith(uni.run_id)
+    expect(ctx.backtests.detail.artifact).toBeTruthy()
+    expect(ctx.backtests.detail.shape.kind).toBe('universe')
+    expect(ctx.backtests.detail.shape.chartable).toBe(false)
+    expect(ctx.backtestsFeed.getReportOverlays).not.toHaveBeenCalled()   // compact study → no overview plot
+  })
+  test('artifact fetch failure surfaces a clean error, not a hang', async () => {
+    ctx.backtestsFeed.getRun = vi.fn(async () => { throw new Error('socket closed') })
+    const uni = { ...RUN, run_id: 'universe:x:1h:0:1:5', symbols: ['a', 'b'] }
+    await ctx.btSelectRun(uni)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(ctx.backtests.detail.artifactError).toBeTruthy()
+    expect(ctx.backtests.detail.artifactLoading).toBe(false)
   })
 })
 
