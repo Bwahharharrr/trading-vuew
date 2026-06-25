@@ -4,6 +4,7 @@
         <span class="bt-badge" :class="run.status">{{ run.status }}</span>
         <span class="btd-title">{{ run.strategy }}</span>
         <span class="btd-sub">{{ run.venue }} · {{ (run.symbols||[]).join(',') }} · {{ run.trade_timeframe }}</span>
+        <span v-if="shape" class="bt-type" :class="'t-' + shape.kind">{{ shape.label }}</span>
         <span class="btd-spacer"></span>
         <button class="btd-close" title="Close run details" @click="$emit('close')">×</button>
     </div>
@@ -11,6 +12,18 @@
     <div class="btd-meta">
         <span v-if="run.started_at_ms">started {{ fmtTime(run.started_at_ms) }}</span>
         <span v-if="run.completed_at_ms"> · completed {{ fmtTime(run.completed_at_ms) }}</span>
+    </div>
+
+    <!-- Candidate (run_index) selector for sweep / optimization studies. -->
+    <div v-if="multiCandidate" class="btd-candidate">
+        <span class="btd-clabel">Candidate</span>
+        <select class="btd-cselect" :value="runIndex == null ? '' : String(runIndex)"
+                @change="$emit('select-candidate', $event.target.value === '' ? null : Number($event.target.value))">
+            <option value="">Top-ranked (default)</option>
+            <option v-for="i in candidateOptions" :key="i" :value="String(i)">#{{ i }}</option>
+        </select>
+        <span v-if="activeCandidate != null" class="btd-dim">plotting #{{ activeCandidate }}</span>
+        <span class="btd-dim">· {{ candidateCount }} candidates</span>
     </div>
 
     <!-- Plot action -->
@@ -138,8 +151,26 @@ export default {
         //   plotting, overviewLoading, plottedRunId }
         detail: { type: Object, default: () => ({}) },
     },
-    emits: ['plot-run', 'select-trade', 'close'],
+    emits: ['plot-run', 'select-trade', 'select-candidate', 'close'],
     computed: {
+        // Detected artifact shape + candidate (run_index) selection, supplied by App.
+        shape() { return (this.detail && this.detail.shape) || null },
+        candidateCount() { return Number((this.detail && this.detail.candidateCount) || 0) },
+        multiCandidate() { return !!(this.shape && this.shape.multiCandidate) && this.candidateCount > 1 },
+        candidateOptions() {
+            const n = this.candidateCount
+            return n > 1 ? Array.from({ length: n }, (_, i) => i) : []
+        },
+        runIndex() {
+            const ri = this.detail && this.detail.runIndex
+            return (ri == null || ri === '') ? null : Number(ri)
+        },
+        // Which candidate the gateway actually returned (echoed on the report).
+        activeCandidate() {
+            const r = this.detail && this.detail.report
+            const i = r && r.parameter_run_index
+            return (i == null) ? null : Number(i)
+        },
         // metric name → descriptor (from the OVERVIEW report's metric_descriptors).
         metricDescriptors() {
             const ds = (this.detail && this.detail.report && this.detail.report.metric_descriptors) || []
@@ -267,6 +298,15 @@ export default {
 .btd-meta { color: #808a9d; font-size: 11px; margin: 2px 0 8px; }
 .btd-actions { display: flex; align-items: center; gap: 10px; margin: 8px 0 12px; }
 .btd-dim { color: #808a9d; font-size: 11px; }
+.btd-candidate { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; }
+.btd-clabel { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #bb86fc; }
+.btd-cselect { background: #0e1320; color: #d1d4dc; border: 1px solid #2a2e39; border-radius: 4px; padding: 3px 6px; font-size: 11px; }
+.bt-type { font-size: 10px; padding: 1px 7px; border-radius: 9px; background: #2a2e39; color: #b0b6c0; }
+.bt-type.t-normal { background: rgba(53,167,118,0.14); color: #35a776; }
+.bt-type.t-portfolio { background: rgba(88,166,255,0.16); color: #58a6ff; }
+.bt-type.t-sweep { background: rgba(245,197,24,0.16); color: #f5c518; }
+.bt-type.t-optimize { background: rgba(187,134,252,0.18); color: #bb86fc; }
+.bt-type.t-universe { background: rgba(255,127,0,0.16); color: #ff9f40; }
 
 /* Metrics table: ONE table so the label/value columns align across every
    section; rows zebra-stripe; up to 4 [label | value] blocks per row with a

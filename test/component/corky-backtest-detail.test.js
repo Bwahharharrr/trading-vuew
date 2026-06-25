@@ -71,6 +71,23 @@ describe('CorkyBacktestDetail', () => {
     expect(text).toContain('Net Profit')
   })
 
+  test('renders a candidate (run_index) selector for sweep studies + emits select-candidate', async () => {
+    const w = mountDetail({ detail: { ...DETAIL, shape: { kind: 'sweep', label: 'Sweep', multiCandidate: true, chartable: true }, candidateCount: 5, runIndex: null } })
+    expect(w.find('.btd-candidate').exists()).toBe(true)
+    const opts = w.find('.btd-cselect').findAll('option').map((o) => o.text())
+    expect(opts[0]).toContain('Top-ranked')
+    expect(opts).toContain('#3')
+    await w.find('.btd-cselect').setValue('3')
+    expect(w.emitted('select-candidate')[0][0]).toBe(3)
+    await w.find('.btd-cselect').setValue('')
+    expect(w.emitted('select-candidate')[1][0]).toBe(null)   // back to default
+  })
+
+  test('no candidate selector for a normal single-candidate run', () => {
+    const w = mountDetail()   // DETAIL has no shape/candidateCount
+    expect(w.find('.btd-candidate').exists()).toBe(false)
+  })
+
   test('beat-buy-hold boolean cell is coloured green when true', () => {
     const w = mountDetail()
     const beatCell = w.findAll('.btd-mval').find((c) => c.text() === '✓ Yes')

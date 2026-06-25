@@ -128,6 +128,7 @@
             @bt-select-run="btSelectRun"
             @bt-plot-run="btPlotRun"
             @bt-select-trade="btSelectTrade"
+            @bt-select-candidate="btSelectCandidate"
             @bt-close-detail="btCloseDetail"
             @update:open="togglePositionsDock"
             @update:active-tab="setPositionsTab"
@@ -365,6 +366,7 @@ import { CorkySearchFeed } from '../src/helpers/feed/corky-search-feed.js'
 import { CorkyBacktestsFeed } from '../src/helpers/feed/corky-backtests-feed.js'
 import { buildSearchQuery, buildCondition, barrierTargetSpec } from '../src/helpers/feed/search-query.js'
 import { backtestSeriesOverlays, backtestTradeMarkers } from '../src/helpers/feed/backtest-overlays.js'
+import { detectRunShape } from '../src/helpers/feed/backtest-shape.js'
 import { pickTimeframe, paddedCandleRange, coarsenTimeframe } from '../src/helpers/feed/pick-timeframe.js'
 import {
     tradeMarkers, positionSizeSeries, buySellHistogram, cumulativeFees, positionWindow,
@@ -840,7 +842,7 @@ export default {
                     }),
                     btActive
                         ? this.backtestsFeed.getReportOverlays(
-                            { run_id: plot.runId, start_ms: start, end_ms: end, max_points: 2000 }).catch(() => null)
+                            { run_id: plot.runId, start_ms: start, end_ms: end, max_points: 2000, run_index: plot.runIndex }).catch(() => null)
                         : Promise.resolve(null),
                 ])
                 // The user switched stream while the backfill was in flight — the
@@ -2090,12 +2092,22 @@ export default {
             this.backtests.selectedRun = run
             this.positionsActiveTab = 'bt-detail'   // open this run's details in its tab
             this._btStopProgress()
-            this._btSetDetail({ progress: [], live: false, report: null, plottedRunId: this.backtests.detail.plottedRunId })
+            // Detected artifact shape drives the candidate selector + universe view.
+            // candidateCount: run_id trailing :N first, refined by progress below.
+            const shape = detectRunShape(run)
+            this._btSetDetail({
+                progress: [], live: false, report: null, plottedRunId: this.backtests.detail.plottedRunId,
+                shape, candidateCount: shape.candidateCount || null, runIndex: null,
+            })
             // One-shot progress, then go live while a run is still executing.
             try {
                 const events = await this.backtestsFeed.getProgress(run.run_id)
                 if (this.backtests.selectedRun !== run) return
-                this._btSetDetail({ progress: events })
+                // A sweep's total_steps == its candidate count (one step per run).
+                const steps = (events || []).reduce((m, e) => Math.max(m, Number(e.total_steps) || 0), 0)
+                const patch = { progress: events }
+                if (steps > 1) patch.candidateCount = Math.max(shape.candidateCount || 0, steps)
+                this._btSetDetail(patch)
             } catch (err) { this.backtests.error = this._btErr(err) }
             if (run.status === 'running' || run.status === 'queued') this._btSubscribeProgress(run)
             // Downsampled full-run OVERVIEW (full range, capped equity): powers the
@@ -2104,11 +2116,30 @@ export default {
             this._btLoadOverview(run)
         },
 
+        // Active sweep/optimization candidate (run_index); undefined ⇒ the gateway
+        // default (top-ranked). The client omits run_index when undefined.
+        _btRunIndex() {
+            const ri = this.backtests.detail && this.backtests.detail.runIndex
+            return (ri != null && ri !== '') ? Number(ri) : undefined
+        },
+
+        // Switch the plotted/inspected sweep candidate. Refreshes the overview
+        // (per-candidate equity/trades/period returns) and re-plots if this run is
+        // currently on the chart.
+        async btSelectCandidate(runIndex) {
+            const run = this.backtests.selectedRun
+            if (!run) return
+            const ri = (runIndex == null || runIndex === '') ? null : Number(runIndex)
+            this._btSetDetail({ runIndex: ri })
+            this._btLoadOverview(run)
+            if (this._btPlot && this._btPlot.runId === run.run_id) await this.btPlotRun(run)
+        },
+
         async _btLoadOverview(run) {
             if (!this.backtestsFeed) return
             this._btSetDetail({ overviewLoading: true })
             try {
-                const report = await this.backtestsFeed.getReportOverlays({ run_id: run.run_id, max_points: 1000 })
+                const report = await this.backtestsFeed.getReportOverlays({ run_id: run.run_id, max_points: 1000, run_index: this._btRunIndex() })
                 if (this.backtests.selectedRun !== run) return
                 this._btSetDetail({ report, overviewLoading: false })
             } catch (err) {
@@ -2181,17 +2212,18 @@ export default {
             this._btSetDetail({ plotting: true })
             // WINDOWED report: equity capped to max_points + only this window's
             // trades/levels — a multi-year run no longer ships its whole curve.
+            const runIndex = this._btRunIndex()
             let report
             try {
                 report = await this.backtestsFeed.getReportOverlays(
-                    { run_id: run.run_id, start_ms: win.start, end_ms: win.end, max_points: 2000 })
+                    { run_id: run.run_id, start_ms: win.start, end_ms: win.end, max_points: 2000, run_index: runIndex })
             } catch (err) {
                 this.backtests.error = this._btErr(err)
                 this._btSetDetail({ plotting: false })
                 return
             }
             if (this.backtests.selectedRun !== run) return   // superseded
-            this._btPlot = { runId: run.run_id, venue, symbol, timeframe, report, window: win }
+            this._btPlot = { runId: run.run_id, venue, symbol, timeframe, report, window: win, runIndex }
             this._corkyPendingRange = { start: win.start, end: win.end }
             try { await this._ensureCandleState(venue, symbol, timeframe) } catch (_) { /* best effort */ }
             // No indicators:[] override → corkySelect re-applies the symbol's enabled
@@ -2238,9 +2270,10 @@ export default {
             if (run) {
                 this._btSetDetail({ plotting: true })
                 try {
+                    const runIndex = (this._btPlot && this._btPlot.runIndex != null) ? this._btPlot.runIndex : this._btRunIndex()
                     const report = await this.backtestsFeed.getReportOverlays(
-                        { run_id: run.run_id, start_ms: start, end_ms: end, max_points: 2000 })
-                    this._btPlot = { ...(this._btPlot || {}), runId: run.run_id, venue, symbol, timeframe, report, window: { start, end } }
+                        { run_id: run.run_id, start_ms: start, end_ms: end, max_points: 2000, run_index: runIndex })
+                    this._btPlot = { ...(this._btPlot || {}), runId: run.run_id, venue, symbol, timeframe, report, window: { start, end }, runIndex }
                 } catch (_) { /* keep prior overlays */ }
             }
             this._corkyPendingRange = { start, end }

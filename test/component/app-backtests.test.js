@@ -55,7 +55,7 @@ function mkCtx() {
     _ensureCandleState: vi.fn(async () => true),
   }
   for (const m of ['btLoadStrategies', 'btUpdateFilter', 'btInspectStrategy', 'btListRuns',
-    'btSelectRun', 'btCloseDetail', '_btLoadOverview', '_btSubscribeProgress', '_btStopProgress', 'btPlotRun', 'btSelectTrade',
+    'btSelectRun', 'btCloseDetail', 'btSelectCandidate', '_btLoadOverview', '_btRunIndex', '_btSubscribeProgress', '_btStopProgress', 'btPlotRun', 'btSelectTrade',
     '_btPlotWindow', '_tfToMs', '_removeBacktestOverlays', 'syncBacktestOverlays', '_btErr', '_btSetDetail',
     '_canonicalVenue', '_loadedCandleRange']) {
     ctx[m] = M[m]
@@ -130,6 +130,31 @@ describe('btSelectRun progress', () => {
     await ctx.btSelectRun(RUN)
     expect(ctx.backtests.selectedRun).toBe(RUN)
     expect(ctx.positionsActiveTab).toBe('bt-detail')
+  })
+})
+
+describe('candidate (run_index) selection', () => {
+  test('btSelectCandidate sets runIndex + reloads the overview with run_index', async () => {
+    ctx.backtests.selectedRun = RUN
+    await ctx.btSelectCandidate(3)
+    expect(ctx.backtests.detail.runIndex).toBe(3)
+    expect(ctx.backtestsFeed.getReportOverlays).toHaveBeenCalledWith(
+      expect.objectContaining({ run_id: 'r1', run_index: 3 }))
+  })
+  test('default (null) candidate omits run_index', async () => {
+    ctx.backtests.selectedRun = RUN
+    await ctx.btSelectCandidate(null)
+    expect(ctx.backtests.detail.runIndex).toBe(null)
+    const call = ctx.backtestsFeed.getReportOverlays.mock.calls.at(-1)[0]
+    expect(call.run_index).toBeUndefined()
+  })
+  test('btPlotRun forwards the selected run_index + stores it on _btPlot', async () => {
+    ctx.backtests.selectedRun = RUN
+    ctx.backtests.detail.runIndex = 2
+    await ctx.btPlotRun(RUN)
+    expect(ctx.backtestsFeed.getReportOverlays).toHaveBeenCalledWith(
+      expect.objectContaining({ run_id: 'r1', run_index: 2 }))
+    expect(ctx._btPlot.runIndex).toBe(2)
   })
 })
 

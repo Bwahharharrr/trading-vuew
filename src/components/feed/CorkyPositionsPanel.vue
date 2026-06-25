@@ -94,6 +94,7 @@
                         :detail="backtests.detail || {}"
                         @plot-run="$emit('bt-plot-run', $event)"
                         @select-trade="$emit('bt-select-trade', $event)"
+                        @select-candidate="$emit('bt-select-candidate', $event)"
                         @close="$emit('bt-close-detail')" />
 
         <!-- One Search Results tab -->
@@ -196,7 +197,7 @@ export default {
         'select-position', 'audit-position', 'load-more', 'refresh', 'resize-start',
         'run-search', 'cancel-search', 'close-search-tab', 'select-result',
         'bt-refresh-strategies', 'bt-update-filter', 'bt-list-runs', 'bt-inspect-strategy',
-        'bt-select-run', 'bt-plot-run', 'bt-select-trade', 'bt-close-detail',
+        'bt-select-run', 'bt-plot-run', 'bt-select-trade', 'bt-select-candidate', 'bt-close-detail',
     ],
     computed: {
         rows() {
