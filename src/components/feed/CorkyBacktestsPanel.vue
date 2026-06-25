@@ -73,8 +73,7 @@
                         <td><span class="bt-badge" :class="r.status">{{ r.status }}</span></td>
                         <td class="num" :class="ratioSign(r, 'profit_factor')" :title="metric(r, 'profit_factor')">{{ fmtRatio(metric(r, 'profit_factor')) }}</td>
                         <td class="num" :class="ratioSign(r, 'recovery_factor')" :title="metric(r, 'recovery_factor')">{{ fmtRatio(metric(r, 'recovery_factor')) }}</td>
-                        <td class="time">{{ fmtTime(r.started_at_ms) }}</td>
-                        <td class="time">{{ fmtTime(r.completed_at_ms) }}</td>
+                        <td class="time bt-dur" :title="durationTitle(r)">{{ fmtDuration(r) }}</td>
                     </tr>
                 </tbody>
             </table>
@@ -101,8 +100,8 @@ export default {
     emits: ['refresh-strategies', 'update:filter', 'list-runs', 'inspect-strategy', 'select-run'],
     data() {
         return {
-            // Default newest-first by completion.
-            sortKey: 'completed_at_ms',
+            // Default longest-period first.
+            sortKey: 'duration',
             sortDir: -1,   // 1 asc, -1 desc
             columns: [
                 { key: 'strategy', label: 'Strategy' },
@@ -111,8 +110,7 @@ export default {
                 { key: 'status', label: 'Status' },
                 { key: 'profit_factor', label: 'PF', metric: 'profit_factor', title: 'Profit factor (gross profit ÷ gross loss)' },
                 { key: 'recovery_factor', label: 'RF', metric: 'recovery_factor', title: 'Recovery factor (net profit ÷ max drawdown)' },
-                { key: 'started_at_ms', label: 'Started' },
-                { key: 'completed_at_ms', label: 'Completed' },
+                { key: 'duration', label: 'Duration', title: 'Backtest data period (start – end, days, bars)' },
             ],
         }
     },
@@ -132,6 +130,7 @@ export default {
                 const v = this.sortKey === 'symbols' ? (r.symbols || []).join(',') : r[this.sortKey]
                 return v == null ? '' : v
             }
+            const span = (r) => (Number(r.completed_at_ms) || 0) - (Number(r.started_at_ms) || 0)
             return this.runs.slice().sort((a, b) => {
                 if (metric) {
                     const an = num(a); const bn = num(b)
@@ -140,6 +139,7 @@ export default {
                     if (bn == null) return -1
                     return (an - bn) * dir
                 }
+                if (this.sortKey === 'duration') return (span(a) - span(b)) * dir   // sort by data-period length
                 const av = strVal(a); const bv = strVal(b)
                 if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir
                 return String(av).localeCompare(String(bv)) * dir
@@ -187,6 +187,43 @@ export default {
             if (Number.isNaN(d.getTime())) return '—'
             const pad = (n) => String(n).padStart(2, '0')
             return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+        },
+        // Date only (YYYY-MM-DD) — multi-year backtest periods don't need a time.
+        fmtDate(ms) {
+            const d = new Date(Number(ms))
+            if (Number.isNaN(d.getTime())) return '—'
+            const pad = (n) => String(n).padStart(2, '0')
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+        },
+        _tfMs(tf) {
+            const m = String(tf).match(/^(\d+)\s*([mhdwM])$/)
+            if (!m) return 0
+            const u = { m: 60000, h: 3600000, d: 86400000, w: 604800000, M: 2592000000 }[m[2]] || 0
+            return Number(m[1]) * u
+        },
+        // { n, exact } bar count: EXACT when the run summary carries bar_count;
+        // otherwise an estimate from the data span / timeframe (continuous bars).
+        barCount(r) {
+            const exact = r.bar_count != null ? Number(r.bar_count) : NaN
+            if (Number.isFinite(exact)) return { n: exact, exact: true }
+            const s = Number(r.started_at_ms); const e = Number(r.completed_at_ms)
+            const tf = this._tfMs(r.trade_timeframe)
+            if (!(e > s) || !(tf > 0)) return null
+            return { n: Math.round((e - s) / tf), exact: false }
+        },
+        // "2013-03-31 – 2026-06-25 (4,835 days, ~116,005 bars)" for the run's
+        // backtest data period (started_at_ms → completed_at_ms).
+        fmtDuration(r) {
+            const s = Number(r.started_at_ms); const e = Number(r.completed_at_ms)
+            if (!(s > 0) || !(e > 0) || e < s) return '—'
+            const days = Math.round((e - s) / 86400000)
+            const b = this.barCount(r)
+            const bars = b ? `, ${b.exact ? '' : '~'}${b.n.toLocaleString()} bars` : ''
+            return `${this.fmtDate(s)} – ${this.fmtDate(e)} (${days.toLocaleString()} day${days === 1 ? '' : 's'}${bars})`
+        },
+        durationTitle(r) {
+            const b = this.barCount(r)
+            return b && !b.exact ? 'Bar count estimated from the data span ÷ timeframe (exact bar_count not in the run summary)' : ''
         },
     },
 }

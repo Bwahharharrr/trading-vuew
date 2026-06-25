@@ -12,7 +12,7 @@ const strategies = [
   { name: 'ema_cross_all_in_v1', display_name: 'EMA Cross', default_trade_timeframe: '1h', default_context_timeframes: [], default_indicators: [{ kind: 'ema', timeframe: '1h', params: { period: '50' } }], parameters: [{ name: 'fast_period', type: 'integer', default_value: 50, description: 'Fast EMA' }] },
 ]
 const runs = [
-  { run_id: 'ema:BITFINEX:tBTCUSD:1h:0:1782320400000', strategy: 'ema_cross_all_in_v1', venue: 'BITFINEX', symbols: ['tBTCUSD'], trade_timeframe: '1h', status: 'completed', started_at_ms: 0, completed_at_ms: 1782320400000, metrics: { total_net_profit: '1250.50', total_trades: 34, profit_factor: '1.3282', recovery_factor: '1.5622' } },
+  { run_id: 'ema:BITFINEX:tBTCUSD:1h:1364770800000:1782320400000', strategy: 'ema_cross_all_in_v1', venue: 'BITFINEX', symbols: ['tBTCUSD'], trade_timeframe: '1h', status: 'completed', started_at_ms: 1364770800000, completed_at_ms: 1782320400000, metrics: { total_net_profit: '1250.50', total_trades: 34, profit_factor: '1.3282', recovery_factor: '1.5622' } },
 ]
 
 function mountPanel(props = {}) {
@@ -72,7 +72,7 @@ describe('CorkyBacktestsPanel', () => {
       { run_id: 'b', strategy: 'a_strat', symbols: ['tETHUSD'], trade_timeframe: '1h', status: 'failed', completed_at_ms: 100 },
     ]
     const w = mountPanel({ runs: twoRuns })
-    // default sort = completed desc → run 'a' (200) first
+    // default sort = duration (span) desc → run 'a' (span 200) first
     expect(w.findAll('.bt-runs .bt-row')[0].text()).toContain('b_strat')
     // click "Strategy" header → asc by strategy → 'a_strat' first
     const stratHeader = w.findAll('.bt-sortable th')[0]
@@ -81,6 +81,25 @@ describe('CorkyBacktestsPanel', () => {
     // click again → desc → 'b_strat' first
     await stratHeader.trigger('click')
     expect(w.findAll('.bt-runs .bt-row')[0].text()).toContain('b_strat')
+  })
+
+  test('Duration column replaces Started/Completed: start – end, days, est. bars', () => {
+    const w = mountPanel()
+    const headers = w.findAll('.bt-sortable th').map((h) => h.text().replace(/[▲▼]/g, '').trim())
+    expect(headers).toContain('Duration')
+    expect(headers).not.toContain('Started')
+    expect(headers).not.toContain('Completed')
+    const dur = w.find('.bt-dur').text()
+    expect(dur).toMatch(/^\d{4}-\d{2}-\d{2} .+ \d{4}-\d{2}-\d{2} \(.*days, ~.*bars\)$/)
+    expect(dur).toContain('2013')
+    expect(dur).toContain('2026')
+  })
+
+  test('Duration uses exact bar_count when the summary provides it (no ~)', () => {
+    const w = mountPanel({ runs: [{ ...runs[0], bar_count: 100000 }] })
+    const dur = w.find('.bt-dur').text()
+    expect(dur).toMatch(/100.?000 bars/)
+    expect(dur).not.toContain('~')
   })
 
   test('shows Profit/Recovery factor columns from run.metrics', () => {
