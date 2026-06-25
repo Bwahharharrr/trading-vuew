@@ -88,10 +88,16 @@
                 <span v-if="selectedRun.started_at_ms"> · started {{ fmtTime(selectedRun.started_at_ms) }}</span>
             </div>
 
-            <div v-if="metricRows.length" class="bt-metrics">
-                <div v-for="m in metricRows" :key="m.key" class="bt-metric">
-                    <span class="bt-dim">{{ m.key }}</span><b>{{ m.value }}</b>
-                </div>
+            <div v-if="metricRows.length" class="bt-metrics-wrap">
+                <div class="bt-sec-head">Metrics</div>
+                <table class="bt-table bt-metrics-table">
+                    <tbody>
+                        <tr v-for="m in metricRows" :key="m.key">
+                            <td class="bt-mkey">{{ m.label }}</td>
+                            <td class="num" :class="m.sign">{{ m.value }}</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
 
             <!-- Progress -->
@@ -105,8 +111,8 @@
             </div>
 
             <div class="bt-actions">
-                <button class="bt-btn bt-plot" :disabled="reportLoading" @click="$emit('plot-run', selectedRun)">
-                    {{ reportLoading ? 'Loading…' : (plotted ? 'Re-plot equity / trades' : 'Plot equity / trades on chart') }}
+                <button class="bt-btn bt-plot" :disabled="plotBusy" @click="$emit('plot-run', selectedRun)">
+                    {{ plotBusy ? 'Loading onto chart…' : (plotted ? 'Re-plot equity / trades' : 'Plot equity / trades on chart') }}
                 </button>
             </div>
 
@@ -203,11 +209,25 @@ export default {
         },
         metricRows() {
             const m = (this.selectedRun && this.selectedRun.metrics) || {}
-            return Object.keys(m).map((key) => ({ key, value: m[key] }))
+            // Show the headline metrics first, then the rest alphabetically.
+            const PRIORITY = ['total_net_profit', 'profit_factor', 'total_trades', 'ending_equity',
+                'initial_deposit', 'max_equity_drawdown', 'absolute_drawdown', 'recovery_factor',
+                'expected_payoff', 'gross_profit', 'gross_loss', 'largest_winner', 'largest_loser']
+            const rank = (k) => { const i = PRIORITY.indexOf(k); return i === -1 ? PRIORITY.length : i }
+            const humanize = (k) => k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+            return Object.keys(m)
+                .sort((a, b) => (rank(a) - rank(b)) || a.localeCompare(b))
+                .map((key) => {
+                    const value = m[key]
+                    const neg = String(value).trim().startsWith('-')
+                    return { key, label: humanize(key), value, sign: neg ? 'neg' : '' }
+                })
         },
         progress() { return (this.detail && this.detail.progress) || [] },
         progressLive() { return !!(this.detail && this.detail.live) },
         reportLoading() { return !!(this.detail && this.detail.reportLoading) },
+        // Busy while the report fetch OR the chart load is in flight.
+        plotBusy() { return !!(this.detail && (this.detail.reportLoading || this.detail.plotting)) },
         plotted() {
             return !!(this.detail && this.selectedRun && this.detail.plottedRunId === this.selectedRun.run_id)
         },
@@ -295,8 +315,11 @@ export default {
 .bt-detail-head { display: flex; gap: 8px; align-items: center; }
 .bt-runid { font-size: 11px; color: #808a9d; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bt-meta { color: #808a9d; margin: 6px 0; font-size: 11px; }
-.bt-metrics { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0; }
-.bt-metric { display: flex; gap: 6px; align-items: baseline; background: #131722; border: 1px solid #2a2e39; border-radius: 4px; padding: 4px 8px; }
+.bt-metrics-wrap { margin: 8px 0; }
+.bt-metrics-table { width: 100%; }
+.bt-metrics-table td { padding: 3px 10px; border-bottom: 1px solid #1c212e; }
+.bt-mkey { color: #808a9d; }
+.bt-metrics-table .num { font-variant-numeric: tabular-nums; color: #d1d4dc; max-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .bt-progress { margin: 8px 0; border: 1px solid #1c212e; border-radius: 4px; padding: 6px 8px; }
 .bt-prog-head { color: #808a9d; font-weight: 600; display: flex; gap: 8px; }
 .bt-live { color: #f5c518; }

@@ -2036,47 +2036,86 @@ export default {
             this._btProgressSub = null
         },
 
-        // Plot a run: fetch its normalized report overlays, navigate the chart to
-        // the run's symbol/timeframe over the equity-curve span, and draw the
-        // descriptor-driven equity/drawdown series + trade markers after load.
+        // Resolve the discovered (canonical-cased) venue. Backtest run venues are
+        // UPPERCASE ('BITFINEX') but discovery + the enabled-indicator memory use
+        // the gateway's lowercase form — using the wrong case silently drops the
+        // user's enabled indicators on navigation.
+        _canonicalVenue(venue, symbol) {
+            const states = this.corkyStates || []
+            const lc = String(venue || '').toLowerCase()
+            const st = states.find((s) => s && String(s.venue).toLowerCase() === lc && s.symbol === symbol)
+                || states.find((s) => s && String(s.venue).toLowerCase() === lc)
+            return st ? st.venue : venue
+        },
+
+        _loadedCandleRange() {
+            const d = this.chart && this.chart.data && this.chart.data.chart && this.chart.data.chart.data
+            if (!Array.isArray(d) || !d.length) return null
+            return [d[0][0], d[d.length - 1][0]]
+        },
+
+        // Plot a run: fetch its report overlays, navigate to the run's symbol/tf
+        // over an end-anchored window (capped), and draw the descriptor-driven
+        // equity/drawdown panes + trade markers after load. Keeps the user's
+        // enabled indicators (canonical venue) so they show alongside the backtest.
         async btPlotRun(run) {
             if (!run || !this.backtestsFeed) return
-            const venue = run.venue
             const symbol = (run.symbols || [])[0]
             const timeframe = run.trade_timeframe
+            const venue = this._canonicalVenue(run.venue, symbol)
             if (!venue || !symbol || !timeframe) return
-            this._btSetDetail({ reportLoading: true })
+            this._btSetDetail({ reportLoading: true, plotting: true })
             let report
             try {
                 report = await this.backtestsFeed.getReportOverlays({ run_id: run.run_id })
             } catch (err) {
                 this.backtests.error = this._btErr(err)
-                this._btSetDetail({ reportLoading: false })
+                this._btSetDetail({ reportLoading: false, plotting: false })
                 return
             }
             this._btSetDetail({ reportLoading: false, report })
             this._btPlot = { runId: run.run_id, venue, symbol, timeframe, report }
-            // Window: the equity-curve span (fallback to trade span).
+            // End-anchored window: the run's tail, capped so a multi-year run
+            // doesn't request ~100k candles (which stalls / partially loads).
+            const MAX_BARS = 1000
             const span = this._btSpan(report)
             let range
             if (span) {
-                range = { type: 'start_end', start_ms: span.start, end_ms: span.end }
-                this._corkyPendingRange = { start: span.start, end: span.end }
+                const tfMs = this._tfToMs(timeframe)
+                let start = span.start
+                if ((span.end - start) / tfMs > MAX_BARS) start = span.end - MAX_BARS * tfMs
+                range = { type: 'start_end', start_ms: start, end_ms: span.end }
+                this._corkyPendingRange = { start, end: span.end }
             }
             try { await this._ensureCandleState(venue, symbol, timeframe) } catch (_) { /* best effort */ }
+            // No indicators:[] override → corkySelect re-applies the symbol's enabled
+            // indicators from per-(venue,symbol) memory (now keyed on the canonical venue).
             this.corkySelect({ venue, symbol, timeframe, range, chunk_rows: 500 })
         },
 
-        // Click a trade → centre the chart on it (re-plotting the run's overlays).
+        // Click a trade → jump to it. INSTANT when the trade is already within the
+        // loaded candle range (just re-range, no reload); otherwise load a ±200-bar
+        // window around it.
         async btSelectTrade(trade) {
             if (!trade || trade.timestamp_ms == null) return
             const plot = this._btPlot
             const run = this.backtests.selectedRun
-            const venue = (plot && plot.venue) || (run && run.venue)
             const symbol = trade.symbol || (plot && plot.symbol) || (run && (run.symbols || [])[0])
             const timeframe = (plot && plot.timeframe) || (run && run.trade_timeframe)
+            const venue = (plot && plot.venue) || this._canonicalVenue(run && run.venue, symbol)
             if (!venue || !symbol || !timeframe) return
             const tfMs = this._tfToMs(timeframe)
+            const tv = this.$refs.tradingVue
+            const cur = this.corkyCurrent
+            const loaded = this._loadedCandleRange()
+            const onThisChart = cur && cur.symbol === symbol && cur.timeframe === timeframe
+            if (onThisChart && tv && loaded &&
+                trade.timestamp_ms >= loaded[0] && trade.timestamp_ms <= loaded[1]) {
+                // Instant: centre the existing view on the trade (no candle reload).
+                tv.setRange(trade.timestamp_ms - 60 * tfMs, trade.timestamp_ms + 60 * tfMs)
+                return
+            }
+            // Out of the loaded window → load a window around the trade.
             const start = trade.timestamp_ms - 200 * tfMs
             const end = trade.timestamp_ms + 200 * tfMs
             this._corkyPendingRange = { start, end }
@@ -2120,17 +2159,26 @@ export default {
             const plot = this._btPlot
             if (!plot || !plot.report || !this.corkyCurrent) return
             if (plot.symbol !== this.corkyCurrent.symbol || plot.venue !== this.corkyCurrent.venue) return
+            // Clip series/markers to the loaded candle window (± a margin) so a
+            // multi-year run's 100k-point series stays light and aligns with the
+            // candles actually on screen. Re-plotted on each navigation.
+            const loaded = this._loadedCandleRange()
+            const margin = loaded ? (loaded[1] - loaded[0]) || 0 : 0
+            const lo = loaded ? loaded[0] - margin : -Infinity
+            const hi = loaded ? loaded[1] + margin : Infinity
+            const inWin = (t) => t >= lo && t <= hi
             // Descriptor-driven account/equity/drawdown series → offchart panes.
             for (const ov of backtestSeriesOverlays(plot.report)) {
-                if (!ov.data.length) continue
+                const data = ov.data.filter((p) => inWin(p[0]))
+                if (!data.length) continue
                 dc.add('offchart', {
-                    name: ov.name, type: ov.type, data: ov.data,
+                    name: ov.name, type: ov.type, data,
                     settings: { ...ov.settings, $backtestOverlay: true, $uuid: `bt-${ov.id}`, legend: true },
                 })
             }
-            // Trade markers on the price pane (filtered to the charted symbol).
+            // Trade markers on the price pane (charted symbol, within the window).
             const trades = (plot.report.trades || []).filter(
-                (t) => !t.symbol || t.symbol === plot.symbol)
+                (t) => (!t.symbol || t.symbol === plot.symbol) && inWin(t.timestamp_ms))
             const markers = backtestTradeMarkers(trades)
             if (markers.length) {
                 dc.add('onchart', {
@@ -2141,7 +2189,7 @@ export default {
                     },
                 })
             }
-            this.backtests.detail = { ...this.backtests.detail, plottedRunId: plot.runId }
+            this.backtests.detail = { ...this.backtests.detail, plottedRunId: plot.runId, plotting: false }
         },
 
         setPositionsAccount(acct) {

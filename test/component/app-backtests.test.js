@@ -29,8 +29,12 @@ const RUN = { run_id: 'r1', strategy: 'ema', venue: 'BITFINEX', symbols: ['tBTCU
 function mkCtx() {
   const ctx = {
     backtests: { strategies: [], runs: [], filters: { strategy: '', symbol: '', status: '' }, selectedRun: null, detail: {}, loading: false, error: null },
-    corkyCurrent: { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1h' },
-    chart: { data: { onchart: [], offchart: [] }, add(s, o) { this.data[s].push(o) }, update_ids() {}, touchData() {} },
+    // Discovery reports the venue LOWERCASE (run.venue is UPPERCASE) — the
+    // canonical-venue fix must reconcile them so enabled indicators survive.
+    corkyCurrent: { venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1h' },
+    corkyStates: [{ venue: 'bitfinex', symbol: 'tBTCUSD', available_timeframes: ['1h'] }],
+    $refs: { tradingVue: { setRange: vi.fn() } },
+    chart: { data: { onchart: [], offchart: [], chart: { data: [] } }, add(s, o) { this.data[s].push(o) }, update_ids() {}, touchData() {} },
     backtestsFeed: {
       streamingSupported: true,
       listStrategies: vi.fn(async () => [{ name: 'ema', display_name: 'EMA' }]),
@@ -46,7 +50,8 @@ function mkCtx() {
   }
   for (const m of ['btLoadStrategies', 'btUpdateFilter', 'btInspectStrategy', 'btListRuns',
     'btSelectRun', '_btSubscribeProgress', '_btStopProgress', 'btPlotRun', 'btSelectTrade',
-    '_btSpan', '_tfToMs', '_removeBacktestOverlays', 'syncBacktestOverlays', '_btErr', '_btSetDetail']) {
+    '_btSpan', '_tfToMs', '_removeBacktestOverlays', 'syncBacktestOverlays', '_btErr', '_btSetDetail',
+    '_canonicalVenue', '_loadedCandleRange']) {
     ctx[m] = M[m]
   }
   return ctx
@@ -118,14 +123,23 @@ describe('btSelectRun progress', () => {
 })
 
 describe('btPlotRun + syncBacktestOverlays', () => {
-  test('fetches the report, sets _btPlot, navigates with a start_end window', async () => {
-    await ctx.btPlotRun(RUN)
-    expect(ctx._btPlot).toMatchObject({ runId: 'r1', symbol: 'tBTCUSD', timeframe: '1h' })
+  test('fetches the report, sets _btPlot, navigates with the CANONICAL (lowercase) venue', async () => {
+    await ctx.btPlotRun(RUN)   // RUN.venue is 'BITFINEX'
+    expect(ctx._btPlot).toMatchObject({ runId: 'r1', venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1h' })
     expect(ctx.backtests.detail.report).toBe(REPORT)
     const [opts] = ctx.corkySelect.mock.calls[0]
-    expect(opts).toMatchObject({ venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1h' })
+    expect(opts).toMatchObject({ venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1h' })  // canonical, so indicators persist
     expect(opts.range.type).toBe('start_end')
-    expect(ctx._corkyPendingRange).toEqual({ start: 0, end: 7200000 })
+    expect(ctx._corkyPendingRange).toEqual({ start: 0, end: 7200000 })   // short run → no clamp
+  })
+
+  test('clamps the window for a multi-year run to the last 1000 bars', async () => {
+    const H = 3600000
+    const longReport = { ...REPORT, equity_curve: [{ timestamp_ms: 0, equity: '1', cash: '1', position_quantity: '0', drawdown: '0' }, { timestamp_ms: 5000 * H, equity: '2', cash: '2', position_quantity: '0', drawdown: '0' }] }
+    ctx.backtestsFeed.getReportOverlays = vi.fn(async () => longReport)
+    await ctx.btPlotRun(RUN)
+    // span = 0..5000h (5000 bars > 1000) → start clamped to end - 1000 bars
+    expect(ctx._corkyPendingRange).toEqual({ start: 5000 * H - 1000 * H, end: 5000 * H })
   })
 
   test('syncBacktestOverlays adds descriptor-driven offchart series + trade markers', async () => {
@@ -144,7 +158,7 @@ describe('btPlotRun + syncBacktestOverlays', () => {
 
   test('syncBacktestOverlays is a no-op for a foreign charted symbol', async () => {
     await ctx.btPlotRun(RUN)
-    ctx.corkyCurrent = { venue: 'BITFINEX', symbol: 'tETHUSD', timeframe: '1h' }
+    ctx.corkyCurrent = { venue: 'bitfinex', symbol: 'tETHUSD', timeframe: '1h' }
     ctx.syncBacktestOverlays()
     expect(offSeries(ctx)).toHaveLength(0)
   })
@@ -158,11 +172,22 @@ describe('btPlotRun + syncBacktestOverlays', () => {
 })
 
 describe('btSelectTrade', () => {
-  test('navigates centered on the trade (±200 bars)', async () => {
-    ctx._btPlot = { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1h', report: REPORT }
+  test('loads a ±200-bar window when the trade is OUTSIDE the loaded candles', async () => {
+    ctx._btPlot = { venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1h', report: REPORT }
+    // no candles loaded → can't jump instantly → loads a window
     await ctx.btSelectTrade(REPORT.trades[0])
     const [opts] = ctx.corkySelect.mock.calls[0]
     const H = 3600000
     expect(opts.range).toEqual({ type: 'start_end', start_ms: 3600000 - 200 * H, end_ms: 3600000 + 200 * H })
+  })
+
+  test('INSTANT: re-ranges (no reload) when the trade is within the loaded candles', async () => {
+    ctx._btPlot = { venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1h', report: REPORT }
+    // candles loaded spanning the trade ts (3600000)
+    ctx.chart.data.chart.data = [[0, 1, 1, 1, 1, 1], [3600000, 1, 1, 1, 1, 1], [7200000, 1, 1, 1, 1, 1]]
+    await ctx.btSelectTrade(REPORT.trades[0])
+    expect(ctx.corkySelect).not.toHaveBeenCalled()        // no reload
+    const H = 3600000
+    expect(ctx.$refs.tradingVue.setRange).toHaveBeenCalledWith(3600000 - 60 * H, 3600000 + 60 * H)
   })
 })

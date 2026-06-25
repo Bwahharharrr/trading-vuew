@@ -93,7 +93,7 @@ describe('CorkyBacktestsPanel', () => {
       detail: { progress: [{ kind: 'completed', completed_steps: 1, total_steps: 1, message: 'done' }], report, plottedRunId: null },
     })
     const detail = w.find('.bt-detail')
-    expect(detail.text()).toContain('total_net_profit')
+    expect(detail.find('.bt-metrics-table').text()).toContain('Total Net Profit') // humanized label
     expect(detail.text()).toContain('1250.50')                 // decimal string verbatim
     expect(detail.text()).toContain('done')                    // progress message
     await w.find('.bt-plot').trigger('click')
