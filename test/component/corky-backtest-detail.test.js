@@ -39,7 +39,7 @@ function mountDetail(props = {}) {
 describe('CorkyBacktestDetail', () => {
   test('renders grouped metric sections', () => {
     const w = mountDetail()
-    const titles = w.findAll('.btd-mgroup-title').map((t) => t.text())
+    const titles = w.findAll('.btd-msection').map((t) => t.text())
     expect(titles).toContain('P&L')
     expect(titles).toContain('Ratios / Risk')
     expect(titles).toContain('Trades')
@@ -50,7 +50,7 @@ describe('CorkyBacktestDetail', () => {
 
   test('grid uses descriptor formatting (percent is a fraction; ratio precision)', () => {
     const w = mountDetail()
-    const text = w.find('.btd-metrics').text()
+    const text = w.find('.btd-mtable').text()
     expect(text).toContain('Profit Factor')
     expect(text).toContain('1.3282')   // ratio precision 4
     expect(text).toContain('32.00%')   // 0.32 fraction → 32%
@@ -59,12 +59,14 @@ describe('CorkyBacktestDetail', () => {
     expect(text).not.toContain('Final account equity')
   })
 
-  test('each rendered metric has a label + value cell (3 pairs / 6 cols per row)', () => {
+  test('each rendered metric has a label + value cell, in one aligned table', () => {
     const w = mountDetail()
     const labels = w.findAll('.btd-mlabel').length
     const values = w.findAll('.btd-mval').length
     expect(labels).toBeGreaterThan(0)
-    expect(labels).toBe(values)   // one value per label
+    expect(labels).toBe(values)            // one value per label
+    expect(w.findAll('.btd-mtable')).toHaveLength(1)   // single table → columns align across sections
+    expect(w.findAll('.btd-mrow.alt').length).toBeGreaterThan(0)   // zebra rows present
   })
 
   test('plot button + trade click + close emit; period returns render', async () => {

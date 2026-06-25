@@ -21,18 +21,23 @@
         <span v-if="overviewLoading" class="btd-dim">loading metrics…</span>
     </div>
 
-    <!-- Metrics: grouped grid (3 label + 3 value columns per row) -->
-    <div v-if="metricGroups.length" class="btd-metrics">
-        <div v-for="g in metricGroups" :key="g.title" class="btd-mgroup">
-            <div class="btd-mgroup-title">{{ g.title }}</div>
-            <div class="btd-mgrid">
-                <template v-for="c in g.cells" :key="c.key">
-                    <div class="btd-mlabel" :title="c.key">{{ c.label }}</div>
-                    <div class="btd-mval" :class="c.sign" :title="c.raw">{{ c.value }}</div>
-                </template>
-            </div>
-        </div>
-    </div>
+    <!-- Metrics: one table so columns align across ALL sections, rows zebra-stripe,
+         and dividers separate each [label | value] block. 4 blocks per row. -->
+    <table v-if="metricRows.length" class="btd-mtable">
+        <tbody>
+            <template v-for="(row, ri) in metricRows" :key="ri">
+                <tr v-if="row.type === 'section'" class="btd-msection">
+                    <td :colspan="metricColSpan">{{ row.title }}</td>
+                </tr>
+                <tr v-else class="btd-mrow" :class="{ alt: row.alt }">
+                    <template v-for="c in row.cells" :key="c.key">
+                        <td class="btd-mlabel" :title="c.key">{{ c.label }}</td>
+                        <td class="btd-mval" :class="c.sign" :title="c.raw">{{ c.value }}</td>
+                    </template>
+                </tr>
+            </template>
+        </tbody>
+    </table>
     <div v-else class="btd-empty">No metrics for this run yet.</div>
 
     <!-- Progress -->
@@ -155,6 +160,30 @@ export default {
             if (rest.length) groups.push({ title: 'Other', cells: rest.map(cell) })
             return groups
         },
+        // Flatten the groups into table rows: a 'section' header row, then
+        // 'metrics' rows of up to 4 blocks each. `alt` toggles per metric row
+        // (continuous across sections) so the zebra striping is always visible
+        // even for single-row sections.
+        metricRows() {
+            const rows = []
+            let alt = false
+            for (const g of this.metricGroups) {
+                rows.push({ type: 'section', title: g.title })
+                for (let i = 0; i < g.cells.length; i += 4) {
+                    rows.push({ type: 'metrics', cells: g.cells.slice(i, i + 4), alt })
+                    alt = !alt
+                }
+            }
+            return rows
+        },
+        // Header colspan = the widest metric row's cell count (≤ 4 blocks × 2).
+        metricColSpan() {
+            let max = 2
+            for (const g of this.metricGroups) {
+                if (g.cells.length) max = Math.max(max, Math.min(4, g.cells.length) * 2)
+            }
+            return max
+        },
         progress() { return (this.detail && this.detail.progress) || [] },
         progressLive() { return !!(this.detail && this.detail.live) },
         overviewLoading() { return !!(this.detail && this.detail.overviewLoading) },
@@ -218,20 +247,17 @@ export default {
 .btd-actions { display: flex; align-items: center; gap: 10px; margin: 8px 0 12px; }
 .btd-dim { color: #808a9d; font-size: 11px; }
 
-/* Metrics grid: 3 label + 3 value columns per row, grouped by section. */
-.btd-metrics { display: flex; flex-direction: column; gap: 12px; }
-.btd-mgroup-title { color: #35a776; font-weight: 700; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 5px; border-bottom: 1px solid #1c212e; padding-bottom: 3px; }
-/* Four [label | value] blocks per row; a vertical divider BETWEEN blocks (drawn
-   as the left border of every block except the first in its row), values left
-   aligned. 8 interleaved cells/row (label,value × 4) → first label = 8n+1. */
-.btd-mgrid {
-    display: grid;
-    grid-template-columns: repeat(4, auto minmax(40px, 1fr));
-    column-gap: 0; row-gap: 6px; align-items: baseline;
-}
-.btd-mlabel { color: #808a9d; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 1px solid #2a2e39; padding: 0 8px 0 14px; }
-.btd-mlabel:nth-of-type(8n+1) { border-left: none; padding-left: 0; }   /* first block in row: no leading divider */
-.btd-mval { text-align: left; font-variant-numeric: tabular-nums; color: #d1d4dc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 6px; }
+/* Metrics table: ONE table so the label/value columns align across every
+   section; rows zebra-stripe; up to 4 [label | value] blocks per row with a
+   vertical divider between blocks (left border of every label but the first). */
+.btd-mtable { width: 100%; border-collapse: collapse; margin-top: 2px; }
+.btd-msection td { color: #35a776; font-weight: 700; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; padding: 9px 0 3px; border-bottom: 1px solid #1c212e; }
+.btd-mrow.alt { background: rgba(255, 255, 255, 0.025); }   /* zebra striping */
+.btd-mrow td { padding: 3px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.btd-mlabel { color: #808a9d; font-size: 11px; padding-left: 14px; padding-right: 8px; }
+.btd-mlabel:first-child { padding-left: 4px; }                    /* first block: flush left */
+.btd-mlabel:not(:first-child) { border-left: 1px solid #2a2e39; } /* divider between blocks */
+.btd-mval { text-align: left; font-variant-numeric: tabular-nums; color: #d1d4dc; padding-right: 12px; }
 .btd-empty { color: #808a9d; padding: 16px 0; }
 
 /* Shared table / badge / progress styling (mirrors CorkyBacktestsPanel). */
