@@ -17,7 +17,7 @@
 //      discipline the existing ws-manager live path uses).
 
 import { CorkyClient } from './corky-client.js'
-import { assembleChunks, buildChartData, applyLiveUpdate, columnarChunkToRows } from './corky-ingest.js'
+import { assembleChunks, buildChartData, applyLiveUpdate, columnarChunkToRows, rowToOhlcv } from './corky-ingest.js'
 import { FeedSource } from './feed-source.js'
 
 // Case-insensitive indicator-kind equality. The wire/UI may carry a display
@@ -94,6 +94,44 @@ export class CorkyFeed extends FeedSource {
      */
     async discover(venue) {
         return this.client.listCandleStates(venue)
+    }
+
+    /**
+     * One-shot historical candle fetch for a fixed [start_ms, end_ms] window —
+     * powers the chart's lazy "load older candles on pan-left" loader. Runs on
+     * its OWN subscription id (NEVER the active live stream, and not registered
+     * in `_subs`, so a concurrent re-select can't tear it down or be torn down by
+     * it), collects the historical chunks, unsubscribes the live tail, and
+     * returns ascending OHLCV rows. Candles only (no indicators) and no DataCube
+     * side effects — the caller merges the rows into chart.data.
+     *
+     * @returns {Promise<Array<[number,number,number,number,number,number]>>}
+     */
+    async fetchHistory({ venue, symbol, timeframe, start_ms, end_ms, chunk_rows = 500 } = {}) {
+        if (!venue || !symbol || !timeframe) return []
+        if (!(Number(end_ms) > Number(start_ms))) return []
+        const subscription_id = `${this._nextSubscriptionId()}-backfill`
+        const chunks = []
+        try {
+            await this.client.subscribeCandles({
+                subscription_id, venue, symbol, timeframe,
+                range: { type: 'start_end', start_ms, end_ms },
+                include_indicators: false, chunk_rows,
+                ack_mode: 'summary', historical_format: 'columnar',
+                onEvent: ({ event }) => {
+                    if (!event) return
+                    if (event.type === 'historical_chunk') chunks.push(event)
+                    else if (event.type === 'historical_chunk_columnar') {
+                        chunks.push(columnarChunkToRows(event, timeframe))
+                    }
+                },
+            })
+        } finally {
+            // We only wanted the fixed window — stop any live tail the gateway
+            // starts after history (best-effort; the request already resolved).
+            Promise.resolve(this.client.unsubscribe(subscription_id)).catch(() => {})
+        }
+        return assembleChunks(chunks).map(rowToOhlcv).filter((r) => Number.isFinite(r[0]))
     }
 
     // ── subscribe ──────────────────────────────────────────────────────────

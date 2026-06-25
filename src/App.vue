@@ -758,6 +758,13 @@ export default {
                 this.searchFeed = new CorkySearchFeed({ client: this.corkyClient })
                 // Strategies/backtests: read-only over the same socket.
                 this.backtestsFeed = new CorkyBacktestsFeed({ client: this.corkyClient })
+                // Wire the chart's lazy "load older candles on pan-left" loader.
+                // The DataCube has the plumbing (dc_core.range_changed) but no
+                // loader was ever registered in gateway mode, so panning left past
+                // the initially-loaded window showed nothing. This backfills the
+                // revealed older range on demand (e.g. a backtest plotted as its
+                // last ~1000 bars now scrolls back through the full run history).
+                this.chart.onrange((range) => this._corkyHistoryLoader(range))
             }
             // Preload the strategy catalog so the Backtests tab is populated.
             this.btLoadStrategies()
@@ -795,6 +802,42 @@ export default {
                 this.corkyLoading = false
             }
             return this.corkyStates
+        },
+
+        // Lazy-history loader: the chart calls this when the user pans LEFT past
+        // the earliest loaded candle. Fetch the revealed older window from the
+        // gateway (a one-shot start_end read on its own subscription — never the
+        // live stream) and return ascending OHLCV; the DataCube merges/prepends
+        // it. Staleness-guarded against a stream switch mid-fetch.
+        // @param {[number, number]} range - [olderEdgeMs, firstLoadedCandleMs]
+        async _corkyHistoryLoader(range) {
+            const cur = this.corkyCurrent
+            if (!this.corkyFeed || !cur || !cur.venue || !cur.symbol || !cur.timeframe) return []
+            const end = Math.ceil(range[1])
+            let start = Math.floor(range[0])
+            if (!(end > start)) return []
+            // Bound each backfill to ≤1000 bars: the gateway holds only a small
+            // live buffer (~400) and serves older bars from a SLOW historical
+            // source, so a far pan would otherwise issue one huge, stalling
+            // request. The chart re-fires range_changed after each chunk merges,
+            // so panning further keeps loading progressively.
+            const tfMs = this._tfToMs(cur.timeframe)
+            const MAX_BARS = 1000
+            if (tfMs > 0 && (end - start) / tfMs > MAX_BARS) start = end - MAX_BARS * tfMs
+            const gen = this._corkyGen   // bumped by every select/teardown
+            try {
+                const rows = await this.corkyFeed.fetchHistory({
+                    venue: cur.venue, symbol: cur.symbol, timeframe: cur.timeframe,
+                    start_ms: start, end_ms: end,
+                })
+                // The user switched stream while the backfill was in flight — the
+                // candles belong to a symbol/tf no longer charted; drop them.
+                if (gen !== this._corkyGen) return []
+                return rows
+            } catch (err) {
+                console.warn('[Corky] history backfill failed:', (err && err.message) || err)
+                return []
+            }
         },
 
         // Subscribe to a stream (single active subscription): drop the prior
