@@ -93,8 +93,8 @@
                 <table class="bt-table bt-metrics-table">
                     <tbody>
                         <tr v-for="m in metricRows" :key="m.key">
-                            <td class="bt-mkey">{{ m.label }}</td>
-                            <td class="num" :class="m.sign">{{ m.value }}</td>
+                            <td class="bt-mkey" :title="m.key">{{ m.label }}</td>
+                            <td class="num" :class="m.sign" :title="m.raw">{{ m.value }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -207,8 +207,16 @@ export default {
             const n = this.filters.strategy
             return n ? this.strategies.find((s) => s.name === n) || null : null
         },
+        // metric name → descriptor (from the report's metric_descriptors).
+        metricDescriptors() {
+            const ds = (this.detail && this.detail.report && this.detail.report.metric_descriptors) || []
+            const map = {}
+            for (const d of ds) if (d && d.name) map[d.name] = d
+            return map
+        },
         metricRows() {
             const m = (this.selectedRun && this.selectedRun.metrics) || {}
+            const desc = this.metricDescriptors
             // Show the headline metrics first, then the rest alphabetically.
             const PRIORITY = ['total_net_profit', 'profit_factor', 'total_trades', 'ending_equity',
                 'initial_deposit', 'max_equity_drawdown', 'absolute_drawdown', 'recovery_factor',
@@ -218,9 +226,17 @@ export default {
             return Object.keys(m)
                 .sort((a, b) => (rank(a) - rank(b)) || a.localeCompare(b))
                 .map((key) => {
-                    const value = m[key]
-                    const neg = String(value).trim().startsWith('-')
-                    return { key, label: humanize(key), value, sign: neg ? 'neg' : '' }
+                    const raw = m[key]
+                    const d = desc[key]
+                    const neg = String(raw).trim().startsWith('-')
+                    return {
+                        key,
+                        label: (d && d.description) || humanize(key),
+                        value: this.formatMetric(raw, d),   // formatted for display
+                        raw,                                 // exact decimal string (hover)
+                        unit: d ? d.unit : '',
+                        sign: neg ? 'neg' : '',
+                    }
                 })
         },
         progress() { return (this.detail && this.detail.progress) || [] },
@@ -248,6 +264,24 @@ export default {
         indLabel(i) {
             const p = i.params && Object.values(i.params).join(',')
             return `${i.kind}${p ? '(' + p + ')' : ''}@${i.timeframe || ''}`
+        },
+        // Format a decimal-string metric per its descriptor. Number() is used for
+        // DISPLAY ONLY (never calculations); the exact string rides along as the
+        // hover title. NB: percent values are FRACTIONS (0.32 = 32%).
+        formatMetric(raw, d) {
+            if (raw == null || raw === '') return '—'
+            if (!d || !d.unit) return String(raw)
+            const n = Number(raw)
+            if (!Number.isFinite(n)) return String(raw)   // don't lie about a bad value
+            const p = d.precision != null ? d.precision : 2
+            switch (d.unit) {
+                case 'currency': return n.toLocaleString(undefined, { minimumFractionDigits: p, maximumFractionDigits: p })
+                case 'percent': return (n * 100).toFixed(p) + '%'
+                case 'bps': return n.toFixed(p) + ' bps'
+                case 'ratio': return n.toFixed(p)
+                case 'count': return n.toLocaleString(undefined, { maximumFractionDigits: 0 })
+                default: return String(raw)
+            }
         },
         signClass(dec) {
             if (dec == null || dec === '') return ''

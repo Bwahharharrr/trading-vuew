@@ -2013,6 +2013,23 @@ export default {
                 this._btSetDetail({ progress: events })
             } catch (err) { this.backtests.error = this._btErr(err) }
             if (run.status === 'running' || run.status === 'queued') this._btSubscribeProgress(run)
+            // Downsampled full-run OVERVIEW (full range, capped equity): powers the
+            // panel — metric_descriptors (format the metrics table), period_returns,
+            // and the trades list — without pulling the whole equity curve.
+            this._btLoadOverview(run)
+        },
+
+        async _btLoadOverview(run) {
+            if (!this.backtestsFeed) return
+            this._btSetDetail({ overviewLoading: true })
+            try {
+                const report = await this.backtestsFeed.getReportOverlays({ run_id: run.run_id, max_points: 1000 })
+                if (this.backtests.selectedRun !== run) return
+                this._btSetDetail({ report, overviewLoading: false })
+            } catch (err) {
+                this.backtests.error = this._btErr(err)
+                this._btSetDetail({ overviewLoading: false })
+            }
         },
 
         _btSubscribeProgress(run) {
@@ -2063,33 +2080,39 @@ export default {
             const timeframe = run.trade_timeframe
             const venue = this._canonicalVenue(run.venue, symbol)
             if (!venue || !symbol || !timeframe) return
-            this._btSetDetail({ reportLoading: true, plotting: true })
+            // End-anchored window from the run summary (no need to pull the full
+            // report just to learn the span): the run's tail, capped so a multi-year
+            // run doesn't request ~100k candles (which stalls / partially loads).
+            const win = this._btPlotWindow(run, timeframe)
+            this._btSetDetail({ plotting: true })
+            // WINDOWED report: equity capped to max_points + only this window's
+            // trades/levels — a multi-year run no longer ships its whole curve.
             let report
             try {
-                report = await this.backtestsFeed.getReportOverlays({ run_id: run.run_id })
+                report = await this.backtestsFeed.getReportOverlays(
+                    { run_id: run.run_id, start_ms: win.start, end_ms: win.end, max_points: 2000 })
             } catch (err) {
                 this.backtests.error = this._btErr(err)
-                this._btSetDetail({ reportLoading: false, plotting: false })
+                this._btSetDetail({ plotting: false })
                 return
             }
-            this._btSetDetail({ reportLoading: false, report })
-            this._btPlot = { runId: run.run_id, venue, symbol, timeframe, report }
-            // End-anchored window: the run's tail, capped so a multi-year run
-            // doesn't request ~100k candles (which stalls / partially loads).
-            const MAX_BARS = 1000
-            const span = this._btSpan(report)
-            let range
-            if (span) {
-                const tfMs = this._tfToMs(timeframe)
-                let start = span.start
-                if ((span.end - start) / tfMs > MAX_BARS) start = span.end - MAX_BARS * tfMs
-                range = { type: 'start_end', start_ms: start, end_ms: span.end }
-                this._corkyPendingRange = { start, end: span.end }
-            }
+            if (this.backtests.selectedRun !== run) return   // superseded
+            this._btPlot = { runId: run.run_id, venue, symbol, timeframe, report, window: win }
+            this._corkyPendingRange = { start: win.start, end: win.end }
             try { await this._ensureCandleState(venue, symbol, timeframe) } catch (_) { /* best effort */ }
             // No indicators:[] override → corkySelect re-applies the symbol's enabled
             // indicators from per-(venue,symbol) memory (now keyed on the canonical venue).
-            this.corkySelect({ venue, symbol, timeframe, range, chunk_rows: 500 })
+            this.corkySelect({ venue, symbol, timeframe, range: { type: 'start_end', start_ms: win.start, end_ms: win.end }, chunk_rows: 500 })
+        },
+
+        // End-anchored ≤1000-bar window for a run, from its summary timestamps.
+        _btPlotWindow(run, timeframe) {
+            const tfMs = this._tfToMs(timeframe)
+            const MAX_BARS = 1000
+            const end = (run.completed_at_ms && run.completed_at_ms > 0) ? run.completed_at_ms : Date.now()
+            let start = (run.started_at_ms && run.started_at_ms > 0) ? run.started_at_ms : end - MAX_BARS * tfMs
+            if ((end - start) / tfMs > MAX_BARS) start = end - MAX_BARS * tfMs
+            return { start, end }
         },
 
         // Click a trade → jump to it. INSTANT when the trade is already within the
@@ -2114,20 +2137,21 @@ export default {
                 tv.setRange(trade.timestamp_ms - 60 * tfMs, trade.timestamp_ms + 60 * tfMs)
                 return
             }
-            // Out of the loaded window → load a window around the trade.
+            // Out of the loaded window → load a window around the trade, and
+            // re-fetch the WINDOWED report so the equity/markers match it.
             const start = trade.timestamp_ms - 200 * tfMs
             const end = trade.timestamp_ms + 200 * tfMs
+            if (run) {
+                this._btSetDetail({ plotting: true })
+                try {
+                    const report = await this.backtestsFeed.getReportOverlays(
+                        { run_id: run.run_id, start_ms: start, end_ms: end, max_points: 2000 })
+                    this._btPlot = { ...(this._btPlot || {}), runId: run.run_id, venue, symbol, timeframe, report, window: { start, end } }
+                } catch (_) { /* keep prior overlays */ }
+            }
             this._corkyPendingRange = { start, end }
             try { await this._ensureCandleState(venue, symbol, timeframe) } catch (_) { /* best effort */ }
             this.corkySelect({ venue, symbol, timeframe, range: { type: 'start_end', start_ms: start, end_ms: end }, chunk_rows: 500 })
-        },
-
-        _btSpan(report) {
-            const ts = []
-            for (const p of (report && report.equity_curve) || []) if (p.timestamp_ms != null) ts.push(p.timestamp_ms)
-            for (const t of (report && report.trades) || []) if (t.timestamp_ms != null) ts.push(t.timestamp_ms)
-            if (!ts.length) return null
-            return { start: Math.min(...ts), end: Math.max(...ts) }
         },
 
         _tfToMs(tf) {

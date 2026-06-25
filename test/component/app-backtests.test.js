@@ -23,8 +23,14 @@ const REPORT = {
     { id: 'backtest_equity', display_name: 'Equity', kind: 'line', fields: ['equity'], target: { surface: 'pane', pane: 'Backtest' }, style: {}, visible_by_default: true },
     { id: 'backtest_drawdown', display_name: 'Drawdown', kind: 'histogram', fields: ['drawdown'], target: { surface: 'pane', pane: 'Backtest DD' }, style: {}, visible_by_default: true },
   ],
+  metric_descriptors: [
+    { name: 'ending_equity', unit: 'currency', precision: 2, description: 'Final account equity' },
+  ],
 }
-const RUN = { run_id: 'r1', strategy: 'ema', venue: 'BITFINEX', symbols: ['tBTCUSD'], trade_timeframe: '1h', status: 'completed', metrics: {} }
+const RUN = {
+  run_id: 'r1', strategy: 'ema', venue: 'BITFINEX', symbols: ['tBTCUSD'], trade_timeframe: '1h',
+  status: 'completed', started_at_ms: 3600000, completed_at_ms: 7200000, metrics: { ending_equity: '10250' },
+}
 
 function mkCtx() {
   const ctx = {
@@ -49,8 +55,8 @@ function mkCtx() {
     _ensureCandleState: vi.fn(async () => true),
   }
   for (const m of ['btLoadStrategies', 'btUpdateFilter', 'btInspectStrategy', 'btListRuns',
-    'btSelectRun', '_btSubscribeProgress', '_btStopProgress', 'btPlotRun', 'btSelectTrade',
-    '_btSpan', '_tfToMs', '_removeBacktestOverlays', 'syncBacktestOverlays', '_btErr', '_btSetDetail',
+    'btSelectRun', '_btLoadOverview', '_btSubscribeProgress', '_btStopProgress', 'btPlotRun', 'btSelectTrade',
+    '_btPlotWindow', '_tfToMs', '_removeBacktestOverlays', 'syncBacktestOverlays', '_btErr', '_btSetDetail',
     '_canonicalVenue', '_loadedCandleRange']) {
     ctx[m] = M[m]
   }
@@ -123,23 +129,29 @@ describe('btSelectRun progress', () => {
 })
 
 describe('btPlotRun + syncBacktestOverlays', () => {
-  test('fetches the report, sets _btPlot, navigates with the CANONICAL (lowercase) venue', async () => {
+  beforeEach(() => { ctx.backtests.selectedRun = RUN })   // a run is selected before plotting
+  test('fetches a WINDOWED report, sets _btPlot, navigates with the CANONICAL venue', async () => {
     await ctx.btPlotRun(RUN)   // RUN.venue is 'BITFINEX'
     expect(ctx._btPlot).toMatchObject({ runId: 'r1', venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1h' })
-    expect(ctx.backtests.detail.report).toBe(REPORT)
+    expect(ctx._btPlot.report).toBe(REPORT)   // windowed report lives on _btPlot (chart), not detail
+    // fetched WINDOWED + downsampled (not the whole run)
+    expect(ctx.backtestsFeed.getReportOverlays).toHaveBeenCalledWith(
+      { run_id: 'r1', start_ms: 3600000, end_ms: 7200000, max_points: 2000 })
     const [opts] = ctx.corkySelect.mock.calls[0]
-    expect(opts).toMatchObject({ venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1h' })  // canonical, so indicators persist
+    expect(opts).toMatchObject({ venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1h' })  // canonical → indicators persist
     expect(opts.range.type).toBe('start_end')
-    expect(ctx._corkyPendingRange).toEqual({ start: 0, end: 7200000 })   // short run → no clamp
+    expect(ctx._corkyPendingRange).toEqual({ start: 3600000, end: 7200000 })   // short run → whole span
   })
 
   test('clamps the window for a multi-year run to the last 1000 bars', async () => {
     const H = 3600000
-    const longReport = { ...REPORT, equity_curve: [{ timestamp_ms: 0, equity: '1', cash: '1', position_quantity: '0', drawdown: '0' }, { timestamp_ms: 5000 * H, equity: '2', cash: '2', position_quantity: '0', drawdown: '0' }] }
-    ctx.backtestsFeed.getReportOverlays = vi.fn(async () => longReport)
-    await ctx.btPlotRun(RUN)
-    // span = 0..5000h (5000 bars > 1000) → start clamped to end - 1000 bars
+    const longRun = { ...RUN, started_at_ms: 0, completed_at_ms: 5000 * H }   // 5000 bars > 1000
+    ctx.backtests.selectedRun = longRun
+    await ctx.btPlotRun(longRun)
     expect(ctx._corkyPendingRange).toEqual({ start: 5000 * H - 1000 * H, end: 5000 * H })
+    // and the windowed report request used the clamped bounds
+    expect(ctx.backtestsFeed.getReportOverlays).toHaveBeenCalledWith(
+      { run_id: 'r1', start_ms: 4000 * H, end_ms: 5000 * H, max_points: 2000 })
   })
 
   test('syncBacktestOverlays adds descriptor-driven offchart series + trade markers', async () => {

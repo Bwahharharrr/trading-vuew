@@ -493,24 +493,31 @@ export class CorkyClient {
             { subscription_id, onEvent })
     }
 
-    /** Trade chart overlays (per chart_window) → resolves the full event. */
+    /** Trade chart overlays (per chart_window) → resolves the full event. Pass
+     *  start_ms/end_ms to return only trades inside that visible window. */
     getBacktestChartOverlays(opts = {}) {
-        const { run_id, timeframe, before_bars, after_bars, run_index, fold_index } = opts
+        const { run_id, timeframe, before_bars, after_bars, start_ms, end_ms, run_index, fold_index } = opts
         if (!run_id) throw new Error('getBacktestChartOverlays: run_id is required')
         const command = { type: 'get_backtest_chart_overlays', run_id }
         if (timeframe != null) command.timeframe = timeframe
         if (before_bars != null) command.before_bars = before_bars
         if (after_bars != null) command.after_bars = after_bars
+        if (start_ms != null) command.start_ms = start_ms
+        if (end_ms != null) command.end_ms = end_ms
         if (run_index != null) command.run_index = run_index
         if (fold_index != null) command.fold_index = fold_index
         return this._request(command)
     }
 
-    /** Normalized report/account overlays → resolves the full event. */
+    /** Normalized report/account overlays → resolves the full event. Pass
+     *  start_ms/end_ms to window and max_points to downsample equity_curve. */
     getBacktestReportOverlays(opts = {}) {
-        const { run_id, run_index, fold_index } = opts
+        const { run_id, start_ms, end_ms, max_points, run_index, fold_index } = opts
         if (!run_id) throw new Error('getBacktestReportOverlays: run_id is required')
         const command = { type: 'get_backtest_report_overlays', run_id }
+        if (start_ms != null) command.start_ms = start_ms
+        if (end_ms != null) command.end_ms = end_ms
+        if (max_points != null) command.max_points = max_points
         if (run_index != null) command.run_index = run_index
         if (fold_index != null) command.fold_index = fold_index
         return this._request(command)

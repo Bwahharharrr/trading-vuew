@@ -769,6 +769,9 @@ export interface GetBacktestChartOverlaysCommand {
   timeframe?: Timeframe
   before_bars?: number
   after_bars?: number
+  /** Inclusive window: only trades whose timestamp_ms ∈ [start_ms, end_ms]. */
+  start_ms?: TimestampMs
+  end_ms?: TimestampMs
   /** Parameter-sweep run selector. */
   run_index?: number | null
   /** Walk-forward fold selector. */
@@ -779,6 +782,11 @@ export interface GetBacktestChartOverlaysCommand {
 export interface GetBacktestReportOverlaysCommand {
   type: 'get_backtest_report_overlays'
   run_id: string
+  /** Inclusive window filter (trades/equity/levels/period-returns intersecting). */
+  start_ms?: TimestampMs
+  end_ms?: TimestampMs
+  /** Downsample equity_curve to at most this many points (no interpolation). */
+  max_points?: number
   run_index?: number | null
   fold_index?: number | null
 }
@@ -1258,6 +1266,18 @@ export interface ChartBacktestEquityCurvePoint {
   drawdown_pct?: DecimalString | null
 }
 
+/**
+ * Formatting metadata for a run metric (`ChartBacktestMetricDescriptor`). `unit`
+ * tells the UI how to render the decimal-string value. IMPORTANT: `percent`
+ * values are decimal FRACTIONS (`"0.32"` = 32%).
+ */
+export interface ChartBacktestMetricDescriptor {
+  name: string
+  unit: 'currency' | 'ratio' | 'percent' | 'count' | 'bps' | (string & {})
+  precision?: number
+  description?: string
+}
+
 /** A period-return row (`ChartBacktestPeriodReturn`). Decimals as strings. */
 export interface ChartBacktestPeriodReturn {
   period: string
@@ -1368,6 +1388,8 @@ export interface BacktestReportOverlaysEvent {
   equity_curve: ChartBacktestEquityCurvePoint[]
   period_returns: ChartBacktestPeriodReturn[]
   series_descriptors: ChartBacktestSeriesDescriptor[]
+  /** Formatting metadata for run metrics (see {@link ChartBacktestMetricDescriptor}). */
+  metric_descriptors?: ChartBacktestMetricDescriptor[]
 }
 
 /** Discriminated union of gateway event payloads (`ChartFeedEventKind`). */
