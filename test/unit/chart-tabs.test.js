@@ -134,4 +134,21 @@ describe('chart-tabs: create / switch / close', () => {
         host.destroyAllChartTabs()
         for (const s of spies) expect(s).toHaveBeenCalledTimes(1)
     })
+
+    it('saves a COPY of the view range per tab — zoom does not bleed across tabs', () => {
+        const tab0 = host.chartTabs[0]
+        // The chart returns a reference to its live, mutated-in-place range array.
+        const liveRange = [100, 200]
+        host.$refs.tradingVue.getRange = () => liveRange
+        host.$refs.tradingVue.setRange = vi.fn()
+
+        const tab1 = host.createChartTab()              // switch → saves tab0's range
+        expect(tab0.range).toEqual([100, 200])
+        expect(tab0.range).not.toBe(liveRange)          // a snapshot, NOT the shared array
+
+        // Zooming tab1 mutates the shared live array in place; tab0 must be immune.
+        liveRange[0] = 999; liveRange[1] = 1000
+        expect(tab0.range).toEqual([100, 200])
+        expect(tab1.id).toBeTruthy()
+    })
 })

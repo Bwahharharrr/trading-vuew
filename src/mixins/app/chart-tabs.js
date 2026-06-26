@@ -146,10 +146,16 @@ export default {
             const tab = this.chartTabs.find(t => t.id === id)
             if (!tab || id === this.activeChartTabId) return
             // Save the OUTGOING tab's view range so switching back doesn't jump.
+            // COPY it: getRange() returns a REFERENCE to the live chart.range
+            // array, so storing it directly made every tab share (and mutate) the
+            // same array — zooming one tab bled into all of them.
             const tvOut = this.$refs.tradingVue
             const outgoing = this.activeTab
             if (tvOut && outgoing && typeof tvOut.getRange === 'function') {
-                try { outgoing.range = tvOut.getRange() } catch (_) { /* not ready */ }
+                try {
+                    const r = tvOut.getRange()
+                    if (Array.isArray(r) && r.length === 2) outgoing.range = [r[0], r[1]]
+                } catch (_) { /* not ready */ }
             }
             this.activeChartTabId = id
             this.$nextTick(() => {
