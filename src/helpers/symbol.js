@@ -118,9 +118,12 @@ export default class Sym {
                 if (t < this.vol.__t0__ + this.tf) this.vol[0] = 0
                 let noevent = true
                 for(let i = i0; i < this.data.length; i++) {
-                    noevent = false
                     let dp = this.data[i]
                     if (dp[idx.time] >= t1) break
+                    // Only AFTER confirming the row is inside the window — else a
+                    // gap window whose next row is already past t1 would wrongly
+                    // skip the gap-fill below (stale carry-over + unreset volume).
+                    noevent = false
                     this.open.__fn__(dp[idx.open], t)
                     this.high.__fn__(dp[idx.high], t)
                     this.low.__fn__(dp[idx.low], t)
