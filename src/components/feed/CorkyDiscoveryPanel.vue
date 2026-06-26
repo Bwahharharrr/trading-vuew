@@ -225,6 +225,7 @@
 
 <script>
 import { symbolCategories, SYMBOL_CATEGORIES } from '../../helpers/feed/symbol-meta.js'
+import { newTabIntent } from '../../helpers/open-intent.js'
 
 // Short, human display labels for each derived category.
 const CATEGORY_LABELS = {
@@ -460,7 +461,7 @@ export default {
             // re-subscribe). `indicators: []` ⇒ candles-only.
             // ⌘/Ctrl-click (or middle-click) opens the load in a NEW chart tab;
             // a plain click loads into the active tab.
-            const newTab = !!(ev && (ev.metaKey || ev.ctrlKey || ev.button === 1))
+            const newTab = newTabIntent(ev)
             this.$emit('select', {
                 venue: row.venue,
                 symbol: row.symbol,

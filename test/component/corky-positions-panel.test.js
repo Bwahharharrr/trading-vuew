@@ -108,6 +108,14 @@ describe('CorkyPositionsPanel — events', () => {
         expect(ev[0][0].source).toBe('current')
     })
 
+    test('Ctrl/Cmd-click a position row → select-position(newTab=true); plain click → false', async () => {
+        const w = mountPanel()
+        await w.find('.pd-row').trigger('click', { ctrlKey: true })
+        expect(w.emitted('select-position')[0][1]).toBe(true)     // 2nd arg = newTab
+        await w.find('.pd-row').trigger('click')
+        expect(w.emitted('select-position')[1][1]).toBe(false)
+    })
+
     test('the per-row details button emits audit-position (not select)', async () => {
         const w = mountPanel()
         await w.find('.pd-details').trigger('click')
@@ -269,7 +277,9 @@ describe('CorkyPositionsPanel — search tabs', () => {
         expect(rows[0].text()).toContain('tBTCUSD')
         expect(rows[0].text()).toContain('2h bull box')
         await rows[0].trigger('click')
-        expect(w.emitted('select-result')[0][0]).toEqual({ tabId: 'search-1', row: matchRow, index: 0 })
+        expect(w.emitted('select-result')[0][0]).toEqual({ tabId: 'search-1', row: matchRow, index: 0, newTab: false })
+        await rows[0].trigger('click', { metaKey: true })   // ⌘-click → new tab
+        expect(w.emitted('select-result')[1][0].newTab).toBe(true)
         await w.find('.sr-stop').trigger('click')
         expect(w.emitted('cancel-search')[0]).toEqual(['search-1'])
     })

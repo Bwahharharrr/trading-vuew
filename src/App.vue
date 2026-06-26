@@ -2032,13 +2032,15 @@ export default {
         // with a start_end range so the matched bar lands in view (one-shot zoom
         // via _corkyPendingRange). corkySelect's onStatus/onError/history-complete
         // drive the row's progress + the on-chart vertical signal marker.
-        async onSearchResultSelect({ tabId, row, index } = {}) {
+        async onSearchResultSelect({ tabId, row, index, newTab } = {}) {
             if (!row) return
             const cw = row.chart_window || null
             const venue = row.venue
             const symbol = row.ticker
             const timeframe = (cw && cw.timeframe) || row.timeframe
             if (!venue || !symbol || !timeframe) return
+            // ⌘/Ctrl/middle-click → open this result in a NEW chart tab.
+            if (newTab) this.createChartTab()
 
             // Active + loading state on THIS row, set before any await so the user
             // sees instant feedback. Carries the signal info for the chart marker.
@@ -2516,8 +2518,10 @@ export default {
         // Click a position row → switch the chart to that position's ticker,
         // keeping the current timeframe if the target offers it, else 1h, else the
         // lowest available (pickTimeframe). Discovers the venue first if unknown.
-        async onPositionSelect(pos) {
+        async onPositionSelect(pos, newTab) {
             if (!pos || !pos.symbol) return
+            // ⌘/Ctrl/middle-click → plot this position in a NEW chart tab.
+            if (newTab) this.createChartTab()
             this._clearSearchNav()   // a position pick drops any active search-result marker
             const { venue, symbol } = pos
             let state = (this.corkyStates || []).find(

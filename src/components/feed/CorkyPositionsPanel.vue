@@ -126,10 +126,11 @@
                         class="pd-row" :class="{ active: isActiveRow(p) }"
                         tabindex="0" role="button"
                         :aria-label="`Switch chart to ${p.venue} ${p.symbol}`"
-                        @click="$emit('select-position', p)"
+                        @click="$emit('select-position', p, newTabIntent($event))"
+                        @mousedown.middle.prevent="$emit('select-position', p, true)"
                         @keydown.enter.prevent="$emit('select-position', p)"
                         @keydown.space.prevent="$emit('select-position', p)"
-                        :title="`Switch chart to ${p.venue} ${p.symbol}`">
+                        :title="`Switch chart to ${p.venue} ${p.symbol} — ⌘/Ctrl/middle-click opens a new tab`">
                         <td class="sym">{{ p.symbol }}</td>
                         <td :class="sideClass(p)">{{ p.side }}</td>
                         <td class="num">{{ p.amount }}</td>
@@ -159,6 +160,7 @@
 
 <script>
 import { isNeg, positionKey } from '../../helpers/feed/corky-positions.js'
+import { newTabIntent } from '../../helpers/open-intent.js'
 import SearchSignalsForm from './SearchSignalsForm.vue'
 import SearchResults from './SearchResults.vue'
 import CorkyBacktestsPanel from './CorkyBacktestsPanel.vue'
@@ -220,6 +222,7 @@ export default {
         },
     },
     methods: {
+        newTabIntent,   // ⌘/Ctrl/middle-click → open in a new chart tab
         selectTab(tab) {
             if (tab !== this.activeTab) this.$emit('update:active-tab', tab)
         },

@@ -32,8 +32,9 @@
             <template v-for="(m, i) in tab.matches" :key="i">
                 <tr class="sr-row" :class="{ active: isActive(i) }"
                     tabindex="0" role="button"
-                    :title="`Open ${m.ticker} ${m.timeframe} at ${fmtDate(m.timestamp_ms)}`"
-                    @click="$emit('select', { row: m, index: i })"
+                    :title="`Open ${m.ticker} ${m.timeframe} at ${fmtDate(m.timestamp_ms)} — ⌘/Ctrl/middle-click opens a new tab`"
+                    @click="$emit('select', { row: m, index: i, newTab: newTabIntent($event) })"
+                    @mousedown.middle.prevent="$emit('select', { row: m, index: i, newTab: true })"
                     @keydown.enter.prevent="$emit('select', { row: m, index: i })">
                     <td class="sym">{{ m.ticker }}</td>
                     <td><span class="sr-side" :class="sideClass(m.side)">{{ m.signal }}</span></td>
@@ -61,6 +62,8 @@
 // tab state owned by the parent (status / progress / matches[] / error). Row
 // click emits `select` (the projected match row, carrying chart_window) for the
 // parent to navigate the chart; `cancel` stops a running search (keeps partials).
+
+import { newTabIntent } from '../../helpers/open-intent.js'
 
 export default {
     name: 'SearchResults',
@@ -101,6 +104,7 @@ export default {
         },
     },
     methods: {
+        newTabIntent,   // ⌘/Ctrl/middle-click → open the result in a new chart tab
         isActive(i) { return !!this.activeNav && this.activeNav.index === i },
         // Compact Barrier Symmetric outcome cell. Pending/unavailable is its OWN
         // state — never rendered as a miss (per the contract). The analytics
