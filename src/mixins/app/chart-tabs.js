@@ -198,6 +198,11 @@ export default {
         // a blank tab) + the active index. Tab ids are session-local, so we persist
         // positions/selections, not ids.
         serializeChartTabs() {
+            // CRITICAL: while a restore is still pending (discovery hasn't succeeded
+            // yet, so the tabs aren't recreated), DON'T let the current placeholder
+            // set overwrite the persisted layout — round-trip the pending saved set
+            // so a transient discovery failure can't wipe the user's tabs.
+            if (this._corkyRestorePending && this._savedCorkyTabs) return this._savedCorkyTabs
             return {
                 tabs: this.chartTabs.map((t) => {
                     const sel = t.corkyCurrent || t.corkyLast
@@ -209,10 +214,11 @@ export default {
         },
 
         // Restore tabs from persisted selections (validated against discovery).
-        // Creates the tabs WITHOUT subscribing — each lazy-subscribes on first
-        // view (activateChartTab). Returns the number of tabs restored.
+        // Creates the tabs WITHOUT subscribing — each lazy-subscribes on first view
+        // (activateChartTab). Preserves blank tabs + original positions and maps the
+        // active index through any dropped (vanished) tab. Returns the count.
         restoreChartTabs(saved) {
-            if (!saved || !Array.isArray(saved.tabs)) return 0
+            if (!saved || !Array.isArray(saved.tabs) || !saved.tabs.length) return 0
             const states = this.corkyStates || []
             const resolve = (sel) => {
                 if (!sel || !sel.venue || !sel.symbol) return null
@@ -222,24 +228,39 @@ export default {
                 const tf = tfs.includes(sel.timeframe) ? sel.timeframe : tfs[0]
                 return tf ? { venue: sel.venue, symbol: sel.symbol, timeframe: tf, indicators: [], layers: [] } : null
             }
-            const wanted = saved.tabs.map(resolve).filter(Boolean)
-            if (!wanted.length) return 0
-            const ids = []
-            wanted.forEach((sel, i) => {
-                // Reuse the seeded tab 0; create fresh tabs for the rest (capped).
-                let tab
-                if (i === 0) { tab = this.chartTabs[0] } else { tab = this._appendChartTab() }
-                if (!tab) return
-                tab.corkyCurrent = sel
-                tab.corkyLast = { venue: sel.venue, symbol: sel.symbol, timeframe: sel.timeframe }
-                tab.title = `${sel.symbol} · ${sel.timeframe}`
-                ids.push(tab.id)
+            // Keep blank tabs (null) + original positions; drop ONLY vanished
+            // symbols (a non-null selection that no longer exists in discovery).
+            const survivors = []   // { sel|null, origIndex }
+            saved.tabs.forEach((entry, origIndex) => {
+                if (entry == null) { survivors.push({ sel: null, origIndex }); return }
+                const sel = resolve(entry)
+                if (sel) survivors.push({ sel, origIndex })
             })
-            // Activate the saved-active tab (clamped) → triggers its lazy-subscribe.
-            const idx = Math.min(Math.max(0, saved.activeIndex | 0), ids.length - 1)
-            this.activeChartTabId = ids[idx]
-            // Kick the active tab's subscribe (activateChartTab early-returns when
-            // id === active, so call the bind+subscribe path directly).
+            // Only restore if there's a real chart to bring back (else it's just the
+            // default empty session — leave the seeded tab as-is).
+            if (!survivors.some((s) => s.sel)) return 0
+            const created = []   // { id, origIndex }
+            survivors.forEach((s, i) => {
+                const tab = (i === 0) ? this.chartTabs[0] : this._appendChartTab()
+                if (!tab) return   // hit MAX_CHART_TABS
+                if (s.sel) {
+                    tab.corkyCurrent = s.sel
+                    tab.corkyLast = { venue: s.sel.venue, symbol: s.sel.symbol, timeframe: s.sel.timeframe }
+                    tab.title = `${s.sel.symbol} · ${s.sel.timeframe}`
+                }
+                created.push({ id: tab.id, origIndex: s.origIndex })
+            })
+            if (!created.length) return 0
+            // Map saved.activeIndex through the drop: exact origIndex, else the
+            // nearest surviving tab at/just-before it, else the first.
+            const want = saved.activeIndex | 0
+            let pick = created.find((c) => c.origIndex === want)
+                || [...created].reverse().find((c) => c.origIndex <= want)
+                || created[0]
+            this.activeChartTabId = pick.id
+            this._corkyRestorePending = false   // restored → the live set is authoritative
+            // Kick the active tab's lazy-subscribe (activateChartTab early-returns
+            // when id === active, so run the bind+subscribe path directly).
             this.$nextTick(() => {
                 if (typeof this._corkyBindActiveCube === 'function') this._corkyBindActiveCube()
                 const t = this.activeTab
@@ -248,7 +269,7 @@ export default {
                     this.corkySelect({ venue: s.venue, symbol: s.symbol, timeframe: s.timeframe })
                 }
             })
-            return ids.length
+            return created.length
         },
 
         // Append a tab WITHOUT activating it (used by restore). Capped at MAX.
@@ -277,6 +298,16 @@ export default {
 
         _destroyChartTabCube(tab) {
             if (!tab) return
+            // Release this tab's OWN gateway feed — unsubscribe its live stream +
+            // detach its reconnect listeners — WITHOUT closing the SHARED client
+            // (dispose, not destroy). Otherwise the gateway keeps pushing
+            // live_update into the destroyed cube forever + re-subscribes on every
+            // reconnect (the closeChartTab feed leak).
+            if (tab.corkyFeed) {
+                try { tab.corkyFeed.dispose() } catch (_) { /* gone */ }
+                tab.corkyFeed = null
+                tab.corkyHandle = null
+            }
             // Release this tab's backtest-progress subscription (per-tab overlay).
             if (tab.btProgressSub && this.backtestsFeed) {
                 try { this.backtestsFeed.unsubscribe(tab.btProgressSub) } catch (_) { /* gone */ }

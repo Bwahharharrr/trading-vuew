@@ -35,7 +35,8 @@
                     :title="`Open ${m.ticker} ${m.timeframe} at ${fmtDate(m.timestamp_ms)} — ⌘/Ctrl/middle-click opens a new tab`"
                     @click="$emit('select', { row: m, index: i, newTab: newTabIntent($event) })"
                     @mousedown.middle.prevent="$emit('select', { row: m, index: i, newTab: true })"
-                    @keydown.enter.prevent="$emit('select', { row: m, index: i })">
+                    @keydown.enter.prevent="$emit('select', { row: m, index: i })"
+                    @keydown.space.prevent="$emit('select', { row: m, index: i })">
                     <td class="sym">{{ m.ticker }}</td>
                     <td><span class="sr-side" :class="sideClass(m.side)">{{ m.signal }}</span></td>
                     <td class="sr-boxes">{{ m.boxesText || '—' }}</td>

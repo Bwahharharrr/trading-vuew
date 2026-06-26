@@ -52,7 +52,8 @@ function mkFeed(over = {}) {
     unsubscribe: vi.fn(async () => {}),
     setIndicatorEnabled: vi.fn(() => true),
     setLayerEnabled: vi.fn(() => true),
-    destroy: vi.fn(),
+    dispose: vi.fn(),   // teardown disposes each feed (no per-feed client.close)…
+    destroy: vi.fn(),   // …then closes the one shared client itself
   }, over)
 }
 
@@ -389,16 +390,23 @@ describe('_corkyMem + _corkyUnsub + teardown', () => {
     expect(feed.unsubscribe).toHaveBeenCalled()
   })
 
-  test('teardownCorky destroys the discover feed + every tab stream feed', () => {
+  test('teardownCorky DISPOSES the discover feed + every tab feed, then closes the ONE shared client', () => {
     const discover = mkFeed()
     const tabFeed = mkFeed()
+    const client = { close: vi.fn() }
     const app = mkApp({
+      corkyClient: client,
       corkyDiscoverFeed: discover,
       chartTabs: [{ id: 'ct-1', chart: {}, corkyFeed: tabFeed }],
     })
     app.teardownCorky()
-    expect(discover.destroy).toHaveBeenCalled()
-    expect(tabFeed.destroy).toHaveBeenCalled()   // concurrent-live: all tab feeds released
+    // Feeds are DISPOSED (unsubscribe + detach), NOT destroyed — destroy() would
+    // each close the shared socket. The App closes the one client exactly once.
+    expect(tabFeed.dispose).toHaveBeenCalled()
+    expect(tabFeed.destroy).not.toHaveBeenCalled()
+    expect(discover.dispose).toHaveBeenCalled()
+    expect(client.close).toHaveBeenCalledTimes(1)
+    expect(app.chartTabs[0].corkyFeed).toBeNull()   // released
   })
 })
 

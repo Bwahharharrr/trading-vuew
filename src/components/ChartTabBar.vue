@@ -4,7 +4,10 @@
         <div v-for="tab in tabs" :key="tab.id"
              class="ctab" :class="{ active: tab.id === activeId }"
              :title="tab.title"
+             role="tab" tabindex="0" :aria-selected="tab.id === activeId ? 'true' : 'false'"
              @click="$emit('select', tab.id)"
+             @keydown.enter.prevent="$emit('select', tab.id)"
+             @keydown.space.prevent="$emit('select', tab.id)"
              @mousedown.middle.prevent="tabs.length > 1 && $emit('close', tab.id)">
             <span class="ctab-title">{{ tab.title }}</span>
             <button v-if="tabs.length > 1" class="ctab-close" title="Close tab"

@@ -20,7 +20,7 @@ function makeHost(over = {}) {
         host[m] = M[m].bind(host)
     }
     host.corkySelect = vi.fn()
-    host.createChartTab = vi.fn()
+    host.createChartTab = vi.fn(() => ({ id: 'ct-new' }))   // truthy = created (null = at cap)
     host.clearPositionPlot = vi.fn()
     host._clearSearchNav = vi.fn()
     host._corkyCancelSelectRetry = vi.fn()
@@ -90,5 +90,13 @@ describe('onCorkySelect new-tab routing', () => {
         host.onCorkySelect({ venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1h', newTab: false })
         expect(host.createChartTab).not.toHaveBeenCalled()
         expect(host.corkySelect).toHaveBeenCalled()
+    })
+
+    it('at the tab cap (createChartTab → null) a new-tab click ABORTS, never clobbers the active chart', () => {
+        const host = makeHost()
+        host.createChartTab = vi.fn(() => null)   // at MAX_CHART_TABS
+        host.onCorkySelect({ venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1h', newTab: true })
+        expect(host.createChartTab).toHaveBeenCalledTimes(1)
+        expect(host.corkySelect).not.toHaveBeenCalled()   // did NOT load into the active tab
     })
 })

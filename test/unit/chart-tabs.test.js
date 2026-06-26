@@ -125,6 +125,16 @@ describe('chart-tabs: create / switch / close', () => {
         expect(d).not.toHaveBeenCalled()
     })
 
+    it('closeChartTab DISPOSES the closed tab\'s feed (no shared-client close)', () => {
+        const tab1 = host.createChartTab()
+        const dispose = vi.fn(); const destroy = vi.fn()
+        tab1.corkyFeed = { dispose, destroy }
+        host.closeChartTab(tab1.id)
+        expect(dispose).toHaveBeenCalledTimes(1)
+        expect(destroy).not.toHaveBeenCalled()       // destroy() would close the shared socket
+        expect(tab1.corkyFeed).toBeNull()
+    })
+
     it('caps at maxChartTabs and destroyAllChartTabs releases every cube', () => {
         while (host.chartTabs.length < host.maxChartTabs) host.createChartTab()
         expect(host.chartTabs).toHaveLength(8)
@@ -202,5 +212,46 @@ describe('chart-tabs: persistence (serialize / restore)', () => {
         expect(host.restoreChartTabs(null)).toBe(0)
         expect(host.restoreChartTabs({ tabs: [{ venue: 'GONE', symbol: 'X', timeframe: '1h' }] })).toBe(0)
         expect(host.chartTabs).toHaveLength(1)     // untouched
+    })
+
+    it('maps activeIndex through a LEADING dropped tab (wrong-active-tab bug)', () => {
+        host.corkyStates = [
+            { venue: 'V', symbol: 'B', available_timeframes: ['1h'] },
+            { venue: 'V', symbol: 'C', available_timeframes: ['1h'] },
+        ]
+        host.corkySelect = vi.fn(); host._corkyBindActiveCube = vi.fn()
+        // saved: [A(vanished, idx0), B(active, idx1), C(idx2)] — B was active.
+        host.restoreChartTabs({
+            tabs: [
+                { venue: 'V', symbol: 'GONE', timeframe: '1h' },  // dropped
+                { venue: 'V', symbol: 'B', timeframe: '1h' },     // origIndex 1 = saved active
+                { venue: 'V', symbol: 'C', timeframe: '1h' },
+            ],
+            activeIndex: 1,
+        })
+        expect(host.activeTab.corkyCurrent.symbol).toBe('B')   // B active, NOT C
+    })
+
+    it('serializeChartTabs preserves the pending saved set while a restore is pending', () => {
+        host._savedCorkyTabs = { tabs: [{ venue: 'V', symbol: 'X', timeframe: '1h' }], activeIndex: 0 }
+        host._corkyRestorePending = true
+        // The current set is just a blank seeded tab — serialize must round-trip the
+        // PENDING set so a transient discovery failure can't overwrite the layout.
+        expect(host.serializeChartTabs()).toBe(host._savedCorkyTabs)
+        host._corkyRestorePending = false
+        expect(host.serializeChartTabs().tabs).toEqual([null])   // now serializes the live (blank) set
+    })
+
+    it('preserves a blank (null) tab on restore + maps the active index past it', () => {
+        host.corkyStates = [{ venue: 'V', symbol: 'B', available_timeframes: ['1h'] }]
+        host.corkySelect = vi.fn(); host._corkyBindActiveCube = vi.fn()
+        const n = host.restoreChartTabs({
+            tabs: [null, { venue: 'V', symbol: 'B', timeframe: '1h' }],  // [blank, B(active)]
+            activeIndex: 1,
+        })
+        expect(n).toBe(2)
+        expect(host.chartTabs).toHaveLength(2)                 // blank preserved
+        expect(host.chartTabs[0].corkyCurrent).toBe(null)      // tab 0 stays blank
+        expect(host.activeTab.corkyCurrent.symbol).toBe('B')   // active mapped past the blank
     })
 })

@@ -919,10 +919,15 @@ export class CorkyFeed extends FeedSource {
         await this.client.unsubscribe(id)
     }
 
-    /** Unsubscribe every stream and close the client. */
-    destroy() {
-        // Detach the connection-lifecycle listeners we registered in the ctor so
-        // a torn-down feed doesn't keep resubscribing on the shared client.
+    /**
+     * Release this feed WITHOUT closing the SHARED client: detach the connection-
+     * lifecycle listeners it registered in the ctor (so a torn-down feed can't keep
+     * resubscribing on reconnect) and unsubscribe every stream (stops the gateway
+     * pushing live_update + drops the fan-out + frees the retained wire history).
+     * Use this when MULTIPLE feeds share one client (one CorkyFeed per chart tab):
+     * closing the socket here would kill every other tab's + the dock feeds' stream.
+     */
+    dispose() {
         for (const off of this._offClientEvents) { try { off() } catch (_) { /* ignore */ } }
         this._offClientEvents = []
         const ids = [...this._subs.keys()]
@@ -930,13 +935,19 @@ export class CorkyFeed extends FeedSource {
             const h = this._subs.get(id)
             if (h && h.unsubFanout) h.unsubFanout()
             this._clearHandle(h)
-            // Fire-and-forget the unsubscribe command; we're tearing down.
-            // unsubscribe() is async and the client.close() below rejects any
-            // in-flight request, so attach a no-op catch to avoid an unhandled
-            // rejection (the sync try/catch alone would NOT catch that).
+            // Fire-and-forget the unsubscribe command; we're tearing down. A no-op
+            // catch avoids an unhandled rejection if the socket later closes.
             Promise.resolve(this.client.unsubscribe(id)).catch(() => {})
         }
         this._subs.clear()
+        this._activeSubId = null
+    }
+
+    /** dispose() + close the client. Only the SOLE owner of the client should use
+     * this; under multi-tab the App disposes each feed then closes the one shared
+     * client itself (see teardownCorky). */
+    destroy() {
+        this.dispose()
         if (typeof this.client.close === 'function') this.client.close()
     }
 }

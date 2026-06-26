@@ -653,6 +653,10 @@ export default {
             this._savedCorkyTabs = (savedState.corkyTabs && Array.isArray(savedState.corkyTabs.tabs))
                 ? savedState.corkyTabs
                 : (this.corkyLast ? { tabs: [this.corkyLast], activeIndex: 0 } : null)
+            // While a restore is pending, serializeChartTabs round-trips the saved
+            // set so no interaction can overwrite the persisted layout before it's
+            // actually restored (transient-discovery-failure protection).
+            this._corkyRestorePending = !!this._savedCorkyTabs
             if (Number.isFinite(Number(savedState.panelWidth))) {
                 this.panelWidth = Number(savedState.panelWidth)
             }
@@ -783,17 +787,27 @@ export default {
             // Load the open-positions snapshot up front so the dock's tab badge is
             // populated even before the user expands it.
             this.refreshPositions()
-            this.corkyDiscover().then(() => {
-                // Restore the persisted chart-tab SET (selections + active tab) if
-                // anything is open already, or restore a saved tab list. Tabs
-                // lazy-subscribe on first view; restoreChartTabs kicks the active
-                // one. Falls through to nothing when there's no saved set (a fresh
-                // session shows the empty tab + discovery panel as the CTA).
-                if (this.corkyCurrent || this.corkyHandle) return   // already charting
-                const restored = (this._savedCorkyTabs && typeof this.restoreChartTabs === 'function')
+            this.corkyDiscover().then((states) => {
+                // Restore the persisted chart-tab SET after discovery. Tabs
+                // lazy-subscribe on first view; restoreChartTabs kicks the active one.
+                if (this.corkyCurrent || this.corkyHandle) {
+                    // Already charting → the live set is authoritative; stop pending.
+                    this._savedCorkyTabs = null
+                    this._corkyRestorePending = false
+                    return
+                }
+                if (!this._savedCorkyTabs) return   // fresh session → empty tab + discovery CTA
+                // CRITICAL: do NOT discard the saved set when discovery came back
+                // EMPTY (a transient gateway/runtime failure) — keep it (and the
+                // pending flag protecting localStorage) so the NEXT successful
+                // discover (this reload's retry, or a future reload) still restores.
+                if (!Array.isArray(states) || !states.length) return
+                const restored = (typeof this.restoreChartTabs === 'function')
                     ? this.restoreChartTabs(this._savedCorkyTabs) : 0
-                this._savedCorkyTabs = null
-                if (restored) return
+                if (restored) {
+                    this._savedCorkyTabs = null   // cleared ONLY on a real restore
+                    this._corkyRestorePending = false
+                }
             })
         },
 
@@ -1164,10 +1178,10 @@ export default {
         onCorkySelect(opts) {
             this._corkyCancelSelectRetry()   // a manual pick supersedes any pending retry
             // ⌘/Ctrl/middle-click → open this load in a NEW chart tab (becomes the
-            // active tab); a plain click loads into the active tab. The new tab is
-            // capped at maxChartTabs — if we're at the cap, fall back to the active
-            // tab rather than silently dropping the click.
-            if (opts && opts.newTab) this.createChartTab()
+            // active tab); a plain click loads into the active tab. At the tab cap
+            // createChartTab() returns null — abort rather than clobber the active
+            // chart with a load the user asked to open elsewhere.
+            if (opts && opts.newTab && !this.createChartTab()) return
             this.clearPositionPlot()         // a discovery pick drops any plotted position
             this._clearSearchNav()           // …and the active search-result highlight/marker
             this.corkySelect(opts)
@@ -2041,8 +2055,9 @@ export default {
             const symbol = row.ticker
             const timeframe = (cw && cw.timeframe) || row.timeframe
             if (!venue || !symbol || !timeframe) return
-            // ⌘/Ctrl/middle-click → open this result in a NEW chart tab.
-            if (newTab) this.createChartTab()
+            // ⌘/Ctrl/middle-click → open this result in a NEW chart tab (abort at
+            // the cap rather than clobber the active chart).
+            if (newTab && !this.createChartTab()) return
 
             // Active + loading state on THIS row, set before any await so the user
             // sees instant feedback. Carries the signal info for the chart marker.
@@ -2522,8 +2537,9 @@ export default {
         // lowest available (pickTimeframe). Discovers the venue first if unknown.
         async onPositionSelect(pos, newTab) {
             if (!pos || !pos.symbol) return
-            // ⌘/Ctrl/middle-click → plot this position in a NEW chart tab.
-            if (newTab) this.createChartTab()
+            // ⌘/Ctrl/middle-click → plot this position in a NEW chart tab (abort at
+            // the cap rather than clobber the active chart).
+            if (newTab && !this.createChartTab()) return
             this._clearSearchNav()   // a position pick drops any active search-result marker
             const { venue, symbol } = pos
             let state = (this.corkyStates || []).find(
@@ -2790,16 +2806,24 @@ export default {
             this._stopAuditStream()
             this._stopPositionAuditStream()
             if (this._positionsPoll) { clearInterval(this._positionsPoll); this._positionsPoll = null }
-            // Destroy every tab's stream feed (concurrent-live) + the discover feed.
+            // Dispose EVERY tab's gateway stream feed (concurrent-live) + its
+            // backtest-progress sub WITHOUT closing the shared client (we close it
+            // once, below) — disposing each feed avoids N redundant socket closes
+            // and the dock feeds running against an already-dead client.
             for (const t of (this.chartTabs || [])) {
-                if (t && t.corkyFeed) {
-                    try { t.corkyFeed.destroy() } catch (_) { /* already gone */ }
+                if (!t) continue
+                if (t.corkyFeed) {
+                    try { t.corkyFeed.dispose() } catch (_) { /* already gone */ }
                     t.corkyFeed = null
                     t.corkyHandle = null
                 }
+                if (t.btProgressSub && this.backtestsFeed) {
+                    try { this.backtestsFeed.unsubscribe(t.btProgressSub) } catch (_) { /* gone */ }
+                    t.btProgressSub = null
+                }
             }
             if (this.corkyDiscoverFeed) {
-                try { this.corkyDiscoverFeed.destroy() } catch (_) { /* already gone */ }
+                try { this.corkyDiscoverFeed.dispose() } catch (_) { /* already gone */ }
                 this.corkyDiscoverFeed = null
             }
             if (this.positionsFeed) {
@@ -2812,7 +2836,11 @@ export default {
             if (this.backtestsFeed) {
                 try { this.backtestsFeed.destroy() } catch (_) { /* already gone */ }
             }
-            this.corkyFeed = null
+            // Now close the ONE shared client (the feeds above only disposed).
+            if (this.corkyClient && typeof this.corkyClient.close === 'function') {
+                try { this.corkyClient.close() } catch (_) { /* already gone */ }
+            }
+            // NB: corkyFeed is a getter-only computed shim → no `corkyFeed = null`.
             this.positionsFeed = null
             this.searchFeed = null
             this.backtestsFeed = null
