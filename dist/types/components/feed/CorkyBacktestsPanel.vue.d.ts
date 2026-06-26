@@ -116,6 +116,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     onStrategy(name: any): void;
     indLabel(i: any): string;
     metric(r: any, key: any): any;
+    fmtSymbols(symbols: any): string;
     runShape(r: any): any;
     _truthy(raw: any): boolean;
     fmtRatio(raw: any): string;
