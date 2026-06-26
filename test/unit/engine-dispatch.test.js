@@ -11,7 +11,18 @@ import SyncTransport from '../../src/helpers/transport/sync-transport.js'
 import { script } from '../golden/_engine-harness.js'
 
 const TF = 86400000 // 1D — candle spacing MUST match the declared tf
-const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms))
+// Poll for a condition instead of sleeping a fixed amount — the engine runs
+// slower under coverage instrumentation, so a magic tick(30) can read state
+// before the async exec has emitted overlay-data/overlay-update (flaky reads of
+// `t.events`/`t.se` state against a fixed clock).
+async function waitFor(cond, ms = 3000) {
+  const start = Date.now()
+  while (Date.now() - start < ms) {
+    if (cond()) return true
+    await new Promise((r) => setTimeout(r, 5))
+  }
+  return cond()
+}
 const candles = (n) => Array.from({ length: n }, (_, i) => [1000 + i * TF, 1, 2, 0, 1 + (i % 5), 5])
 const rangeOf = (cs) => [cs[0][0], cs[cs.length - 1][0]]
 
@@ -35,7 +46,9 @@ async function boot(t, n = 30) {
   await t.send({ type: 'update-dc-settings', data: { scripts: true, script_depth: 0 } })
   await t.send({ type: 'upload-data', data: { ohlcv: cs } })
   await t.send({ type: 'exec-script', data: { s: EMA, tf: '1D', range: rangeOf(cs) } })
-  await tick(30)
+  // Wait for the first exec to actually emit overlay-data instead of racing a
+  // fixed clock (slow under coverage instrumentation).
+  await waitFor(() => t.events.some((e) => e.type === 'overlay-data'))
   t._cs = cs
 }
 
@@ -46,7 +59,7 @@ describe('live candle update (se.update → format_update)', () => {
     t.events.length = 0
     const next = [1000 + 30 * TF, 1, 2, 0, 3, 5]
     await t.send({ type: 'update-data', data: { ohlcv: next } })
-    await tick(30)
+    await waitFor(() => t.events.some((e) => e.type === 'overlay-update'))
     expect(t.events.some((e) => e.type === 'overlay-update')).toBe(true)
     t.destroy()
   })
@@ -61,7 +74,7 @@ describe('selective re-exec (update-ov-settings → exec_sel)', () => {
       type: 'update-ov-settings',
       data: { delta: { 'ov-ema': { len: 8 } }, tf: '1D', range: rangeOf(t._cs) },
     })
-    await tick(30)
+    await waitFor(() => t.events.some((e) => e.type === 'overlay-data'))
     expect(t.events.some((e) => e.type === 'overlay-data')).toBe(true)
     t.destroy()
   })
@@ -72,17 +85,14 @@ describe('dataset ops (dataset-op → DatasetWW.op + recalc)', () => {
     const t = mkT()
     await t.send({ type: 'update-dc-settings', data: { scripts: true } })
     await t.send({ type: 'upload-data', data: { ohlcv: candles(20), trades: [[1000, 1]] } })
-    await tick()
     await t.send({ type: 'dataset-op', data: { id: 'trades', type: 'set', data: [[2000, 9]], exec: true } })
-    await tick()
     await t.send({ type: 'dataset-op', data: { id: 'trades', type: 'mrg', data: [[500, 1], [9000, 2]], exec: false } })
     await t.send({ type: 'dataset-op', data: { id: 'trades', type: 'del', exec: true } })
-    await tick()
     // get-dataset for a deleted id replies with undefined
     const got = []
     t.onevent = (e) => { if (e.data && e.data.id === 'q') got.push(e.data) }
     await t.send({ type: 'get-dataset', id: 'q', data: 'trades' })
-    await tick()
+    await waitFor(() => got.length > 0)
     expect(got[0].data).toBeUndefined()
     t.destroy()
   })
@@ -95,11 +105,10 @@ describe('script removal + meta-info', () => {
     await t.send({ type: 'send-meta-info', data: { tf: '1D', range: rangeOf(t._cs) } })
     expect(t.se.tf).toBeGreaterThan(0)
     await t.send({ type: 'remove-scripts', data: ['ov-ema'] })
-    await tick()
     // re-running all scripts now emits an overlay-data without the removed id
     t.events.length = 0
     await t.send({ type: 'exec-all-scripts', data: { tf: '1D', range: rangeOf(t._cs) } })
-    await tick(20)
+    await waitFor(() => t.events.some((e) => e.type === 'overlay-data'))
     const od = t.events.filter((e) => e.type === 'overlay-data').pop()
     if (od) expect(od.data.find((d) => d.id === 'ov-ema')).toBeUndefined()
     t.destroy()
@@ -125,7 +134,8 @@ describe('M6 — multi-candle update batches step EVERY bar', () => {
     await t.send({ type: 'update-data', data: { ohlcv: [base + 2 * TF, 1, 2, 0, 6, 1] } })
     // now a BATCH carrying two new candles at once
     t.se.update([[base + 3 * TF, 1, 2, 0, 7, 1], [base + 4 * TF, 1, 2, 0, 8, 1]])
-    await tick(20)
+    // Poll the deterministic close-array state instead of racing a fixed clock.
+    await waitFor(() => t.se.close[0] === 8 && t.se.close[1] === 7)
     const closes = t.se.close
     // close[0] is the latest batch candle; the INTERMEDIATE one must be there too
     expect(closes[0]).toBe(8)

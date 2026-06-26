@@ -81,6 +81,11 @@ export default class DCCore extends DCEvents {
         if (this._settingsUnwatch) this._settingsUnwatch()
         if (this._idsUnwatch) this._idsUnwatch()
         if (this._datasetsUnwatch) this._datasetsUnwatch()
+        // Tear down the AggTool's self-rescheduling setTimeout->RAF loop. Set in
+        // the DataCube subclass ctor (datacube.js); guarded because DCCore may be
+        // used standalone. Without this the ~100ms timer survives unmount and
+        // fires after jsdom's requestAnimationFrame is gone.
+        if (this.agg) this.agg.destroy()
     }
 
     // Init Data Structure v1.1

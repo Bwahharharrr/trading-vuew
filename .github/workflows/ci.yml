@@ -27,8 +27,8 @@ jobs:
       - name: Lint (eslint — fails on errors, warnings allowed)
         run: npm run lint
 
-      - name: Unit + golden + visual + ssr tests
-        run: npm test
+      - name: Unit + golden + visual + ssr tests (with coverage threshold gate)
+        run: npm run coverage
 
       - name: Build (Vite lib: umd + umd.min + es + .d.ts)
         run: npm run build

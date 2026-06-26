@@ -39,7 +39,9 @@
     "smoke:gateway": "node scripts/corky-gateway-smoke.mjs",
     "smoke:positions": "node scripts/corky-positions-smoke.mjs",
     "smoke:browser": "node scripts/corky-browser-smoke.mjs",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "test:coverage": "vitest run --coverage",
+    "verify": "npm run typecheck && npm run lint && npm run coverage && npm run build && npm run size"
   },
   "size-limit": [
     {

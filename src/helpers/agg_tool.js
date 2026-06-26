@@ -104,12 +104,18 @@ export default class AggTool {
         // Schedule next update: wait for minimum interval, then sync with RAF
         this.st_id = setTimeout(() => {
             this.st_id = null
-            // Use RAF to sync with render loop
-            this.raf_id = requestAnimationFrame(() => {
+            // Use RAF to sync with render loop.
+            // Belt-and-braces: if an orphaned timer ever fires in a context
+            // without RAF (e.g. after DOM teardown), no-op instead of throwing.
+            if (typeof requestAnimationFrame === 'function') {
+                this.raf_id = requestAnimationFrame(() => {
+                    this.raf_id = null
+                    this._lastUpdate = Date.now()
+                    this.update()
+                })
+            } else {
                 this.raf_id = null
-                this._lastUpdate = Date.now()
-                this.update()
-            })
+            }
         }, remaining)
     }
 
