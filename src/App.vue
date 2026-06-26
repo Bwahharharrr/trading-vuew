@@ -856,6 +856,11 @@ export default {
             // and a teardown-raced failure could re-arm the retry post-unmount.
             this._corkyGen = (this._corkyGen || 0) + 1
             const gen = this._corkyGen
+            // Multi-tab: this load targets the ACTIVE tab. Bind the gateway feed +
+            // the lazy-history loader to the active cube so candles AND live ticks
+            // land in the tab the user is viewing — not whichever tab happened to
+            // build the feed (the "loaded into tab 1" bug).
+            this._corkyBindActiveCube()
             // Normalize: `indicators` must be AT LEAST [] — the feed maps a null/
             // missing field to include_indicators:undefined, and the gateway then
             // serves candles WITHOUT indicator rows. The boot-restore call hit
@@ -880,6 +885,13 @@ export default {
                 timeframe: opts.timeframe,
                 indicators: mem.kinds.map(k => k.display_label),
                 layers: mem.layers.slice(),   // enabled view-layer ids
+            }
+            // Remember the selection on the active tab so a tab switch can
+            // re-establish its stream, and label the tab 'SYMBOL · TF'.
+            const _activeTab = this.activeTab
+            if (_activeTab) {
+                _activeTab.corkyCurrent = this.corkyCurrent
+                _activeTab.title = `${opts.symbol} · ${opts.timeframe}`
             }
             // Assemble the indicator VIEW map (display_label → { kind, view }) from
             // the discovery descriptors for this venue/symbol so buildChartData can
@@ -1095,6 +1107,11 @@ export default {
         // Panel: select a venue/symbol/timeframe (+ default indicators).
         onCorkySelect(opts) {
             this._corkyCancelSelectRetry()   // a manual pick supersedes any pending retry
+            // ⌘/Ctrl/middle-click → open this load in a NEW chart tab (becomes the
+            // active tab); a plain click loads into the active tab. The new tab is
+            // capped at maxChartTabs — if we're at the cap, fall back to the active
+            // tab rather than silently dropping the click.
+            if (opts && opts.newTab) this.createChartTab()
             this.clearPositionPlot()         // a discovery pick drops any plotted position
             this._clearSearchNav()           // …and the active search-result highlight/marker
             this.corkySelect(opts)
@@ -1109,6 +1126,53 @@ export default {
             // Drop the remembered failed selection too — a later manual Retry
             // must not navigate back to a symbol the user already moved off.
             this._corkyRetryOpts = null
+        },
+
+        // ── Multi-tab gateway binding ─────────────────────────────────────────
+        // Point the single live gateway stream (feed + lazy-history loader) at the
+        // ACTIVE tab's cube. onrange both sets the cube's loader AND rebinds
+        // TradingVue's range hook to that cube (datacube.onrange → tv.set_loader).
+        _corkyBindActiveCube() {
+            if (!this.corkyFeed) return
+            const cube = this.activeChart
+            if (!cube) return
+            this.corkyFeed.dc = cube
+            if (typeof cube.onrange === 'function') {
+                cube.onrange((range) => this._corkyHistoryLoader(range))
+            }
+        },
+
+        // Called by chart-tabs.activateChartTab after a tab switch. Active-only-live:
+        // re-bind the stream to the now-active cube and re-establish THIS tab's
+        // subscription (so live ticks for its symbol — not the previous tab's —
+        // flow into it). A blank tab tears the stream down. corkySelect supersedes
+        // the previous tab's stream via the _corkyGen epoch + _corkyUnsub.
+        _corkyActivateTab() {
+            if (this.feedMode !== 'gateway' || !this.corkyFeed) return
+            this._corkyBindActiveCube()
+            const sel = this.activeTab && this.activeTab.corkyCurrent
+            if (sel && sel.venue && sel.symbol && sel.timeframe) {
+                this._corkyCancelSelectRetry()
+                this.corkySelect({
+                    venue: sel.venue, symbol: sel.symbol, timeframe: sel.timeframe,
+                    indicators: [],
+                })
+            } else {
+                this._corkyDeselect()
+            }
+        },
+
+        // Stop the active gateway stream WITHOUT tearing down the feed/socket —
+        // used when activating a blank tab. Clears the selection UI so the
+        // discovery panel shows nothing highlighted.
+        _corkyDeselect() {
+            this._corkyGen = (this._corkyGen || 0) + 1   // supersede any in-flight select
+            this._corkyCancelSelectRetry()
+            this._corkyUnsub()
+            this.corkyCurrent = null
+            this.corkyLoading = false
+            this.corkyProgress = null
+            this.corkyError = null
         },
 
         // Panel: add a timeframe → patch the candle-state, re-discover, then

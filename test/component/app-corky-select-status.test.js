@@ -55,7 +55,7 @@ function mkCtx() {
         saveStateToStorage: vi.fn(),
     }
     for (const m of ['corkySelect', '_corkyUnsub', '_corkyMem', '_corkyErr',
-        '_navStatusLabel', '_corkyScheduleSelectRetry']) {
+        '_navStatusLabel', '_corkyScheduleSelectRetry', '_corkyBindActiveCube']) {
         ctx[m] = M[m]
     }
     return ctx

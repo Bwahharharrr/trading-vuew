@@ -303,6 +303,7 @@ describe('CorkyDiscoveryPanel — search + categories', () => {
             symbol: 'tBTCUSD',
             timeframe: '1m',
             indicators: [],
+            newTab: false,   // plain click → active tab (⌘/Ctrl/middle → new tab)
         })
     })
 })

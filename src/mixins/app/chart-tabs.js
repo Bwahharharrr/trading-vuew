@@ -131,9 +131,9 @@ export default {
             return tab
         },
 
-        // Switch which tab renders. NEVER destroys a cube. The shared single
-        // stream stays where it is (Phase 4 re-subscribes per tab); here we only
-        // swap render + reset the canvas to the active cube's data.
+        // Switch which tab renders. NEVER destroys a cube. Active-only-live: the
+        // gateway stream is re-established on the now-active tab (its symbol goes
+        // live, the previous tab's is torn down) via the App corky hook below.
         activateChartTab(id) {
             const tab = this.chartTabs.find(t => t.id === id)
             if (!tab || id === this.activeChartTabId) return
@@ -143,6 +143,11 @@ export default {
                 const tv = this.$refs.tradingVue
                 if (tv && typeof tv.resetChart === 'function') tv.resetChart()
             })
+            // Re-point the gateway feed/loader at this tab's cube and re-subscribe
+            // its remembered symbol (or tear the stream down for a blank tab).
+            if (this.feedMode === 'gateway' && typeof this._corkyActivateTab === 'function') {
+                this._corkyActivateTab()
+            }
         },
 
         closeChartTab(id) {

@@ -126,7 +126,9 @@
                                     'not-ready': !tf.ready
                                 }"
                                 :aria-pressed="isCurrent(row, tf.timeframe) ? 'true' : 'false'"
-                                @click="onSelectTimeframe(row, tf.timeframe)">
+                                :title="'Load ' + row.symbol + ' ' + tf.timeframe + ' — ⌘/Ctrl/middle-click opens a new tab'"
+                                @click="onSelectTimeframe(row, tf.timeframe, $event)"
+                                @mousedown.middle.prevent="onSelectTimeframe(row, tf.timeframe, $event)">
                                 <span class="corky-tf-label">{{ tf.timeframe }}</span>
                                 <span
                                     class="corky-badge"
@@ -452,15 +454,19 @@ export default {
             if (!tf.ready) return 'badge-pending'
             return tf.stale ? 'badge-stale' : 'badge-ready'
         },
-        onSelectTimeframe(row, tf) {
+        onSelectTimeframe(row, tf, ev) {
             // Load CANDLES ONLY by default — every indicator series ships in the
             // rows, so the user toggles each on client-side afterwards (no
             // re-subscribe). `indicators: []` ⇒ candles-only.
+            // ⌘/Ctrl-click (or middle-click) opens the load in a NEW chart tab;
+            // a plain click loads into the active tab.
+            const newTab = !!(ev && (ev.metaKey || ev.ctrlKey || ev.button === 1))
             this.$emit('select', {
                 venue: row.venue,
                 symbol: row.symbol,
                 timeframe: tf,
                 indicators: [],
+                newTab,
             })
         },
         // ── Two-level collapse ────────────────────────────────────────────
