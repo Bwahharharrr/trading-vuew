@@ -107,6 +107,21 @@ describe('CorkyUniverseStudy', () => {
     expect(r0).toContain('fast_period=50')  // parameters.values
   })
 
+  test('renders score_v2 + avg_trades candidate aggregates (universe)', () => {
+    const art = { runs: [
+      { run_index: 0, rank: 1, parameters: { values: { p: 1 } },
+        aggregate: { score: '1000', score_v2: '2604.1387724551', avg_trades: '7204.7', total_trades: 14400 } },
+    ] }
+    const w = mount(CorkyUniverseStudy, { props: { run: { run_id: 'u:x' }, artifact: art, chartable: false } })
+    const hdrs = w.findAll('.us-table thead th').map((h) => h.text())
+    expect(hdrs).toContain('Score v2')
+    expect(hdrs).toContain('Avg Trades')
+    const r0 = w.find('.us-table tbody .bt-row').text()
+    expect(r0).toContain('2604.14')   // score_v2 → ratio (2dp)
+    expect(r0).toContain('7,204.7')   // avg_trades → avg (1dp + thousands sep)
+    expect(r0).toContain('14,400')    // total_trades still present (count)
+  })
+
   test('chartable: clicking a candidate emits select-candidate(run_index); active row highlighted', async () => {
     const sweep = { runs: [{ run_index: 0, parameters: { values: {} } }, { run_index: 1, parameters: { values: {} } }] }
     const w = mount(CorkyUniverseStudy, { props: { run: { run_id: 'x' }, artifact: sweep, chartable: true, selectedRunIndex: 1 } })

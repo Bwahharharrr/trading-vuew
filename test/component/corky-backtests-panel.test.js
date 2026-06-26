@@ -48,6 +48,19 @@ describe('CorkyBacktestsPanel', () => {
     expect(w.emitted('inspect-strategy')[0]).toEqual(['ema_cross_all_in_v1'])
   })
 
+  test('runs list shows Score v2 + Avg Trades columns (universe summary metrics)', () => {
+    const w = mountPanel({ runs: [
+      { run_id: 'u1', strategy: 'ema_cross_all_in_v1', symbols: ['tBTCUSD', 'tETHUSD'], trade_timeframe: '1h', status: 'completed',
+        metrics: { max_score: '1414.6', score_v2: '2604.1387724551', avg_trades: '7204.7', total_trades: 14400 } },
+    ] })
+    const headers = w.findAll('thead th').map((h) => h.text())
+    expect(headers).toContain('Score v2')
+    expect(headers).toContain('Avg Trades')
+    const row = w.find('.bt-runs .bt-row').text()
+    expect(row).toContain('2604.14')   // score_v2 → ratio2 (2dp)
+    expect(row).toContain('7,204.7')   // avg_trades → avg (1dp + thousands sep)
+  })
+
   test('selected-strategy params/indicators are collapsed by default, with a count hint', () => {
     const w = mountPanel({ filters: { strategy: 'ema_cross_all_in_v1', symbol: '', status: '' } })
     // Header (name) shows; the long param list is hidden until toggled.

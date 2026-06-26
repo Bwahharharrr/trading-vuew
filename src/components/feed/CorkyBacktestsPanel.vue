@@ -142,6 +142,8 @@ export default {
                 { key: 'strategy_beat_buy_hold', label: 'Beat', metric: 'strategy_beat_buy_hold', fmt: 'bool', signMode: 'bool', title: 'Strategy beat buy & hold?', agg: 'beat' },
                 { key: 'max_score', label: 'Max Score', metric: 'max_score', fmt: 'ratio2', signMode: 'none', title: 'Best candidate robustness score (universe studies)', agg: 'max' },
                 { key: 'avg_score', label: 'Avg Score', metric: 'avg_score', fmt: 'ratio2', signMode: 'none', title: 'Average candidate robustness score (universe studies)', agg: 'avg' },
+                { key: 'score_v2', label: 'Score v2', metric: 'score_v2', fmt: 'ratio2', signMode: 'none', title: 'Robustness score, v2 (universe studies)', agg: 'max' },
+                { key: 'avg_trades', label: 'Avg Trades', metric: 'avg_trades', fmt: 'avg', signMode: 'none', title: 'Average trades per symbol (universe studies)', agg: 'avg' },
                 { key: 'sharpe_ratio', label: 'Sharpe', metric: 'sharpe_ratio', fmt: 'ratio2', signMode: 'sign', agg: 'avg' },
                 { key: 'sortino_ratio', label: 'Sortino', metric: 'sortino_ratio', fmt: 'ratio2', signMode: 'sign', agg: 'avg' },
                 { key: 'profit_factor', label: 'PF', metric: 'profit_factor', fmt: 'ratio2', signMode: 'gte1', title: 'Profit factor (gross profit ÷ gross loss)', agg: 'avg' },
@@ -311,6 +313,11 @@ export default {
                 case 'pct': return this.fmtPct(raw)
                 case 'ratio2': return this.fmtRatio(raw)
                 case 'bool': return this._truthy(raw) ? '✓' : '✗'
+                // Averaged count (e.g. avg_trades 7204.7) — one decimal + separators.
+                case 'avg': {
+                    const n = Number(raw)
+                    return Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 1 }) : String(raw)
+                }
                 default: return String(raw)
             }
         },

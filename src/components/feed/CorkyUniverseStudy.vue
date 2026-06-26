@@ -98,6 +98,7 @@ function look(o) {
 // SWEEP / optimize candidates carry a single backtest's metrics (report.metrics).
 const SWEEP_COLS = [
     { key: 'rank', label: 'Rank', fmt: 'count', names: ['rank'] },
+    { key: 'scorev2', label: 'Score v2', fmt: 'ratio', title: 'Robustness score (v2)', names: ['score_v2', 'robust_cross_symbol_score_v2', 'score'] },
     { key: 'netprofit', label: 'Net P/L', fmt: 'money', sign: true, names: ['total_net_profit'] },
     { key: 'ret', label: 'Return', fmt: 'pct', sign: true, names: ['strategy_return_pct', 'return_pct'] },
     { key: 'pf', label: 'PF', fmt: 'ratio', names: ['profit_factor'] },
@@ -111,6 +112,7 @@ const SWEEP_COLS = [
 const UNIVERSE_COLS = [
     { key: 'rank', label: 'Rank', fmt: 'count', names: ['rank'] },
     { key: 'score', label: 'Score', fmt: 'ratio', title: 'Robust cross-symbol score', names: ['score', 'robust_cross_symbol_score_v1', 'robust_score'] },
+    { key: 'scorev2', label: 'Score v2', fmt: 'ratio', title: 'Robust cross-symbol score (v2)', names: ['score_v2', 'robust_cross_symbol_score_v2'] },
     { key: 'medreturn', label: 'Med Return', fmt: 'ratio', sign: true, title: 'Median per-symbol return', names: ['median_return'] },
     { key: 'medpf', label: 'Med PF', fmt: 'ratio', title: 'Median profit factor', names: ['median_pf', 'median_profit_factor'] },
     { key: 'medrecovery', label: 'Med Recovery', fmt: 'ratio', title: 'Median recovery factor', names: ['median_recovery'] },
@@ -119,7 +121,8 @@ const UNIVERSE_COLS = [
     { key: 'medvsbh', label: 'vs B&H', fmt: 'pct', sign: true, title: 'Median strategy vs buy & hold return', names: ['median_strategy_vs_buy_hold_return_pct'] },
     { key: 'profitable', label: 'Profitable', fmt: 'count', title: 'Profitable symbols', names: ['profitable'] },
     { key: 'beatbh', label: 'Beat B&H', fmt: 'count', title: 'Symbols beating buy & hold', names: ['beat_buy_hold'] },
-    { key: 'trades', label: 'Trades', fmt: 'count', names: ['total_trades'] },
+    { key: 'trades', label: 'Trades', fmt: 'count', title: 'Total trades across symbols', names: ['total_trades'] },
+    { key: 'avgtrades', label: 'Avg Trades', fmt: 'avg', title: 'Average trades per symbol', names: ['avg_trades', 'mean_trades'] },
 ]
 // Per-symbol metrics carry the full standard backtest metric set (~34 fields) —
 // surface the useful ones for evaluating each ticker individually.
@@ -227,6 +230,9 @@ export default {
                 case 'pct': return `${(n * 100).toFixed(2)}%`   // fractions
                 case 'ratio': return n.toFixed(2)
                 case 'count': return n.toLocaleString(undefined, { maximumFractionDigits: 0 })
+                // Averaged count (e.g. avg_trades 7204.7) — keep one decimal so the
+                // average isn't rounded away, with thousands separators.
+                case 'avg': return n.toLocaleString(undefined, { maximumFractionDigits: 1 })
                 case 'money': return n.toLocaleString(undefined, { maximumFractionDigits: 2 })
                 default: return String(v)
             }
