@@ -28,25 +28,31 @@
         <button class="bt-icon" title="Refresh strategies" @click="$emit('refresh-strategies')">⟳</button>
     </div>
 
-    <!-- Selected strategy info (params + indicators) -->
+    <!-- Selected strategy info (params + indicators) — collapsed by default. -->
     <div v-if="selectedStrategy" class="bt-strategy">
-        <div class="bt-strat-head">
+        <div class="bt-strat-head" @click="strategyOpen = !strategyOpen"
+             :title="strategyOpen ? 'Hide parameters' : 'Show parameters'">
+            <span class="bt-strat-caret">{{ strategyOpen ? '▾' : '▸' }}</span>
             <span class="bt-tag">STRATEGY</span>
             <strong>{{ selectedStrategy.display_name || selectedStrategy.name }}</strong>
             <span class="bt-dim">trade tf {{ selectedStrategy.default_trade_timeframe }}</span>
             <span v-if="(selectedStrategy.default_context_timeframes||[]).length" class="bt-dim">
                 ctx {{ selectedStrategy.default_context_timeframes.join(', ') }}</span>
+            <span v-if="!strategyOpen && (selectedStrategy.parameters||[]).length" class="bt-dim bt-strat-hint">
+                · {{ selectedStrategy.parameters.length }} param{{ selectedStrategy.parameters.length === 1 ? '' : 's' }}</span>
         </div>
-        <div v-if="(selectedStrategy.parameters||[]).length" class="bt-params">
-            <span v-for="p in selectedStrategy.parameters" :key="p.name" class="bt-param"
-                  :title="p.description || ''">
-                {{ p.name }}=<b>{{ p.default_value == null ? '—' : p.default_value }}</b>
-                <span class="bt-dim">({{ p.type }})</span>
-            </span>
-        </div>
-        <div v-if="(selectedStrategy.default_indicators||[]).length" class="bt-dim bt-inds">
-            indicators: {{ selectedStrategy.default_indicators.map(indLabel).join(', ') }}
-        </div>
+        <template v-if="strategyOpen">
+            <div v-if="(selectedStrategy.parameters||[]).length" class="bt-params">
+                <span v-for="p in selectedStrategy.parameters" :key="p.name" class="bt-param"
+                      :title="p.description || ''">
+                    {{ p.name }}=<b>{{ p.default_value == null ? '—' : p.default_value }}</b>
+                    <span class="bt-dim">({{ p.type }})</span>
+                </span>
+            </div>
+            <div v-if="(selectedStrategy.default_indicators||[]).length" class="bt-dim bt-inds">
+                indicators: {{ selectedStrategy.default_indicators.map(indLabel).join(', ') }}
+            </div>
+        </template>
     </div>
 
     <div v-if="error" class="bt-error">{{ error }}</div>
@@ -120,6 +126,9 @@ export default {
     emits: ['refresh-strategies', 'update:filter', 'list-runs', 'inspect-strategy', 'select-run'],
     data() {
         return {
+            // Strategy parameter/indicator block: collapsed by default so the long
+            // variable list doesn't push the runs/candidates table off-screen.
+            strategyOpen: false,
             // Default longest-period first.
             sortKey: 'duration',
             sortDir: -1,   // 1 asc, -1 desc
@@ -396,7 +405,10 @@ export default {
 .bt-icon { background: #131722; color: #808a9d; border: 1px solid #2a2e39; border-radius: 4px; width: 26px; height: 26px; cursor: pointer; }
 .bt-icon:hover { color: #35a776; border-color: #35a776; }
 .bt-strategy { padding: 8px 12px; border-bottom: 1px solid #1c212e; background: rgba(53,167,118,0.04); }
-.bt-strat-head { display: flex; gap: 10px; align-items: center; }
+.bt-strat-head { display: flex; gap: 10px; align-items: center; cursor: pointer; user-select: none; }
+.bt-strat-head:hover { color: #c4ccda; }
+.bt-strat-caret { color: #6b7280; width: 10px; flex-shrink: 0; }
+.bt-strat-hint { font-style: italic; }
 .bt-tag { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; color: #35a776; background: rgba(53,167,118,0.14); border-radius: 3px; padding: 1px 6px; }
 .bt-dim { color: #808a9d; }
 .bt-hint { font-size: 11px; margin-top: 6px; }

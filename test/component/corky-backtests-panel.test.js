@@ -48,10 +48,21 @@ describe('CorkyBacktestsPanel', () => {
     expect(w.emitted('inspect-strategy')[0]).toEqual(['ema_cross_all_in_v1'])
   })
 
-  test('shows selected-strategy params + indicators', () => {
+  test('selected-strategy params/indicators are collapsed by default, with a count hint', () => {
     const w = mountPanel({ filters: { strategy: 'ema_cross_all_in_v1', symbol: '', status: '' } })
-    expect(w.find('.bt-strategy').text()).toContain('fast_period')
+    // Header (name) shows; the long param list is hidden until toggled.
+    expect(w.find('.bt-strategy').text()).toContain('EMA Cross')
+    expect(w.find('.bt-params').exists()).toBe(false)
+    expect(w.find('.bt-strategy').text()).toContain('1 param')   // count hint
+  })
+
+  test('clicking the strategy header toggles params + indicators', async () => {
+    const w = mountPanel({ filters: { strategy: 'ema_cross_all_in_v1', symbol: '', status: '' } })
+    await w.find('.bt-strat-head').trigger('click')
+    expect(w.find('.bt-params').text()).toContain('fast_period')
     expect(w.find('.bt-strategy').text()).toContain('ema(50)@1h')
+    await w.find('.bt-strat-head').trigger('click')              // collapse again
+    expect(w.find('.bt-params').exists()).toBe(false)
   })
 
   test('clicking a run emits select-run', async () => {
