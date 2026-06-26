@@ -76,16 +76,39 @@ export default class DCCore extends DCEvents {
         }
     }
 
-    // Cleanup watchers (call on destroy)
+    // Cleanup watchers + per-cube resources (call on destroy). Idempotent: a
+    // closed tab and TradingVue.beforeUnmount can both fire this on the same cube.
     destroy() {
-        if (this._settingsUnwatch) this._settingsUnwatch()
-        if (this._idsUnwatch) this._idsUnwatch()
-        if (this._datasetsUnwatch) this._datasetsUnwatch()
+        if (this._destroyed) return
+        this._destroyed = true
+        // Detach the settings/ids/datasets $watch hooks + drop the TV back-ref.
+        this.teardown_tvjs()
         // Tear down the AggTool's self-rescheduling setTimeout->RAF loop. Set in
         // the DataCube subclass ctor (datacube.js); guarded because DCCore may be
         // used standalone. Without this the ~100ms timer survives unmount and
         // fires after jsdom's requestAnimationFrame is gone.
         if (this.agg) this.agg.destroy()
+        // Terminate the per-cube Web Worker (created in the DCEvents ctor as
+        // `this.ww = new WebWork(this)`). Single-chart masked this leak by
+        // replacing the worker on the next cube load; multi-tab opens N cubes, so
+        // each closed cube must release its worker. WebWork.destroy() is
+        // idempotent (guards `this.worker`/`this.socket`).
+        if (this.ww) this.ww.destroy()
+        // Drop the range-loader closure so a destroyed cube can be GC'd.
+        this.loader = null
+    }
+
+    // Inverse of init_tvjs: detach the settings/ids/datasets $watch hooks and
+    // drop the TradingVue back-ref WITHOUT touching data, so a backgrounded tab's
+    // cube stops recomputing its fingerprint against the shared TradingVue root.
+    // init_tvjs (guarded `if (!this.tv)`) re-attaches on the next activate.
+    teardown_tvjs() {
+        if (this._settingsUnwatch) { this._settingsUnwatch(); this._settingsUnwatch = null }
+        if (this._idsUnwatch) { this._idsUnwatch(); this._idsUnwatch = null }
+        if (this._datasetsUnwatch) { this._datasetsUnwatch(); this._datasetsUnwatch = null }
+        this._cachedSettings = this._cachedSettingsKey = null
+        this._cachedIds = this._cachedIdsKey = null
+        this.tv = null
     }
 
     // Init Data Structure v1.1

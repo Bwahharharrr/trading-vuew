@@ -427,6 +427,11 @@ export default {
                 dc.range_changed(r, tf)
             }
         },
+        // Detach the range loader (e.g. when switching to a tab whose cube has
+        // no lazy-history loader, so the previous tab's closure can't fire).
+        clear_loader() {
+            this.onrange = null
+        },
         parse_colors(colors) {
             const defs = this.$options.props
             let usedFlat = false
