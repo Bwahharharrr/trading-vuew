@@ -121,12 +121,19 @@ const UNIVERSE_COLS = [
     { key: 'beatbh', label: 'Beat B&H', fmt: 'count', title: 'Symbols beating buy & hold', names: ['beat_buy_hold'] },
     { key: 'trades', label: 'Trades', fmt: 'count', names: ['total_trades'] },
 ]
+// Per-symbol metrics carry the full standard backtest metric set (~34 fields) —
+// surface the useful ones for evaluating each ticker individually.
 const PER_SYMBOL_COLS = [
     { key: 'ret', label: 'Return', fmt: 'pct', sign: true, names: ['strategy_return_pct', 'return_pct', 'total_return_pct'] },
     { key: 'netprofit', label: 'Net P/L', fmt: 'money', sign: true, names: ['total_net_profit'] },
+    { key: 'vsbh', label: 'vs B&H', fmt: 'pct', sign: true, names: ['strategy_vs_buy_hold_return_pct'] },
     { key: 'pf', label: 'PF', fmt: 'ratio', names: ['profit_factor'] },
+    { key: 'recovery', label: 'Recovery', fmt: 'ratio', names: ['recovery_factor'] },
     { key: 'sharpe', label: 'Sharpe', fmt: 'ratio', names: ['sharpe_ratio'] },
+    { key: 'sortino', label: 'Sortino', fmt: 'ratio', names: ['sortino_ratio'] },
     { key: 'dd', label: 'Max DD', fmt: 'money', names: ['max_equity_drawdown'] },
+    { key: 'expectancy', label: 'Exp. Payoff', fmt: 'money', sign: true, names: ['expected_payoff'] },
+    { key: 'winpct', label: 'Win %', fmt: 'pct', names: ['positive_trade_pct'] },
     { key: 'trades', label: 'Trades', fmt: 'count', names: ['total_trades'] },
 ]
 

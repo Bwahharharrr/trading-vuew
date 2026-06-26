@@ -17,7 +17,7 @@ const ARTIFACT = {
   runs: [
     { run_index: 52, rank: 1, parameters: { values: { fast_period: 20, slow_period: 150 } },
       aggregate: { score: '1414.6', median_pf: '1.40', median_recovery: '0.866', median_sharpe: '0.505', median_sortino: '1.75', median_return: '2.256', median_strategy_vs_buy_hold_return_pct: '1.847', profitable: 14, beat_buy_hold: 13, total_trades: 1412 },
-      symbols: [{ symbol: 'tAAVE:USD', metrics: { strategy_return_pct: '0.1617', total_net_profit: '1617.08', profit_factor: '1.045', sharpe_ratio: '0.3', max_equity_drawdown: '1694.6', total_trades: 90 } }] },
+      symbols: [{ symbol: 'tAAVE:USD', metrics: { strategy_return_pct: '0.1617', total_net_profit: '1617.08', profit_factor: '1.045', recovery_factor: '1.9', sharpe_ratio: '0.3', sortino_ratio: '0.45', strategy_vs_buy_hold_return_pct: '0.99', expected_payoff: '17.9', positive_trade_pct: '0.37', max_equity_drawdown: '1694.6', total_trades: 90 } }] },
     { run_index: 7, rank: 2, parameters: { values: { fast_period: 25, slow_period: 200 } },
       aggregate: { score: '1200.1', median_pf: '1.10', median_recovery: '0.5', median_sharpe: '0.31', median_sortino: '1.1', median_return: '-0.05', profitable: 9, beat_buy_hold: 6, total_trades: 980 },
       symbols: { tETHBTC: { metrics: { strategy_return_pct: '-0.1', profit_factor: '0.8' } } } },   // MAP form
@@ -54,14 +54,23 @@ describe('CorkyUniverseStudy', () => {
     expect(r0).toContain('fast_period=20')   // parameters.values
   })
 
-  test('expanding a candidate shows the per-symbol breakdown (array + map forms)', async () => {
+  test('expanding a candidate shows the per-symbol breakdown (array + map forms) with the full metric set', async () => {
     const w = mountStudy()
     const rows = w.findAll('.us-table tbody .bt-row')
     await rows[0].trigger('click')
+    // per-symbol columns now include Recovery + Sortino + vs B&H + Win % etc.
+    const hdrs = w.findAll('.us-subtable thead th').map((h) => h.text())
+    for (const h of ['Return', 'Net P/L', 'vs B&H', 'PF', 'Recovery', 'Sharpe', 'Sortino', 'Max DD', 'Win %', 'Trades']) {
+      expect(hdrs).toContain(h)
+    }
     const sub = w.find('.us-subtable').text()
     expect(sub).toContain('tAAVE:USD')
-    expect(sub).toContain('16.17%')    // per-symbol strategy_return_pct fraction → %
-    expect(sub).toContain('1,617.08')  // per-symbol net profit
+    expect(sub).toContain('16.17%')    // strategy_return_pct
+    expect(sub).toContain('1,617.08')  // net profit
+    expect(sub).toContain('1.90')      // recovery_factor
+    expect(sub).toContain('0.45')      // sortino_ratio
+    expect(sub).toContain('99.00%')    // strategy_vs_buy_hold_return_pct (0.99 → %)
+    expect(sub).toContain('37.00%')    // positive_trade_pct (win %)
     await rows[1].trigger('click')     // map-form symbols
     expect(w.find('.us-subtable').text()).toContain('tETHBTC')
   })
