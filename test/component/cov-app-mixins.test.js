@@ -553,6 +553,7 @@ describe('file-manager: save/load storage round-trip', () => {
       accordionExpandedViews: { Trend: true },
       corkyEnabled: { 'V|S': { kinds: [] } },
       corkyLast: { venue: 'V', symbol: 'S', timeframe: '1m' },
+      corkyTabs: null,   // no tab system on the fake ctx → serializeChartTabs absent
       panelWidth: 333,
       positionsDockOpen: false,
       positionsDockHeight: 200,

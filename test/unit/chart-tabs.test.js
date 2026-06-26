@@ -152,3 +152,55 @@ describe('chart-tabs: create / switch / close', () => {
         expect(tab1.id).toBeTruthy()
     })
 })
+
+describe('chart-tabs: persistence (serialize / restore)', () => {
+    let host
+    beforeEach(() => { host = makeHost(); host.seedInitialChartTab() })
+
+    it('serializeChartTabs captures each tab selection + the active index', () => {
+        host.chartTabs[0].corkyCurrent = { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1h' }
+        const tab1 = host.createChartTab()
+        tab1.corkyCurrent = { venue: 'BITFINEX', symbol: 'tETHUSD', timeframe: '4h' }
+        const s = host.serializeChartTabs()
+        expect(s.tabs).toEqual([
+            { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1h' },
+            { venue: 'BITFINEX', symbol: 'tETHUSD', timeframe: '4h' },
+        ])
+        expect(s.activeIndex).toBe(1)               // tab1 is active
+    })
+
+    it('serializes a blank tab as null', () => {
+        const s = host.serializeChartTabs()          // tab0 has no selection
+        expect(s.tabs).toEqual([null])
+    })
+
+    it('restoreChartTabs recreates tabs from selections, dropping vanished symbols', () => {
+        host.corkyStates = [
+            { venue: 'BITFINEX', symbol: 'tBTCUSD', available_timeframes: ['1h', '4h'] },
+            { venue: 'BITFINEX', symbol: 'tETHUSD', available_timeframes: ['1d'] },
+        ]
+        host.corkySelect = vi.fn()
+        host._corkyBindActiveCube = vi.fn()
+        const n = host.restoreChartTabs({
+            tabs: [
+                { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1h' },
+                { venue: 'BITFINEX', symbol: 'tETHUSD', timeframe: '99x' },  // bad tf → first available
+                { venue: 'GONE', symbol: 'X', timeframe: '1h' },             // not discovered → dropped
+            ],
+            activeIndex: 1,
+        })
+        expect(n).toBe(2)
+        expect(host.chartTabs).toHaveLength(2)
+        expect(host.chartTabs[0].corkyCurrent).toMatchObject({ symbol: 'tBTCUSD', timeframe: '1h' })
+        expect(host.chartTabs[1].corkyCurrent).toMatchObject({ symbol: 'tETHUSD', timeframe: '1d' })  // fell back
+        expect(host.activeChartTabId).toBe(host.chartTabs[1].id)   // activeIndex 1
+        expect(host.corkySelect).toHaveBeenCalled()                // active tab lazy-subscribed
+    })
+
+    it('restoreChartTabs is a no-op for an empty/garbage saved set', () => {
+        host.corkyStates = []
+        expect(host.restoreChartTabs(null)).toBe(0)
+        expect(host.restoreChartTabs({ tabs: [{ venue: 'GONE', symbol: 'X', timeframe: '1h' }] })).toBe(0)
+        expect(host.chartTabs).toHaveLength(1)     // untouched
+    })
+})

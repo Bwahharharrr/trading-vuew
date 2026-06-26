@@ -113,41 +113,40 @@ describe('corkySelect', () => {
 })
 
 describe('enterGatewayMode auto-restore', () => {
-  test('re-selects corkyLast after discovery when the state still exists', async () => {
+  // Boot restores the persisted chart-tab SET after discovery (the real restore
+  // logic — tab creation + lazy-subscribe — lives in restoreChartTabs, tested in
+  // chart-tabs.test.js). Here we pin that enterGatewayMode hands the saved set to
+  // restoreChartTabs once discovery resolves.
+  test('restores the saved tab set after discovery', async () => {
     const feed = mkFeed({ discover: vi.fn(async () => [STATE]) })
-    const app = mkApp({ corkyDiscoverFeed: feed, corkyLast: { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '15m' } })
-    app.corkySelect = vi.fn(async () => {})
+    const saved = { tabs: [{ venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '15m' }], activeIndex: 0 }
+    const app = mkApp({ corkyDiscoverFeed: feed, _savedCorkyTabs: saved })
+    app.restoreChartTabs = vi.fn(() => 1)
     app.enterGatewayMode()
     await new Promise(r => setTimeout(r, 0))
-    expect(app.corkySelect).toHaveBeenCalledWith(
-      { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '15m' })
+    expect(app.restoreChartTabs).toHaveBeenCalledWith(saved)
   })
 
-  test('falls back to the first timeframe when the remembered one is gone', async () => {
+  test('does nothing when already charting (corkyCurrent set)', async () => {
     const feed = mkFeed({ discover: vi.fn(async () => [STATE]) })
-    const app = mkApp({ corkyDiscoverFeed: feed, corkyLast: { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '4h' } })
-    app.corkySelect = vi.fn(async () => {})
-    app.enterGatewayMode()
-    await new Promise(r => setTimeout(r, 0))
-    expect(app.corkySelect.mock.calls[0][0].timeframe).toBe('1m')
-  })
-
-  test('does nothing without a match or when something is already selected', async () => {
-    const feed = mkFeed({ discover: vi.fn(async () => [STATE]) })
-    const noMatch = mkApp({ corkyFeed: feed, corkyLast: { venue: 'X', symbol: 'Y', timeframe: '1m' } })
-    noMatch.corkySelect = vi.fn()
-    noMatch.enterGatewayMode()
-    await new Promise(r => setTimeout(r, 0))
-    expect(noMatch.corkySelect).not.toHaveBeenCalled()
-
     const busy = mkApp({
-      corkyFeed: feed, corkyLast: { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1m' },
+      corkyDiscoverFeed: feed,
+      _savedCorkyTabs: { tabs: [{ venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1m' }], activeIndex: 0 },
       corkyCurrent: { venue: 'OTHER', symbol: 'S', timeframe: '1m' },
     })
-    busy.corkySelect = vi.fn()
+    busy.restoreChartTabs = vi.fn()
     busy.enterGatewayMode()
     await new Promise(r => setTimeout(r, 0))
-    expect(busy.corkySelect).not.toHaveBeenCalled()
+    expect(busy.restoreChartTabs).not.toHaveBeenCalled()
+  })
+
+  test('no saved set → nothing restored (fresh session shows the empty tab)', async () => {
+    const feed = mkFeed({ discover: vi.fn(async () => [STATE]) })
+    const app = mkApp({ corkyDiscoverFeed: feed, _savedCorkyTabs: null })
+    app.restoreChartTabs = vi.fn()
+    app.enterGatewayMode()
+    await new Promise(r => setTimeout(r, 0))
+    expect(app.restoreChartTabs).not.toHaveBeenCalled()
   })
 })
 

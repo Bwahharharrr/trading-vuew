@@ -195,6 +195,10 @@ export default {
                 // Corky: last-viewed { venue, symbol, timeframe } — reopened on the
                 // next load (incl. after a full browser restart; localStorage).
                 corkyLast: this.corkyLast,
+                // Multi-tab: the whole chart-tab set (selections + active index) so
+                // a reload restores every open chart. Back-compat: when absent,
+                // boot falls back to the single corkyLast.
+                corkyTabs: typeof this.serializeChartTabs === 'function' ? this.serializeChartTabs() : null,
                 // Right-panel width (user-resizable via its left-edge handle).
                 panelWidth: this.panelWidth,
                 // Positions dock: open/height + active tab (gateway mode).

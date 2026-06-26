@@ -168,6 +168,7 @@ export default {
                 } catch (_) { /* not ready */ }
             }
             this.activeChartTabId = id
+            if (typeof this.saveStateToStorage === 'function') this.saveStateToStorage()
             this.$nextTick(() => {
                 window.dc = tab.chart
                 const tv = this.$refs.tradingVue
@@ -175,6 +176,14 @@ export default {
                 // Re-bind the lazy-history loader to the now-active cube.
                 if (this.feedMode === 'gateway' && typeof this._corkyBindActiveCube === 'function') {
                     this._corkyBindActiveCube()
+                    // Lazy (re)subscribe a RESTORED (or dropped) tab on first view:
+                    // it remembers its selection but isn't streaming yet. Once live
+                    // it stays live (concurrent), so this only fires once per tab.
+                    if (tab.corkyCurrent && !tab.corkyHandle && typeof this.corkySelect === 'function') {
+                        const s = tab.corkyCurrent
+                        this.corkySelect({ venue: s.venue, symbol: s.symbol, timeframe: s.timeframe })
+                        return   // corkySelect resets the chart to the freshly-loaded data
+                    }
                 }
                 // Restore this tab's view (its feed kept it live — no re-fetch).
                 if (Array.isArray(tab.range) && tab.range.length === 2 && typeof tv.setRange === 'function') {
@@ -185,6 +194,73 @@ export default {
             })
         },
 
+        // Serialize the tab set for persistence: each tab's selection (or null for
+        // a blank tab) + the active index. Tab ids are session-local, so we persist
+        // positions/selections, not ids.
+        serializeChartTabs() {
+            return {
+                tabs: this.chartTabs.map((t) => {
+                    const sel = t.corkyCurrent || t.corkyLast
+                    return (sel && sel.venue && sel.symbol && sel.timeframe)
+                        ? { venue: sel.venue, symbol: sel.symbol, timeframe: sel.timeframe } : null
+                }),
+                activeIndex: Math.max(0, this.chartTabs.findIndex((t) => t.id === this.activeChartTabId)),
+            }
+        },
+
+        // Restore tabs from persisted selections (validated against discovery).
+        // Creates the tabs WITHOUT subscribing — each lazy-subscribes on first
+        // view (activateChartTab). Returns the number of tabs restored.
+        restoreChartTabs(saved) {
+            if (!saved || !Array.isArray(saved.tabs)) return 0
+            const states = this.corkyStates || []
+            const resolve = (sel) => {
+                if (!sel || !sel.venue || !sel.symbol) return null
+                const st = states.find((s) => s && s.venue === sel.venue && s.symbol === sel.symbol)
+                if (!st) return null
+                const tfs = st.available_timeframes || []
+                const tf = tfs.includes(sel.timeframe) ? sel.timeframe : tfs[0]
+                return tf ? { venue: sel.venue, symbol: sel.symbol, timeframe: tf, indicators: [], layers: [] } : null
+            }
+            const wanted = saved.tabs.map(resolve).filter(Boolean)
+            if (!wanted.length) return 0
+            const ids = []
+            wanted.forEach((sel, i) => {
+                // Reuse the seeded tab 0; create fresh tabs for the rest (capped).
+                let tab
+                if (i === 0) { tab = this.chartTabs[0] } else { tab = this._appendChartTab() }
+                if (!tab) return
+                tab.corkyCurrent = sel
+                tab.corkyLast = { venue: sel.venue, symbol: sel.symbol, timeframe: sel.timeframe }
+                tab.title = `${sel.symbol} · ${sel.timeframe}`
+                ids.push(tab.id)
+            })
+            // Activate the saved-active tab (clamped) → triggers its lazy-subscribe.
+            const idx = Math.min(Math.max(0, saved.activeIndex | 0), ids.length - 1)
+            this.activeChartTabId = ids[idx]
+            // Kick the active tab's subscribe (activateChartTab early-returns when
+            // id === active, so call the bind+subscribe path directly).
+            this.$nextTick(() => {
+                if (typeof this._corkyBindActiveCube === 'function') this._corkyBindActiveCube()
+                const t = this.activeTab
+                if (t && t.corkyCurrent && !t.corkyHandle && typeof this.corkySelect === 'function') {
+                    const s = t.corkyCurrent
+                    this.corkySelect({ venue: s.venue, symbol: s.symbol, timeframe: s.timeframe })
+                }
+            })
+            return ids.length
+        },
+
+        // Append a tab WITHOUT activating it (used by restore). Capped at MAX.
+        _appendChartTab() {
+            if (this.chartTabs.length >= MAX_CHART_TABS) return null
+            const dc = new this.DataCubeClass()
+            const tab = this._makeChartTab(dc)
+            this.chartTabs.push(tab)
+            this.setupChartCube(dc)
+            return tab
+        },
+
         closeChartTab(id) {
             if (this.chartTabs.length <= 1) return   // always keep one tab
             const idx = this.chartTabs.findIndex(t => t.id === id)
@@ -193,7 +269,9 @@ export default {
             this._destroyChartTabCube(tab)
             if (id === this.activeChartTabId) {
                 const neighbor = this.chartTabs[idx] || this.chartTabs[idx - 1] || this.chartTabs[0]
-                if (neighbor) this.activateChartTab(neighbor.id)
+                if (neighbor) this.activateChartTab(neighbor.id)   // persists the set
+            } else if (typeof this.saveStateToStorage === 'function') {
+                this.saveStateToStorage()   // closed a background tab → persist the new set
             }
         },
 

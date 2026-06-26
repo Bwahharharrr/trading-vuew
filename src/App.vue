@@ -648,6 +648,11 @@ export default {
                 ? savedState.corkyEnabled : {}
             this.corkyLast = (savedState.corkyLast && savedState.corkyLast.venue &&
                 savedState.corkyLast.symbol) ? savedState.corkyLast : null
+            // Multi-tab restore set (consumed by enterGatewayMode after discovery).
+            // Back-compat: if absent but a single corkyLast exists, synthesize one.
+            this._savedCorkyTabs = (savedState.corkyTabs && Array.isArray(savedState.corkyTabs.tabs))
+                ? savedState.corkyTabs
+                : (this.corkyLast ? { tabs: [this.corkyLast], activeIndex: 0 } : null)
             if (Number.isFinite(Number(savedState.panelWidth))) {
                 this.panelWidth = Number(savedState.panelWidth)
             }
@@ -778,20 +783,17 @@ export default {
             // Load the open-positions snapshot up front so the dock's tab badge is
             // populated even before the user expands it.
             this.refreshPositions()
-            this.corkyDiscover().then((states) => {
-                // Reopen the last-viewed stream (persisted across reloads/browser
-                // restarts) if it still exists in the catalog. Falls back to the
-                // state's first timeframe when the remembered tf is gone.
-                const last = this.corkyLast
-                if (!last || this.corkyCurrent || this.corkyHandle) return
-                const st = (states || []).find(
-                    s => s && s.venue === last.venue && s.symbol === last.symbol)
-                if (!st) return
-                const tfs = st.available_timeframes || []
-                const timeframe = tfs.includes(last.timeframe) ? last.timeframe : tfs[0]
-                if (timeframe) {
-                    this.corkySelect({ venue: last.venue, symbol: last.symbol, timeframe })
-                }
+            this.corkyDiscover().then(() => {
+                // Restore the persisted chart-tab SET (selections + active tab) if
+                // anything is open already, or restore a saved tab list. Tabs
+                // lazy-subscribe on first view; restoreChartTabs kicks the active
+                // one. Falls through to nothing when there's no saved set (a fresh
+                // session shows the empty tab + discovery panel as the CTA).
+                if (this.corkyCurrent || this.corkyHandle) return   // already charting
+                const restored = (this._savedCorkyTabs && typeof this.restoreChartTabs === 'function')
+                    ? this.restoreChartTabs(this._savedCorkyTabs) : 0
+                this._savedCorkyTabs = null
+                if (restored) return
             })
         },
 
