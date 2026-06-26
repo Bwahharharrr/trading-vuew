@@ -23,6 +23,24 @@ import {
 
 // ─────────────────────────────────────────────────────────── primitives ──
 
+// True when `arr` is already non-strictly ascending by `arr[i][key]` (uses <=
+// so equal keys count as ordered → a no-op sort would preserve their stable
+// order). Lets the build/merge path skip an already-sorted array's sort.
+function isAscendingBy(arr, key) {
+  for (let i = 0; i < arr.length - 1; i++) {
+    if (!(arr[i][key] <= arr[i + 1][key])) return false
+  }
+  return true
+}
+
+// As `isAscendingBy`, but for a flat array of scalars (e.g. a list of ts).
+function isAscending(arr) {
+  for (let i = 0; i < arr.length - 1; i++) {
+    if (!(arr[i] <= arr[i + 1])) return false
+  }
+  return true
+}
+
 /**
  * Convert a decimal string (or number) to a JS number, NaN-safe.
  * Empty / null / non-numeric input → NaN (never throws).
@@ -114,10 +132,12 @@ export function pivotIndicators(rows) {
   }
 
   const out = order.map((k) => byKey.get(k))
-  // Each series ascending by ts (rows may arrive unordered upstream).
+  // Each series ascending by ts (rows may arrive unordered upstream). Skip the
+  // sort when the series is already ordered (the common case: rows arrive in ts
+  // order) — `<=` precheck keeps equal-ts stable order identical to a no-op sort.
   for (const s of out) {
-    s.data.sort((a, b) => a[0] - b[0])
-    s.raw.sort((a, b) => a[0] - b[0])
+    if (!isAscendingBy(s.data, 0)) s.data.sort((a, b) => a[0] - b[0])
+    if (!isAscendingBy(s.raw, 0)) s.raw.sort((a, b) => a[0] - b[0])
   }
   return out
 }
@@ -192,7 +212,8 @@ function zipFields(fields, outputsMap) {
     for (const [ts, v] of s.data) { let r = byTs.get(ts); if (!r) { r = []; byTs.set(ts, r) } r[col] = v }
     for (const [ts, v] of s.raw) { let r = rawByTs.get(ts); if (!r) { r = []; rawByTs.set(ts, r) } r[col] = v }
   })
-  const tss = [...byTs.keys()].sort((a, b) => a - b)
+  const tss = [...byTs.keys()]
+  if (!isAscending(tss)) tss.sort((a, b) => a - b)
   const data = tss.map((ts) => [ts, ...series.map((_, c) => { const v = byTs.get(ts)[c]; return v == null ? null : v })])
   const raw = tss.map((ts) => [ts, ...series.map((_, c) => { const v = (rawByTs.get(ts) || [])[c]; return v == null ? null : v })])
   return { data, raw, fields: survivors }
@@ -614,7 +635,7 @@ export function buildChartData(rows, opts = {}) {
   // so candles AND indicator pivots stay consistent.
   rows = rows.filter((r) => r && r.candle && Number.isFinite(r.candle.timestamp_ms))
   const ohlcv = rows.map(rowToOhlcv)
-  ohlcv.sort((a, b) => a[0] - b[0])
+  if (!isAscendingBy(ohlcv, 0)) ohlcv.sort((a, b) => a[0] - b[0])
 
   const onchart = []
   const offchart = []
@@ -705,7 +726,52 @@ export function buildChartData(rows, opts = {}) {
   Object.defineProperty(result, '_detectionBoxes', {
     value: detectionBoxes, enumerable: false, configurable: true, writable: true
   })
+  // Live-tick lookup indexes (non-enumerable, like the sidecars above). MEMBERSHIP
+  // of result.onchart/offchart is immutable after this build — toggles mutate
+  // dc.data[pane] (a DIFFERENT array) — so these need NO per-toggle invalidation.
+  // applyLiveUpdate consumes them when present and falls back to a full scan when
+  // they're absent (e.g. a `{ ...built }` spread drops these non-enumerable props).
+  attachLiveIndexes(result)
   return result
+}
+
+// Build the per-tick lookup indexes on a freshly-built chart-data object. All
+// four mirror the iteration order of the scan functions they replace (onchart
+// before offchart, array order within each) so results stay byte-identical.
+//   _overlayByKey         — corkyKey → fallback overlay (findOverlayByKey; first wins)
+//   _viewOverlaysByInstance — corkyInstance → [view overlays] pre-filtered to
+//                             (corkyView && !corkyColorRule && !corkyMarkerRule);
+//                             the per-output corkyFields.includes(output) filter is
+//                             STILL applied per tick (this map is instance-keyed only)
+//   _ssHistograms         — signed_slope_histogram overlays
+//   _markerRuleOverlays   — corkyMarkerRule overlays
+function attachLiveIndexes(result) {
+  const byKey = new Map()
+  const viewByInstance = new Map()
+  const ssHistograms = []
+  const markerRuleOverlays = []
+  for (const pane of ['onchart', 'offchart']) {
+    const arr = result[pane]
+    if (!arr) continue
+    for (const ov of arr) {
+      const s = ov.settings
+      if (!s) continue
+      if (s.corkyKey != null && !byKey.has(s.corkyKey)) byKey.set(s.corkyKey, ov)
+      if (s.corkyView && !s.corkyColorRule && !s.corkyMarkerRule && s.corkyInstance != null &&
+          Array.isArray(s.corkyFields)) {
+        let list = viewByInstance.get(s.corkyInstance)
+        if (!list) { list = []; viewByInstance.set(s.corkyInstance, list) }
+        list.push(ov)
+      }
+      if (s.corkyColorRule === 'signed_slope_histogram') ssHistograms.push(ov)
+      if (s.corkyMarkerRule) markerRuleOverlays.push(ov)
+    }
+  }
+  const def = (k, v) => Object.defineProperty(result, k, { value: v, enumerable: false, configurable: true, writable: true })
+  def('_overlayByKey', byKey)
+  def('_viewOverlaysByInstance', viewByInstance)
+  def('_ssHistograms', ssHistograms)
+  def('_markerRuleOverlays', markerRuleOverlays)
 }
 
 // ─────────────────────────────────────────────────────────── assembling ──
@@ -721,9 +787,15 @@ export function buildChartData(rows, opts = {}) {
  * @returns {import('../../types/corky-feed').ChartCandleRow[]}
  */
 export function assembleChunks(chunkEvents) {
-  const ordered = [...chunkEvents].sort(
-    (a, b) => Number(a.chunk_index) - Number(b.chunk_index)
-  )
+  const ordered = [...chunkEvents]
+  // Skip the sort when chunks already arrive in ascending chunk_index order
+  // (the common case). `<=` on the NUMERIC index mirrors the comparator exactly
+  // and keeps equal-index chunks in their original (stable) order.
+  let sorted = true
+  for (let i = 0; i < ordered.length - 1; i++) {
+    if (!(Number(ordered[i].chunk_index) <= Number(ordered[i + 1].chunk_index))) { sorted = false; break }
+  }
+  if (!sorted) ordered.sort((a, b) => Number(a.chunk_index) - Number(b.chunk_index))
 
   const byKey = new Map()
   const order = []
@@ -801,18 +873,23 @@ function findOverlayByKey(chartDataObj, key) {
   return null
 }
 
-/** Upsert a `[ts, ...]` tuple into an ascending-by-ts array (replace same ts). */
+/**
+ * Upsert a `[ts, ...]` tuple into an ascending-by-ts array (replace same ts).
+ * RETURNS the row now living at `ts` (the appended/replaced/spliced tuple) so a
+ * caller that needs the OHLCV row it just wrote can skip a redundant backward
+ * `for(...)` ts rescan.
+ */
 function upsertByTs(data, tuple) {
   const ts = tuple[0]
   // Common case: append (live rows arrive newest-last).
   const lastIdx = data.length - 1
   if (lastIdx < 0 || data[lastIdx][0] < ts) {
     data.push(tuple)
-    return
+    return tuple
   }
   if (data[lastIdx][0] === ts) {
     data[lastIdx] = tuple
-    return
+    return tuple
   }
   // Out-of-order ts: binary search for an exact match or insert position.
   let lo = 0
@@ -822,8 +899,9 @@ function upsertByTs(data, tuple) {
     if (data[mid][0] < ts) lo = mid + 1
     else hi = mid
   }
-  if (lo < data.length && data[lo][0] === ts) data[lo] = tuple
-  else data.splice(lo, 0, tuple)
+  if (lo < data.length && data[lo][0] === ts) { data[lo] = tuple; return tuple }
+  data.splice(lo, 0, tuple)
+  return tuple
 }
 
 /**
@@ -867,23 +945,47 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
   if (chartDataObj.timeframe && row.timeframe && row.timeframe !== chartDataObj.timeframe) {
     return { chart: chartDataObj, applied: false, sequence: last, reason: 'tf-mismatch' }
   }
-  upsertByTs(chartDataObj.chart.data, rowToOhlcv(row))
+  // `liveCandle` is the OHLCV row now living at `ts` (the tuple just upserted).
+  // Nothing below mutates chartDataObj.chart.data again, so the candle_color /
+  // grouped-box / marker sections reuse this reference instead of re-scanning
+  // the OHLCV array backward for arr[i][0] === ts.
+  const liveCandle = upsertByTs(chartDataObj.chart.data, rowToOhlcv(row))
+
+  // Precomputed live-tick indexes (attached by buildChartData). Membership of the
+  // pane arrays is immutable post-build, so these stay valid for the object's life.
+  // Absent (e.g. on a `{ ...built }` spread that drops non-enumerable props) → fall
+  // back to the original full-scan functions for byte-identical behaviour.
+  const overlayByKey = chartDataObj._overlayByKey || null
+  const viewByInstance = chartDataObj._viewOverlaysByInstance || null
 
   const ts = row.candle.timestamp_ms
   const inds = row.indicators || {}
   for (const instanceKey of Object.keys(inds)) {
     const outputs = inds[instanceKey] || {}
+    // Pre-filtered view overlays for this instance (the per-output
+    // corkyFields.includes(output) filter is still applied below).
+    const viewOvsForInstance = viewByInstance
+      ? (viewByInstance.get(instanceKey) || null)
+      : null
     for (const output of Object.keys(outputs)) {
       const numv = decimalToNumber(outputs[output])
       // (a) Legacy/fallback single-output overlay keyed by instanceKey.output.
-      const ov = findOverlayByKey(chartDataObj, instanceKey + '.' + output)
+      const key = instanceKey + '.' + output
+      const ov = overlayByKey
+        ? (overlayByKey.has(key) ? overlayByKey.get(key) : null)
+        : findOverlayByKey(chartDataObj, key)
       if (ov) {
         upsertByTs(ov.data, [ts, numv])
         if (ov.raw) upsertByTs(ov.raw, [ts, outputs[output]])
       }
       // (b) view overlays consuming this field (by corkyInstance + corkyFields),
       //     writing the value into its column (multi-field Splines/Channel/Zones).
-      for (const vov of viewOverlaysFor(chartDataObj, instanceKey, output)) {
+      const vovs = viewByInstance
+        ? (viewOvsForInstance
+            ? viewOvsForInstance.filter((vov) => vov.settings.corkyFields.includes(output))
+            : [])
+        : viewOverlaysFor(chartDataObj, instanceKey, output)
+      for (const vov of vovs) {
         const col = vov.settings.corkyFields.indexOf(output) + 1
         const ncol = vov.settings.corkyFields.length
         upsertColumn(vov.data, ts, col, ncol, numv)
@@ -900,9 +1002,8 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
   const ccMeta = chartDataObj._candleColor
   const ccActive = chartDataObj._candleColorActive
   if (ccMeta && ccMeta.length) {
-    let candle = null
-    const arr = chartDataObj.chart.data
-    for (let i = arr.length - 1; i >= 0; i--) { if (arr[i][0] === ts) { candle = arr[i]; break } }
+    // The OHLCV row at `ts` is the one we just upserted (always present).
+    const candle = liveCandle
     for (const cc of ccMeta) {
       const vals = inds[cc.instanceKey]
       // Does THIS update actually carry the colour field(s)? A live tick that is
@@ -964,8 +1065,8 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
       if (db.grouped) {
         const srcTs = vals ? Number(vals[db.rule.sourceTimestampField]) : NaN
         if (Number.isFinite(srcTs)) {
-          let candle = null
-          for (let i = arr.length - 1; i >= 0; i--) { if (arr[i][0] === ts) { candle = arr[i]; break } }
+          // The OHLCV row at `ts` is the one we just upserted (always present).
+          const candle = liveCandle
           // NEW source bar → the previous source bar closed: kill/anchor from it.
           if (db.lastSrcTs != null && srcTs > db.lastSrcTs && db.srcAccum &&
               (db.evaluatedThrough == null || db.lastSrcTs > db.evaluatedThrough)) {
@@ -1045,9 +1146,12 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
 
   // signed_slope_histogram overlays: recompute the bar wholesale ([ts,value,
   // color]) — slope from slope_field, else value − previous bar value, else
-  // sign-only. (Excluded from the generic column-write above.)
-  for (const pane of ['onchart', 'offchart']) {
-    for (const ov of (chartDataObj[pane] || [])) {
+  // sign-only. (Excluded from the generic column-write above.) Iterate the
+  // precomputed list (onchart-then-offchart) when present — usually empty, so
+  // the block is skipped entirely — else fall back to a full pane scan.
+  const ssOverlays = chartDataObj._ssHistograms ||
+    [...(chartDataObj.onchart || []), ...(chartDataObj.offchart || [])]
+  for (const ov of ssOverlays) {
       const s = ov.settings
       if (!s || s.corkyColorRule !== 'signed_slope_histogram') continue
       const oinds = inds[s.corkyInstance]
@@ -1073,7 +1177,6 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
       }
       upsertByTs(ov.data, [ts, value, signedSlopeColor(value, slope, s.ssColors)])
       if (ov.raw) upsertByTs(ov.raw, [ts, oinds[s.valueField]])
-    }
   }
 
   // marker-rule overlays (e.g. SCMR reversal symbols): recompute the marker for
@@ -1081,8 +1184,11 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
   // price. A tick that resolves to no marker (0 / unknown id / no field) REMOVES
   // any marker previously placed at ts — so a transient reversal that flips back
   // to 0 on the forming bar disappears. Excluded from the generic column-write.
-  for (const pane of ['onchart', 'offchart']) {
-    for (const ov of (chartDataObj[pane] || [])) {
+  // Iterate the precomputed list (onchart-then-offchart) when present — usually
+  // empty, so the block is skipped — else fall back to a full pane scan.
+  const markerOverlays = chartDataObj._markerRuleOverlays ||
+    [...(chartDataObj.onchart || []), ...(chartDataObj.offchart || [])]
+  for (const ov of markerOverlays) {
       const s = ov.settings
       if (!s || !s.corkyMarkerRule) continue
       const rule = s.corkyMarkerSpec
@@ -1092,9 +1198,8 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
       if (!rule || !oinds || !(rule.valueField in oinds)) continue
       const m = markerSymbolOf(oinds[rule.valueField], rule)
       if (!m) { removeByTs(ov.data, ts); if (ov.raw) removeByTs(ov.raw, ts); continue }
-      let candle = null
-      const arr = chartDataObj.chart.data
-      for (let i = arr.length - 1; i >= 0; i--) { if (arr[i][0] === ts) { candle = arr[i]; break } }
+      // The OHLCV row at `ts` is the one we just upserted (always present).
+      const candle = liveCandle
       const above = m.placement === 'above_candle'
       const y = anchorYFromCandle(candle, above ? rule.aboveAnchor : rule.belowAnchor)
       if (y == null || !Number.isFinite(Number(y))) {
@@ -1103,7 +1208,6 @@ export function applyLiveUpdate(chartDataObj, liveEvent, lastSeqBySub) {
       const label = (rule.labelField && rule.labelField in oinds) ? oinds[rule.labelField] : null
       upsertByTs(ov.data, [ts, Number(y), label, m.glyph, m.color, above ? 'above' : 'below'])
       if (ov.raw) upsertByTs(ov.raw, [ts, oinds[rule.valueField]])
-    }
   }
 
   lastSeqBySub[sub] = seq

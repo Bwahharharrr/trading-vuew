@@ -32,6 +32,22 @@ export default class GridRenderer {
         // PERFORMANCE: Cache sorted overlays to avoid sorting every frame
         this._sortedOverlays = []
         this._overlaysSortDirty = true
+
+        // PERFORMANCE: Reuse one props object across shadered frames instead of
+        // allocating a fresh 10-key object each redraw. Safe because shaders read
+        // the field VALUES synchronously in-frame and never retain its identity.
+        this._shaderPropsObj = {
+            layout: null,
+            range: null,
+            interval: null,
+            tf: null,
+            cursor: null,
+            colors: null,
+            sub: null,
+            font: null,
+            config: null,
+            meta: null
+        }
     }
 
     // Static canvas context (grid, candles, overlays)
@@ -189,20 +205,22 @@ export default class GridRenderer {
     }
 
     // Props passed to grid shaders (resolved layout + theme + cursor).
+    // Mutates and returns ONE persistent object (see constructor) rather than
+    // allocating a new one each frame; shaders read field values in-frame only.
     _shaderProps() {
         const layout = this.layout
-        return {
-            layout: layout,
-            range: this.range,
-            interval: this.interval,
-            tf: layout.ti_map.tf,
-            cursor: this.cursor,
-            colors: this.$p.colors,
-            sub: this.data,
-            font: this.$p.font,
-            config: this.$p.config,
-            meta: this.$p.meta
-        }
+        const p = this._shaderPropsObj
+        p.layout = layout
+        p.range = this.range
+        p.interval = this.interval
+        p.tf = layout.ti_map.tf
+        p.cursor = this.cursor
+        p.colors = this.$p.colors
+        p.sub = this.data
+        p.font = this.$p.font
+        p.config = this.$p.config
+        p.meta = this.$p.meta
+        return p
     }
 
     // Propagate mouse event to overlays

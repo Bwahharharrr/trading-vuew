@@ -15,6 +15,32 @@ function getExponent(value) {
     return Math.floor(Math.log10(Math.abs(value)))
 }
 
+// PERFORMANCE: Cache for measureText results — calc_sidebar() runs on every
+// pan/zoom frame (per grid), but the measured string is a pure function of
+// (ctx.font, str). Mirrors botbar.js measureTextCached (FIFO-capped Map keyed
+// on font|text). Result is floored/clamped identically afterward.
+const measureTextCache = new Map()
+const MAX_CACHE_SIZE = 100
+
+function measureTextCached(ctx, text) {
+    const font = ctx.font
+    const key = `${font}|${text}`
+
+    if (measureTextCache.has(key)) {
+        return measureTextCache.get(key)
+    }
+
+    // Evict oldest entries if cache is too large
+    if (measureTextCache.size >= MAX_CACHE_SIZE) {
+        const firstKey = measureTextCache.keys().next().value
+        measureTextCache.delete(firstKey)
+    }
+
+    const width = ctx.measureText(text).width
+    measureTextCache.set(key, width)
+    return width
+}
+
 // master_grid - ref to the master grid
 function GridMaker(id, params, master_grid = null) {
 
@@ -124,7 +150,7 @@ function GridMaker(id, params, master_grid = null) {
         lens.push(self.$_hi.toFixed(self.prec).length)
         lens.push(self.$_lo.toFixed(self.prec).length)
         let str = '0'.repeat(Utils.maxInArray(lens)) + '    '
-        self.sb = ctx.measureText(str).width
+        self.sb = measureTextCached(ctx, str)
         self.sb = Math.max(Math.floor(self.sb), $p.config.SBMIN)
         self.sb = Math.min(self.sb, $p.config.SBMAX)
 

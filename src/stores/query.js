@@ -39,7 +39,8 @@ export function querySearch(data, query, tuple) {
     let path = tuple[1] || ''
     let field = tuple[2]
 
-    let arr = data[side].filter(x => (
+    const sideData = data[side]
+    const match = x => (
         x.id === query ||
         (x.id && x.id.includes(path)) ||
         x.name === query ||
@@ -49,24 +50,25 @@ export function querySearch(data, query, tuple) {
         // matched every uuid-less overlay and returned an arbitrary one.
         ((x.settings || {}).$uuid != null &&
             query.includes(x.settings.$uuid))
-    ))
+    )
 
     if (field) {
-        return arr.map(x => ({
+        return sideData.filter(match).map(x => ({
             p: x,
             i: field,
             v: x[field]
         }))
     }
 
-    // O(1) index lookup (vs indexOf O(n) per element) — O(n) overall.
-    const sideData = data[side]
-    const indexMap = new Map(sideData.map((item, idx) => [item, idx]))
-    return arr.map(x => ({
-        p: sideData,
-        i: indexMap.get(x),
-        v: x
-    }))
+    // Capture each match's array index during the filter pass — no second
+    // pass and no Map (the recorded index === indexMap.get(x) since matched
+    // elements are unique and occupy the same array position).
+    let result = []
+    for (let idx = 0; idx < sideData.length; idx++) {
+        let x = sideData[idx]
+        if (match(x)) result.push({ p: sideData, i: idx, v: x })
+    }
+    return result
 }
 
 /**

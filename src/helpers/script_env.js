@@ -80,7 +80,7 @@ export default class ScriptEnv {
             point = [t, val]
         } else {
             // Array
-            point = [t, ...val]
+            point = [t].concat(val)
         }
         if (unshift) {
             this.data.push(point)
