@@ -1,7 +1,7 @@
 declare const _default: typeof __VLS_export;
 export default _default;
 declare const __VLS_export: import("vue").DefineComponent<{}, {}, {}, {
-    side(): "sell" | "buy";
+    side(): "buy" | "sell";
     visible(): boolean;
     orders(): any;
     color_buy(): any;

@@ -32,6 +32,10 @@ export function pivotIndicators(rows: import("../../types/corky-feed").ChartCand
     data: [number, number][];
     raw: [number, string][];
 }>;
+export function buildSourceCandles(rule: any, outputsMap: any, ohlcv: any): {
+    candles: any[][];
+    rawOf: (field: any) => Map<any, any>;
+} | null;
 export function buildDetectionBoxes(rule: any, outputsMap: any, ohlcv: any): {
     boxes: ({
         side: string;
@@ -54,17 +58,36 @@ export function buildDetectionBoxes(rule: any, outputsMap: any, ohlcv: any): {
     })[];
     tf: number;
     lastTs: any;
+    usedSource: boolean;
+    srcSeed: {
+        lastSrcTs: any;
+        srcAccum: {
+            ts: any;
+            high: any;
+            low: any;
+            close: any;
+        };
+        lastSrcVals: {
+            bull: any;
+            bear: any;
+        };
+    } | null;
 };
 /** Zones settings-format rows ([x1, y1, x2, y2, rgba]) — one row per box. */
 export function detectionBoxRows(boxes: any, rule: any): any;
 /** Boxes covering the bar at `ts` (a bar is covered when the box spans its
  *  whole open..close) — must equal the server's `{side}_box_count`. */
 export function detectionBoxCountAt(boxes: any, ts: any, tf: any, side?: null): any;
+export function anchorYFromCandle(candle: any, anchor: any): any;
+export function buildSymbolMarkers(rule: any, outputsMap: any, ohlcv: any): {
+    data: import("vue").Raw<any[][]>;
+    raw: import("vue").Raw<any[][]>;
+};
 export function buildLayerOverlays(instanceKey: any, kind: any, outputsMap: any, view: any, paneResolver: any, ohlcv?: null): {
     onchart: ({
         name: any;
         type: string;
-        data: never[];
+        data: import("vue").Raw<never[]>;
         settings: {
             corkyKey: string;
             corkyKind: any;
@@ -77,7 +100,7 @@ export function buildLayerOverlays(instanceKey: any, kind: any, outputsMap: any,
             'z-index': number;
             zones: any;
         };
-        raw: never[];
+        raw: import("vue").Raw<never[]>;
     } | {
         name: any;
         type: string;
@@ -115,6 +138,35 @@ export function buildLayerOverlays(instanceKey: any, kind: any, outputsMap: any,
             zeroLine?: undefined;
         }));
         raw: any;
+    } | {
+        name: any;
+        type: string;
+        data: import("vue").Raw<any[][]>;
+        settings: object & {
+            corkyKey: string;
+            corkyKind: any;
+            corkyInstance: any;
+            corkyLayerId: any;
+            corkyView: boolean;
+            corkyVisibleDefault: boolean;
+            display: boolean;
+            corkyMarkerRule: string;
+            corkyMarkerSpec: {
+                rule: string;
+                valueField: string;
+                labelField: string | null;
+                zeroValue: string;
+                hideZero: boolean;
+                aboveAnchor: string;
+                belowAnchor: string;
+                symbols: Record<string, string>;
+                colors: Record<string, string>;
+                placements: Record<string, string>;
+            };
+            corkyFields: (string | null)[];
+            legend: boolean;
+        };
+        raw: import("vue").Raw<any[][]>;
     })[];
     offchart: {
         name: any;
@@ -211,10 +263,14 @@ export function buildLayerOverlays(instanceKey: any, kind: any, outputsMap: any,
         evaluatedThrough: any;
         lastLiveTs: null;
         lastVals: null;
+        grouped: boolean;
+        lastSrcTs: any;
+        srcAccum: any;
+        lastSrcVals: any;
         overlay: {
             name: any;
             type: string;
-            data: never[];
+            data: import("vue").Raw<never[]>;
             settings: {
                 corkyKey: string;
                 corkyKind: any;
@@ -227,7 +283,7 @@ export function buildLayerOverlays(instanceKey: any, kind: any, outputsMap: any,
                 'z-index': number;
                 zones: any;
             };
-            raw: never[];
+            raw: import("vue").Raw<never[]>;
         };
     }[];
 };
@@ -239,7 +295,7 @@ export function buildChartData(rows: any, opts?: {}): {
     onchart: ({
         name: any;
         type: string;
-        data: never[];
+        data: import("vue").Raw<never[]>;
         settings: {
             corkyKey: string;
             corkyKind: any;
@@ -252,7 +308,7 @@ export function buildChartData(rows: any, opts?: {}): {
             'z-index': number;
             zones: any;
         };
-        raw: never[];
+        raw: import("vue").Raw<never[]>;
     } | {
         name: any;
         type: string;
@@ -291,15 +347,44 @@ export function buildChartData(rows: any, opts?: {}): {
         }));
         raw: any;
     } | {
+        name: any;
+        type: string;
+        data: import("vue").Raw<any[][]>;
+        settings: object & {
+            corkyKey: string;
+            corkyKind: any;
+            corkyInstance: any;
+            corkyLayerId: any;
+            corkyView: boolean;
+            corkyVisibleDefault: boolean;
+            display: boolean;
+            corkyMarkerRule: string;
+            corkyMarkerSpec: {
+                rule: string;
+                valueField: string;
+                labelField: string | null;
+                zeroValue: string;
+                hideZero: boolean;
+                aboveAnchor: string;
+                belowAnchor: string;
+                symbols: Record<string, string>;
+                colors: Record<string, string>;
+                placements: Record<string, string>;
+            };
+            corkyFields: (string | null)[];
+            legend: boolean;
+        };
+        raw: import("vue").Raw<any[][]>;
+    } | {
         name: string;
         type: string;
-        data: [number, number][];
+        data: import("vue").Raw<[number, number][]>;
         settings: {
             corkyKey: string;
             corkyKind: any;
             corkyOutput: string;
         };
-        raw: [number, string][];
+        raw: import("vue").Raw<[number, string][]>;
     })[];
     offchart: ({
         name: any;
@@ -341,13 +426,13 @@ export function buildChartData(rows: any, opts?: {}): {
     } | {
         name: string;
         type: string;
-        data: [number, number][];
+        data: import("vue").Raw<[number, number][]>;
         settings: {
             corkyKey: string;
             corkyKind: any;
             corkyOutput: string;
         };
-        raw: [number, string][];
+        raw: import("vue").Raw<[number, string][]>;
     })[];
 };
 /**
@@ -361,6 +446,25 @@ export function buildChartData(rows: any, opts?: {}): {
  * @returns {import('../../types/corky-feed').ChartCandleRow[]}
  */
 export function assembleChunks(chunkEvents: import("../../types/corky-feed").HistoricalChunkEvent[]): import("../../types/corky-feed").ChartCandleRow[];
+/**
+ * Reconstruct a row-format historical chunk from a `historical_chunk_columnar`
+ * event so the rest of the pipeline (assembleChunks → buildChartData) stays
+ * format-agnostic. The gateway sends parallel column arrays; we rebuild one
+ * `ChartCandleRow` per index. Decimal values are kept as STRINGS (rowToOhlcv /
+ * decimalToNumber convert downstream). A `null`/absent indicator field value
+ * means that field is absent for that row and is omitted (NOT coerced to 0).
+ *
+ * @param {object} event - the `historical_chunk_columnar` event
+ * @param {string} [fallbackTimeframe] - used when the event omits `timeframe`
+ * @returns {{ type:'historical_chunk', subscription_id, chunk_index, timeframe, rows }}
+ */
+export function columnarChunkToRows(event: object, fallbackTimeframe?: string): {
+    type: "historical_chunk";
+    subscription_id: any;
+    chunk_index: any;
+    timeframe: any;
+    rows: any;
+};
 /**
  * Apply one `live_update` event to a chart-data object, in place.
  *

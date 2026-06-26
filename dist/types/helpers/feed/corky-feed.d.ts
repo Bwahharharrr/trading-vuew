@@ -28,6 +28,20 @@ export class CorkyFeed extends FeedSource {
      */
     discover(venue?: string): Promise<any[]>;
     /**
+     * One-shot historical candle fetch for a fixed [start_ms, end_ms] window —
+     * powers the chart's lazy "load older candles on pan-left" loader. Runs on
+     * its OWN subscription id (NEVER the active live stream, and not registered
+     * in `_subs`, so a concurrent re-select can't tear it down or be torn down by
+     * it), collects the historical chunks, unsubscribes the live tail, and
+     * returns ascending OHLCV rows. Candles only (no indicators) and no DataCube
+     * side effects — the caller merges the rows into chart.data.
+     *
+     * @returns {Promise<Array<[number,number,number,number,number,number]>>}
+     */
+    fetchHistory({ venue, symbol, timeframe, start_ms, end_ms, chunk_rows }?: {
+        chunk_rows?: number | undefined;
+    }): Promise<Array<[number, number, number, number, number, number]>>;
+    /**
      * Subscribe to one venue/symbol/timeframe stream and drive the DataCube.
      *
      * @param {{ venue: string, symbol: string, timeframe: string,

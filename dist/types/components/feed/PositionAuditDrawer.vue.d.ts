@@ -31,7 +31,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     fees(): any;
     feesText(): string;
 }, {
-    signClass(dec: any): "" | "neg" | "pos";
+    signClass(dec: any): "" | "pos" | "neg";
     sideClass(side: any): "" | "side-long" | "side-short";
     fmtTime(ms: any): string;
     feeKindLabel(kind: any): any;

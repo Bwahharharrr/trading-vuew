@@ -14,6 +14,18 @@ export default class GridRenderer {
     _lastLayoutRef: any;
     _sortedOverlays: any[];
     _overlaysSortDirty: boolean;
+    _shaderPropsObj: {
+        layout: null;
+        range: null;
+        interval: null;
+        tf: null;
+        cursor: null;
+        colors: null;
+        sub: null;
+        font: null;
+        config: null;
+        meta: null;
+    };
     get ctx(): any;
     get ctxDynamic(): any;
     get hasDualCanvas(): boolean;
@@ -32,16 +44,16 @@ export default class GridRenderer {
     update(): void;
     updateDynamic(): void;
     _shaderProps(): {
-        layout: any;
-        range: any;
-        interval: any;
-        tf: any;
-        cursor: any;
-        colors: any;
-        sub: any;
-        font: any;
-        config: any;
-        meta: any;
+        layout: null;
+        range: null;
+        interval: null;
+        tf: null;
+        cursor: null;
+        colors: null;
+        sub: null;
+        font: null;
+        config: null;
+        meta: null;
     };
     propagate(name: any, event: any): void;
 }

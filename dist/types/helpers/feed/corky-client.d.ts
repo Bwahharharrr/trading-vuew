@@ -47,6 +47,34 @@ export namespace KNOWN_ERROR_CODES {
         let retryable_11: boolean;
         export { retryable_11 as retryable };
     }
+    namespace backtest_artifacts_disabled {
+        let retryable_12: boolean;
+        export { retryable_12 as retryable };
+    }
+    namespace strategy_not_found {
+        let retryable_13: boolean;
+        export { retryable_13 as retryable };
+    }
+    namespace backtest_not_found {
+        let retryable_14: boolean;
+        export { retryable_14 as retryable };
+    }
+    namespace backtest_artifact_not_ready {
+        let retryable_15: boolean;
+        export { retryable_15 as retryable };
+    }
+    namespace invalid_backtest_request {
+        let retryable_16: boolean;
+        export { retryable_16 as retryable };
+    }
+    namespace backtest_artifact_invalid {
+        let retryable_17: boolean;
+        export { retryable_17 as retryable };
+    }
+    namespace backtest_store_unavailable {
+        let retryable_18: boolean;
+        export { retryable_18 as retryable };
+    }
 }
 export class CorkyError extends Error {
     constructor(code: any, message: any, retryable: any);
@@ -82,6 +110,8 @@ export class CorkyClient {
     listCandleStates(venue: any): Promise<any>;
     subscribeCandles(opts?: {}): Promise<any>;
     unsubscribe(subscription_id: any): Promise<any>;
+    searchCandles(query: any): string;
+    cancelSearch(search_id: any): string;
     upsertCandleState(opts?: {}): Promise<any>;
     patchCandleState(opts?: {}): Promise<any>;
     /** One-shot snapshot. Resolves with the `auth_positions` event. */
@@ -101,6 +131,32 @@ export class CorkyClient {
      * `auth_position_audit_update`; register `onSubscription` for ongoing updates.
      */
     subscribeAuthPositionAudit(opts?: {}): Promise<any>;
+    /** List available strategies → resolves the `strategies` array. */
+    listStrategies(): Promise<any>;
+    /** Inspect one strategy → resolves the `strategy` descriptor. */
+    getStrategy(strategy: any): Promise<any>;
+    /** List backtest runs (all filters optional) → resolves the `runs` array. */
+    listBacktestRuns(opts?: {}): Promise<any>;
+    /** Raw artifact for a run → resolves the pass-through `artifact` JSON. Pass
+     *  { compact:true } to get plan/scenario/optimization/rankings/parameters/
+     *  metrics with heavy report arrays (fills/ledger/equity/period_returns/
+     *  rejected_orders) replaced by *_count fields — bounded, so it won't hit the
+     *  `backtest_artifact_too_large` error a full read raises on long sweeps. */
+    getBacktestRun(run_id: any, opts?: {}): Promise<any>;
+    /** One-shot progress snapshot → resolves the `events` list. */
+    getBacktestProgress(run_id: any): Promise<any>;
+    /**
+     * Stream live progress. Resolves with the FIRST `backtest_progress_update`;
+     * register `onSubscription(subscription_id, …)` for ongoing updates (apply by
+     * increasing `sequence`; each update carries the FULL current event list).
+     */
+    subscribeBacktestProgress(opts?: {}): Promise<any>;
+    /** Trade chart overlays (per chart_window) → resolves the full event. Pass
+     *  start_ms/end_ms to return only trades inside that visible window. */
+    getBacktestChartOverlays(opts?: {}): Promise<any>;
+    /** Normalized report/account overlays → resolves the full event. Pass
+     *  start_ms/end_ms to window and max_points to downsample equity_curve. */
+    getBacktestReportOverlays(opts?: {}): Promise<any>;
     _nextRequestId(): string;
     _request(command: any, meta?: {}): Promise<any>;
     _send(frame: any): void;

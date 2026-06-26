@@ -174,6 +174,51 @@ export function signedSlopeColor(value: number, slope: number | null | undefined
     negative_falling_color?: string;
     negative_rising_color?: string;
 }): string | null;
+/**
+ * Parse a `marker` layer's SYMBOL rule from its `style` (the SCMR reversal form,
+ * `style.marker_rule`). The wire carries a numeric type-id in `value_field`; the
+ * glyph / colour / placement for each id live ENTIRELY in the style map as
+ * `symbol_{id}` / `color_{id}` / `placement_{id}`, scanned dynamically. Anchors
+ * (`above_anchor`/`below_anchor`, default candle_high/candle_low) say which candle
+ * price a marker sits at. NOTHING is hardcoded — the SCMR / SCMR(INV) tables are
+ * server DEFAULTS; this obeys whatever the descriptor sends. Returns null when
+ * `style` is not a marker rule (no `marker_rule`, `value_field`, or `symbol_{id}`).
+ *
+ * @param {Record<string,string>} [style]
+ * @returns {{ rule:string, valueField:string, labelField:string|null,
+ *   zeroValue:string, hideZero:boolean, aboveAnchor:string, belowAnchor:string,
+ *   symbols:Record<string,string>, colors:Record<string,string>,
+ *   placements:Record<string,string> }|null}
+ */
+export function markerSymbolRule(style?: Record<string, string>): {
+    rule: string;
+    valueField: string;
+    labelField: string | null;
+    zeroValue: string;
+    hideZero: boolean;
+    aboveAnchor: string;
+    belowAnchor: string;
+    symbols: Record<string, string>;
+    colors: Record<string, string>;
+    placements: Record<string, string>;
+} | null;
+/**
+ * Resolve the marker for a raw type-id value under a {@link markerSymbolRule}.
+ * Returns null (draw nothing) when the value is the zero value (and `hideZero`),
+ * empty, missing, non-numeric, or has no `symbol_{id}` entry. Otherwise
+ * `{ id, glyph, color, placement }` straight from the descriptor — the id is the
+ * value TRUNCATED to an integer (matching paletteColorOf).
+ *
+ * @param {string|number|null|undefined} value
+ * @param {ReturnType<typeof markerSymbolRule>} rule
+ * @returns {{ id:string, glyph:string, color:string|null, placement:string }|null}
+ */
+export function markerSymbolOf(value: string | number | null | undefined, rule: ReturnType<typeof markerSymbolRule>): {
+    id: string;
+    glyph: string;
+    color: string | null;
+    placement: string;
+} | null;
 export namespace onchartKinds {
     export { LINE as sma };
     export { LINE as ema };

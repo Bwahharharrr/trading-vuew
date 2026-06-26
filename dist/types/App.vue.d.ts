@@ -35,7 +35,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         };
         computed: {};
     } | import("vue").DefineComponent<{}, {}, {}, {
-        side(): "sell" | "buy";
+        side(): "buy" | "sell";
         visible(): boolean;
         orders(): any;
         color_buy(): any;
@@ -270,6 +270,26 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     positionsError: null;
     positionsHistoryCursor: null;
     positionsHistoryTotal: number;
+    searchFeed: null;
+    searchTabs: never[];
+    searchTabSeq: number;
+    searchNav: null;
+    backtestsFeed: null;
+    backtests: {
+        strategies: never[];
+        runs: never[];
+        filters: {
+            strategy: string;
+            symbol: string;
+            status: string;
+            timeframe: string;
+            runType: string;
+        };
+        selectedRun: null;
+        detail: {};
+        loading: boolean;
+        error: null;
+    };
     positionPlot: null;
     auditOpen: boolean;
     auditData: null;
@@ -282,10 +302,31 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         key: string;
         name: string;
     }[];
+    searchContext(): {
+        venue: any;
+        symbol: any;
+        timeframe: null;
+        timeframes: any;
+        indicators: {
+            label: any;
+            fields: any[];
+        }[];
+        symbols: {
+            venue: any;
+            symbol: any;
+            timeframes: any;
+            indicators: {
+                label: any;
+                fields: any[];
+            }[];
+        }[];
+    };
 }, {
     setFeedMode(mode: any): void;
     enterGatewayMode(): void;
     corkyDiscover(venue: any): Promise<never[] | undefined>;
+    _corkyHistoryLoader(range: any): Promise<any>;
+    _btMergeReportWindow(base: any, add: any): any;
     corkySelect(opts: any): Promise<void>;
     _corkyScheduleSelectRetry(opts: any, mapped: any): boolean;
     onCorkySelect(opts: any): void;
@@ -310,6 +351,10 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         };
     };
     _removePositionOverlays(dc: any): void;
+    _removeSignalMarker(dc: any): void;
+    syncSignalMarker(): void;
+    _removeBarrierOverlay(dc: any): void;
+    syncBarrierOverlay(): void;
     syncPositionOverlays(): void;
     togglePositionDetail(key: any): void;
     clearPositionPlot(): void;
@@ -340,12 +385,55 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     _positionsStartPoll(): void;
     togglePositionsDock(open: any): void;
     setPositionsTab(tab: any): void;
+    _indicatorOptions(state: any): {
+        label: any;
+        fields: any[];
+    }[];
+    onRunSearch(form: any): void;
+    onCancelSearch(tabId: any): void;
+    onCloseSearchTab(tabId: any): void;
+    onSearchResultSelect({ tabId, row, index }?: {}): Promise<void>;
+    _isActiveNav(tabId: any, index: any): false;
+    _setNavMessage(tabId: any, index: any, message: any): void;
+    _navStatusLabel(status: any): any;
+    _clearSearchNav(): void;
+    _btErr(err: any): any;
+    _btSetDetail(patch: any): void;
+    btLoadStrategies(): Promise<void>;
+    btUpdateFilter(patch: any): void;
+    btInspectStrategy(name: any): Promise<void>;
+    btListRuns(): Promise<void>;
+    btSelectRun(run: any): Promise<void>;
+    _withTimeout(promise: any, ms: any): Promise<any>;
+    _btLoadArtifact(run: any): Promise<void>;
+    _btRunIndex(): number | undefined;
+    btSelectCandidate(runIndex: any): Promise<void>;
+    _btLoadOverview(run: any): Promise<void>;
+    btCloseDetail(): void;
+    _btSubscribeProgress(run: any): void;
+    _btStopProgress(): void;
+    _canonicalVenue(venue: any, symbol: any): any;
+    _loadedCandleRange(): any[] | null;
+    btPlotRun(run: any): Promise<void>;
+    _btPlotWindow(run: any, timeframe: any): {
+        start: any;
+        end: any;
+    };
+    btSelectTrade(trade: any): Promise<void>;
+    _btTradeChartWindow(run: any, trade: any, timeframe: any, runIndex: any, beforeBars: any, afterBars: any): Promise<{
+        start: number;
+        end: number;
+    } | null>;
+    _tfToMs(tf: any): number;
+    _removeBacktestOverlays(dc: any): void;
+    syncBacktestOverlays(): void;
     setPositionsAccount(acct: any): void;
     _ensureHistoryLoaded(opts?: {}): void;
     loadHistoryPage(reset?: boolean, { silent }?: {
         silent?: boolean | undefined;
     }): Promise<void>;
     onPositionSelect(pos: any): Promise<void>;
+    _isOpenPosition(pos: any, audit: any): boolean;
     _plotWindow(pos: any, audit: any): {
         start: any;
         end: any;
@@ -2057,8 +2145,26 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             type: StringConstructor;
             default: string;
         };
+        searchTabs: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
+        searchContext: {
+            type: ObjectConstructor;
+            default: null;
+        };
+        searchNav: {
+            type: ObjectConstructor;
+            default: null;
+        };
+        backtests: {
+            type: ObjectConstructor;
+            default: () => {};
+        };
     }>, {}, {}, {
         rows(): unknown[];
+        activeSearchTab(): {} | null;
+        runDetailTitle(): string;
         activeAccountKey(): string;
     }, {
         selectTab(tab: any): void;
@@ -2067,10 +2173,10 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         rowKey(p: any): string;
         isActiveRow(p: any): boolean;
         sideClass(p: any): "" | "side-long" | "side-short";
-        signClass(dec: any): "" | "neg" | "pos";
+        signClass(dec: any): "" | "pos" | "neg";
         pctText(dec: any): string;
         fmtTime(ms: any): string;
-    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("update:open" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "refresh" | "resize-start")[], "update:open" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "refresh" | "resize-start", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("update:open" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "refresh" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail")[], "update:open" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "refresh" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
         height: {
             type: NumberConstructor;
             default: number;
@@ -2119,6 +2225,22 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             type: StringConstructor;
             default: string;
         };
+        searchTabs: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
+        searchContext: {
+            type: ObjectConstructor;
+            default: null;
+        };
+        searchNav: {
+            type: ObjectConstructor;
+            default: null;
+        };
+        backtests: {
+            type: ObjectConstructor;
+            default: () => {};
+        };
     }>> & Readonly<{
         "onUpdate:open"?: ((...args: any[]) => any) | undefined;
         "onUpdate:active-tab"?: ((...args: any[]) => any) | undefined;
@@ -2128,6 +2250,19 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         "onLoad-more"?: ((...args: any[]) => any) | undefined;
         onRefresh?: ((...args: any[]) => any) | undefined;
         "onResize-start"?: ((...args: any[]) => any) | undefined;
+        "onRun-search"?: ((...args: any[]) => any) | undefined;
+        "onCancel-search"?: ((...args: any[]) => any) | undefined;
+        "onClose-search-tab"?: ((...args: any[]) => any) | undefined;
+        "onSelect-result"?: ((...args: any[]) => any) | undefined;
+        "onBt-refresh-strategies"?: ((...args: any[]) => any) | undefined;
+        "onBt-update-filter"?: ((...args: any[]) => any) | undefined;
+        "onBt-list-runs"?: ((...args: any[]) => any) | undefined;
+        "onBt-inspect-strategy"?: ((...args: any[]) => any) | undefined;
+        "onBt-select-run"?: ((...args: any[]) => any) | undefined;
+        "onBt-plot-run"?: ((...args: any[]) => any) | undefined;
+        "onBt-select-trade"?: ((...args: any[]) => any) | undefined;
+        "onBt-select-candidate"?: ((...args: any[]) => any) | undefined;
+        "onBt-close-detail"?: ((...args: any[]) => any) | undefined;
     }>, {
         error: string;
         height: number;
@@ -2141,7 +2276,482 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         historyHasMore: boolean;
         historyTotal: number;
         currentSymbolKey: string;
-    }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+        searchTabs: unknown[];
+        searchContext: Record<string, any>;
+        searchNav: Record<string, any>;
+        backtests: Record<string, any>;
+    }, {}, {
+        SearchSignalsForm: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
+            context: {
+                type: ObjectConstructor;
+                default: null;
+            };
+        }>, {}, {
+            OPS: {
+                v: string;
+                label: string;
+            }[];
+            venue: string;
+            symbol: string;
+            venueDirty: boolean;
+            symbolDirty: boolean;
+            tfs: never[];
+            rangeMode: string;
+            latestLimit: number;
+            startStr: string;
+            endStr: string;
+            rows: any[];
+            beforeBars: number;
+            afterBars: number;
+            maxResults: number;
+            targetEnabled: boolean;
+            target: {
+                timeframe: string;
+                window_fwd: number;
+                window_atr: number;
+                k_take: number;
+                k_stop: number;
+                post_hit_policy: string;
+                guard_use_close: boolean;
+                guard_min_consecutive_closes: number;
+            };
+            error: string;
+        }, {
+            symbolOptions(): any;
+            availableTimeframes(): any;
+            indicators(): any;
+        }, {
+            blankRow(): {
+                indicator: string;
+                field: string;
+                op: string;
+                value: string;
+                bar_offset: number;
+            };
+            applyDefaults(): void;
+            reconcileTimeframes(): void;
+            toggleTf(tf: any): void;
+            fieldsFor(label: any): any;
+            addRow(): void;
+            removeRow(i: any): void;
+            submit(): void;
+        }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, "run"[], "run", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+            context: {
+                type: ObjectConstructor;
+                default: null;
+            };
+        }>> & Readonly<{
+            onRun?: ((...args: any[]) => any) | undefined;
+        }>, {
+            context: Record<string, any>;
+        }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+        SearchResults: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
+            tab: {
+                type: ObjectConstructor;
+                required: true;
+            };
+            nav: {
+                type: ObjectConstructor;
+                default: null;
+            };
+        }>, {}, {}, {
+            activeNav(): Record<string, any> | null;
+            hasBarrier(): any;
+            statusLabel(): any;
+            errorText(): any;
+        }, {
+            isActive(i: any): boolean;
+            barrierCell(m: any): {
+                label: string;
+                cls: string;
+                title: string;
+            };
+            analyticsTitle(b: any): string;
+            sideClass(side: any): "" | "bull" | "bear";
+            fmtDate(ms: any): string;
+        }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("select" | "cancel")[], "select" | "cancel", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+            tab: {
+                type: ObjectConstructor;
+                required: true;
+            };
+            nav: {
+                type: ObjectConstructor;
+                default: null;
+            };
+        }>> & Readonly<{
+            onSelect?: ((...args: any[]) => any) | undefined;
+            onCancel?: ((...args: any[]) => any) | undefined;
+        }>, {
+            nav: Record<string, any>;
+        }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+        CorkyBacktestsPanel: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
+            strategies: {
+                type: ArrayConstructor;
+                default: () => never[];
+            };
+            runs: {
+                type: ArrayConstructor;
+                default: () => never[];
+            };
+            filters: {
+                type: ObjectConstructor;
+                default: () => {
+                    strategy: string;
+                    symbol: string;
+                    status: string;
+                };
+            };
+            selectedRun: {
+                type: ObjectConstructor;
+                default: null;
+            };
+            loading: {
+                type: BooleanConstructor;
+                default: boolean;
+            };
+            error: {
+                type: StringConstructor;
+                default: null;
+            };
+        }>, {}, {
+            sortKey: string;
+            sortDir: number;
+            metricCols: ({
+                key: string;
+                label: string;
+                metric: string;
+                fmt: string;
+                signMode: string;
+                agg: string;
+                beat?: undefined;
+                title?: undefined;
+            } | {
+                key: string;
+                label: string;
+                metric: string;
+                fmt: string;
+                signMode: string;
+                beat: string;
+                agg: string;
+                title?: undefined;
+            } | {
+                key: string;
+                label: string;
+                metric: string;
+                fmt: string;
+                signMode: string;
+                title: string;
+                agg: string;
+                beat?: undefined;
+            })[];
+        }, {
+            columns(): ({
+                key: string;
+                label: string;
+                metric: string;
+                fmt: string;
+                signMode: string;
+                agg: string;
+                beat?: undefined;
+                title?: undefined;
+            } | {
+                key: string;
+                label: string;
+                metric: string;
+                fmt: string;
+                signMode: string;
+                beat: string;
+                agg: string;
+                title?: undefined;
+            } | {
+                key: string;
+                label: string;
+                metric: string;
+                fmt: string;
+                signMode: string;
+                title: string;
+                agg: string;
+                beat?: undefined;
+            } | {
+                key: string;
+                label: string;
+                title?: undefined;
+            } | {
+                key: string;
+                label: string;
+                title: string;
+            })[];
+            timeframeOptions(): any[];
+            runTypeOptions(): {
+                kind: any;
+                label: any;
+            }[];
+            filteredRuns(): unknown[];
+            sortedRuns(): unknown[];
+            selectedStrategy(): {} | null;
+            summaryCells(): {
+                key: string;
+                text: string;
+                sign: string;
+                title: string;
+            }[];
+        }, {
+            sortBy(key: any): void;
+            onStrategy(name: any): void;
+            indLabel(i: any): string;
+            metric(r: any, key: any): any;
+            runShape(r: any): any;
+            _truthy(raw: any): boolean;
+            fmtRatio(raw: any): string;
+            fmtPct(raw: any): string;
+            fmtMoney(raw: any): string;
+            cellText(r: any, c: any): string;
+            cellSign(r: any, c: any): "" | "pos" | "neg";
+            cellTitle(r: any, c: any): any;
+            fmtTime(ms: any): string;
+            fmtDate(ms: any): string;
+            _tfMs(tf: any): number;
+            _dataRange(r: any): {
+                s: number;
+                e: number;
+            };
+            barCount(r: any): {
+                n: number;
+                exact: boolean;
+            } | null;
+            fmtDuration(r: any): string;
+            durationTitle(r: any): "" | "Bar count estimated from the data span ÷ timeframe (exact bar_count not in the run summary)";
+        }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("refresh-strategies" | "update:filter" | "list-runs" | "inspect-strategy" | "select-run")[], "refresh-strategies" | "update:filter" | "list-runs" | "inspect-strategy" | "select-run", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+            strategies: {
+                type: ArrayConstructor;
+                default: () => never[];
+            };
+            runs: {
+                type: ArrayConstructor;
+                default: () => never[];
+            };
+            filters: {
+                type: ObjectConstructor;
+                default: () => {
+                    strategy: string;
+                    symbol: string;
+                    status: string;
+                };
+            };
+            selectedRun: {
+                type: ObjectConstructor;
+                default: null;
+            };
+            loading: {
+                type: BooleanConstructor;
+                default: boolean;
+            };
+            error: {
+                type: StringConstructor;
+                default: null;
+            };
+        }>> & Readonly<{
+            "onRefresh-strategies"?: ((...args: any[]) => any) | undefined;
+            "onUpdate:filter"?: ((...args: any[]) => any) | undefined;
+            "onList-runs"?: ((...args: any[]) => any) | undefined;
+            "onInspect-strategy"?: ((...args: any[]) => any) | undefined;
+            "onSelect-run"?: ((...args: any[]) => any) | undefined;
+        }>, {
+            error: string;
+            strategies: unknown[];
+            filters: Record<string, any>;
+            loading: boolean;
+            runs: unknown[];
+            selectedRun: Record<string, any>;
+        }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+        CorkyBacktestDetail: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
+            run: {
+                type: ObjectConstructor;
+                required: true;
+            };
+            detail: {
+                type: ObjectConstructor;
+                default: () => {};
+            };
+        }>, {}, {}, {
+            shape(): any;
+            chartable(): boolean;
+            showStudy(): boolean;
+            candidateCount(): number;
+            runIndex(): number | null;
+            metricDescriptors(): {};
+            metricGroups(): {
+                title: string;
+                cells: {
+                    key: any;
+                    label: any;
+                    value: string;
+                    raw: any;
+                    sign: string;
+                }[];
+            }[];
+            metricRows(): ({
+                type: string;
+                title: string;
+                cells?: undefined;
+                alt?: undefined;
+            } | {
+                type: string;
+                cells: {
+                    key: any;
+                    label: any;
+                    value: string;
+                    raw: any;
+                    sign: string;
+                }[];
+                alt: boolean;
+                title?: undefined;
+            })[];
+            metricColSpan(): number;
+            progress(): any;
+            progressLive(): boolean;
+            overviewLoading(): boolean;
+            plotBusy(): boolean;
+            plotted(): boolean;
+            trades(): any;
+            periodReturns(): any;
+        }, {
+            _truthy(raw: any): boolean;
+            formatMetric(raw: any, d: any): string;
+            signClass(dec: any): "" | "pos" | "neg";
+            pctText(dec: any): string;
+            fmtTime(ms: any): string;
+        }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("close" | "select-candidate" | "plot-run" | "select-trade")[], "close" | "select-candidate" | "plot-run" | "select-trade", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+            run: {
+                type: ObjectConstructor;
+                required: true;
+            };
+            detail: {
+                type: ObjectConstructor;
+                default: () => {};
+            };
+        }>> & Readonly<{
+            onClose?: ((...args: any[]) => any) | undefined;
+            "onSelect-candidate"?: ((...args: any[]) => any) | undefined;
+            "onPlot-run"?: ((...args: any[]) => any) | undefined;
+            "onSelect-trade"?: ((...args: any[]) => any) | undefined;
+        }>, {
+            detail: Record<string, any>;
+        }, {}, {
+            CorkyUniverseStudy: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
+                run: {
+                    type: ObjectConstructor;
+                    default: null;
+                };
+                artifact: {
+                    type: ObjectConstructor;
+                    default: null;
+                };
+                loading: {
+                    type: BooleanConstructor;
+                    default: boolean;
+                };
+                error: {
+                    type: StringConstructor;
+                    default: null;
+                };
+                chartable: {
+                    type: BooleanConstructor;
+                    default: boolean;
+                };
+                selectedRunIndex: {
+                    type: NumberConstructor;
+                    default: null;
+                };
+            }>, {}, {
+                expanded: number;
+                showRaw: boolean;
+            }, {
+                candidateCols(): ({
+                    key: string;
+                    label: string;
+                    fmt: string;
+                    names: string[];
+                    sign?: undefined;
+                } | {
+                    key: string;
+                    label: string;
+                    fmt: string;
+                    sign: boolean;
+                    names: string[];
+                })[];
+                perSymbolCols(): ({
+                    key: string;
+                    label: string;
+                    fmt: string;
+                    sign: boolean;
+                    names: string[];
+                } | {
+                    key: string;
+                    label: string;
+                    fmt: string;
+                    names: string[];
+                    sign?: undefined;
+                })[];
+                study(): any;
+                candidates(): {
+                    runIndex: any;
+                    params: any;
+                    perSymbol: {
+                        symbol: any;
+                    }[];
+                }[];
+                optMetaRows(): {
+                    key: string;
+                    label: string;
+                    value: string;
+                }[];
+                rawJson(): string;
+            }, {
+                onRowClick(cand: any, i: any): void;
+                _perSymbol(c: any): {
+                    symbol: any;
+                }[];
+                signOf(v: any): "" | "pos" | "neg";
+                fmtCell(v: any, col: any): string;
+                paramStr(params: any): string;
+            }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, "select-candidate"[], "select-candidate", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+                run: {
+                    type: ObjectConstructor;
+                    default: null;
+                };
+                artifact: {
+                    type: ObjectConstructor;
+                    default: null;
+                };
+                loading: {
+                    type: BooleanConstructor;
+                    default: boolean;
+                };
+                error: {
+                    type: StringConstructor;
+                    default: null;
+                };
+                chartable: {
+                    type: BooleanConstructor;
+                    default: boolean;
+                };
+                selectedRunIndex: {
+                    type: NumberConstructor;
+                    default: null;
+                };
+            }>> & Readonly<{
+                "onSelect-candidate"?: ((...args: any[]) => any) | undefined;
+            }>, {
+                error: string;
+                loading: boolean;
+                run: Record<string, any>;
+                artifact: Record<string, any>;
+                chartable: boolean;
+                selectedRunIndex: number;
+            }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+        }, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+    }, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
     PositionAuditDrawer: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
         open: {
             type: BooleanConstructor;
@@ -2173,7 +2783,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         fees(): any;
         feesText(): string;
     }, {
-        signClass(dec: any): "" | "neg" | "pos";
+        signClass(dec: any): "" | "pos" | "neg";
         sideClass(side: any): "" | "side-long" | "side-short";
         fmtTime(ms: any): string;
         feeKindLabel(kind: any): any;

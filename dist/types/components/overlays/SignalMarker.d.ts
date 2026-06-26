@@ -29,18 +29,20 @@ declare namespace _default {
         function meta_info(): {
             author: string;
             version: string;
+            desc: string;
         };
         function draw(ctx: any): void;
         function use_for(): string[];
-        function data_colors(): any[];
+        function legend(): never[];
     }
     namespace computed {
-        function line_width(): any;
         function color(): any;
-        function data_index(): any;
+        function band_color(): any;
+        function line_width(): number;
+        function glow_width(): number;
+        function dashed(): boolean;
+        function show_label(): boolean;
+        function new_font(): any;
     }
-    function data(): {
-        COLORS: string[];
-    };
 }
 export default _default;

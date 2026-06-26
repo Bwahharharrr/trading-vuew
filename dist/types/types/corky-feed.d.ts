@@ -20,7 +20,7 @@ export type RuntimeControlStatus = 'Accepted' | 'Rejected' | 'Applied' | 'Failed
 /** Detailed outcome of a state-control command (`StateControlOutcome`). */
 export type StateControlOutcome = 'applied_hot' | 'accepted_pending' | 'requires_restart' | 'noop' | 'rejected' | 'failed';
 /** Catalog of error codes the gateway may emit. */
-export type KnownErrorCode = 'unsupported_schema_version' | 'invalid_request_json' | 'state_not_found' | 'runtime_not_found' | 'invalid_control_command' | 'control_response_timeout' | 'control_receive_error' | 'historical_query_failed' | 'auth_position_history_unavailable' | 'auth_position_audit_unavailable' | 'stateful_websocket_required';
+export type KnownErrorCode = 'unsupported_schema_version' | 'invalid_request_json' | 'state_not_found' | 'runtime_not_found' | 'invalid_control_command' | 'control_response_timeout' | 'control_receive_error' | 'historical_query_failed' | 'auth_position_history_unavailable' | 'auth_position_audit_unavailable' | 'stateful_websocket_required' | 'backtest_artifacts_disabled' | 'strategy_not_found' | 'backtest_not_found' | 'backtest_artifact_not_ready' | 'invalid_backtest_request' | 'backtest_artifact_invalid' | 'backtest_store_unavailable';
 /**
  * An error code on the wire: a {@link KnownErrorCode} or any future string the
  * gateway may introduce.
@@ -345,6 +345,18 @@ export interface SubscribeCandlesCommand {
     indicators?: PublicIndicatorSpec[];
     /** Rows per historical chunk. Defaults to null (gateway chooses). */
     chunk_rows?: number | null;
+    /**
+     * `'summary'` → gateway returns the lightweight {@link SubscriptionAcceptedSummaryEvent}
+     * instead of the full {@link SubscriptionAcceptedEvent} descriptor (use discovery
+     * for descriptor metadata). Omitted → full `subscription_accepted` (back-compat).
+     */
+    ack_mode?: 'summary' | 'full';
+    /**
+     * `'columnar'` → historical rows arrive as compact {@link HistoricalChunkColumnarEvent}s
+     * instead of row-based {@link HistoricalChunkEvent}s. Omitted → row chunks
+     * (back-compat). Live updates are unchanged regardless.
+     */
+    historical_format?: 'columnar' | 'rows';
 }
 /** Stop live updates for a subscription (idempotent; runtime state stays). */
 export interface UnsubscribeCommand {
@@ -441,8 +453,185 @@ export interface SubscribeAuthPositionAuditCommand {
     /** Defaults to `true`. */
     include_trades?: boolean;
 }
+/** Comparison operator in a {@link SearchConditionCompare}. */
+export type SearchCompareOp = 'gt' | 'gte' | 'lt' | 'lte' | 'eq' | 'ne';
+/**
+ * A reference to one indicator output at a bar offset. `indicator` is the
+ * DISPLAY LABEL (e.g. `"MACD(12,26,9)"`, `"CRUP"`) — NOT the canonical kind.
+ */
+export interface SearchConditionField {
+    indicator: string;
+    field: string;
+    /** Bars back from the candidate bar; 0 = the bar itself. Default 0. */
+    bar_offset?: number;
+}
+/** Leaf predicate: `field <op> value`. */
+export interface SearchConditionCompare {
+    type: 'compare';
+    field: SearchConditionField;
+    op: SearchCompareOp;
+    value: number;
+}
+/** All child conditions must hold. */
+export interface SearchConditionAll {
+    type: 'all';
+    conditions: SearchCondition[];
+}
+/** Any child condition must hold. */
+export interface SearchConditionAny {
+    type: 'any';
+    conditions: SearchCondition[];
+}
+/** Alert-style condition tree evaluated per candidate bar (`SearchCondition`). */
+export type SearchCondition = SearchConditionCompare | SearchConditionAll | SearchConditionAny;
+/** The set of symbols a search scans. */
+export interface SearchSymbolSet {
+    type: 'symbols';
+    symbols: string[];
+}
+/**
+ * An indicator the gateway must COMPUTE for the search. The `indicators` array
+ * is REQUIRED and non-empty — omitting it makes the search accept then STALL
+ * (nothing is computed to match on). Mirrors a discovery descriptor's
+ * `{kind, timeframe, source, params}` (read those off {@link ChartIndicatorDescriptor}).
+ */
+export interface SearchIndicatorSpec {
+    kind: string;
+    timeframe?: Timeframe;
+    source?: string;
+    params?: Record<string, DecimalString>;
+}
+/** Bars to return on each side of a match (`SearchResultWindow`). */
+export interface SearchResultWindow {
+    before_bars: number;
+    after_bars: number;
+}
+/**
+ * Barrier Symmetric target-enrichment spec (`SearchBarrierSymmetricTargetSpec`).
+ * All fields optional — the runtime applies documented defaults. This requests a
+ * forward target/stop plan + (when matured) outcome attached to matched rows; it
+ * is NOT a causal indicator and must never be referenced by a `condition`.
+ */
+export interface SearchBarrierSymmetricTargetSpec {
+    timeframe?: Timeframe | null;
+    window_fwd?: number;
+    window_atr?: number;
+    /** Take-profit ATR multiple (default 0.9). */
+    k_take?: number;
+    /** Stop ATR multiple (default = k_take). */
+    k_stop?: number | null;
+    fees_bps?: number;
+    slippage_bps?: number;
+    half_spread_bps?: number;
+    giveback_eps_bps?: number;
+    post_hit_stop_relax_bps?: number;
+    timeout_requires_final?: boolean;
+    /** e.g. `'stop'`. */
+    post_hit_policy?: string;
+    guard_use_close?: boolean;
+    guard_min_consecutive_closes?: number;
+    version?: number;
+}
+/** A tagged target-enrichment spec for {@link SearchQuery.target_specs}. */
+export interface SearchTargetSpec {
+    type: 'barrier_symmetric';
+    spec: SearchBarrierSymmetricTargetSpec;
+}
+/** The full query carried by a {@link SearchCandlesCommand}. */
+export interface SearchQuery {
+    /** Caller-minted, unique; echoed on every event as `event.search_id`. */
+    search_id: string;
+    venue: string;
+    symbols: SearchSymbolSet;
+    /** Reuses the subscribe range shapes (latest / start_end / since_inception). */
+    range: ChartHistoryRange;
+    timeframes: Timeframe[];
+    /** Indicators to compute; REQUIRED and non-empty (see {@link SearchIndicatorSpec}). */
+    indicators: SearchIndicatorSpec[];
+    condition: SearchCondition;
+    result_window?: SearchResultWindow;
+    /** Cap on returned matches; the gateway stops scanning once reached. */
+    max_results?: number;
+    /**
+     * Optional result ENRICHMENT (Barrier Symmetric plans/outcomes). Does NOT
+     * change which rows match — plans/outcomes are attached to rows that already
+     * satisfied the causal `condition`. (Alias on the wire: `outcome_specs`.)
+     */
+    target_specs?: SearchTargetSpec[];
+}
+/** Start a historical indicator search (streamed, keyed by `query.search_id`). */
+export interface SearchCandlesCommand {
+    type: 'search_candles';
+    query: SearchQuery;
+}
+/** Cancel an in-flight search by its `search_id`. */
+export interface CancelSearchCommand {
+    type: 'cancel_search';
+    search_id: string;
+}
+export type BacktestRunStatus = 'queued' | 'running' | 'completed' | 'failed';
+/** List available strategies. */
+export interface ListStrategiesCommand {
+    type: 'list_strategies';
+}
+/** Inspect one strategy by `name`. */
+export interface GetStrategyCommand {
+    type: 'get_strategy';
+    strategy: string;
+}
+/** List backtest runs; all filters optional. */
+export interface ListBacktestRunsCommand {
+    type: 'list_backtest_runs';
+    strategy?: string;
+    symbol?: string;
+    venue?: string;
+    status?: BacktestRunStatus;
+}
+/** Raw pass-through artifact for a run (advanced details). */
+export interface GetBacktestRunCommand {
+    type: 'get_backtest_run';
+    run_id: string;
+}
+/** One-shot progress snapshot for a run. */
+export interface GetBacktestProgressCommand {
+    type: 'get_backtest_progress';
+    run_id: string;
+}
+/** Stream live progress for a run (full event list each update). */
+export interface SubscribeBacktestProgressCommand {
+    type: 'subscribe_backtest_progress';
+    subscription_id: string;
+    run_id: string;
+}
+/** Per-trade chart windows + markers for a run. */
+export interface GetBacktestChartOverlaysCommand {
+    type: 'get_backtest_chart_overlays';
+    run_id: string;
+    timeframe?: Timeframe;
+    before_bars?: number;
+    after_bars?: number;
+    /** Inclusive window: only trades whose timestamp_ms ∈ [start_ms, end_ms]. */
+    start_ms?: TimestampMs;
+    end_ms?: TimestampMs;
+    /** Parameter-sweep run selector. */
+    run_index?: number | null;
+    /** Walk-forward fold selector. */
+    fold_index?: number | null;
+}
+/** Normalized report/account overlays for a run. */
+export interface GetBacktestReportOverlaysCommand {
+    type: 'get_backtest_report_overlays';
+    run_id: string;
+    /** Inclusive window filter (trades/equity/levels/period-returns intersecting). */
+    start_ms?: TimestampMs;
+    end_ms?: TimestampMs;
+    /** Downsample equity_curve to at most this many points (no interpolation). */
+    max_points?: number;
+    run_index?: number | null;
+    fold_index?: number | null;
+}
 /** Discriminated union of client commands (`ChartClientCommand`). */
-export type ChartClientCommand = ListCandleStatesCommand | SubscribeCandlesCommand | UnsubscribeCommand | UpsertCandleStateCommand | PatchCandleStateCommand | ListAuthPositionsCommand | SubscribeAuthPositionsCommand | ListAuthPositionHistoryCommand | GetAuthPositionAuditCommand | SubscribeAuthPositionAuditCommand;
+export type ChartClientCommand = ListCandleStatesCommand | SubscribeCandlesCommand | UnsubscribeCommand | UpsertCandleStateCommand | PatchCandleStateCommand | ListAuthPositionsCommand | SubscribeAuthPositionsCommand | ListAuthPositionHistoryCommand | GetAuthPositionAuditCommand | SubscribeAuthPositionAuditCommand | SearchCandlesCommand | CancelSearchCommand | ListStrategiesCommand | GetStrategyCommand | ListBacktestRunsCommand | GetBacktestRunCommand | GetBacktestProgressCommand | SubscribeBacktestProgressCommand | GetBacktestChartOverlaysCommand | GetBacktestReportOverlaysCommand;
 /** Discriminant of {@link ChartClientCommand}. */
 export type ChartClientCommandType = ChartClientCommand['type'];
 /** The envelope every client → gateway message is wrapped in. */
@@ -463,6 +652,22 @@ export interface SubscriptionAcceptedEvent {
     type: 'subscription_accepted';
     subscription_id: string;
     state: ChartCandleStateDescriptor;
+    timeframe: Timeframe;
+    range: ChartHistoryRange;
+}
+/**
+ * Lightweight accept (when `ack_mode:'summary'`): identity + served range only,
+ * WITHOUT the full {@link ChartCandleStateDescriptor}. Read descriptor metadata
+ * from discovery / `list_candle_states` instead.
+ */
+export interface SubscriptionAcceptedSummaryEvent {
+    type: 'subscription_accepted_summary';
+    subscription_id: string;
+    runtime_id: string;
+    state_id: string;
+    venue: string;
+    symbol: string;
+    funding_period?: string | null;
     timeframe: Timeframe;
     range: ChartHistoryRange;
 }
@@ -492,6 +697,32 @@ export interface HistoricalChunkEvent {
     chunk_index: number;
     timeframe: Timeframe;
     rows: ChartCandleRow[];
+}
+/**
+ * Columnar form of {@link HistoricalChunkEvent} (when `historical_format:'columnar'`).
+ * Parallel arrays indexed `[i]`; reconstruct a {@link ChartCandleRow} per `i`.
+ * A `null` indicator field value means that field is absent for that row.
+ * Decimal columns (OHLCV + indicator fields) are {@link DecimalString}s.
+ */
+export interface HistoricalChunkColumnarEvent {
+    type: 'historical_chunk_columnar';
+    subscription_id: string;
+    chunk_index: number;
+    timeframe: Timeframe;
+    columns: {
+        timestamp_ms: TimestampMs[];
+        open: DecimalString[];
+        high: DecimalString[];
+        low: DecimalString[];
+        close: DecimalString[];
+        volume: DecimalString[];
+        status?: string[];
+        source?: string[];
+        updated_at_ms?: (TimestampMs | null)[];
+        confirmed_at_ms?: (TimestampMs | null)[];
+        /** `indicators[display_label][field][i]` → value (or null = absent). */
+        indicators?: Record<string, Record<string, (DecimalString | null)[]>>;
+    };
 }
 /** Terminal historical event: backfill is done, live updates follow. */
 export interface HistoricalCompleteEvent {
@@ -566,8 +797,370 @@ export interface AuthPositionAuditUpdateEvent {
     sequence: number;
     audit: ChartAuthPositionAudit;
 }
+/** A single field comparison the gateway evaluated to produce a match. */
+export interface SearchObservation {
+    indicator: string;
+    field: string;
+    bar_offset: number;
+    value: number;
+}
+/** Detection-box context attached to a CRUP-style match (`crup_context`). */
+export interface SearchCrupContext {
+    anchor_timeframe: Timeframe;
+    bull_confluence_timeframe_count: number;
+    bear_confluence_timeframe_count: number;
+    detection_box_timeframes: Array<{
+        timeframe: Timeframe;
+        side: string;
+        box_count: number;
+    }>;
+}
+/** The chart window to load when the user opens a match (`chart_window`). */
+export interface SearchChartWindow {
+    timeframe: Timeframe;
+    start_ms: TimestampMs;
+    end_ms: TimestampMs;
+    before_bars: number;
+    after_bars: number;
+}
+/**
+ * Causal Barrier Symmetric PLAN for a matched row (`SearchBarrierSymmetricPlan`):
+ * chartable forward target/stop levels computed from data up to the row. Prices
+ * are {@link DecimalString}s. Band prices may be absent when ATR can't be formed.
+ */
+export interface SearchBarrierSymmetricPlan {
+    kind: 'BARRIER_SYMMETRIC';
+    target_spec_hash: string;
+    timeframe: Timeframe;
+    window_fwd: number;
+    window_atr: number;
+    k_take: number;
+    k_stop: number;
+    fees_bps: number;
+    slippage_bps: number;
+    half_spread_bps: number;
+    entry_price: DecimalString;
+    atr?: DecimalString;
+    atr_pct?: DecimalString;
+    sigma_log?: DecimalString;
+    cost_log?: DecimalString;
+    take_up_price?: DecimalString;
+    stop_up_price?: DecimalString;
+    take_dn_price?: DecimalString;
+    stop_dn_price?: DecimalString;
+    reward_risk_ratio?: number;
+    expiry_timestamp_ms?: TimestampMs;
+    /** When false, the outcome can't mature yet — render pending, NOT a miss. */
+    evaluable_outcome: boolean;
+}
+/** Matured Barrier Symmetric OUTCOME (`SearchBarrierSymmetricOutcome`), optional. */
+export interface SearchBarrierSymmetricOutcome {
+    target_spec_hash: string;
+    matured_at_ms: TimestampMs;
+    evaluable_outcome: boolean;
+    bull_hit: boolean;
+    bear_hit: boolean;
+    strength_up?: number | null;
+    strength_dn?: number | null;
+    mae_up?: number | null;
+    mae_dn?: number | null;
+    time_up?: number | null;
+    time_dn?: number | null;
+    quality_up?: number | null;
+    quality_dn?: number | null;
+}
+/** Cohort analytics for the spec (`SearchBarrierSymmetricAnalyticsSummary`), optional. */
+export interface SearchBarrierSymmetricAnalyticsSummary {
+    target_spec_hash: string;
+    sample_count: number;
+    bull_hit_count: number;
+    bear_hit_count: number;
+    bull_hit_rate?: number;
+    bear_hit_rate?: number;
+    bull_wilson_lower_bound?: number;
+    bear_wilson_lower_bound?: number;
+    reward_risk_ratio?: number;
+    bull_expected_value?: number;
+    bear_expected_value?: number;
+    bull_full_kelly?: number;
+    bear_full_kelly?: number;
+}
+/** Barrier Symmetric evaluation attached to a match (`SearchBarrierSymmetricEvaluation`). */
+export interface SearchBarrierSymmetricEvaluation {
+    target_spec_hash: string;
+    plan: SearchBarrierSymmetricPlan;
+    outcome?: SearchBarrierSymmetricOutcome | null;
+    analytics_summary?: SearchBarrierSymmetricAnalyticsSummary | null;
+}
+/** One entry of {@link SearchMatchResult.target_evaluations}. */
+export interface SearchTargetEvaluation {
+    type: 'barrier_symmetric';
+    evaluation: SearchBarrierSymmetricEvaluation;
+}
+/** A matched bar carried by {@link SearchMatchEvent} (`result`). */
+export interface SearchMatchResult {
+    venue: string;
+    symbol: string;
+    timeframe: Timeframe;
+    timestamp_ms: TimestampMs;
+    candle: CandleSnapshot;
+    /** Indicator outputs at the match bar, keyed by DISPLAY LABEL. */
+    indicators: RowIndicators;
+    observations: SearchObservation[];
+    /** `bull` / `bear` / `neutral` (open string). */
+    side: string;
+    crup_context?: SearchCrupContext | null;
+    chart_window: SearchChartWindow;
+    /** Target enrichment requested via {@link SearchQuery.target_specs}. */
+    target_evaluations?: SearchTargetEvaluation[];
+}
+/** First event after `search_candles`: the query was accepted, the scan begins. */
+export interface SearchAcceptedEvent {
+    type: 'search_accepted';
+    search_id: string;
+    venue: string;
+    symbols: string[];
+    timeframes: Timeframe[];
+    range: HistoricalCandleRange;
+    result_window?: SearchResultWindow;
+}
+/** Progress during a search scan. */
+export interface SearchProgressEvent {
+    type: 'search_progress';
+    search_id: string;
+    phase: string;
+    current: number;
+    total?: number | null;
+    message?: string;
+}
+/** One bar that satisfied the condition; apply in `sequence` order. */
+export interface SearchMatchEvent {
+    type: 'search_match';
+    search_id: string;
+    sequence: number;
+    result: SearchMatchResult;
+}
+/** Terminal: the scan finished (possibly with 0 matches). */
+export interface SearchCompleteEvent {
+    type: 'search_complete';
+    search_id: string;
+    matches: number;
+    scanned_rows: number;
+    symbols: string[];
+    timeframes: Timeframe[];
+}
+/** Terminal: the search was cancelled (`cancel_search` / tab close). */
+export interface SearchCancelledEvent {
+    type: 'search_cancelled';
+    search_id: string;
+    /** Matches emitted before cancellation, when reported. */
+    matches?: number;
+}
+/** Terminal: the search failed; any partial matches already streamed are kept. */
+export interface SearchFailedEvent {
+    type: 'search_failed';
+    search_id: string;
+    code?: ErrorCode;
+    message?: string;
+    /** The gateway puts the human-readable failure detail here (code/message may be absent). */
+    error?: string;
+}
+/** One tunable strategy parameter (`ChartStrategyParameterDescriptor`). */
+export interface ChartStrategyParameterDescriptor {
+    name: string;
+    /** e.g. `'integer'` | `'decimal'`. */
+    type: string;
+    /** Default value — decimal params are {@link DecimalString}; may be null. */
+    default_value?: DecimalString | number | null;
+    recommended_sweep?: {
+        start: DecimalString | number;
+        step: DecimalString | number;
+        end: DecimalString | number;
+    } | null;
+    description?: string | null;
+}
+/** A strategy descriptor (`ChartStrategyDescriptor`). */
+export interface ChartStrategyDescriptor {
+    schema_version?: SchemaVersion;
+    name: string;
+    display_name: string;
+    default_trade_timeframe: Timeframe;
+    default_context_timeframes: Timeframe[];
+    /** `{kind, timeframe, source, params}` — same shape as a search indicator. */
+    default_indicators: SearchIndicatorSpec[];
+    parameters: ChartStrategyParameterDescriptor[];
+}
+/** A backtest run summary row (`ChartBacktestRunSummary`). */
+export interface ChartBacktestRunSummary {
+    run_id: string;
+    strategy: string;
+    venue: string;
+    symbols: string[];
+    trade_timeframe: Timeframe;
+    status: BacktestRunStatus;
+    started_at_ms?: TimestampMs;
+    completed_at_ms?: TimestampMs | null;
+    /** Decimal-string (or numeric) metric values keyed by name. */
+    metrics?: Record<string, DecimalString | number>;
+}
+/** One progress event item (`ChartBacktestProgressEvent`). */
+export interface ChartBacktestProgressItem {
+    run_id: string;
+    kind: 'accepted' | 'progress' | 'completed' | 'failed';
+    completed_steps?: number;
+    total_steps?: number;
+    message?: string;
+}
+/** A backtest trade marker (`ChartBacktestTradeOverlay`). Decimals as strings. */
+export interface ChartBacktestTradeOverlay {
+    symbol: string;
+    timestamp_ms: TimestampMs;
+    /** `'Buy'` | `'Sell'`. */
+    side: string;
+    quantity: DecimalString;
+    price: DecimalString;
+    fee?: DecimalString;
+}
+/** A stop-loss / take-profit level with lifecycle (`ChartBacktestPriceLevelOverlay`). */
+export interface ChartBacktestPriceLevelOverlay {
+    symbol: string;
+    /** e.g. `'stop_loss'` | `'take_profit'`. */
+    kind: string;
+    side: string;
+    price: DecimalString;
+    quantity?: DecimalString;
+    activated_at_ms?: TimestampMs | null;
+    cleared_at_ms?: TimestampMs | null;
+    triggered_at_ms?: TimestampMs | null;
+}
+/** One account/equity-curve sample (`ChartBacktestEquityCurvePoint`). Decimals as strings. */
+export interface ChartBacktestEquityCurvePoint {
+    timestamp_ms: TimestampMs;
+    equity: DecimalString;
+    cash: DecimalString;
+    position_quantity: DecimalString;
+    drawdown: DecimalString;
+    drawdown_pct?: DecimalString | null;
+}
+/**
+ * Formatting metadata for a run metric (`ChartBacktestMetricDescriptor`). `unit`
+ * tells the UI how to render the decimal-string value. IMPORTANT: `percent`
+ * values are decimal FRACTIONS (`"0.32"` = 32%).
+ */
+export interface ChartBacktestMetricDescriptor {
+    name: string;
+    unit: 'currency' | 'ratio' | 'percent' | 'count' | 'quantity' | 'boolean' | 'bps' | (string & {});
+    precision?: number;
+    description?: string;
+}
+/** A period-return row (`ChartBacktestPeriodReturn`). Decimals as strings. */
+export interface ChartBacktestPeriodReturn {
+    period: string;
+    start_ts_ms: TimestampMs;
+    end_ts_ms: TimestampMs;
+    starting_equity: DecimalString;
+    ending_equity: DecimalString;
+    return_amount: DecimalString;
+    return_pct: DecimalString;
+}
+/**
+ * An indicator-style plot descriptor for an account series
+ * (`ChartBacktestSeriesDescriptor`) — same descriptor-driven plotting as
+ * indicator `view.layers`.
+ */
+export interface ChartBacktestSeriesDescriptor {
+    id: string;
+    display_name: string;
+    /** e.g. `'line'` | `'histogram'`. */
+    kind: string;
+    fields: string[];
+    target: {
+        surface: string;
+        pane?: string;
+    };
+    style?: Record<string, unknown>;
+    visible_by_default?: boolean;
+}
+/** A trade + its chart window (`ChartBacktestTradeChartOverlay`). */
+export interface ChartBacktestTradeChartOverlay {
+    trade: ChartBacktestTradeOverlay;
+    chart_window: {
+        venue: string;
+        symbol: string;
+        timeframe: Timeframe;
+        anchor_timestamp_ms?: TimestampMs;
+        start_ms: TimestampMs;
+        end_ms: TimestampMs;
+        before_bars?: number;
+        after_bars?: number;
+    };
+}
+/** Response to `list_strategies`. */
+export interface StrategiesEvent {
+    type: 'strategies';
+    strategies: ChartStrategyDescriptor[];
+}
+/** Response to `get_strategy`. */
+export interface StrategyEvent {
+    type: 'strategy';
+    strategy: ChartStrategyDescriptor;
+}
+/** Response to `list_backtest_runs`. */
+export interface BacktestRunsEvent {
+    type: 'backtest_runs';
+    runs: ChartBacktestRunSummary[];
+}
+/** Response to `get_backtest_run`: `artifact` is PASS-THROUGH JSON (feature-detect). */
+export interface BacktestRunEvent {
+    type: 'backtest_run';
+    run_id: string;
+    artifact: unknown;
+}
+/** Response to `get_backtest_progress` (one-shot). */
+export interface BacktestProgressEvent {
+    type: 'backtest_progress';
+    run_id: string;
+    events: ChartBacktestProgressItem[];
+}
+/**
+ * Streamed progress for `subscribe_backtest_progress`. Each update carries the
+ * FULL current event list; apply per `subscription_id` by increasing `sequence`.
+ */
+export interface BacktestProgressUpdateEvent {
+    type: 'backtest_progress_update';
+    subscription_id: string;
+    sequence: number;
+    run_id: string;
+    events: ChartBacktestProgressItem[];
+}
+/** Response to `get_backtest_chart_overlays`. */
+export interface BacktestChartOverlaysEvent {
+    type: 'backtest_chart_overlays';
+    run_id: string;
+    parameter_run_index?: number | null;
+    fold_index?: number | null;
+    venue: string;
+    timeframe: Timeframe;
+    overlays: ChartBacktestTradeChartOverlay[];
+}
+/** Response to `get_backtest_report_overlays`. */
+export interface BacktestReportOverlaysEvent {
+    type: 'backtest_report_overlays';
+    run_id: string;
+    parameter_run_index?: number | null;
+    fold_index?: number | null;
+    venue: string;
+    trade_timeframe: Timeframe;
+    trades: ChartBacktestTradeOverlay[];
+    price_levels: ChartBacktestPriceLevelOverlay[];
+    equity_curve: ChartBacktestEquityCurvePoint[];
+    period_returns: ChartBacktestPeriodReturn[];
+    series_descriptors: ChartBacktestSeriesDescriptor[];
+    /** Formatting metadata for run metrics (see {@link ChartBacktestMetricDescriptor}). */
+    metric_descriptors?: ChartBacktestMetricDescriptor[];
+}
 /** Discriminated union of gateway event payloads (`ChartFeedEventKind`). */
-export type ChartFeedEventKind = CandleStatesEvent | SubscriptionAcceptedEvent | HistoricalAckEvent | HistoricalProgressEvent | HistoricalChunkEvent | HistoricalCompleteEvent | LiveUpdateEvent | ControlAckEvent | ErrorEvent | AuthPositionsEvent | AuthPositionsUpdateEvent | AuthPositionHistoryEvent | AuthPositionAuditEvent | AuthPositionAuditUpdateEvent;
+export type ChartFeedEventKind = CandleStatesEvent | SubscriptionAcceptedEvent | SubscriptionAcceptedSummaryEvent | HistoricalAckEvent | HistoricalProgressEvent | HistoricalChunkEvent | HistoricalChunkColumnarEvent | HistoricalCompleteEvent | LiveUpdateEvent | ControlAckEvent | ErrorEvent | AuthPositionsEvent | AuthPositionsUpdateEvent | AuthPositionHistoryEvent | AuthPositionAuditEvent | AuthPositionAuditUpdateEvent | SearchAcceptedEvent | SearchProgressEvent | SearchMatchEvent | SearchCompleteEvent | SearchCancelledEvent | SearchFailedEvent | StrategiesEvent | StrategyEvent | BacktestRunsEvent | BacktestRunEvent | BacktestProgressEvent | BacktestProgressUpdateEvent | BacktestChartOverlaysEvent | BacktestReportOverlaysEvent;
 /** Discriminant of {@link ChartFeedEventKind}. */
 export type ChartFeedEventType = ChartFeedEventKind['type'];
 /** The envelope every gateway → client message is wrapped in. */

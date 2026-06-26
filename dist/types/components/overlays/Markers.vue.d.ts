@@ -7,7 +7,10 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {}, {
     marker_size(): number;
     line_width(): number;
     shape(): any;
+    marker_rule(): any;
+    glyph_font(): string;
     show_label(): boolean;
+    marker_show_label(): boolean;
     label_color(): any;
     new_font(): any;
 }, {
@@ -17,6 +20,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {}, {
         desc: string;
     };
     draw(ctx: any): void;
+    draw_symbol_markers(ctx: any, layout: any, data: any, r: any): void;
     draw_marker(ctx: any, x: any, y: any, r: any): void;
     use_for(): string[];
     legend(values: any): ({
