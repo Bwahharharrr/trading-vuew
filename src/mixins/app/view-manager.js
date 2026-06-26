@@ -1,5 +1,6 @@
 // View management mixin - handles view selection and candle coloring
 
+import { markRaw } from 'vue'
 import Utils from '../../stuff/utils.js'
 
 export default {
@@ -117,8 +118,12 @@ export default {
                 }
             }
 
-            // Update the chart candle data
-            this.chart.data.chart.data = newData
+            // Update the chart candle data. vr-3 Strategy B: this REPLACES the
+            // live OHLCV ROW array (file-mode coloring/view switch). Wrap it
+            // non-reactive (markRaw) AT REPLACEMENT so later live-tick fast_merge
+            // upserts can't re-proxy the rows; redraw stays revision-driven via
+            // touchData below. Row array only — chart object/container untouched.
+            this.chart.data.chart.data = markRaw(newData)
             this.chart.touchData()
 
             // Handle view-specific offchart indicators

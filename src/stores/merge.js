@@ -7,6 +7,8 @@
 // of src/stores/query.js. DataCube delegates to it byte-identically (the
 // Phase 1 DataCube golden masters' merge_ts matrix is the guarantee).
 
+import { markRaw } from 'vue'
+
 /** Reactive object merge: assign over a fresh object so Vue sees the change. */
 export function mergeObjects(obj, data, new_obj = {}) {
     Object.assign(new_obj, obj.v)
@@ -121,15 +123,18 @@ export function mergeTs(obj, data) {
         data.splice(...d2)
 
         if (!obj.v.length && !data.length) {
-            obj.p[obj.i] = od
+            // vr-3 Strategy B: the merged ROW array stored back into the cube is
+            // non-reactive (markRaw) so later in-place upserts can't re-proxy it.
+            // markRaw is shallow + idempotent (od/obj.v are already-raw rows).
+            obj.p[obj.i] = markRaw(od)
             return obj.v
         }
         if (!data.length) { data = obj.v.splice(d1[0]) }
         if (!obj.v.length) { obj.v = data.splice(d2[0]) }
 
-        obj.p[obj.i] = combine(obj.v, od, data)
+        obj.p[obj.i] = markRaw(combine(obj.v, od, data))
     } else {
-        obj.p[obj.i] = combine(obj.v, [], data)
+        obj.p[obj.i] = markRaw(combine(obj.v, [], data))
     }
 
     return obj.v

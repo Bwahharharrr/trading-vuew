@@ -1,6 +1,7 @@
 
 // DataCube event handlers
 
+import { markRaw } from 'vue'
 import Utils from '../stuff/utils.js'
 import Icons from '../stuff/icons.json'
 import WebWork from './script_ww_api.js'
@@ -500,7 +501,11 @@ export default class DCEvents {
             if (obj) {
                 obj['loading'] = false
                 if (!ov.data) continue
-                obj.data = ov.data
+                // vr-3 Strategy B: the script-worker's fresh overlay ROW array
+                // is non-reactive (markRaw) so the in-place fast_merge upserts in
+                // on_overlay_update can't re-proxy it. Row array only — the
+                // overlay OBJECT + container stay reactive.
+                obj.data = Array.isArray(ov.data) ? markRaw(ov.data) : ov.data
             }
             if (!ov.new_ovs) continue
             for (let id in ov.new_ovs.onchart) {

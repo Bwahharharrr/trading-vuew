@@ -13,6 +13,7 @@
 //   OHLCV:    [ts, open, high, low, close, volume]  (numbers, ascending ts)
 //   overlay:  { name, type, data:[[ts, value], ...] }
 
+import { markRaw } from 'vue'
 import {
   indicatorPlacement, layerKindToOverlay, styleToSettings, candleColorOf, candleColorOpts,
   signedSlopeColor, candleColorPalette, paletteColorOf, paletteLabelOf,
@@ -121,7 +122,7 @@ export function pivotIndicators(rows) {
         const key = instanceKey + '.' + output
         let series = byKey.get(key)
         if (!series) {
-          series = { key, instanceKey, output, data: [], raw: [] }
+          series = { key, instanceKey, output, data: markRaw([]), raw: markRaw([]) }
           byKey.set(key, series)
           order.push(key)
         }
@@ -203,9 +204,9 @@ function zipFields(fields, outputsMap) {
   // column when a non-final declared field is absent from history.
   const survivors = fields.filter((f) => outputsMap.get(f))
   const series = survivors.map((f) => outputsMap.get(f))
-  if (!series.length) return { data: [], raw: [], fields: [] }
+  if (!series.length) return { data: markRaw([]), raw: markRaw([]), fields: [] }
   if (series.length === 1) {
-    return { data: series[0].data.map((d) => d.slice()), raw: series[0].raw.map((d) => d.slice()), fields: survivors }
+    return { data: markRaw(series[0].data.map((d) => d.slice())), raw: markRaw(series[0].raw.map((d) => d.slice())), fields: survivors }
   }
   const byTs = new Map(); const rawByTs = new Map()
   series.forEach((s, col) => {
@@ -216,7 +217,7 @@ function zipFields(fields, outputsMap) {
   if (!isAscending(tss)) tss.sort((a, b) => a - b)
   const data = tss.map((ts) => [ts, ...series.map((_, c) => { const v = byTs.get(ts)[c]; return v == null ? null : v })])
   const raw = tss.map((ts) => [ts, ...series.map((_, c) => { const v = (rawByTs.get(ts) || [])[c]; return v == null ? null : v })])
-  return { data, raw, fields: survivors }
+  return { data: markRaw(data), raw: markRaw(raw), fields: survivors }
 }
 
 // Build [ts, value, color] for a `signed_slope_histogram` layer. Colour per bar
@@ -248,7 +249,7 @@ function buildSignedSlopeHistogram(layer, fields, outputsMap) {
     raw.push([ts, vRaw[k] ? vRaw[k][1] : null])
     prev = value
   }
-  return { data, raw, valueField, slopeField, colors }
+  return { data: markRaw(data), raw: markRaw(raw), valueField, slopeField, colors }
 }
 
 // ── detection-zone boxes (box_rule: detection_zone_until_close_breaks) ─────
@@ -434,7 +435,7 @@ export function buildSymbolMarkers(rule, outputsMap, ohlcv) {
     data.push([ts, Number(y), label, m.glyph, m.color, above ? 'above' : 'below'])
     raw.push([ts, rawVal])
   }
-  return { data, raw }
+  return { data: markRaw(data), raw: markRaw(raw) }
 }
 
 // Build overlays for ONE indicator instance from its view.layers. Returns
@@ -454,7 +455,7 @@ export function buildLayerOverlays(instanceKey, kind, outputsMap, view, paneReso
         const overlay = {
           name: layer.label || layer.id,
           type: 'Zones',
-          data: [],   // long-lived rects live in settings.zones (index-0 time
+          data: markRaw([]),   // long-lived rects live in settings.zones (index-0 time
                       // filtering would clip boxes anchored left of the view)
           settings: {
             corkyKey: instanceKey + '#' + layer.id,
@@ -468,7 +469,7 @@ export function buildLayerOverlays(instanceKey, kind, outputsMap, view, paneReso
             'z-index': -1,   // behind the candles
             zones: detectionBoxRows(builtBoxes.boxes, boxRule),
           },
-          raw: [],
+          raw: markRaw([]),
         }
         onchart.push(overlay)   // price surface
         // A layer is GROUPED (MTF) when its source bar is coarser than the chart's
@@ -679,9 +680,9 @@ export function buildChartData(rows, opts = {}) {
       name:
         s.output === kind || s.output === s.instanceKey ? s.instanceKey : s.key,
       type: overlayType,
-      data: s.data,
+      data: markRaw(s.data),
       settings: { corkyKey: s.key, corkyKind: kind, corkyOutput: s.output },
-      raw: s.raw,
+      raw: markRaw(s.raw),
     }
     if (pane === 'onchart') onchart.push(overlay)
     else offchart.push(overlay)
@@ -705,7 +706,7 @@ export function buildChartData(rows, opts = {}) {
   }
 
   const result = {
-    chart: { type: 'Candles', data: ohlcv },
+    chart: { type: 'Candles', data: markRaw(ohlcv) },
     onchart,
     offchart,
   }

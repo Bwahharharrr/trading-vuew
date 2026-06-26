@@ -2,6 +2,7 @@
 // DataCube "private" methods
 // Optimized for Vue 3: reduced Vue instance coupling
 
+import { markRaw } from 'vue'
 import Utils from '../stuff/utils.js'
 import DCEvents from './dc_events.js'
 import Dataset from './dataset.js'
@@ -88,7 +89,11 @@ export default class DCCore extends DCEvents {
         if (!('chart' in this.data)) {
             this.data['chart'] = {
                 type: 'Candles',
-                data: this.data.ohlcv || []
+                // vr-3 Strategy B: the OHLCV ROW array is non-reactive (markRaw)
+                // to drop ~6N row proxies. Redraw is revision-driven (cd.invalidate
+                // via touchData), not deep reactivity, so this is observationally
+                // identical. The chart OBJECT + container arrays stay reactive.
+                data: markRaw(this.data.ohlcv || [])
             }
         }
 
@@ -121,6 +126,23 @@ export default class DCCore extends DCEvents {
             if (!this.dss) this.dss = {}
             this.dss[ds.id] = new Dataset(this, ds)
         }
+
+        // vr-3 Strategy B: mark the inner ROW arrays non-reactive (markRaw) on the
+        // BOOTSTRAP path. When the caller constructs `new DataCube({chart:{data},
+        // onchart:[{data,raw}], offchart:[...]})`, the per-field guards above SKIP
+        // creating chart.data, so those caller arrays were never wrapped. Walk them
+        // once here. markRaw is shallow + idempotent (re-wrapping the already-raw
+        // chart.data from the create site above is a no-op). The cube root, chart
+        // object, onchart/offchart CONTAINER arrays, and settings stay reactive —
+        // only the OHLCV/overlay ROW arrays are wrapped.
+        const rawRows = (obj) => {
+            if (!obj) return
+            if (Array.isArray(obj.data)) obj.data = markRaw(obj.data)
+            if (Array.isArray(obj.raw)) obj.raw = markRaw(obj.raw)
+        }
+        rawRows(this.data.chart)
+        for (let ov of this.data.onchart) rawRows(ov)
+        for (let ov of this.data.offchart) rawRows(ov)
 
         // Typed UI-state facade (Phase 3.1 data/UI seam). Backed by `this.data`
         // so reactivity and existing `this.data.tool` readers are unaffected;

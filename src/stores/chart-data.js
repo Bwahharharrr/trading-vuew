@@ -14,7 +14,7 @@
 // the closure-held ref below. The in-place OHLCV mutation BODY (fast_merge)
 // still lives on DCCore and simply calls touchData() -> cd.invalidate().
 
-import { ref } from 'vue'
+import { ref, markRaw } from 'vue'
 import { getByQuery } from './query.js'
 import { mergeTs, mergeObjects } from './merge.js'
 
@@ -57,7 +57,11 @@ export default class ChartData {
         let objects = this.query(query)
         for (var obj of objects) {
             let i = obj.i !== undefined ? obj.i : obj.p.indexOf(obj.v)
-            if (i !== -1) obj.p[i] = data
+            // vr-3 Strategy B: a row array set into the cube is non-reactive
+            // (markRaw) so a later in-place push can't re-proxy it. markRaw is
+            // shallow + idempotent (forwarding an already-raw array is a no-op);
+            // non-array slots (set can target object fields) pass through.
+            if (i !== -1) obj.p[i] = Array.isArray(data) ? markRaw(data) : data
         }
         this._ctx.updateIds()
     }
@@ -103,6 +107,16 @@ export default class ChartData {
 
     add(side, overlay) {
         if (side !== 'onchart' && side !== 'offchart' && side !== 'datasets') return
+        // vr-3 Strategy B: an overlay added at runtime carries fresh ROW arrays
+        // (.data/.raw). Wrap them non-reactive (markRaw) AT CREATION — otherwise
+        // pushing the overlay into the reactive container deep-proxies the rows,
+        // and a later in-place upsert keeps re-proxying. markRaw is shallow +
+        // idempotent (re-wrapping an already-raw feed-built overlay is a no-op);
+        // the overlay OBJECT + the container stay reactive (structure/$watch).
+        if (overlay) {
+            if (Array.isArray(overlay.data)) overlay.data = markRaw(overlay.data)
+            if (Array.isArray(overlay.raw)) overlay.raw = markRaw(overlay.raw)
+        }
         this._ctx.data[side].push(overlay)
         this._ctx.updateIds()
         return overlay.id
