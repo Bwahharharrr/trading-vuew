@@ -85,7 +85,7 @@
                         @click="$emit('select-run', r)"
                         @keydown.enter.prevent="$emit('select-run', r)">
                         <td>{{ r.strategy }}</td>
-                        <td class="sym">{{ (r.symbols||[]).join(',') }}</td>
+                        <td class="sym" :title="(r.symbols||[]).join(', ')">{{ fmtSymbols(r.symbols) }}</td>
                         <td>{{ r.trade_timeframe }}</td>
                         <td><span class="bt-type" :class="'t-' + runShape(r).klass" :title="runShape(r).chartable ? '' : 'Metric study only — plot requires a materialized execution artifact'">{{ runShape(r).label }}</span></td>
                         <td><span class="bt-badge" :class="r.status">{{ r.status }}</span></td>
@@ -129,9 +129,10 @@ export default {
             metricCols: [
                 { key: 'total_net_profit', label: 'Net P/L', metric: 'total_net_profit', fmt: 'money', signMode: 'sign', agg: 'sum' },
                 { key: 'strategy_return_pct', label: 'Return', metric: 'strategy_return_pct', fmt: 'pct', signMode: 'sign', agg: 'avg' },
-                { key: 'buy_hold_return_pct', label: 'B&H Ret', metric: 'buy_hold_return_pct', fmt: 'pct', signMode: 'sign', agg: 'avg' },
-                { key: 'strategy_vs_buy_hold_return_pct', label: 'vs B&H', metric: 'strategy_vs_buy_hold_return_pct', fmt: 'pct', signMode: 'beat', beat: 'strategy_beat_buy_hold', agg: 'avg' },
+                { key: 'strategy_vs_buy_hold_return_pct', label: 'vs B&H', metric: 'strategy_vs_buy_hold_return_pct', fmt: 'pct', signMode: 'sign', beat: 'strategy_beat_buy_hold', agg: 'avg' },
                 { key: 'strategy_beat_buy_hold', label: 'Beat', metric: 'strategy_beat_buy_hold', fmt: 'bool', signMode: 'bool', title: 'Strategy beat buy & hold?', agg: 'beat' },
+                { key: 'max_score', label: 'Max Score', metric: 'max_score', fmt: 'ratio2', signMode: 'none', title: 'Best candidate robustness score (universe studies)', agg: 'max' },
+                { key: 'avg_score', label: 'Avg Score', metric: 'avg_score', fmt: 'ratio2', signMode: 'none', title: 'Average candidate robustness score (universe studies)', agg: 'avg' },
                 { key: 'sharpe_ratio', label: 'Sharpe', metric: 'sharpe_ratio', fmt: 'ratio2', signMode: 'sign', agg: 'avg' },
                 { key: 'sortino_ratio', label: 'Sortino', metric: 'sortino_ratio', fmt: 'ratio2', signMode: 'sign', agg: 'avg' },
                 { key: 'profit_factor', label: 'PF', metric: 'profit_factor', fmt: 'ratio2', signMode: 'gte1', title: 'Profit factor (gross profit ÷ gross loss)', agg: 'avg' },
@@ -235,10 +236,13 @@ export default {
                     const n = Number(raw); if (Number.isFinite(n)) vals.push(n)
                 }
                 if (!vals.length) return { key: c.key, text: '—', sign: '', title: '' }
-                const val = c.agg === 'sum' ? vals.reduce((a, b) => a + b, 0) : vals.reduce((a, b) => a + b, 0) / vals.length
+                const val = c.agg === 'sum' ? vals.reduce((a, b) => a + b, 0)
+                    : c.agg === 'max' ? Math.max(...vals)
+                        : vals.reduce((a, b) => a + b, 0) / vals.length
                 const text = c.fmt === 'pct' ? this.fmtPct(val) : c.fmt === 'money' ? this.fmtMoney(val) : this.fmtRatio(val)
-                const sign = c.signMode === 'gte1' ? (val >= 1 ? 'pos' : 'neg') : (val > 0 ? 'pos' : (val < 0 ? 'neg' : ''))
-                return { key: c.key, text, sign, title: `${c.agg === 'sum' ? 'Total' : 'Average'} ${c.label} over ${vals.length} run${vals.length === 1 ? '' : 's'}` }
+                const sign = c.signMode === 'none' ? '' : c.signMode === 'gte1' ? (val >= 1 ? 'pos' : 'neg') : (val > 0 ? 'pos' : (val < 0 ? 'neg' : ''))
+                const verb = c.agg === 'sum' ? 'Total' : c.agg === 'max' ? 'Max' : 'Average'
+                return { key: c.key, text, sign, title: `${verb} ${c.label} over ${vals.length} run${vals.length === 1 ? '' : 's'}` }
             })
         },
     },
@@ -259,6 +263,12 @@ export default {
         },
         // Raw decimal-string metric value off a run summary (or undefined).
         metric(r, key) { return (r.metrics || {})[key] },
+        // Compact symbol list: first 5, then "… & N more" (full list on hover).
+        fmtSymbols(symbols) {
+            const a = Array.isArray(symbols) ? symbols : []
+            if (a.length <= 5) return a.join(', ')
+            return `${a.slice(0, 5).join(', ')} … & ${a.length - 5} more`
+        },
         // Detected artifact shape for a run (fast path, no artifact fetch),
         // memoised per run_id so the list/sort/filter don't recompute it.
         runShape(r) {
@@ -297,6 +307,7 @@ export default {
         },
         // pos/neg colour for a metric column cell, per its signMode.
         cellSign(r, c) {
+            if (c.signMode === 'none') return ''   // magnitude (e.g. score) — no colour
             if (c.signMode === 'beat') {
                 const b = this.metric(r, c.beat)
                 if (b != null && b !== '') return this._truthy(b) ? 'pos' : 'neg'

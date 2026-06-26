@@ -129,9 +129,10 @@ describe('CorkyBacktestsPanel', () => {
     const r = { ...runs[0], metrics: { ...runs[0].metrics, strategy_return_pct: '0.125', buy_hold_return_pct: '0.08', strategy_vs_buy_hold_return_pct: '0.045', strategy_beat_buy_hold: true, sharpe_ratio: '1.8', sortino_ratio: '2.4', total_net_profit: '1250.50' } }
     const w = mountPanel({ runs: [r] })
     const headers = w.findAll('.bt-sortable th').map((h) => h.text().replace(/[▲▼]/g, '').trim())
-    for (const h of ['Net P/L', 'Return', 'B&H Ret', 'vs B&H', 'Beat', 'Sharpe', 'Sortino', 'PF', 'RF']) {
+    for (const h of ['Net P/L', 'Return', 'vs B&H', 'Beat', 'Sharpe', 'Sortino', 'PF', 'RF']) {
       expect(headers).toContain(h)
     }
+    expect(headers).not.toContain('B&H Ret')   // removed
     const row = w.find('.bt-runs .bt-row').text()
     expect(row).toContain('12.50%')   // strategy_return_pct 0.125 → 12.50% (fraction)
     expect(row).toContain('4.50%')    // strategy_vs_buy_hold_return_pct 0.045
@@ -139,12 +140,51 @@ describe('CorkyBacktestsPanel', () => {
     expect(row).toContain('1.80')     // sharpe_ratio
   })
 
-  test('vs-B&H cell colours green when the run beat buy-and-hold', () => {
-    const r = { ...runs[0], metrics: { ...runs[0].metrics, strategy_vs_buy_hold_return_pct: '0.045', strategy_beat_buy_hold: true } }
+  test('vs-B&H cell colours by its OWN sign, not the beat flag (positive → green even if beat=false)', () => {
+    // The beat flag can disagree with the delta (computed on different bases);
+    // colouring by the displayed value's sign avoids "positive number shown red".
+    const r = { ...runs[0], metrics: { ...runs[0].metrics, strategy_vs_buy_hold_return_pct: '0.045', strategy_beat_buy_hold: false } }
     const w = mountPanel({ runs: [r] })
     const cell = w.findAll('.bt-row td.num').find((c) => c.text() === '4.50%')
     expect(cell).toBeTruthy()
-    expect(cell.classes()).toContain('pos')
+    expect(cell.classes()).toContain('pos')          // positive → green despite beat=false
+    expect(cell.classes()).not.toContain('neg')
+  })
+
+  test('vs-B&H cell is red for a negative delta', () => {
+    const r = { ...runs[0], metrics: { ...runs[0].metrics, strategy_vs_buy_hold_return_pct: '-0.03', strategy_beat_buy_hold: false } }
+    const w = mountPanel({ runs: [r] })
+    const cell = w.findAll('.bt-row td.num').find((c) => c.text() === '-3.00%')
+    expect(cell.classes()).toContain('neg')
+  })
+
+  test('Max Score / Avg Score columns (before Sharpe) for universe runs; no sign colour', () => {
+    const r = { ...runs[0], metrics: { ...runs[0].metrics, max_score: '1414.63', avg_score: '1179.64', sharpe_ratio: '1.8' } }
+    const w = mountPanel({ runs: [r] })
+    const headers = w.findAll('.bt-sortable th').map((h) => h.text().replace(/[▲▼]/g, '').trim())
+    expect(headers).toContain('Max Score')
+    expect(headers).toContain('Avg Score')
+    expect(headers.indexOf('Max Score')).toBeLessThan(headers.indexOf('Sharpe'))   // before Sharpe
+    expect(headers.indexOf('Avg Score')).toBeLessThan(headers.indexOf('Sharpe'))
+    const row = w.find('.bt-runs .bt-row').text()
+    expect(row).toContain('1414.63')
+    expect(row).toContain('1179.64')
+    const cell = w.findAll('.bt-row td.num').find((c) => c.text() === '1414.63')
+    expect(cell.classes()).not.toContain('pos')   // score is a magnitude, not coloured
+    expect(cell.classes()).not.toContain('neg')
+  })
+
+  test('truncates the symbols list past 5 with "… & N more" (full list on hover)', () => {
+    const many = { ...runs[0], symbols: ['tBTCUSD', 'tETHUSD', 'tADAUSD', 'tXMRBTC', 'tXRPBTC', 'tSOLBTC', 'tZECBTC'] }
+    const w = mountPanel({ runs: [many] })
+    const sym = w.find('.bt-runs .bt-row .sym')
+    expect(sym.text()).toBe('tBTCUSD, tETHUSD, tADAUSD, tXMRBTC, tXRPBTC … & 2 more')
+    expect(sym.attributes('title')).toContain('tSOLBTC')   // full list on hover
+  })
+
+  test('lists all symbols when 5 or fewer', () => {
+    const w = mountPanel({ runs: [{ ...runs[0], symbols: ['tBTCUSD', 'tETHUSD'] }] })
+    expect(w.find('.bt-runs .bt-row .sym').text()).toBe('tBTCUSD, tETHUSD')
   })
 
   test('new metric columns render — when the run lacks the field (old artifact)', () => {
