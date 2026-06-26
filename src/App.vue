@@ -436,10 +436,10 @@ export default {
             // markRaw: overlay component definitions must not be made reactive
             // (Vue warns + needless overhead) when held in component data.
             overlays: [BuysAndSells, Balance, LineTracker, OrderBox, PriceAlarms, SignalMarker, BarrierPlan].map(c => markRaw(c)),
-            // Price alarms (Y-axis click): App owns the list; the PriceAlarms
-            // overlay renders THIS array by reference (survives DataCube wipes
-            // because ensurePriceAlarmOverlay re-adds the overlay pointing at it).
-            priceAlarms: [],
+            // priceAlarms / searchNav / positionPlot are now PER-TAB (computed
+            // shims → the active tab; see the computed block). The PriceAlarms
+            // overlay renders the active tab's array by reference, re-pointed by
+            // ensurePriceAlarmOverlay.
             // Store DataCube class for mixin use
             DataCubeClass: DataCube,
 
@@ -488,11 +488,7 @@ export default {
             // not persisted (results are query output, not state).
             searchTabs: [],
             searchTabSeq: 0,               // increments per created tab → "Search Results N"
-            // The result row currently being navigated to / shown on the chart:
-            // { tabId, index, loading, message, error, target:{venue,symbol,timeframe},
-            //   signal:{ ts, low, label } }. Drives the row highlight + "loading onto
-            //   chart" feedback and the on-chart vertical signal marker. Null = none.
-            searchNav: null,
+            // searchNav (active search-result nav) is PER-TAB (computed shim).
 
             // ── Strategies / Backtests (read-only via the gateway) ──
             backtestsFeed: null,
@@ -503,12 +499,10 @@ export default {
                 selectedRun: null, detail: {}, loading: false, error: null,
             },
 
-            // ── Selected position plotted on the chart (trades + detail panes) ──
-            // { venue, symbol, position_id, window:{start,end},
-            //   series:{ markers, size, hist, fees }, toggles:{trades,size,hist,fees} }
-            // Null when no position is plotted. App-owned so the derived series
-            // survive the candle feed's onchart/offchart wipe on every reload.
-            positionPlot: null,
+            // positionPlot (a position plotted on the chart: trades + detail panes)
+            // is PER-TAB (computed shim → active tab). The derived series live on
+            // the tab so they survive the candle feed's onchart/offchart wipe and
+            // stay with the chart they were plotted on.
 
             // ── Selected-position audit drawer ──
             auditOpen: false,
@@ -537,6 +531,36 @@ export default {
         corkyLast: {
             get() { return this.activeTab ? this.activeTab.corkyLast : null },
             set(v) { if (this.activeTab) this.activeTab.corkyLast = v },
+        },
+        // ── Per-tab on-chart overlay state (shims → active tab) ───────────────
+        // A plotted position / backtest / search marker / price alarms / drawing
+        // arm belong to the chart they were made on. The draw methods already
+        // target this.chart (= active cube), so routing the STATE through the
+        // active tab keeps each tab's overlays with it (they persist in its cube).
+        positionPlot: {
+            get() { return this.activeTab ? this.activeTab.positionPlot : null },
+            set(v) { if (this.activeTab) this.activeTab.positionPlot = v },
+        },
+        searchNav: {
+            get() { return this.activeTab ? this.activeTab.searchNav : null },
+            set(v) { if (this.activeTab) this.activeTab.searchNav = v },
+        },
+        priceAlarms: {
+            get() { return this.activeTab ? this.activeTab.priceAlarms : [] },
+            set(v) { if (this.activeTab) this.activeTab.priceAlarms = v },
+        },
+        rectDrawMode: {
+            get() { return this.activeTab ? this.activeTab.rectDrawMode : false },
+            set(v) { if (this.activeTab) this.activeTab.rectDrawMode = v },
+        },
+        // Non-reactive-by-history backtest plot state, now per-tab via the shim.
+        _btPlot: {
+            get() { return this.activeTab ? this.activeTab.btPlot : null },
+            set(v) { if (this.activeTab) this.activeTab.btPlot = v },
+        },
+        _btProgressSub: {
+            get() { return this.activeTab ? this.activeTab.btProgressSub : null },
+            set(v) { if (this.activeTab) this.activeTab.btProgressSub = v },
         },
         // `venue|symbol` (lowercased) of the charted stream — lets the dock
         // highlight the row whose ticker is currently shown.
@@ -822,7 +846,7 @@ export default {
             // for the same older window too, so the overlays extend with the
             // candles (not just the candles). The chart report is windowed, so we
             // merge each panned window into it on demand.
-            const plot = this._btPlot
+            const plot = tab.btPlot   // the BOUND tab's plotted backtest (not the active shim)
             const btActive = !!(plot && plot.runId && plot.report && this.backtestsFeed
                 && plot.venue === cur.venue && plot.symbol === cur.symbol && plot.timeframe === cur.timeframe)
             try {
@@ -843,9 +867,9 @@ export default {
                 // Extend the plotted report with the older window's equity/trades,
                 // then re-sync overlays AFTER the candle merge (the clip keys off
                 // the candle range, which only widens once these rows are merged).
-                if (btActive && windowReport && this._btPlot === plot) {
+                if (btActive && windowReport && tab.btPlot === plot) {
                     plot.report = this._btMergeReportWindow(plot.report, windowReport)
-                    setTimeout(() => { if (this._btPlot === plot) this.syncBacktestOverlays() }, 0)
+                    setTimeout(() => { if (tab.btPlot === plot && tab.id === this.activeChartTabId) this.syncBacktestOverlays() }, 0)
                 }
                 return rows
             } catch (err) {

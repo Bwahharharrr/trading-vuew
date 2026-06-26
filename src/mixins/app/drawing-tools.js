@@ -51,7 +51,8 @@ export function boxReadout(grid, { topY, botY, leftX, rightX }, tzHours = 0) {
 export default {
     data() {
         return {
-            rectDrawMode: false,
+            // rectDrawMode is PER-TAB (computed shim in App.vue → active tab), so
+            // arming the rectangle tool only affects the chart you're on.
             isDrawing: false,
             rectStart: null,
             rectCurrent: null,

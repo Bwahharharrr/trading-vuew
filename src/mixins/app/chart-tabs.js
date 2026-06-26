@@ -67,6 +67,16 @@ export default {
                 corkyHandle: null,
                 corkyLast: null,
                 range: null,
+                // Per-tab ON-CHART overlay state — a plotted position / backtest /
+                // search-result marker / price alarms / drawing-tool arm all belong
+                // to the chart they were created on, not the app. Surfaced via the
+                // active-tab computed shims in App.vue.
+                positionPlot: null,
+                searchNav: null,
+                priceAlarms: [],
+                rectDrawMode: false,
+                btPlot: null,
+                btProgressSub: null,
                 ...extra,
             }
         },
@@ -188,7 +198,13 @@ export default {
         },
 
         _destroyChartTabCube(tab) {
-            if (!tab || !tab.chart) return
+            if (!tab) return
+            // Release this tab's backtest-progress subscription (per-tab overlay).
+            if (tab.btProgressSub && this.backtestsFeed) {
+                try { this.backtestsFeed.unsubscribe(tab.btProgressSub) } catch (_) { /* gone */ }
+                tab.btProgressSub = null
+            }
+            if (!tab.chart) return
             if (tab.chart.orderAgent) {
                 try { tab.chart.orderAgent.destroy() } catch (_) { /* gone */ }
                 tab.chart.orderAgent = null

@@ -19,6 +19,7 @@ function mkCtx(rows = [[1000, 1, 2, 0.5, 1.5, 10]]) {
   ctx.activeTab = {
     get corkyCurrent() { return ctx.corkyCurrent },
     get corkyFeed() { return ctx.corkyFeed },
+    get btPlot() { return ctx._btPlot },   // per-tab backtest plot (loader reads tab.btPlot)
   }
   ctx._corkyHistoryLoader = M._corkyHistoryLoader
   ctx._tfToMs = M._tfToMs
