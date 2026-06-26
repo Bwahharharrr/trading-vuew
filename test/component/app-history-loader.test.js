@@ -12,8 +12,13 @@ const H = 3600000
 function mkCtx(rows = [[1000, 1, 2, 0.5, 1.5, 10]]) {
   const ctx = {
     corkyCurrent: { venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1h' },
-    _corkyGen: 1,
     corkyFeed: { fetchHistory: vi.fn(async () => rows) },
+  }
+  // The loader now reads the BOUND tab's stream (range, tab) and falls back to
+  // this.activeTab — so point a fake active tab at ctx's stream fields.
+  ctx.activeTab = {
+    get corkyCurrent() { return ctx.corkyCurrent },
+    get corkyFeed() { return ctx.corkyFeed },
   }
   ctx._corkyHistoryLoader = M._corkyHistoryLoader
   ctx._tfToMs = M._tfToMs
@@ -39,10 +44,30 @@ describe('_corkyHistoryLoader', () => {
     expect(opts.end_ms).toBe(end)
   })
 
-  test('drops the result if the stream switched mid-fetch (staleness)', async () => {
-    ctx.corkyFeed.fetchHistory = vi.fn(async () => { ctx._corkyGen = 2; return [[1000, 1, 2, 0.5, 1.5, 10]] })
+  test('drops the result if the tab re-selected mid-fetch (per-tab staleness)', async () => {
+    // A fresh corkyCurrent object (a re-select) mid-fetch → reference changed.
+    ctx.corkyFeed.fetchHistory = vi.fn(async () => {
+      ctx.corkyCurrent = { venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '15m' }
+      return [[1000, 1, 2, 0.5, 1.5, 10]]
+    })
     const out = await ctx._corkyHistoryLoader([0, 9000])
-    expect(out).toEqual([])                            // gen changed → discard
+    expect(out).toEqual([])                            // tab's stream moved on → discard
+  })
+
+  test('uses the BOUND tab, not the global active tab (cross-tab corruption guard)', async () => {
+    // Simulate the bug: the active tab is a DIFFERENT symbol/tf (the 1d tab), but
+    // the loader is invoked bound to THIS tab (the 1h tab). It must fetch the
+    // bound tab's 1h stream, never the active tab's 1d.
+    const boundFeed = { fetchHistory: vi.fn(async () => [[1000, 1, 2, 0.5, 1.5, 10]]) }
+    const boundTab = {
+      corkyCurrent: { venue: 'bitfinex', symbol: 'tETHBTC', timeframe: '1h' },
+      corkyFeed: boundFeed,
+    }
+    ctx.activeTab = { corkyCurrent: { venue: 'bitfinex', symbol: 'tETHBTC', timeframe: '1d' }, corkyFeed: { fetchHistory: vi.fn() } }
+    await ctx._corkyHistoryLoader([5000, 9000], boundTab)
+    expect(boundFeed.fetchHistory).toHaveBeenCalledWith(
+      expect.objectContaining({ timeframe: '1h' }))     // 1h, NOT the active tab's 1d
+    expect(ctx.activeTab.corkyFeed.fetchHistory).not.toHaveBeenCalled()
   })
 
   test('no-ops without a charted stream or with a non-positive window', async () => {

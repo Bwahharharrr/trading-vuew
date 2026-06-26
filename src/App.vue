@@ -795,9 +795,16 @@ export default {
         // live stream) and return ascending OHLCV; the DataCube merges/prepends
         // it. Staleness-guarded against a stream switch mid-fetch.
         // @param {[number, number]} range - [olderEdgeMs, firstLoadedCandleMs]
-        async _corkyHistoryLoader(range) {
-            const cur = this.corkyCurrent
-            if (!this.corkyFeed || !cur || !cur.venue || !cur.symbol || !cur.timeframe) return []
+        async _corkyHistoryLoader(range, tab) {
+            // Bound to a SPECIFIC tab's cube (see _corkyBindActiveCube): use THAT
+            // tab's stream, NEVER the global active tab. Otherwise a backfill that
+            // fires for tab B's cube during/after a switch could read tab A's
+            // timeframe (corkyCurrent is the active-tab shim) and prepend it — the
+            // "daily candles glued onto the start of an hourly chart" corruption.
+            tab = tab || this.activeTab
+            const cur = tab && tab.corkyCurrent
+            const feed = tab && tab.corkyFeed
+            if (!feed || !cur || !cur.venue || !cur.symbol || !cur.timeframe) return []
             const end = Math.ceil(range[1])
             let start = Math.floor(range[0])
             if (!(end > start)) return []
@@ -809,7 +816,8 @@ export default {
             const tfMs = this._tfToMs(cur.timeframe)
             const MAX_BARS = 1000
             if (tfMs > 0 && (end - start) / tfMs > MAX_BARS) start = end - MAX_BARS * tfMs
-            const gen = this._corkyGen   // bumped by every select/teardown
+            // Per-tab staleness: corkyCurrent is a fresh object on each (re)select,
+            // so a reference change means this tab's stream moved on mid-backfill.
             // If a backtest is plotted for THIS stream, fetch its equity/trades
             // for the same older window too, so the overlays extend with the
             // candles (not just the candles). The chart report is windowed, so we
@@ -819,7 +827,7 @@ export default {
                 && plot.venue === cur.venue && plot.symbol === cur.symbol && plot.timeframe === cur.timeframe)
             try {
                 const [rows, windowReport] = await Promise.all([
-                    this.corkyFeed.fetchHistory({
+                    feed.fetchHistory({
                         venue: cur.venue, symbol: cur.symbol, timeframe: cur.timeframe,
                         start_ms: start, end_ms: end,
                     }),
@@ -828,9 +836,10 @@ export default {
                             { run_id: plot.runId, start_ms: start, end_ms: end, max_points: 2000, run_index: plot.runIndex }).catch(() => null)
                         : Promise.resolve(null),
                 ])
-                // The user switched stream while the backfill was in flight — the
-                // candles belong to a symbol/tf no longer charted; drop them.
-                if (gen !== this._corkyGen) return []
+                // This tab was re-selected (tf-switch) while the backfill was in
+                // flight — the candles belong to a stream no longer charted in this
+                // tab; drop them rather than prepend the wrong timeframe.
+                if (tab.corkyCurrent !== cur) return []
                 // Extend the plotted report with the older window's equity/trades,
                 // then re-sync overlays AFTER the candle merge (the clip keys off
                 // the candle range, which only widens once these rows are merged).
@@ -1173,7 +1182,10 @@ export default {
             this._ensureTabFeed(tab)
             const cube = tab.chart
             if (cube && typeof cube.onrange === 'function') {
-                cube.onrange((range) => this._corkyHistoryLoader(range))
+                // Close the loader over THIS tab so a backfill always fetches this
+                // tab's symbol/tf via this tab's feed — never the global active
+                // tab's (which can differ mid-switch due to the deferred set_loader).
+                cube.onrange((range) => this._corkyHistoryLoader(range, tab))
             }
         },
 
