@@ -12,11 +12,13 @@ const M = App.methods
 function mkApp(over = {}) {
   const ctx = {
     feedMode: 'gateway',
+    corkyClient: {},   // corkySelect/enterGatewayMode guard on the client being up
     corkyStates: [],
     corkyCurrent: null,
     corkyEnabled: {},
     corkyHandle: null,
     corkyFeed: null,
+    corkyDiscoverFeed: null,
     corkyLast: null,
     corkyLoading: false,
     corkyError: null,
@@ -113,7 +115,7 @@ describe('corkySelect', () => {
 describe('enterGatewayMode auto-restore', () => {
   test('re-selects corkyLast after discovery when the state still exists', async () => {
     const feed = mkFeed({ discover: vi.fn(async () => [STATE]) })
-    const app = mkApp({ corkyFeed: feed, corkyLast: { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '15m' } })
+    const app = mkApp({ corkyDiscoverFeed: feed, corkyLast: { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '15m' } })
     app.corkySelect = vi.fn(async () => {})
     app.enterGatewayMode()
     await new Promise(r => setTimeout(r, 0))
@@ -123,7 +125,7 @@ describe('enterGatewayMode auto-restore', () => {
 
   test('falls back to the first timeframe when the remembered one is gone', async () => {
     const feed = mkFeed({ discover: vi.fn(async () => [STATE]) })
-    const app = mkApp({ corkyFeed: feed, corkyLast: { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '4h' } })
+    const app = mkApp({ corkyDiscoverFeed: feed, corkyLast: { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '4h' } })
     app.corkySelect = vi.fn(async () => {})
     app.enterGatewayMode()
     await new Promise(r => setTimeout(r, 0))
@@ -388,11 +390,16 @@ describe('_corkyMem + _corkyUnsub + teardown', () => {
     expect(feed.unsubscribe).toHaveBeenCalled()
   })
 
-  test('teardownCorky destroys the feed', () => {
-    const feed = mkFeed()
-    const app = mkApp({ corkyFeed: feed })
+  test('teardownCorky destroys the discover feed + every tab stream feed', () => {
+    const discover = mkFeed()
+    const tabFeed = mkFeed()
+    const app = mkApp({
+      corkyDiscoverFeed: discover,
+      chartTabs: [{ id: 'ct-1', chart: {}, corkyFeed: tabFeed }],
+    })
     app.teardownCorky()
-    expect(feed.destroy).toHaveBeenCalled()
+    expect(discover.destroy).toHaveBeenCalled()
+    expect(tabFeed.destroy).toHaveBeenCalled()   // concurrent-live: all tab feeds released
   })
 })
 

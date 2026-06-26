@@ -34,6 +34,7 @@ function mkCtx() {
         _corkyGen: 0,
         _corkyRetryKeepSpinner: false,
         chart: { data: { onchart: [], offchart: [] } },
+        corkyClient: {},   // corkySelect guards on the client being up
         // A fake feed whose subscribe captures the status/error callbacks so the
         // test can drive them. Returns a non-null handle so corkySelect commits.
         corkyFeed: {

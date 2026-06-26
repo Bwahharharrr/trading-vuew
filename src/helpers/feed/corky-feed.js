@@ -51,7 +51,9 @@ export class CorkyFeed extends FeedSource {
         this.subscribeTimeoutMs = subscribeTimeoutMs
 
         // Deterministic subscription_id minting (counter + prefix; no randomness
-        // / wall-clock), mirroring CorkyClient's request_id discipline.
+        // / wall-clock), mirroring CorkyClient's request_id discipline. The
+        // per-instance _feedId disambiguates concurrent feeds sharing one client.
+        this._feedId = (CorkyFeed._seq = (CorkyFeed._seq || 0) + 1)
         this._subCounter = 0
 
         // subscription_id → handle (the live routing state for that stream).
@@ -80,7 +82,11 @@ export class CorkyFeed extends FeedSource {
 
     _nextSubscriptionId() {
         this._subCounter += 1
-        return `corky-feed-sub-${this._subCounter}`
+        // Prefix with a per-instance feed id so MULTIPLE concurrent feeds over the
+        // SAME client (one CorkyFeed per chart tab) never mint colliding
+        // subscription_ids — the client fans live_update out by subscription_id,
+        // so a collision would cross-wire two tabs' streams.
+        return `corky-feed-${this._feedId}-sub-${this._subCounter}`
     }
 
     // ── discover ───────────────────────────────────────────────────────────

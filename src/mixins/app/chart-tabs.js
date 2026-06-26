@@ -54,12 +54,19 @@ export default {
         _makeChartTab(chart, extra = {}) {
             const n = ++_tabSeq
             return {
-                // Distinct placeholder title; Phase 4 derives 'SYMBOL · TF' from
-                // the tab's own corkyCurrent once streams are per-tab.
                 id: `ct-${n}`,
+                // 'Chart N' until a symbol loads; corkySelect sets 'SYMBOL · TF'.
                 title: `Chart ${n}`,
                 chart,
+                // Per-tab gateway stream (concurrent-live): each tab owns its feed
+                // + subscription, kept alive even when the tab is hidden, so
+                // switching never re-subscribes. `range` preserves the view so a
+                // switch doesn't jump.
+                corkyFeed: null,
                 corkyCurrent: null,
+                corkyHandle: null,
+                corkyLast: null,
+                range: null,
                 ...extra,
             }
         },
@@ -131,23 +138,35 @@ export default {
             return tab
         },
 
-        // Switch which tab renders. NEVER destroys a cube. Active-only-live: the
-        // gateway stream is re-established on the now-active tab (its symbol goes
-        // live, the previous tab's is torn down) via the App corky hook below.
+        // Switch which tab renders. NEVER destroys a cube and — concurrent-live —
+        // never re-subscribes: every tab's feed keeps streaming in the background,
+        // so a switch is a pure render swap + restore of that tab's saved view (so
+        // it doesn't jump). The corky computed shims auto-follow the active tab.
         activateChartTab(id) {
             const tab = this.chartTabs.find(t => t.id === id)
             if (!tab || id === this.activeChartTabId) return
+            // Save the OUTGOING tab's view range so switching back doesn't jump.
+            const tvOut = this.$refs.tradingVue
+            const outgoing = this.activeTab
+            if (tvOut && outgoing && typeof tvOut.getRange === 'function') {
+                try { outgoing.range = tvOut.getRange() } catch (_) { /* not ready */ }
+            }
             this.activeChartTabId = id
             this.$nextTick(() => {
                 window.dc = tab.chart
                 const tv = this.$refs.tradingVue
-                if (tv && typeof tv.resetChart === 'function') tv.resetChart()
+                if (!tv) return
+                // Re-bind the lazy-history loader to the now-active cube.
+                if (this.feedMode === 'gateway' && typeof this._corkyBindActiveCube === 'function') {
+                    this._corkyBindActiveCube()
+                }
+                // Restore this tab's view (its feed kept it live — no re-fetch).
+                if (Array.isArray(tab.range) && tab.range.length === 2 && typeof tv.setRange === 'function') {
+                    tv.setRange(tab.range[0], tab.range[1])
+                } else if (typeof tv.resetChart === 'function') {
+                    tv.resetChart()
+                }
             })
-            // Re-point the gateway feed/loader at this tab's cube and re-subscribe
-            // its remembered symbol (or tear the stream down for a blank tab).
-            if (this.feedMode === 'gateway' && typeof this._corkyActivateTab === 'function') {
-                this._corkyActivateTab()
-            }
         },
 
         closeChartTab(id) {

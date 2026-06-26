@@ -1,11 +1,8 @@
-// Phase 3+4 — the gateway stream follows the ACTIVE chart tab.
+// Phase 4 (concurrent-live) — every chart tab owns its OWN CorkyFeed and keeps
+// streaming in the background, so switching tabs is a render swap (no
+// re-subscribe, no jump) and a load lands in the tab you're viewing.
 //
-// Pins the bug the user hit: loading a ticker while viewing tab 2 wrote into
-// tab 1 because corkyFeed.dc never moved off the tab that built the feed. These
-// tests bind the real App corky-tab methods to a fake `this` (the app-* pattern)
-// and assert: the feed/loader re-point to the active cube, a tab switch
-// re-subscribes that tab's remembered symbol (active-only-live), a blank tab
-// tears the stream down, and ⌘/Ctrl-click routes to a NEW tab.
+// Binds the real App corky-tab methods to a fake `this` (the app-* pattern).
 import { describe, it, expect, vi } from 'vitest'
 import App from '../../src/App.vue'
 
@@ -14,77 +11,69 @@ const M = App.methods
 function makeHost(over = {}) {
     const host = {
         feedMode: 'gateway',
-        corkyFeed: { dc: null, unsubscribe: vi.fn() },
-        corkyHandle: null,
+        corkyClient: {},          // minimal — CorkyFeed ctor guards client.on()
         activeChart: null,
         activeTab: null,
-        corkyCurrent: null,
-        corkyLoading: false,
-        corkyProgress: null,
-        corkyError: null,
-        _corkyGen: 0,
-        _corkyRetryTimer: null,
         ...over,
     }
-    for (const m of ['_corkyBindActiveCube', '_corkyActivateTab', '_corkyDeselect',
-        '_corkyUnsub', '_corkyCancelSelectRetry', 'onCorkySelect']) {
+    for (const m of ['_ensureTabFeed', '_corkyBindActiveCube', 'onCorkySelect']) {
         host[m] = M[m].bind(host)
     }
-    // Stubs for collaborators not under test.
     host.corkySelect = vi.fn()
     host.createChartTab = vi.fn()
     host.clearPositionPlot = vi.fn()
     host._clearSearchNav = vi.fn()
+    host._corkyCancelSelectRetry = vi.fn()
     host._corkyHistoryLoader = vi.fn()
     return host
 }
 
-describe('_corkyBindActiveCube', () => {
-    it('re-points feed.dc AND the lazy-history loader at the active cube', () => {
-        const cube = { onrange: vi.fn() }
-        const host = makeHost({ corkyFeed: { dc: { stale: true }, unsubscribe: vi.fn() }, activeChart: cube })
-        host._corkyBindActiveCube()
-        expect(host.corkyFeed.dc).toBe(cube)              // feed writes into the visible cube
-        expect(cube.onrange).toHaveBeenCalledTimes(1)     // pan-backfill bound to it too
+describe('_ensureTabFeed — one CorkyFeed per tab over the shared client', () => {
+    it('creates the tab\'s own feed (bound to its cube) when missing', () => {
+        const tab = { chart: { id: 'cube' }, corkyFeed: null }
+        const host = makeHost()
+        host._ensureTabFeed(tab)
+        expect(tab.corkyFeed).toBeTruthy()
+        expect(tab.corkyFeed.dc).toBe(tab.chart)     // bound to THIS tab's cube
     })
 
-    it('no-ops safely when there is no feed or no active cube', () => {
-        expect(() => makeHost({ corkyFeed: null })._corkyBindActiveCube()).not.toThrow()
-        expect(() => makeHost({ activeChart: null })._corkyBindActiveCube()).not.toThrow()
+    it('is idempotent and a no-op without a client', () => {
+        const host = makeHost()
+        const existing = { dc: {} }
+        const tab = { chart: {}, corkyFeed: existing }
+        host._ensureTabFeed(tab)
+        expect(tab.corkyFeed).toBe(existing)         // not replaced
+
+        const noClient = makeHost({ corkyClient: null })
+        const tab2 = { chart: {}, corkyFeed: null }
+        noClient._ensureTabFeed(tab2)
+        expect(tab2.corkyFeed).toBe(null)            // nothing to build a feed over
+    })
+
+    it('distinct tabs get distinct feeds with non-colliding subscription ids', () => {
+        const host = makeHost()
+        const a = { chart: {}, corkyFeed: null }
+        const b = { chart: {}, corkyFeed: null }
+        host._ensureTabFeed(a)
+        host._ensureTabFeed(b)
+        expect(a.corkyFeed).not.toBe(b.corkyFeed)
+        // _nextSubscriptionId embeds a per-feed id → ids differ across feeds.
+        expect(a.corkyFeed._nextSubscriptionId()).not.toBe(b.corkyFeed._nextSubscriptionId())
     })
 })
 
-describe('_corkyActivateTab (active-only-live on switch)', () => {
-    it('re-subscribes the active tab\'s remembered symbol into its cube', () => {
+describe('_corkyBindActiveCube — ensure feed + bind the loader to the active cube', () => {
+    it('ensures the active tab\'s feed and binds its lazy-history loader', () => {
         const cube = { onrange: vi.fn() }
-        const host = makeHost({
-            activeChart: cube,
-            activeTab: { corkyCurrent: { venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1h' } },
-        })
-        host._corkyActivateTab()
-        expect(host.corkyFeed.dc).toBe(cube)
-        expect(host.corkySelect).toHaveBeenCalledWith(
-            expect.objectContaining({ venue: 'BITFINEX', symbol: 'tBTCUSD', timeframe: '1h' }))
+        const tab = { chart: cube, corkyFeed: null }
+        const host = makeHost({ activeTab: tab, activeChart: cube })
+        host._corkyBindActiveCube()
+        expect(tab.corkyFeed).toBeTruthy()           // feed created
+        expect(cube.onrange).toHaveBeenCalledTimes(1) // pan-backfill bound to it
     })
 
-    it('tears the stream down for a blank tab (no remembered symbol)', () => {
-        const cube = { onrange: vi.fn() }
-        const host = makeHost({
-            activeChart: cube,
-            activeTab: { corkyCurrent: null },
-            corkyCurrent: { venue: 'X', symbol: 'Y', timeframe: '1h' },
-            corkyHandle: { id: 'h1' },
-        })
-        host._corkyActivateTab()
-        expect(host.corkySelect).not.toHaveBeenCalled()
-        expect(host.corkyCurrent).toBe(null)              // deselected → discovery shows nothing active
-        expect(host.corkyFeed.unsubscribe).toHaveBeenCalled()
-    })
-
-    it('does nothing outside gateway mode', () => {
-        const host = makeHost({ feedMode: 'file', activeTab: { corkyCurrent: { venue: 'a', symbol: 'b', timeframe: '1h' } } })
-        host._corkyActivateTab()
-        expect(host.corkySelect).not.toHaveBeenCalled()
+    it('no-ops safely with no active tab', () => {
+        expect(() => makeHost({ activeTab: null })._corkyBindActiveCube()).not.toThrow()
     })
 })
 

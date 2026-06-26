@@ -454,22 +454,20 @@ export default {
                 } catch (_) { return 'gateway' }
             })(),
             corkyClient: null,   // lazily-built CorkyClient (own its socket)
-            corkyFeed: null,     // CorkyFeed over (client, this.chart)
+            // corkyFeed/corkyCurrent/corkyHandle/corkyLast are now COMPUTED shims
+            // that resolve to the ACTIVE tab (concurrent-live: each tab owns its
+            // own CorkyFeed + stream, all live at once). See the computed block.
+            corkyDiscoverFeed: null,   // a feed used ONLY for discover() (no stream)
             // Reactive discovery surface rendered by CorkyDiscoveryPanel.
             corkyStates: [],
-            corkyCurrent: null,
             // Enabled indicators + hidden layers, persisted per venue|symbol so a
             // timeframe switch (which tears down the subscription) keeps them on.
             // `${venue}|${symbol}` → { kinds:[{display_label,kind}], layers:[layerId],
             //                          hiddenLayers:[layerId] }
             corkyEnabled: {},
-            // Last selected stream { venue, symbol, timeframe } — persisted so a
-            // reload (or browser restart) reopens the chart you were looking at.
-            corkyLast: null,
             corkyLoading: false,
             corkyProgress: null,
             corkyError: null,
-            corkyHandle: null,   // active subscription handle (single stream)
 
             // ── Auth positions (bottom dock) ──
             positionsFeed: null,           // CorkyPositionsFeed over corkyClient
@@ -521,6 +519,25 @@ export default {
         }
     },
     computed: {
+        // ── Per-tab gateway stream shims (concurrent-live) ────────────────────
+        // Each chart tab owns its own CorkyFeed + stream, all live at once. These
+        // resolve to the ACTIVE tab so the existing corky code (corkySelect, the
+        // indicator toggles, the discovery panel's :current highlight) transparently
+        // reads/writes the active tab's stream — while every tab keeps streaming in
+        // the background, so switching is a render swap (no re-subscribe, no jump).
+        corkyFeed() { return this.activeTab ? this.activeTab.corkyFeed : null },
+        corkyCurrent: {
+            get() { return this.activeTab ? this.activeTab.corkyCurrent : null },
+            set(v) { if (this.activeTab) this.activeTab.corkyCurrent = v },
+        },
+        corkyHandle: {
+            get() { return this.activeTab ? this.activeTab.corkyHandle : null },
+            set(v) { if (this.activeTab) this.activeTab.corkyHandle = v },
+        },
+        corkyLast: {
+            get() { return this.activeTab ? this.activeTab.corkyLast : null },
+            set(v) { if (this.activeTab) this.activeTab.corkyLast = v },
+        },
         // `venue|symbol` (lowercased) of the charted stream — lets the dock
         // highlight the row whose ticker is currently shown.
         positionsCurrentSymbolKey() {
@@ -706,15 +723,17 @@ export default {
             // mutate the candles concurrently. wsDisconnect() also cancels any
             // pending file-WS reconnect.
             this.wsDisconnect()
-            if (!this.corkyFeed) {
+            if (!this.corkyClient) {
                 const url = deriveCorkyUrl()
                 console.log('[Corky] gateway URL:', url)
                 this.corkyClient = new CorkyClient({ url })
                 this.corkyClient.connect()
-                this.corkyFeed = new CorkyFeed({
+                // A feed used ONLY for discover() (no chart subscription); the
+                // per-tab stream feeds are created by _corkyBindActiveCube.
+                this.corkyDiscoverFeed = markRaw(new CorkyFeed({
                     client: this.corkyClient,
-                    dataCube: this.chart,
-                })
+                    dataCube: this.activeChart,
+                }))
                 // Positions ride the SAME socket; they are not chart data so they
                 // get their own feed (no DataCube), surfaced in the bottom dock.
                 this.positionsFeed = new CorkyPositionsFeed({ client: this.corkyClient })
@@ -723,13 +742,12 @@ export default {
                 this.searchFeed = new CorkySearchFeed({ client: this.corkyClient })
                 // Strategies/backtests: read-only over the same socket.
                 this.backtestsFeed = new CorkyBacktestsFeed({ client: this.corkyClient })
-                // Wire the chart's lazy "load older candles on pan-left" loader.
-                // The DataCube has the plumbing (dc_core.range_changed) but no
-                // loader was ever registered in gateway mode, so panning left past
-                // the initially-loaded window showed nothing. This backfills the
-                // revealed older range on demand (e.g. a backtest plotted as its
-                // last ~1000 bars now scrolls back through the full run history).
-                this.chart.onrange((range) => this._corkyHistoryLoader(range))
+                // Create the initial tab's stream feed + wire its lazy "load older
+                // candles on pan-left" loader onto the active cube. (Each tab gets
+                // its own feed; the loader backfills the revealed older range on
+                // demand — e.g. a backtest plotted as its last ~1000 bars scrolls
+                // back through the full run history.)
+                this._corkyBindActiveCube()
             }
             // Preload the strategy catalog so the Backtests tab is populated.
             this.btLoadStrategies()
@@ -753,13 +771,15 @@ export default {
             })
         },
 
-        // Discover the catalog → populate the reactive `corkyStates`.
+        // Discover the catalog → populate the reactive `corkyStates`. Uses the
+        // dedicated discover feed (not a tab's stream feed), so it works even when
+        // no tab has a stream yet.
         async corkyDiscover(venue) {
-            if (!this.corkyFeed) return
+            if (!this.corkyDiscoverFeed) return
             this.corkyLoading = true
             this.corkyError = null
             try {
-                const list = await this.corkyFeed.discover(venue)
+                const list = await this.corkyDiscoverFeed.discover(venue)
                 this.corkyStates = Array.isArray(list) ? list : (list ? [list] : [])
             } catch (err) {
                 this.corkyError = this._corkyErr(err)
@@ -848,6 +868,12 @@ export default {
         // Subscribe to a stream (single active subscription): drop the prior
         // one, then drive the DataCube from the gateway.
         async corkySelect(opts) {
+            if (!this.corkyClient) return
+            // Multi-tab: this load targets the ACTIVE tab. Ensure its own feed
+            // exists + bind the lazy-history loader to its cube, so candles AND
+            // live ticks land in the tab you're viewing (each tab streams into its
+            // own cube concurrently). corkyFeed below resolves to this tab's feed.
+            this._corkyBindActiveCube()
             if (!this.corkyFeed) return
             // Staleness epoch: every select (and teardown) bumps it; anything
             // after an await only applies if this call is still the latest.
@@ -856,11 +882,6 @@ export default {
             // and a teardown-raced failure could re-arm the retry post-unmount.
             this._corkyGen = (this._corkyGen || 0) + 1
             const gen = this._corkyGen
-            // Multi-tab: this load targets the ACTIVE tab. Bind the gateway feed +
-            // the lazy-history loader to the active cube so candles AND live ticks
-            // land in the tab the user is viewing — not whichever tab happened to
-            // build the feed (the "loaded into tab 1" bug).
-            this._corkyBindActiveCube()
             // Normalize: `indicators` must be AT LEAST [] — the feed maps a null/
             // missing field to include_indicators:undefined, and the gateway then
             // serves candles WITHOUT indicator rows. The boot-restore call hit
@@ -1128,51 +1149,32 @@ export default {
             this._corkyRetryOpts = null
         },
 
-        // ── Multi-tab gateway binding ─────────────────────────────────────────
-        // Point the single live gateway stream (feed + lazy-history loader) at the
-        // ACTIVE tab's cube. onrange both sets the cube's loader AND rebinds
+        // ── Multi-tab gateway binding (concurrent-live) ───────────────────────
+        // Each tab owns its own CorkyFeed (over the SHARED client), bound to its
+        // cube — so every tab streams in the background and a tab switch is a pure
+        // render swap (no re-subscribe, no history re-fetch, no jump). Created
+        // lazily once the client exists; markRaw — the feed manages its own state
+        // and needs no Vue reactivity.
+        _ensureTabFeed(tab) {
+            if (!tab || tab.corkyFeed || !this.corkyClient) return
+            tab.corkyFeed = markRaw(new CorkyFeed({
+                client: this.corkyClient,
+                dataCube: tab.chart,
+            }))
+        },
+
+        // Ensure the active tab's feed exists and bind the lazy-history loader to
+        // the active cube. onrange both sets the cube's loader AND rebinds
         // TradingVue's range hook to that cube (datacube.onrange → tv.set_loader).
+        // The feed is pre-bound to its cube at creation, so no feed.dc re-pointing.
         _corkyBindActiveCube() {
-            if (!this.corkyFeed) return
-            const cube = this.activeChart
-            if (!cube) return
-            this.corkyFeed.dc = cube
-            if (typeof cube.onrange === 'function') {
+            const tab = this.activeTab
+            if (!tab) return
+            this._ensureTabFeed(tab)
+            const cube = tab.chart
+            if (cube && typeof cube.onrange === 'function') {
                 cube.onrange((range) => this._corkyHistoryLoader(range))
             }
-        },
-
-        // Called by chart-tabs.activateChartTab after a tab switch. Active-only-live:
-        // re-bind the stream to the now-active cube and re-establish THIS tab's
-        // subscription (so live ticks for its symbol — not the previous tab's —
-        // flow into it). A blank tab tears the stream down. corkySelect supersedes
-        // the previous tab's stream via the _corkyGen epoch + _corkyUnsub.
-        _corkyActivateTab() {
-            if (this.feedMode !== 'gateway' || !this.corkyFeed) return
-            this._corkyBindActiveCube()
-            const sel = this.activeTab && this.activeTab.corkyCurrent
-            if (sel && sel.venue && sel.symbol && sel.timeframe) {
-                this._corkyCancelSelectRetry()
-                this.corkySelect({
-                    venue: sel.venue, symbol: sel.symbol, timeframe: sel.timeframe,
-                    indicators: [],
-                })
-            } else {
-                this._corkyDeselect()
-            }
-        },
-
-        // Stop the active gateway stream WITHOUT tearing down the feed/socket —
-        // used when activating a blank tab. Clears the selection UI so the
-        // discovery panel shows nothing highlighted.
-        _corkyDeselect() {
-            this._corkyGen = (this._corkyGen || 0) + 1   // supersede any in-flight select
-            this._corkyCancelSelectRetry()
-            this._corkyUnsub()
-            this.corkyCurrent = null
-            this.corkyLoading = false
-            this.corkyProgress = null
-            this.corkyError = null
         },
 
         // Panel: add a timeframe → patch the candle-state, re-discover, then
@@ -2746,8 +2748,17 @@ export default {
             this._stopAuditStream()
             this._stopPositionAuditStream()
             if (this._positionsPoll) { clearInterval(this._positionsPoll); this._positionsPoll = null }
-            if (this.corkyFeed) {
-                try { this.corkyFeed.destroy() } catch (_) { /* already gone */ }
+            // Destroy every tab's stream feed (concurrent-live) + the discover feed.
+            for (const t of (this.chartTabs || [])) {
+                if (t && t.corkyFeed) {
+                    try { t.corkyFeed.destroy() } catch (_) { /* already gone */ }
+                    t.corkyFeed = null
+                    t.corkyHandle = null
+                }
+            }
+            if (this.corkyDiscoverFeed) {
+                try { this.corkyDiscoverFeed.destroy() } catch (_) { /* already gone */ }
+                this.corkyDiscoverFeed = null
             }
             if (this.positionsFeed) {
                 try { this.positionsFeed.destroy() } catch (_) { /* already gone */ }
