@@ -52,7 +52,9 @@ export default {
             return this.width - this.rightPanelWidth
         },
         chartHeight() {
+            // chartTabBarHeight (chart-tabs mixin) is the top tab strip.
             return this.height - this.bottomPanelHeight - this.bottomDockHeight
+                - (this.chartTabBarHeight || 0)
         },
         bottomPanelHeight() {
             return 44

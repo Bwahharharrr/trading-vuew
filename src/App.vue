@@ -2,6 +2,14 @@
 <div class="app-container">
     <!-- Chart area -->
     <div class="chart-area">
+        <!-- Top-level chart tabs: each tab is an independent chart. -->
+        <chart-tab-bar
+            :tabs="chartTabs"
+            :active-id="activeChartTabId"
+            :max="maxChartTabs"
+            @select="activateChartTab"
+            @create="createChartTab"
+            @close="closeChartTab" />
         <div class="chart-wrapper">
             <trading-vue ref="tradingVue" :data="chart" :width="chartWidth" :height="chartHeight"
                     :color-back="colors.colorBack"
@@ -353,8 +361,7 @@ import TradingVue from './TradingVue.vue'
 import IndicatorSettings from './components/IndicatorSettings.vue'
 import OrderDistributionModal from './components/OrderDistributionModal.vue'
 import OrderTypeModal from './components/OrderTypeModal.vue'
-import { OrderAgent } from './helpers/orders/order-agent.js'
-import { StubOrderTransport } from './helpers/orders/stub-order-transport.js'
+// OrderAgent / StubOrderTransport now live in the chart-tabs mixin (per-cube setup).
 import CorkyDiscoveryPanel from './components/feed/CorkyDiscoveryPanel.vue'
 import CorkyPositionsPanel from './components/feed/CorkyPositionsPanel.vue'
 import PositionAuditDrawer from './components/feed/PositionAuditDrawer.vue'
@@ -405,13 +412,15 @@ function deriveCorkyUrl() {
 }
 
 // App mixins (decomposed concerns)
-import { ViewManager, IndicatorManager, FileManager, ChartState, DrawingTools, WsManager } from './mixins/app/index.js'
+import { ViewManager, IndicatorManager, FileManager, ChartState, DrawingTools, WsManager, ChartTabs } from './mixins/app/index.js'
+import ChartTabBar from './components/ChartTabBar.vue'
 
 export default {
     name: 'app',
-    mixins: [ViewManager, IndicatorManager, FileManager, ChartState, DrawingTools, WsManager],
+    mixins: [ViewManager, IndicatorManager, FileManager, ChartState, DrawingTools, WsManager, ChartTabs],
     components: {
         TradingVue,
+        ChartTabBar,
         IndicatorSettings,
         OrderDistributionModal,
         OrderTypeModal,
@@ -421,7 +430,9 @@ export default {
     },
     data() {
         return {
-            chart: new DataCube(),
+            // `chart` is now a computed shim in the chart-tabs mixin (get -> the
+            // active tab's cube; set -> replace it). chartTabs/activeChartTabId
+            // live there too, seeded in created().
             // markRaw: overlay component definitions must not be made reactive
             // (Vue warns + needless overhead) when held in component data.
             overlays: [BuysAndSells, Balance, LineTracker, OrderBox, PriceAlarms, SignalMarker, BarrierPlan].map(c => markRaw(c)),
@@ -573,58 +584,9 @@ export default {
                 if (tv && typeof tv.updateLayout === 'function') tv.updateLayout(true)
             })
         },
-        // `this.chart` is REPLACED on every data/timeframe load (chart-state /
-        // file-manager). Re-attach the order agent to the active DataCube each
-        // time (immediate: also attaches to the initial one) so OrderBox's ▶
-        // Submit → dc_events.submit_orders → agent works after any reload.
-        // Without this the agent would point at a stale DataCube and Submit
-        // would be a silent no-op.
-        chart: {
-            immediate: true,
-            handler(dc, old) {
-                if (old && old.orderAgent) {
-                    try { old.orderAgent.destroy() } catch (_) { /* gone */ }
-                    old.orderAgent = null
-                }
-                // Destroy the REPLACED cube: each one registered a settings
-                // $watch on the long-lived TradingVue root (dc_core.init_tvjs),
-                // and only TradingVue.beforeUnmount destroys the FINAL cube —
-                // every file/tf switch leaked a root watcher retaining the full
-                // old dataset and re-running the settings fingerprint forever.
-                if (old && old !== dc && typeof old.destroy === 'function') {
-                    try { old.destroy() } catch (_) { /* already gone */ }
-                }
-                // The Corky feed captured the cube at construction; re-point it
-                // so a chart replacement can't strand the gateway stream writing
-                // into a detached cube (see also the file-mode tf guard).
-                if (dc && this.corkyFeed) this.corkyFeed.dc = dc
-                // Apply the log-scale preference to EVERY cube. The chart-state
-                // watcher only fires on toggle, so the boot default, the restored
-                // value, and every file/tf-switch cube silently rendered linear
-                // while the checkbox showed checked.
-                if (dc && dc.data && dc.data.chart) {
-                    dc.data.chart.grid = {
-                        ...(dc.data.chart.grid || {}),
-                        logScale: this.log_scale,
-                    }
-                }
-                if (dc && !dc.orderAgent) {
-                    dc.orderAgent = new OrderAgent({
-                        transport: new StubOrderTransport(),
-                        dataCube: dc
-                    })
-                }
-                // A replaced DataCube (File-mode load/tf-switch) lost the alarm
-                // renderer — re-add it pointing at the same alarms array.
-                if (dc && this.priceAlarms && this.priceAlarms.length) {
-                    this.$nextTick(() => this.ensurePriceAlarmOverlay())
-                }
-                // Re-plot the selected position's overlays onto the new cube.
-                if (dc && this.positionPlot) {
-                    this.$nextTick(() => this.syncPositionOverlays())
-                }
-            }
-        }
+        // NOTE: the old `chart` watcher moved into the chart-tabs mixin
+        // (onTabCubeReplaced) so cube-REPLACE (tf/file load) is cleanly separated
+        // from tab-ACTIVATE (switch, never destroys a backgrounded cube).
     },
     mounted() {
         window.addEventListener('resize', this.onResize)
@@ -699,10 +661,11 @@ export default {
         // Tear down the gateway feed if it was ever activated (no dangling
         // sockets/listeners on unmount).
         this.teardownCorky()
-        if (this.chart && this.chart.orderAgent) {
-            try { this.chart.orderAgent.destroy() } catch (_) { /* gone */ }
-            this.chart.orderAgent = null
-        }
+        // Release EVERY tab's cube (worker/watchers/orderAgent). DCCore.destroy()
+        // is idempotent, so the active cube being destroyed again by
+        // TradingVue.beforeUnmount (child unmounts after this parent hook) is a
+        // safe no-op.
+        this.destroyAllChartTabs()
     },
     methods: {
         // ── Source toggle ─────────────────────────────────────────────────────
