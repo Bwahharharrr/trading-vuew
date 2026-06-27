@@ -96,6 +96,19 @@ describe('passesFilter — all 5 ops + non-finite safety', () => {
         expect(passesFilter('not-a-number', '>', 0)).toBe(false) // non-numeric string → NaN → fails
     })
 
+    it('EXCLUDES the gateway no-data shapes (null / "" / whitespace), never treats them as 0', () => {
+        // Number(null) === 0 and Number('') === 0 are finite, but these mean "no
+        // data" — they must fail every comparison, not sneak past >=0 / <100 / =0.
+        for (const op of ['>', '>=', '<', '<=', '=']) {
+            expect(passesFilter(null, op, 0)).toBe(false)
+            expect(passesFilter('', op, 0)).toBe(false)
+            expect(passesFilter('   ', op, 100)).toBe(false)
+        }
+        // A genuine numeric 0 (or '0') still compares normally.
+        expect(passesFilter(0, '>=', 0)).toBe(true)
+        expect(passesFilter('0', '<', 100)).toBe(true)
+    })
+
     it('FAILS when the threshold is non-finite', () => {
         expect(passesFilter(10, '>', NaN)).toBe(false)
         expect(passesFilter(10, '>', Infinity)).toBe(false)
@@ -114,6 +127,8 @@ describe('applyMetricFilters — AND-of-filters + passthrough + getVal', () => {
         { name: 'r2', pnl: 800, score: 0.4 },
         { name: 'r3', pnl: 2000, score: 0.2 },
         { name: 'r4', pnl: NaN, score: 0.95 }, // non-finite metric → excluded by pnl filter
+        { name: 'r5', pnl: null, score: 0.95 }, // no-data (null) → excluded, NOT counted as 0
+        { name: 'r6', pnl: '', score: 0.95 }, //  no-data ('') → excluded, NOT counted as 0
     ]
     const getVal = (row, key) => row[key]
 
@@ -137,9 +152,15 @@ describe('applyMetricFilters — AND-of-filters + passthrough + getVal', () => {
     })
 
     it('a non-finite metric fails the filter (row excluded)', () => {
-        // r4 has a high score but pnl=NaN, so a pnl>0 filter excludes it.
+        // r4 (NaN) / r5 (null) / r6 ('') all lack pnl, so a pnl>0 filter excludes them.
         const out = applyMetricFilters(rows, [{ key: 'pnl', op: '>', value: 0 }], getVal)
         expect(out.map((r) => r.name)).toEqual(['r1', 'r2', 'r3'])
+    })
+
+    it('no-data rows (null / "") never pass even a permissive numeric filter', () => {
+        // pnl <= 1e9 would let any real number through; null/'' must still drop.
+        const out = applyMetricFilters(rows, [{ key: 'pnl', op: '<=', value: 1e9 }], getVal)
+        expect(out.map((r) => r.name)).toEqual(['r1', 'r2', 'r3'])   // r4/r5/r6 excluded
     })
 
     it('returns [] for a non-array rows input', () => {

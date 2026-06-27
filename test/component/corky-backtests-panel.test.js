@@ -53,7 +53,7 @@ describe('CorkyBacktestsPanel', () => {
       { run_id: 'u1', strategy: 'ema_cross_all_in_v1', symbols: ['tBTCUSD', 'tETHUSD'], trade_timeframe: '1h', status: 'completed',
         metrics: { max_score: '1414.6', score_v2: '2604.1387724551', avg_trades: '7204.7', total_trades: 14400 } },
     ] })
-    const headers = w.findAll('thead th').map((h) => h.text())
+    const headers = w.findAll('thead th').map((h) => h.text().replace(/[▲▼+]/g, '').trim())
     expect(headers).toContain('Score v2')
     expect(headers).toContain('Avg Trades')
     const row = w.find('.bt-runs .bt-row').text()
@@ -109,7 +109,7 @@ describe('CorkyBacktestsPanel', () => {
 
   test('Duration column replaces Started/Completed: start – end, days, est. bars', () => {
     const w = mountPanel()
-    const headers = w.findAll('.bt-sortable th').map((h) => h.text().replace(/[▲▼]/g, '').trim())
+    const headers = w.findAll('.bt-sortable th').map((h) => h.text().replace(/[▲▼+]/g, '').trim())
     expect(headers).toContain('Duration')
     expect(headers).not.toContain('Started')
     expect(headers).not.toContain('Completed')
@@ -128,7 +128,7 @@ describe('CorkyBacktestsPanel', () => {
 
   test('shows Profit/Recovery factor columns from run.metrics', () => {
     const w = mountPanel()
-    const headers = w.findAll('.bt-sortable th').map((h) => h.text().replace(/[▲▼]/g, '').trim())
+    const headers = w.findAll('.bt-sortable th').map((h) => h.text().replace(/[▲▼+]/g, '').trim())
     expect(headers).toContain('PF')
     expect(headers).toContain('RF')
     const row = w.find('.bt-runs .bt-row')
@@ -152,7 +152,7 @@ describe('CorkyBacktestsPanel', () => {
   test('shows the new metric columns (return / B&H / beat / sharpe / sortino)', () => {
     const r = { ...runs[0], metrics: { ...runs[0].metrics, strategy_return_pct: '0.125', buy_hold_return_pct: '0.08', strategy_vs_buy_hold_return_pct: '0.045', strategy_beat_buy_hold: true, sharpe_ratio: '1.8', sortino_ratio: '2.4', total_net_profit: '1250.50' } }
     const w = mountPanel({ runs: [r] })
-    const headers = w.findAll('.bt-sortable th').map((h) => h.text().replace(/[▲▼]/g, '').trim())
+    const headers = w.findAll('.bt-sortable th').map((h) => h.text().replace(/[▲▼+]/g, '').trim())
     for (const h of ['Net P/L', 'Return', 'vs B&H', 'Beat', 'Sharpe', 'Sortino', 'PF', 'RF']) {
       expect(headers).toContain(h)
     }
@@ -185,7 +185,7 @@ describe('CorkyBacktestsPanel', () => {
   test('Max Score / Avg Score columns (before Sharpe) for universe runs; no sign colour', () => {
     const r = { ...runs[0], metrics: { ...runs[0].metrics, max_score: '1414.63', avg_score: '1179.64', sharpe_ratio: '1.8' } }
     const w = mountPanel({ runs: [r] })
-    const headers = w.findAll('.bt-sortable th').map((h) => h.text().replace(/[▲▼]/g, '').trim())
+    const headers = w.findAll('.bt-sortable th').map((h) => h.text().replace(/[▲▼+]/g, '').trim())
     expect(headers).toContain('Max Score')
     expect(headers).toContain('Avg Score')
     expect(headers.indexOf('Max Score')).toBeLessThan(headers.indexOf('Sharpe'))   // before Sharpe
@@ -250,7 +250,7 @@ describe('CorkyBacktestsPanel', () => {
       { run_id: 'universe:ema:BITFINEX:multi:4h:0:100:40', strategy: 'ema', symbols: ['tBTCUSD', 'tETHUSD'], trade_timeframe: '4h', status: 'completed', metrics: {} },
     ]
     const w = mountPanel({ runs: mixed })
-    const headers = w.findAll('.bt-sortable th').map((h) => h.text().replace(/[▲▼]/g, '').trim())
+    const headers = w.findAll('.bt-sortable th').map((h) => h.text().replace(/[▲▼+]/g, '').trim())
     expect(headers).toContain('Type')
     const types = w.findAll('.bt-runs .bt-row .bt-type').map((t) => t.text())
     expect(types).toContain('Sweep')
@@ -280,7 +280,7 @@ describe('CorkyBacktestsPanel', () => {
     const selects = w.findAll('.bt-controls select')
     await selects.find((s) => s.classes().includes('bt-tf')).setValue('1h')
     expect(w.emitted('update:filter').some((e) => e[0].timeframe === '1h')).toBe(true)
-    await selects.find((s) => s.classes().includes('bt-type')).setValue('sweep')   // 'sweep' is an option (mixed has a sweep run)
+    await selects.find((s) => s.classes().includes('bt-runtype')).setValue('sweep')   // 'sweep' is an option (mixed has a sweep run)
     expect(w.emitted('update:filter').some((e) => e[0].runType === 'sweep')).toBe(true)
   })
 
@@ -292,14 +292,47 @@ describe('CorkyBacktestsPanel', () => {
     expect(w.find('.bt-detail').exists()).toBe(false)
   })
 
-  test('the metric filter bar renders above the runs table', () => {
+  test('each numeric column heading carries a [+] filter trigger; "Beat"/identity columns do not', () => {
     const w = mountPanel()
-    expect(w.find('.bt-filters .mfb').exists()).toBe(true)
-    // Offers the numeric metric columns (not the boolean "Beat") for filtering.
-    const opts = w.findAll('.bt-filters .mfb-col option').map((o) => o.text())
-    expect(opts).toContain('Net P/L')
-    expect(opts).toContain('Score v2')
-    expect(opts).not.toContain('Beat')
+    const headers = w.findAll('.bt-table thead tr:first-child th')
+    const withFilter = headers.filter((h) => h.find('.cfb').exists()).map((h) => h.text())
+    // 11 numeric metric columns get the [+]; the boolean "Beat" + identity/duration don't.
+    expect(withFilter.length).toBe(11)
+    expect(withFilter.some((t) => t.includes('Net P/L'))).toBe(true)
+    expect(withFilter.some((t) => t.includes('Score v2'))).toBe(true)
+    expect(headers.find((h) => h.text().includes('Beat')).find('.cfb').exists()).toBe(false)
+    expect(headers.find((h) => h.text().includes('Strategy')).find('.cfb').exists()).toBe(false)
+  })
+
+  test('a column [+] applies/replaces one filter per column via update:metric-filters', async () => {
+    const w = mountPanel({ metricFilters: [{ key: 'total_net_profit', label: 'Net P/L', op: '>', value: 1000 }] })
+    // Open the Net P/L header filter (already active → pre-filled) and re-apply a new threshold.
+    const netHead = w.findAll('.bt-table thead tr:first-child th').find((h) => h.text().includes('Net P/L'))
+    await netHead.find('.cfb-btn').trigger('click')
+    await netHead.find('.cfb-val').setValue('2000')
+    await netHead.find('.cfb-apply').trigger('click')
+    const arr = w.emitted('update:metric-filters').pop()[0]
+    // Same key replaced (not stacked) → still a single Net P/L filter, new value.
+    expect(arr).toEqual([{ key: 'total_net_profit', label: 'Net P/L', op: '>', value: 2000 }])
+  })
+
+  test('the "Clear column filters" button shows only with active filters and emits []', async () => {
+    const none = mountPanel()
+    expect(none.find('.bt-clear').exists()).toBe(false)
+    const w = mountPanel({ metricFilters: [{ key: 'score_v2', label: 'Score v2', op: '>', value: 1 }] })
+    const clear = w.find('.bt-clear')
+    expect(clear.exists()).toBe(true)
+    expect(clear.find('.bt-clear-n').text()).toBe('1')
+    await clear.trigger('click')
+    expect(w.emitted('update:metric-filters').pop()[0]).toEqual([])
+  })
+
+  test('"Any type" select is a plain control (no badge-pill style bleed)', () => {
+    const w = mountPanel()
+    const sel = w.find('select.bt-runtype')
+    expect(sel.exists()).toBe(true)
+    // The select no longer carries the .bt-type badge class that styled it as a pill.
+    expect(sel.classes()).not.toContain('bt-type')
   })
 
   test('a metric filter hides non-matching runs', () => {

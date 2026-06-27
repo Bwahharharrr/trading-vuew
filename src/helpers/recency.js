@@ -19,7 +19,9 @@
 export function pushRecent(list, id, max = 5) {
     const base = Array.isArray(list) ? list : []
     // Drop any prior occurrence so a re-click promotes (not duplicates) the id.
-    const deduped = base.filter((x) => x !== id)
+    // Object.is keeps dedup consistent with recencyClass's lookup for every id
+    // kind (incl. the NaN edge), so push and lookup can never disagree.
+    const deduped = base.filter((x) => !Object.is(x, id))
     const next = [id, ...deduped]
     // A non-positive / non-finite cap yields an empty list (defensive).
     const cap = Number.isFinite(max) && max > 0 ? Math.floor(max) : 0
@@ -38,6 +40,8 @@ export function pushRecent(list, id, max = 5) {
  */
 export function recencyClass(id, list, prefix = 'recency') {
     if (!Array.isArray(list)) return ''
-    const idx = list.indexOf(id)
+    // findIndex+Object.is mirrors pushRecent's dedup equality (SameValue), so a
+    // pushed id always resolves to its class — even for the NaN edge.
+    const idx = list.findIndex((x) => Object.is(x, id))
     return idx === -1 ? '' : `${prefix}-${idx}`
 }

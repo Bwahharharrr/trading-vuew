@@ -34,7 +34,7 @@ const RUN = {
 
 function mkCtx() {
   const ctx = {
-    backtests: { strategies: [], runs: [], filters: { strategy: '', symbol: '', status: '' }, selectedRun: null, detail: {}, loading: false, error: null },
+    backtests: { strategies: [], runs: [], filters: { strategy: '', symbol: '', status: '' }, selectedRun: null, detail: {}, loading: false, error: null, metricFilters: [], clickHistory: [] },
     // Discovery reports the venue LOWERCASE (run.venue is UPPERCASE) — the
     // canonical-venue fix must reconcile them so enabled indicators survive.
     corkyCurrent: { venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1h' },
@@ -58,7 +58,7 @@ function mkCtx() {
   for (const m of ['btLoadStrategies', 'btUpdateFilter', 'btInspectStrategy', 'btListRuns',
     'btSelectRun', 'btCloseDetail', 'btSelectCandidate', '_btLoadOverview', '_btLoadArtifact', '_withTimeout', '_btRunIndex', '_btSubscribeProgress', '_btStopProgress', 'btPlotRun', 'btSelectTrade', '_btTradeChartWindow',
     '_btPlotWindow', '_tfToMs', '_removeBacktestOverlays', 'syncBacktestOverlays', '_btErr', '_btSetDetail',
-    '_canonicalVenue', '_loadedCandleRange']) {
+    'btSetMetricFilters', '_canonicalVenue', '_loadedCandleRange']) {
     ctx[m] = M[m]
   }
   return ctx
@@ -131,6 +131,35 @@ describe('btSelectRun progress', () => {
     await ctx.btSelectRun(RUN)
     expect(ctx.backtests.selectedRun).toBe(RUN)
     expect(ctx.positionsActiveTab).toBe('bt-detail')
+  })
+})
+
+describe('column filters + recency click history (App-level state)', () => {
+  test('btSelectRun records the run_id in clickHistory (most-recent first, deduped/promoted)', async () => {
+    await ctx.btSelectRun(RUN)
+    expect(ctx.backtests.clickHistory).toEqual(['r1'])
+    // Open a second run, then re-open the first — it promotes to the front, length unchanged.
+    const RUN2 = { ...RUN, run_id: 'r2' }
+    await ctx.btSelectRun(RUN2)
+    expect(ctx.backtests.clickHistory).toEqual(['r2', 'r1'])
+    await ctx.btSelectRun(RUN)
+    expect(ctx.backtests.clickHistory).toEqual(['r1', 'r2'])
+  })
+
+  test('column filters PERSIST across opening a run and re-listing runs (the verbatim core requirement)', async () => {
+    const filters = [{ key: 'total_net_profit', label: 'Net P/L', op: '>', value: 1000 }]
+    ctx.backtests.metricFilters = filters
+    await ctx.btSelectRun(RUN)          // open a run in its detail tab
+    await ctx.btListRuns()              // re-fetch the runs list
+    expect(ctx.backtests.metricFilters).toBe(filters)   // untouched — same reference
+  })
+
+  test('btSetMetricFilters replaces the array; a non-array arg resets to []', () => {
+    const next = [{ key: 'score_v2', label: 'Score v2', op: '>=', value: 0.5 }]
+    ctx.btSetMetricFilters(next)
+    expect(ctx.backtests.metricFilters).toBe(next)
+    ctx.btSetMetricFilters(null)
+    expect(ctx.backtests.metricFilters).toEqual([])
   })
 })
 

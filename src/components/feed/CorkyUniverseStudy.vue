@@ -20,23 +20,26 @@
         <!-- Candidate ranking table -->
         <template v-if="candidates.length">
             <div class="us-sec">
-                Candidates ({{ candidates.length }})
+                Candidates ({{ candidateFilters.length ? shownCandidates.length + ' / ' + candidates.length : candidates.length }})
                 <span v-if="chartable" class="us-dim">· click a row to plot it</span>
+                <button v-if="candidateFilters.length" class="us-clear" @click="clearAllCandidateFilters"
+                        :title="candidateFilters.map(f => `${f.label} ${f.op} ${f.value}`).join('  ·  ')">✕ Clear column filters ({{ candidateFilters.length }})</button>
             </div>
-            <!-- Numeric column filters (App-state-independent, per-study local). -->
-            <MetricFilterBar class="us-filters" :columns="filterableCandidateCols" :filters="candidateFilters"
-                             @update:filters="candidateFilters = $event" />
             <table class="bt-table us-table">
                 <thead><tr>
                     <th>#</th>
-                    <th v-for="c in candidateCols" :key="c.key" class="num" :title="c.title || ''">{{ c.label }}</th>
+                    <th v-for="c in candidateCols" :key="c.key" class="num" :class="{ 'has-filter': !!filterForCandidateCol(c.key) }" :title="c.title || ''">
+                        {{ c.label }}
+                        <ColumnFilterButton :column="{ key: c.key, label: c.label }" :filter="filterForCandidateCol(c.key)"
+                            @apply="applyCandidateFilter" @clear="clearCandidateFilter" />
+                    </th>
                     <th>Parameters</th>
                 </tr></thead>
                 <tbody>
                     <template v-for="cand in shownCandidates" :key="cand._i">
                         <tr class="bt-row" :class="[
                                 { open: expanded === cand._i, active: selectedRunIndex != null && cand.runIndex === selectedRunIndex },
-                                recencyClass(cand.runIndex != null ? cand.runIndex : cand._i, candidateHistory, 'us-recent')
+                                recencyClass(cand._i, candidateHistory, 'us-recent')
                             ]"
                             @click="onRowClick(cand, cand._i)">
                             <td class="us-rank">{{ cand.runIndex != null ? cand.runIndex : cand._i }}</td>
@@ -78,7 +81,7 @@
 </template>
 
 <script>
-import MetricFilterBar from './MetricFilterBar.vue'
+import ColumnFilterButton from './ColumnFilterButton.vue'
 import { applyMetricFilters } from '../../helpers/metric-filter.js'
 import { pushRecent, recencyClass } from '../../helpers/recency.js'
 
@@ -152,7 +155,7 @@ const PER_SYMBOL_COLS = [
 
 export default {
     name: 'CorkyUniverseStudy',
-    components: { MetricFilterBar },
+    components: { ColumnFilterButton },
     props: {
         run: { type: Object, default: null },
         artifact: { type: Object, default: null },
@@ -163,11 +166,22 @@ export default {
         selectedRunIndex: { type: Number, default: null },
     },
     emits: ['select-candidate'],
-    // candidateFilters / candidateHistory are per-study local state: the study is
-    // self-contained, so column filters + recency-graded click history live here
-    // (and reset naturally when a different artifact is mounted).
+    // candidateFilters / candidateHistory / expanded are per-study LOCAL state.
+    // The parent reuses this instance across studies (no remount), so the watch
+    // on `studyKey` below resets them when the shown study changes — otherwise a
+    // prior study's filters/recency would leak onto the next one.
     data() { return { expanded: -1, showRaw: false, candidateFilters: [], candidateHistory: [] } },
+    watch: {
+        studyKey() {
+            this.candidateFilters = []
+            this.candidateHistory = []
+            this.expanded = -1
+        },
+    },
     computed: {
+        // Identity of the shown study — its run_id when present, else the artifact
+        // reference. Drives the per-study local-state reset above.
+        studyKey() { return (this.run && this.run.run_id) || this.artifact },
         // Universe candidates carry cross-symbol robustness aggregates; sweep/
         // optimize candidates carry a single backtest's metrics.
         candidateCols() { return this.chartable ? SWEEP_COLS : UNIVERSE_COLS },
@@ -200,15 +214,11 @@ export default {
                 return row
             })
         },
-        // Columns offered in the filter bar — every numeric candidate metric
-        // column (the rank/Parameters cells aren't filterable thresholds).
-        filterableCandidateCols() {
-            return this.candidateCols.map((c) => ({ key: c.key, label: c.label }))
-        },
         // Candidates after applying the active numeric column filters (AND). Each
         // row already exposes col.key as a numeric-ish field (row[col.key]).
         shownCandidates() {
-            return applyMetricFilters(this.candidates, this.candidateFilters, (row, key) => Number(row[key]))
+            // Raw value through — passesFilter coerces and excludes missing data.
+            return applyMetricFilters(this.candidates, this.candidateFilters, (row, key) => row[key])
         },
         // Optimization metadata key/value chips (sampler, objective, counts, …).
         optMetaRows() {
@@ -228,10 +238,20 @@ export default {
     },
     methods: {
         recencyClass,
+        // ── Per-column numeric filters (header [+]). Local per-study state; one
+        //    filter per column (re-apply replaces it).
+        filterForCandidateCol(key) { return this.candidateFilters.find((f) => f.key === key) || null },
+        applyCandidateFilter(filter) {
+            this.candidateFilters = [...this.candidateFilters.filter((f) => f.key !== filter.key), filter]
+        },
+        clearCandidateFilter(key) {
+            this.candidateFilters = this.candidateFilters.filter((f) => f.key !== key)
+        },
+        clearAllCandidateFilters() { this.candidateFilters = [] },
         onRowClick(cand, i) {
             // Record the click in the recency-graded history (most-recent first)
             // BEFORE selecting/expanding, keyed by run_index when present.
-            this.candidateHistory = pushRecent(this.candidateHistory, cand.runIndex != null ? cand.runIndex : i)
+            this.candidateHistory = pushRecent(this.candidateHistory, i)   // key recency on the stable _i (collision-free across mixed runIndex/_i)
             if (this.chartable && cand.runIndex != null) this.$emit('select-candidate', Number(cand.runIndex))
             else this.expanded = this.expanded === i ? -1 : i
         },
@@ -305,7 +325,12 @@ export default {
 .us-table .bt-row.us-recent-2 { background: rgba(53,167,118,0.11); }
 .us-table .bt-row.us-recent-3 { background: rgba(53,167,118,0.07); }
 .us-table .bt-row.us-recent-4 { background: rgba(53,167,118,0.04); }
-.us-filters { margin: 2px 0 6px; }
+.us-clear { margin-left: 10px; background: rgba(229,65,80,0.10); color: #e07a85;
+            border: 1px solid rgba(229,65,80,0.4); border-radius: 4px; padding: 2px 8px;
+            font-size: 10px; cursor: pointer; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.us-clear:hover { background: rgba(229,65,80,0.18); color: #e54150; }
+/* Filtered candidate column heading: green underline cue. */
+.us-table th.has-filter { box-shadow: inset 0 -2px 0 rgba(53,167,118,0.6); }
 .us-rank { font-weight: 700; color: #bb86fc; }
 .us-params { color: #808a9d; max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
 .us-sub-row > td { padding: 0 8px 8px 24px; background: #11151f; }

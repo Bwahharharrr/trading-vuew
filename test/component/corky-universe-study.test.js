@@ -37,7 +37,7 @@ describe('CorkyUniverseStudy', () => {
 
   test('renders universe robustness aggregates (score, med PF/recovery/Sharpe/Sortino, counts)', () => {
     const w = mountStudy()
-    const headers = w.findAll('.us-table thead th').map((h) => h.text())
+    const headers = w.findAll('.us-table thead th').map((h) => h.text().replace(/\s*\+$/, '').trim())
     expect(headers).toContain('Med Sharpe')      // the requested Sharpe column
     expect(headers).toContain('Med Sortino')
     expect(headers).toContain('Score')
@@ -113,7 +113,7 @@ describe('CorkyUniverseStudy', () => {
         aggregate: { score: '1000', score_v2: '2604.1387724551', avg_trades: '7204.7', total_trades: 14400 } },
     ] }
     const w = mount(CorkyUniverseStudy, { props: { run: { run_id: 'u:x' }, artifact: art, chartable: false } })
-    const hdrs = w.findAll('.us-table thead th').map((h) => h.text())
+    const hdrs = w.findAll('.us-table thead th').map((h) => h.text().replace(/\s*\+$/, '').trim())
     expect(hdrs).toContain('Score v2')
     expect(hdrs).toContain('Avg Trades')
     const r0 = w.find('.us-table tbody .bt-row').text()
@@ -141,21 +141,51 @@ describe('CorkyUniverseStudy', () => {
     expect(mountStudy({ error: 'boom', artifact: null }).find('.us-err').text()).toContain('boom')
   })
 
-  test('a candidate column filter hides non-matching candidates', async () => {
+  test('a candidate column [+] filter hides non-matching candidates; Clear restores them', async () => {
     const w = mountStudy()
     expect(w.findAll('.us-table tbody .bt-row')).toHaveLength(2)   // both candidates
-    // Filter on Score > 1300 — only the rank-1 candidate (score 1414.6) passes.
-    w.findComponent({ name: 'MetricFilterBar' }).vm.$emit('update:filters', [
-      { key: 'score', label: 'Score', op: '>', value: 1300 },
-    ])
+    // Drive the Score column's header [+]: Score > 1300 (default op) — only the
+    // rank-1 candidate (score 1414.6) passes.
+    const scoreBtn = w.findAllComponents({ name: 'ColumnFilterButton' }).find((b) => b.props('column').key === 'score')
+    await scoreBtn.find('.cfb-btn').trigger('click')
+    await scoreBtn.find('.cfb-val').setValue('1300')
+    await scoreBtn.find('.cfb-apply').trigger('click')
     await w.vm.$nextTick()
     const rows = w.findAll('.us-table tbody .bt-row')
     expect(rows).toHaveLength(1)
     expect(rows[0].text()).toContain('1414.60')
-    // Clearing the filter brings the hidden candidate back.
-    w.findComponent({ name: 'MetricFilterBar' }).vm.$emit('update:filters', [])
+    // The "Clear column filters" button appears and restores the hidden candidate.
+    await w.find('.us-clear').trigger('click')
     await w.vm.$nextTick()
     expect(w.findAll('.us-table tbody .bt-row')).toHaveLength(2)
+  })
+
+  test('per-study local state (filter + recency) resets on a study switch — no leak across studies', async () => {
+    const w = mountStudy()
+    // Study A: apply Score > 1300 and click the top candidate.
+    const scoreBtn = w.findAllComponents({ name: 'ColumnFilterButton' }).find((b) => b.props('column').key === 'score')
+    await scoreBtn.find('.cfb-btn').trigger('click')
+    await scoreBtn.find('.cfb-val').setValue('1300')
+    await scoreBtn.find('.cfb-apply').trigger('click')
+    await w.find('.us-table tbody .bt-row').trigger('click')
+    await w.vm.$nextTick()
+    expect(w.findAll('.us-table tbody .bt-row')).toHaveLength(1)   // filter active in study A
+
+    // Switch to a DIFFERENT study (lower scores than the study-A filter threshold).
+    const ARTIFACT_B = {
+      runs: [
+        { run_index: 3, rank: 1, parameters: { values: { p: 1 } }, aggregate: { score: '120.0', total_trades: 10 } },
+        { run_index: 9, rank: 2, parameters: { values: { p: 2 } }, aggregate: { score: '80.0', total_trades: 5 } },
+      ],
+    }
+    await w.setProps({ artifact: ARTIFACT_B, run: { run_id: 'optimize-universe:B' } })
+    await w.vm.$nextTick()
+    const rows = w.findAll('.us-table tbody .bt-row')
+    expect(rows).toHaveLength(2)   // filter did NOT leak — both B candidates render
+    // Recency did NOT leak — no B row carries a us-recent-* tint.
+    expect(rows.every((r) => !r.classes().some((c) => c.startsWith('us-recent-')))).toBe(true)
+    // …and the Clear button is gone (no active filters in B).
+    expect(w.find('.us-clear').exists()).toBe(false)
   })
 
   test('clicking a candidate row tints it us-recent-0 (recency history)', async () => {

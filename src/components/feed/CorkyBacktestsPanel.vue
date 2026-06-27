@@ -20,12 +20,17 @@
             <option value="">Any TF</option>
             <option v-for="tf in timeframeOptions" :key="tf" :value="tf">{{ tf }}</option>
         </select>
-        <select class="bt-input bt-type" :value="filters.runType || ''" @change="$emit('update:filter', { runType: $event.target.value })">
+        <select class="bt-input bt-runtype" :value="filters.runType || ''" @change="$emit('update:filter', { runType: $event.target.value })">
             <option value="">Any type</option>
             <option v-for="t in runTypeOptions" :key="t.kind" :value="t.kind">{{ t.label }}</option>
         </select>
         <button class="bt-btn" :disabled="loading" @click="$emit('list-runs')">Load runs</button>
         <button class="bt-icon" title="Refresh strategies" @click="$emit('refresh-strategies')">⟳</button>
+        <!-- Appears only once ≥1 column filter is active; clears them all. -->
+        <button v-if="metricFilters.length" class="bt-clear" @click="clearAllColumnFilters"
+                :title="metricFilters.map(f => `${f.label} ${f.op} ${f.value}`).join('  ·  ')">
+            ✕ Clear column filters<span class="bt-clear-n">{{ metricFilters.length }}</span>
+        </button>
     </div>
 
     <!-- Selected strategy info (params + indicators) — collapsed by default. -->
@@ -60,11 +65,6 @@
     <div class="bt-body">
         <!-- Runs list -->
         <div class="bt-runs">
-            <!-- Numeric column filters (App-owned, persisted across tabs/views). -->
-            <div class="bt-filters">
-                <MetricFilterBar :columns="filterableCols" :filters="metricFilters"
-                                 @update:filters="$emit('update:metric-filters', $event)" />
-            </div>
             <div class="bt-runs-head">
                 Runs<span class="bt-count">{{ filteredRuns.length }}</span>
                 <span v-if="filters.strategy" class="bt-dim">· {{ filters.strategy }}</span>
@@ -78,8 +78,10 @@
                 <thead>
                     <tr>
                         <th v-for="c in columns" :key="c.key" @click="sortBy(c.key)" :title="c.title || ''"
-                            :class="{ sorted: sortKey === c.key, num: !!c.metric }">
+                            :class="{ sorted: sortKey === c.key, num: !!c.metric, 'has-filter': isFilterable(c) && !!filterForColumn(c.metric) }">
                             {{ c.label }}<span v-if="sortKey === c.key" class="bt-sort">{{ sortDir === 1 ? '▲' : '▼' }}</span>
+                            <ColumnFilterButton v-if="isFilterable(c)" :column="{ key: c.metric, label: c.label }"
+                                :filter="filterForColumn(c.metric)" @apply="applyColumnFilter" @clear="clearColumnFilter" />
                         </th>
                     </tr>
                     <!-- Aggregate totals/averages over every loaded run, glued below the header. -->
@@ -117,11 +119,11 @@
 import { detectRunShape } from '../../helpers/feed/backtest-shape.js'
 import { applyMetricFilters } from '../../helpers/metric-filter.js'
 import { recencyClass } from '../../helpers/recency.js'
-import MetricFilterBar from './MetricFilterBar.vue'
+import ColumnFilterButton from './ColumnFilterButton.vue'
 
 export default {
     name: 'CorkyBacktestsPanel',
-    components: { MetricFilterBar },
+    components: { ColumnFilterButton },
     created() { this._shapeCache = new Map() },   // run_id → detected shape
     props: {
         strategies: { type: Array, default: () => [] },
@@ -195,21 +197,17 @@ export default {
             }
             return out
         },
-        // Numeric metric columns offered to the MetricFilterBar (Net P/L, Return,
-        // vs B&H, Max/Avg/Score v2, Sharpe, Sortino, PF, RF, Avg Trades) — the
-        // boolean "Beat" column isn't numerically filterable.
-        filterableCols() {
-            return this.metricCols.filter((c) => c.fmt !== 'bool').map((c) => ({ key: c.metric, label: c.label }))
-        },
         // Apply the CLIENT-side filters (timeframe + run type) the gateway list
         // doesn't support; strategy/symbol/status were already applied server-side.
         // Then the App-owned numeric metric filters (AND of "<col> <op> <value>").
+        // Pass the RAW metric (not Number()'d) so passesFilter's no-data guard
+        // EXCLUDES null/'' runs instead of mistaking them for 0.
         filteredRuns() {
             const tf = this.filters.timeframe || ''
             const rt = this.filters.runType || ''
             const base = (!tf && !rt) ? this.runs : this.runs.filter((r) =>
                 (!tf || r.trade_timeframe === tf) && (!rt || this.runShape(r).kind === rt))
-            return applyMetricFilters(base, this.metricFilters, (r, key) => Number(this.metric(r, key)))
+            return applyMetricFilters(base, this.metricFilters, (r, key) => this.metric(r, key))
         },
         // Client-side sortable run list (the backend returns the full set; the
         // user orders by any column). Symbols sort by their joined string; metric
@@ -299,6 +297,22 @@ export default {
         // Recency CSS class ('bt-recent-0'..'bt-recent-4') for a run's row, by how
         // recently it was clicked/opened (0 = most recent), or '' if not in history.
         recencyClass,
+        // ── Per-column numeric filters. A header [+] adds/edits ONE filter per
+        //    column; the set is App-owned (metricFilters prop) and persisted, so we
+        //    only emit the full new array. The boolean "Beat" + identity/duration
+        //    columns aren't numerically filterable.
+        isFilterable(c) { return !!c.metric && c.fmt !== 'bool' },
+        filterForColumn(key) { return this.metricFilters.find((f) => f.key === key) || null },
+        applyColumnFilter(filter) {
+            // Replace any existing filter on this column, then append the new one.
+            const next = this.metricFilters.filter((f) => f.key !== filter.key)
+            next.push(filter)
+            this.$emit('update:metric-filters', next)
+        },
+        clearColumnFilter(key) {
+            this.$emit('update:metric-filters', this.metricFilters.filter((f) => f.key !== key))
+        },
+        clearAllColumnFilters() { this.$emit('update:metric-filters', []) },
         // Compact symbol list: first 5, then "… & N more" (full list on hover).
         fmtSymbols(symbols) {
             const a = Array.isArray(symbols) ? symbols : []
@@ -469,11 +483,22 @@ export default {
 .bt-sum-cell { font-variant-numeric: tabular-nums; }
 .bt-summary td.pos { color: #23a776; }
 .bt-summary td.neg { color: #e54150; }
-/* Numeric column-filter bar above the runs table. */
-.bt-filters { padding: 6px 10px; border-bottom: 1px solid #1c212e; background: #121827; }
+/* "Clear column filters" — appears in the controls only when ≥1 filter is active. */
+.bt-clear { display: inline-flex; align-items: center; gap: 6px; background: rgba(229,65,80,0.10);
+            color: #e07a85; border: 1px solid rgba(229,65,80,0.4); border-radius: 4px;
+            padding: 5px 10px; font-size: 12px; cursor: pointer; }
+.bt-clear:hover { background: rgba(229,65,80,0.18); color: #e54150; }
+.bt-clear-n { background: rgba(229,65,80,0.28); color: #fff; border-radius: 8px; padding: 0 6px; font-size: 10px; }
+/* Filtered column heading gets a green underline so it's scannable at a glance. */
+.bt-table th.has-filter { box-shadow: inset 0 -2px 0 rgba(53,167,118,0.6); }
 .bt-row { cursor: pointer; }
 .bt-row:nth-child(even) { background: rgba(255, 255, 255, 0.025); }   /* zebra striping */
 .bt-row:hover { background: #1e222d; }
+/* The active selection keeps a clear accent (left border). Declared BEFORE the
+   recency block (equal specificity → source order wins) so the just-clicked row,
+   which is also bt-recent-0, keeps the brightest recency tint AND the accent bar
+   (box-shadow is a separate property, unaffected by the background order). */
+.bt-row.active { background: rgba(53,167,118,0.12); box-shadow: inset 3px 0 0 #35a776; }
 /* Recency-graded highlight: brightest green for the most recently opened run
    (-0), fading to a faint tint for the oldest remembered (-4). Above zebra. */
 .bt-row.bt-recent-0 { background: rgba(53,167,118,0.30); }
@@ -481,9 +506,6 @@ export default {
 .bt-row.bt-recent-2 { background: rgba(53,167,118,0.15); }
 .bt-row.bt-recent-3 { background: rgba(53,167,118,0.09); }
 .bt-row.bt-recent-4 { background: rgba(53,167,118,0.05); }
-/* The active selection keeps a clear accent (left border) so it reads even when
-   it's also one of the recently opened rows. */
-.bt-row.active { background: rgba(53,167,118,0.12); box-shadow: inset 3px 0 0 #35a776; }
 .sym { color: #fff; font-weight: 600; }
 .time { color: #808a9d; }
 .bt-badge { font-size: 10px; text-transform: uppercase; padding: 1px 7px; border-radius: 9px; background: #2a2e39; color: #b0b6c0; }

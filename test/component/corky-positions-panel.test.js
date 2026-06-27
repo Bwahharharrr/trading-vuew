@@ -49,6 +49,20 @@ describe('CorkyPositionsPanel — rendering', () => {
         expect(w.find('.bt').exists()).toBe(true)
     })
 
+    test('dock forwards metric-filters / click-history to the backtests panel and bubbles updates back', () => {
+        const metricFilters = [{ key: 'total_net_profit', label: 'Net P/L', op: '>', value: 1000 }]
+        const clickHistory = ['r1']
+        const w = mountPanel({ activeTab: 'backtests', backtests: { strategies: [], runs: [], filters: {}, detail: {}, metricFilters, clickHistory } })
+        const child = w.findComponent({ name: 'CorkyBacktestsPanel' })
+        // Down: props arrive intact (catches a misnamed kebab binding falling into $attrs).
+        expect(child.props('metricFilters')).toEqual(metricFilters)
+        expect(child.props('clickHistory')).toEqual(clickHistory)
+        // Up: the child's update:metric-filters bubbles out of the dock as bt-set-metric-filters.
+        const payload = [{ key: 'score_v2', label: 'Score v2', op: '>=', value: 0.5 }]
+        child.vm.$emit('update:metric-filters', payload)
+        expect(w.emitted('bt-set-metric-filters').pop()[0]).toEqual(payload)
+    })
+
     test('a selected run adds a Run-Details tab that renders the detail + closes', async () => {
         const run = { run_id: 'r1', strategy: 'ema_cross_all_in_v1', venue: 'BITFINEX', symbols: ['tBTCUSD'], trade_timeframe: '1h', status: 'completed', metrics: { profit_factor: '1.33' } }
         const w = mountPanel({ activeTab: 'bt-detail', backtests: { runs: [run], filters: {}, selectedRun: run, detail: {} } })
