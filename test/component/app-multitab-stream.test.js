@@ -91,6 +91,45 @@ describe('onCorkySelect new-tab routing', () => {
         expect(host.createChartTab).not.toHaveBeenCalled()
         expect(host.corkySelect).toHaveBeenCalled()
     })
+})
+
+describe('per-tab control epoch — concurrent loads do not supersede each other', () => {
+    function makeTab(id) {
+        return {
+            id, corkyFeed: null, corkyCurrent: null, corkyHandle: null, corkyLast: null,
+            corkyLoading: false, corkyProgress: null, corkyError: null, searchNav: null,
+            title: '', _stream: { gen: 0, retries: 0, retryKeepSpinner: false },
+            corkyFeedSubs: {},
+        }
+    }
+    it('a load on tab B leaves tab A\'s epoch + handle intact (no cross-supersede)', async () => {
+        const tabA = makeTab('A'); const tabB = makeTab('B')
+        const feedFor = (id) => ({ subscribe: vi.fn(async () => ({ id })), unsubscribe: vi.fn() })
+        tabA.corkyFeed = feedFor('A'); tabB.corkyFeed = feedFor('B')
+        const host = {
+            corkyClient: {}, corkyStates: [], corkyEnabled: {}, activeChartTabId: 'A',
+            _tabs: { A: tabA, B: tabB },
+            $nextTick: () => {}, $refs: { tradingVue: {} }, saveStateToStorage: vi.fn(),
+        }
+        Object.defineProperty(host, 'activeTab', { get() { return host._tabs[host.activeChartTabId] }, configurable: true })
+        for (const m of ['corkySelect', '_corkyUnsub', '_corkyMem', '_corkyErr', '_navStatusLabel',
+            '_corkyScheduleSelectRetry', '_ensureTabFeed']) host[m] = M[m].bind(host)
+        host._corkyBindActiveCube = () => {}   // skip loader binding (tested elsewhere)
+
+        await host.corkySelect({ venue: 'V', symbol: 'A', timeframe: '1h' }, tabA)
+        const genA = tabA._stream.gen
+        host.activeChartTabId = 'B'
+        await host.corkySelect({ venue: 'V', symbol: 'B', timeframe: '1h' }, tabB)
+
+        expect(tabA._stream.gen).toBe(genA)                 // tab B's select did NOT bump tab A
+        expect(tabB._stream.gen).toBeGreaterThan(0)
+        expect(tabA.corkyHandle).toEqual({ id: 'A' })       // each kept its own handle
+        expect(tabB.corkyHandle).toEqual({ id: 'B' })
+        expect(tabA.corkyCurrent.symbol).toBe('A')          // …and its own symbol
+        expect(tabB.corkyCurrent.symbol).toBe('B')
+        expect(tabA.corkyFeed.subscribe).toHaveBeenCalledTimes(1)   // each loaded via its OWN feed
+        expect(tabB.corkyFeed.subscribe).toHaveBeenCalledTimes(1)
+    })
 
     it('at the tab cap (createChartTab → null) a new-tab click ABORTS, never clobbers the active chart', () => {
         const host = makeHost()

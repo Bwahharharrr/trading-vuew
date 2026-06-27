@@ -31,8 +31,13 @@ function mkCtx() {
         positionPlot: null,
         priceAlarms: [],
         _corkyPendingRange: null,
-        _corkyGen: 0,
-        _corkyRetryKeepSpinner: false,
+        // Per-tab control epoch + tab identity. corkySelect now operates on
+        // `this.activeTab`; we point it at ctx itself (set below), so the per-tab
+        // fields above ARE this tab's, and isActive() (id===activeChartTabId) holds.
+        _stream: { gen: 0, retryOpts: null, retryTimer: null, retries: 0, retryKeepSpinner: false },
+        id: 'ct-1',
+        activeChartTabId: 'ct-1',
+        title: '',
         chart: { data: { onchart: [], offchart: [] } },
         corkyClient: {},   // corkySelect guards on the client being up
         // A fake feed whose subscribe captures the status/error callbacks so the
@@ -56,9 +61,10 @@ function mkCtx() {
         saveStateToStorage: vi.fn(),
     }
     for (const m of ['corkySelect', '_corkyUnsub', '_corkyMem', '_corkyErr',
-        '_navStatusLabel', '_corkyScheduleSelectRetry', '_corkyBindActiveCube']) {
+        '_navStatusLabel', '_corkyScheduleSelectRetry', '_corkyBindActiveCube', '_ensureTabFeed']) {
         ctx[m] = M[m]
     }
+    ctx.activeTab = ctx   // the tab corkySelect targets IS this ctx
     return ctx
 }
 
@@ -190,7 +196,7 @@ describe('superseded-generation guard', () => {
         ctx.searchNav = { tabId: 'search-1', index: 0, loading: true, message: 'orig' }
         ctx.priceAlarms = [{ id: 'a1' }]
         const { onStatus, tv } = await arm(ctx)
-        ctx._corkyGen += 1                                         // a later select superseded us
+        ctx._stream.gen += 1                                         // a later select superseded us
         onStatus({ phase: 'history-complete' })
         expect(tv.resetChart).not.toHaveBeenCalled()
         expect(ctx.ensurePriceAlarmOverlay).not.toHaveBeenCalled()
@@ -202,7 +208,7 @@ describe('superseded-generation guard', () => {
     test('a newer _corkyGen freezes onError (no corkyError, no nav mutation)', async () => {
         ctx.searchNav = { tabId: 'search-1', index: 0, loading: true, error: false }
         const { onError } = await arm(ctx)
-        ctx._corkyGen += 1
+        ctx._stream.gen += 1
         onError({ message: 'boom' })
         expect(ctx.corkyError).toBeNull()
         expect(ctx.searchNav.error).toBe(false)

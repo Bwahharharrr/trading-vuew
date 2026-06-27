@@ -15,6 +15,7 @@
 // from activate-semantics (swap render, NEVER destroy a backgrounded cube). With
 // exactly one tab only the replace path runs, so single-chart behaviour is
 // byte-identical to the old `chart` watcher this mixin replaces.
+import { markRaw } from 'vue'
 import { OrderAgent } from '../../helpers/orders/order-agent.js'
 import { StubOrderTransport } from '../../helpers/orders/stub-order-transport.js'
 
@@ -67,6 +68,14 @@ export default {
                 corkyHandle: null,
                 corkyLast: null,
                 range: null,
+                // Per-tab load CHROME (reactive — drives the discovery panel via the
+                // active-tab shims) + per-tab CONTROL epoch/retry (markRaw — gen +
+                // setTimeout handles need no reactivity). So a concurrently-loading
+                // background tab keeps its own load state + completion epoch.
+                corkyLoading: false,
+                corkyProgress: null,
+                corkyError: null,
+                _stream: markRaw({ gen: 0, retryOpts: null, retryTimer: null, retries: 0, retryKeepSpinner: false }),
                 // Per-tab ON-CHART overlay state — a plotted position / backtest /
                 // search-result marker / price alarms / drawing-tool arm all belong
                 // to the chart they were created on, not the app. Surfaced via the

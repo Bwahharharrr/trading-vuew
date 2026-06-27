@@ -23,6 +23,12 @@ function mkApp(over = {}) {
     corkyLoading: false,
     corkyError: null,
     corkyProgress: null,
+    // Per-tab control epoch + tab identity — corkySelect now targets this.activeTab
+    // (= ctx, set below), so these flat fields ARE this tab's; isActive() holds.
+    _stream: { gen: 0, retryOpts: null, retryTimer: null, retries: 0, retryKeepSpinner: false },
+    id: 'ct-1',
+    activeChartTabId: 'ct-1',
+    title: '',
     priceAlarms: [],
     chart: {
       data: {
@@ -41,7 +47,9 @@ function mkApp(over = {}) {
     },
   }
   Object.assign(ctx, M) // real App methods, bound by call-site `this`
-  return Object.assign(ctx, over)
+  Object.assign(ctx, over)
+  if (!ctx.activeTab) ctx.activeTab = ctx   // the tab corkySelect/_corkyUnsub target
+  return ctx
 }
 
 // A controllable CorkyFeed stub.
@@ -444,7 +452,7 @@ describe('runtime-id targeting + ride-through retry', () => {
     await app.corkySelect({ venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1m', indicators: [] })
     expect(app.corkyError).toBeNull()
     expect(app.corkyProgress.phase).toBe('retrying')
-    expect(app._corkySelectRetries).toBe(1)
+    expect(app._stream.retries).toBe(1)
     app._corkyCancelSelectRetry()
     vi.useRealTimers()
   })
@@ -459,22 +467,24 @@ describe('runtime-id targeting + ride-through retry', () => {
   test('after the fast attempts it surfaces a CLEAR error but keeps retrying in the background', async () => {
     vi.useFakeTimers()
     const feed = mkFeed({ subscribe: vi.fn(async () => { throw Object.assign(new Error('stale'), { retryable: true }) }) })
-    const app = mkApp({ corkyStates: STATES, corkyFeed: feed, _corkySelectRetries: 3 })
+    const app = mkApp({ corkyStates: STATES, corkyFeed: feed })
+    app._stream.retries = 3   // past the FAST phase → slow (clear error, keep retrying)
     await app.corkySelect({ venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1m', indicators: [] })
     // slow phase: visible actionable error (not an endless spinner), retry still armed
     expect(app.corkyProgress).toBeNull()
     expect(app.corkyError.retryable).toBe(true)
     expect(app.corkyError.message).toMatch(/gateway\/runtime issue/i)
     expect(app.corkyError.message).toContain('stale')   // surfaces the real reason
-    expect(app._corkyRetryKeepSpinner).toBe(false)   // spinner off, error shown
-    expect(app._corkyRetryTimer).toBeTruthy()         // background retry scheduled
+    expect(app._stream.retryKeepSpinner).toBe(false)   // spinner off, error shown
+    expect(app._stream.retryTimer).toBeTruthy()         // background retry scheduled
     app._corkyCancelSelectRetry()
     vi.useRealTimers()
   })
 
   test('onCorkyRetry re-discovers AND re-selects the pending selection', async () => {
     const feed = mkFeed()
-    const app = mkApp({ corkyStates: STATES, corkyFeed: feed, _corkyRetryOpts: { venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1m' } })
+    const app = mkApp({ corkyStates: STATES, corkyFeed: feed })
+    app._stream.retryOpts = { venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1m' }   // active tab's remembered retry
     app.corkyDiscover = vi.fn(async () => STATES)
     app.onCorkyRetry()
     await Promise.resolve(); await Promise.resolve()
@@ -483,12 +493,14 @@ describe('runtime-id targeting + ride-through retry', () => {
   })
 
   test('_corkyCancelSelectRetry clears a pending retry + counter', () => {
-    const app = mkApp({ _corkySelectRetries: 2, _corkyRetryKeepSpinner: true })
-    app._corkyRetryTimer = setTimeout(() => {}, 9999)
+    const app = mkApp()
+    app._stream.retries = 2
+    app._stream.retryKeepSpinner = true
+    app._stream.retryTimer = setTimeout(() => {}, 9999)
     app._corkyCancelSelectRetry()
-    expect(app._corkySelectRetries).toBe(0)
-    expect(app._corkyRetryKeepSpinner).toBe(false)
-    expect(app._corkyRetryTimer).toBeNull()
+    expect(app._stream.retries).toBe(0)
+    expect(app._stream.retryKeepSpinner).toBe(false)
+    expect(app._stream.retryTimer).toBeNull()
   })
 })
 
@@ -517,12 +529,13 @@ describe('corkySelect staleness epoch (M27)', () => {
     let rejectA
     const feed = mkFeed({ subscribe: vi.fn(() => new Promise((_, rej) => { rejectA = rej })) })
     const app = mkApp({ corkyStates: [], corkyFeed: feed })
+    app.chartTabs = [app]   // teardownCorky bumps each tab's epoch + cancels its retry
     const p = app.corkySelect({ venue: 'v', symbol: 'A', timeframe: '1m', indicators: [] })
     await new Promise((r) => setTimeout(r, 0))   // let the select reach its subscribe
     app.teardownCorky()
     rejectA(Object.assign(new Error('conn lost'), { retryable: true }))
     await p
-    expect(app._corkyRetryTimer).toBeFalsy()   // no post-teardown retry armed
+    expect(app._stream.retryTimer).toBeFalsy()   // no post-teardown retry armed
     expect(app.corkyError).toBeNull()
   })
 })

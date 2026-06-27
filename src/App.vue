@@ -465,9 +465,9 @@ export default {
             // `${venue}|${symbol}` → { kinds:[{display_label,kind}], layers:[layerId],
             //                          hiddenLayers:[layerId] }
             corkyEnabled: {},
-            corkyLoading: false,
-            corkyProgress: null,
-            corkyError: null,
+            // corkyLoading/corkyProgress/corkyError are PER-TAB (computed shims →
+            // active tab) so the discovery chrome tracks the active tab and a
+            // background tab's load never bleeds into it.
 
             // ── Auth positions (bottom dock) ──
             positionsFeed: null,           // CorkyPositionsFeed over corkyClient
@@ -561,6 +561,19 @@ export default {
         _btProgressSub: {
             get() { return this.activeTab ? this.activeTab.btProgressSub : null },
             set(v) { if (this.activeTab) this.activeTab.btProgressSub = v },
+        },
+        // Per-tab load chrome (drives CorkyDiscoveryPanel :loading/:progress/:error).
+        corkyLoading: {
+            get() { return this.activeTab ? this.activeTab.corkyLoading : false },
+            set(v) { if (this.activeTab) this.activeTab.corkyLoading = v },
+        },
+        corkyProgress: {
+            get() { return this.activeTab ? this.activeTab.corkyProgress : null },
+            set(v) { if (this.activeTab) this.activeTab.corkyProgress = v },
+        },
+        corkyError: {
+            get() { return this.activeTab ? this.activeTab.corkyError : null },
+            set(v) { if (this.activeTab) this.activeTab.corkyError = v },
         },
         // `venue|symbol` (lowercased) of the charted stream — lets the dock
         // highlight the row whose ticker is currently shown.
@@ -916,53 +929,49 @@ export default {
 
         // Subscribe to a stream (single active subscription): drop the prior
         // one, then drive the DataCube from the gateway.
-        async corkySelect(opts) {
+        async corkySelect(opts, targetTab) {
             if (!this.corkyClient) return
-            // Multi-tab: this load targets the ACTIVE tab. Ensure its own feed
-            // exists + bind the lazy-history loader to its cube, so candles AND
-            // live ticks land in the tab you're viewing (each tab streams into its
-            // own cube concurrently). corkyFeed below resolves to this tab's feed.
+            // Per-tab: this load targets `tab` (defaults to the active tab). Its own
+            // feed, control epoch, handle, load-chrome and retry all live on the tab,
+            // so a concurrently-loading BACKGROUND tab keeps its completion and the
+            // discovery chrome (loading/progress/error shims) tracks the active tab.
+            const tab = targetTab || this.activeTab
+            if (!tab) return
+            this._ensureTabFeed(tab)
+            const feed = tab.corkyFeed
+            if (!feed) return
+            const st = tab._stream || (tab._stream = { gen: 0 })
+            // Bind the lazy-history loader to the active cube (panning is active-only).
             this._corkyBindActiveCube()
-            if (!this.corkyFeed) return
-            // Staleness epoch: every select (and teardown) bumps it; anything
-            // after an await only applies if this call is still the latest.
-            // Without this, a superseded select resolving LATE could overwrite
-            // corkyHandle/corkyLast for the selection the user moved away from,
-            // and a teardown-raced failure could re-arm the retry post-unmount.
-            this._corkyGen = (this._corkyGen || 0) + 1
-            const gen = this._corkyGen
+            // Per-TAB staleness epoch: anything after an await only applies if THIS
+            // tab's select is still the latest — another tab's select can't supersede
+            // it (the global-epoch bug that dropped a concurrent background load).
+            st.gen = (st.gen || 0) + 1
+            const gen = st.gen
             // Normalize: `indicators` must be AT LEAST [] — the feed maps a null/
             // missing field to include_indicators:undefined, and the gateway then
-            // serves candles WITHOUT indicator rows. The boot-restore call hit
-            // exactly that: chart loaded, but no indicator data → _reapplyEnabled
-            // a no-op and every panel toggle dead (applied=false).
+            // serves candles WITHOUT indicator rows (the boot-restore bug).
             opts = { ...opts, indicators: opts.indicators || [] }
-            // Single active stream: tear down the previous subscription first.
-            await this._corkyUnsub()
-            if (gen !== this._corkyGen) return
-            this.corkyLoading = true
-            this.corkyError = null
-            this.corkyProgress = null
+            // Tear down THIS tab's previous subscription first.
+            await this._corkyUnsub(tab)
+            if (gen !== st.gen) return
+            tab.corkyLoading = true
+            tab.corkyError = null
+            tab.corkyProgress = null
             // Candles-only by default: indicators are toggled on client-side
             // afterwards (their data already ships in the rows — no resubscribe).
             // Persisted enabled indicators/layers for this symbol (survives a
             // tf-switch). Reflect them optimistically in the panel; the feed
             // re-applies them after the new history loads (_reapplyEnabled).
             const mem = this._corkyMem(opts.venue, opts.symbol)
-            this.corkyCurrent = {
+            tab.corkyCurrent = {
                 venue: opts.venue,
                 symbol: opts.symbol,
                 timeframe: opts.timeframe,
                 indicators: mem.kinds.map(k => k.display_label),
                 layers: mem.layers.slice(),   // enabled view-layer ids
             }
-            // Remember the selection on the active tab so a tab switch can
-            // re-establish its stream, and label the tab 'SYMBOL · TF'.
-            const _activeTab = this.activeTab
-            if (_activeTab) {
-                _activeTab.corkyCurrent = this.corkyCurrent
-                _activeTab.title = `${opts.symbol} · ${opts.timeframe}`
-            }
+            tab.title = `${opts.symbol} · ${opts.timeframe}`   // label the tab
             // Assemble the indicator VIEW map (display_label → { kind, view }) from
             // the discovery descriptors for this venue/symbol so buildChartData can
             // prefer view.layers over plotting every output. (The select opts from
@@ -992,20 +1001,21 @@ export default {
             // turning a recoverable load into an endless "Reconnecting…" loop.
             // target_runtime_id is threaded only into patch/upsert (below), where
             // the gateway really does fall back to a stale default.
+            const isActive = () => tab.id === this.activeChartTabId
             try {
-                const handle = await this.corkyFeed.subscribe(
+                const handle = await feed.subscribe(
                     { ...opts, views, enabled }, {
                     onStatus: (status) => {
-                        if (gen !== this._corkyGen) return   // superseded stream
-                        this.corkyProgress = status
-                        // Reflect load phases on the active search result row.
-                        if (this.searchNav && this.searchNav.loading && status &&
+                        if (gen !== st.gen) return   // superseded (per-tab epoch)
+                        tab.corkyProgress = status
+                        // Reflect load phases on THIS tab's search result row.
+                        if (tab.searchNav && tab.searchNav.loading && status &&
                             status.phase !== 'history-complete' && status.phase !== 'live') {
-                            this.searchNav.message = this._navStatusLabel(status)
+                            tab.searchNav.message = this._navStatusLabel(status)
                         }
                         if (status && (status.phase === 'history-complete' ||
                                        status.phase === 'live')) {
-                            this.corkyLoading = false
+                            tab.corkyLoading = false
                         }
                         // Refit the visible range to the freshly-loaded history.
                         // The gateway pushes the new timeframe's candles into the
@@ -1020,7 +1030,10 @@ export default {
                         // DEFAULT_LEN window. Deferred to nextTick so the chart's
                         // data watcher has applied the new candles first.
                         if (status && status.phase === 'history-complete') {
-                            this.$nextTick(() => {
+                            // Chart UI is ACTIVE-tab only — a background tab's data
+                            // still loads into its cube via the feed; the view +
+                            // overlays are (re)applied when you switch to it.
+                            if (isActive()) this.$nextTick(() => {
                                 const tv = this.$refs.tradingVue
                                 // For a plotted position we ZOOM to its window so the
                                 // trades fill the pane AND the offchart bars get a
@@ -1067,56 +1080,54 @@ export default {
                                 // + trade markers.
                                 this.syncBacktestOverlays()
                             })
-                            // The chart for the active search result has loaded —
-                            // clear its row's "loading onto chart" feedback.
-                            if (this.searchNav && this.searchNav.loading) {
-                                this.searchNav.loading = false
-                                this.searchNav.message = ''
+                            // THIS tab's search result loaded — clear its row's
+                            // "loading onto chart" feedback (data lands regardless
+                            // of which tab is on screen).
+                            if (tab.searchNav && tab.searchNav.loading) {
+                                tab.searchNav.loading = false
+                                tab.searchNav.message = ''
                             }
                         }
                     },
                     onError: (err) => {
-                        if (gen !== this._corkyGen) return   // superseded stream
-                        this.corkyError = this._corkyErr(err)
-                        if (this.searchNav && this.searchNav.loading) {
-                            this.searchNav.loading = false
-                            this.searchNav.error = true
-                            this.searchNav.message = 'Failed to load on chart'
+                        if (gen !== st.gen) return   // superseded (per-tab epoch)
+                        tab.corkyError = this._corkyErr(err)
+                        if (tab.searchNav && tab.searchNav.loading) {
+                            tab.searchNav.loading = false
+                            tab.searchNav.error = true
+                            tab.searchNav.message = 'Failed to load on chart'
                         }
                     },
                 })
-                // A superseded select (the feed returns null) or a newer epoch
-                // must NOT touch the live selection's state.
-                if (gen !== this._corkyGen || !handle) return
-                this.corkyHandle = handle
-                this._corkySelectRetries = 0   // a clean subscribe clears the ride-through counter
-                this._corkyRetryOpts = null
-                // Remember the selection so a reload / browser restart reopens it.
-                this.corkyLast = {
+                // A superseded select (feed returns null) or a newer per-tab epoch
+                // must NOT touch this tab's live selection state.
+                if (gen !== st.gen || !handle) return
+                tab.corkyHandle = handle
+                st.retries = 0     // a clean subscribe clears this tab's ride-through
+                st.retryOpts = null
+                // Remember the selection so a reload reopens it.
+                tab.corkyLast = {
                     venue: opts.venue, symbol: opts.symbol, timeframe: opts.timeframe,
                 }
                 this.saveStateToStorage()
             } catch (err) {
-                if (gen !== this._corkyGen) return   // stale failure: stay quiet
+                if (gen !== st.gen) return   // stale failure: stay quiet
                 const mapped = this._corkyErr(err)
-                // Ride through transient runtime restarts: a retryable control
-                // error (runtime_not_found / control_response_timeout /
-                // subscribe_timeout) re-discovers + re-selects with backoff a few
-                // times before surfacing, so a runtime redeploy self-heals.
-                if (this._corkyScheduleSelectRetry(opts, mapped)) return
-                this._corkySelectRetries = 0
-                this.corkyError = mapped
-                this.corkyCurrent = null
-                if (this.searchNav && this.searchNav.loading) {
-                    this.searchNav.loading = false
-                    this.searchNav.error = true
-                    this.searchNav.message = 'Failed to load on chart'
+                // Ride through transient runtime restarts (per tab): a retryable
+                // control error re-discovers + re-selects THIS tab with backoff.
+                if (this._corkyScheduleSelectRetry(opts, mapped, tab)) return
+                st.retries = 0
+                tab.corkyError = mapped
+                tab.corkyCurrent = null
+                if (tab.searchNav && tab.searchNav.loading) {
+                    tab.searchNav.loading = false
+                    tab.searchNav.error = true
+                    tab.searchNav.message = 'Failed to load on chart'
                 }
             } finally {
-                // Keep the spinner up only during the brief FAST retry window;
-                // once we surface a clear error (slow phase) the spinner goes off.
-                if (gen === this._corkyGen && !this._corkyRetryKeepSpinner) {
-                    this.corkyLoading = false
+                // Keep the spinner up only during this tab's brief FAST retry window.
+                if (gen === st.gen && !st.retryKeepSpinner) {
+                    tab.corkyLoading = false
                 }
             }
         },
@@ -1128,74 +1139,80 @@ export default {
         //    spinner) AND keep a 20s background retry running, so a longer outage
         //    (a restarted runtime not yet re-registering its control session)
         //    still SELF-HEALS when it returns. Returns true if a retry was armed.
-        _corkyScheduleSelectRetry(opts, mapped) {
+        _corkyScheduleSelectRetry(opts, mapped, tab) {
             if (!mapped || !mapped.retryable) return false
-            this._corkyRetryOpts = opts   // for the panel's manual Retry button
-            const n = this._corkySelectRetries || 0
-            this._corkySelectRetries = n + 1
+            tab = tab || this.activeTab
+            const st = tab && (tab._stream || (tab._stream = {}))
+            if (!st) return false
+            st.retryOpts = opts   // for the panel's manual Retry button
+            const n = st.retries || 0
+            st.retries = n + 1
             const FAST = 3
             const fast = n < FAST
             const delay = fast ? Math.min(400 * Math.pow(2, n), 2400) : 20000
             if (fast) {
-                this.corkyError = null
-                this.corkyProgress = {
+                tab.corkyError = null
+                tab.corkyProgress = {
                     phase: 'retrying', attempt: n + 1,
                     message: 'Reconnecting to the gateway runtime…',
                 }
-                this._corkyRetryKeepSpinner = true
+                st.retryKeepSpinner = true
             } else {
                 const rid = this._corkyRuntimeId(opts.venue, opts.symbol) || 'public-market-main'
-                this.corkyProgress = null
+                tab.corkyProgress = null
                 // Surface the gateway's ACTUAL reason — this is almost always a
-                // backend issue (the runtime's control session being rejected),
-                // not the chart. Keep retrying so it self-heals when it recovers.
+                // backend issue (the runtime's control session being rejected).
                 const reason = (mapped && mapped.message) || 'runtime control session rejected'
-                this.corkyError = {
+                tab.corkyError = {
                     message: `Gateway can't open the stream for runtime "${rid}" — retrying automatically. ` +
                         `This is a gateway/runtime issue: ${reason}`,
                     retryable: true,
                 }
-                this._corkyRetryKeepSpinner = false
+                st.retryKeepSpinner = false
             }
-            clearTimeout(this._corkyRetryTimer)
-            this._corkyRetryTimer = setTimeout(() => {
-                // The client's bounded backoff gives up after ~16s; past that
-                // point NOTHING re-opens the socket unless we do it here — the
-                // 20s slow retry would otherwise spin against a dead socket
-                // forever. connect() resets the backoff budget.
+            clearTimeout(st.retryTimer)
+            st.retryTimer = setTimeout(() => {
+                // The client's bounded backoff gives up after ~16s; past that NOTHING
+                // re-opens the socket unless we do it here. connect() resets the budget.
                 if (this.corkyClient && this.corkyClient.isDead &&
                     this.corkyClient.isDead()) {
                     this.corkyClient.connect()
                 }
-                // A restarted runtime may have a NEW runtime_id — re-discover first.
+                // A restarted runtime may have a NEW runtime_id — re-discover first,
+                // then re-select THIS tab (passed through so a switch doesn't misroute).
                 Promise.resolve(this.corkyDiscover(opts.venue))
-                    .then(() => this.corkySelect(opts))
+                    .then(() => this.corkySelect(opts, tab))
             }, delay)
             return true
         },
 
         // Panel: select a venue/symbol/timeframe (+ default indicators).
         onCorkySelect(opts) {
-            this._corkyCancelSelectRetry()   // a manual pick supersedes any pending retry
             // ⌘/Ctrl/middle-click → open this load in a NEW chart tab (becomes the
             // active tab); a plain click loads into the active tab. At the tab cap
             // createChartTab() returns null — abort rather than clobber the active
-            // chart with a load the user asked to open elsewhere.
+            // chart with a load the user asked to open elsewhere. (Create FIRST so
+            // the cancel/clear below target the TARGET tab, leaving any old tab's
+            // background self-heal retry running.)
             if (opts && opts.newTab && !this.createChartTab()) return
+            this._corkyCancelSelectRetry()   // a manual pick supersedes the target tab's pending retry
             this.clearPositionPlot()         // a discovery pick drops any plotted position
             this._clearSearchNav()           // …and the active search-result highlight/marker
             this.corkySelect(opts)
         },
 
-        // Cancel a pending ride-through retry and reset its counter.
-        _corkyCancelSelectRetry() {
-            clearTimeout(this._corkyRetryTimer)
-            this._corkyRetryTimer = null
-            this._corkyRetryKeepSpinner = false
-            this._corkySelectRetries = 0
-            // Drop the remembered failed selection too — a later manual Retry
-            // must not navigate back to a symbol the user already moved off.
-            this._corkyRetryOpts = null
+        // Cancel a tab's pending ride-through retry and reset its counter.
+        _corkyCancelSelectRetry(tab) {
+            tab = tab || this.activeTab
+            const st = tab && tab._stream
+            if (!st) return
+            clearTimeout(st.retryTimer)
+            st.retryTimer = null
+            st.retryKeepSpinner = false
+            st.retries = 0
+            // Drop the remembered failed selection too — a later manual Retry must
+            // not navigate back to a symbol the user already moved off.
+            st.retryOpts = null
         },
 
         // ── Multi-tab gateway binding (concurrent-live) ───────────────────────
@@ -1785,8 +1802,10 @@ export default {
         // last selection (a bare re-discover left the chart blank after a runtime
         // outage). Resets the ride-through counter so the fast phase runs again.
         onCorkyRetry() {
-            const opts = this._corkyRetryOpts || this.corkyLast
-            this._corkyCancelSelectRetry()
+            // The active tab's remembered failed selection (per-tab retry state).
+            const tab = this.activeTab
+            const opts = (tab && tab._stream && tab._stream.retryOpts) || this.corkyLast
+            this._corkyCancelSelectRetry(tab)
             // Revive a dead client first (backoff exhaustion never reconnects
             // by itself — without this, Retry was a no-op after a >16s outage).
             if (this.corkyClient && this.corkyClient.isDead &&
@@ -1794,18 +1813,20 @@ export default {
                 this.corkyClient.connect()
             }
             if (opts && opts.venue && opts.symbol && opts.timeframe) {
-                Promise.resolve(this.corkyDiscover(opts.venue)).then(() => this.corkySelect(opts))
+                Promise.resolve(this.corkyDiscover(opts.venue)).then(() => this.corkySelect(opts, tab))
             } else {
                 this.corkyDiscover()
             }
         },
 
         // Drop the active subscription (if any) without closing the client.
-        async _corkyUnsub() {
-            const h = this.corkyHandle
-            this.corkyHandle = null
-            if (h != null && this.corkyFeed) {
-                await Promise.resolve(this.corkyFeed.unsubscribe(h)).catch(() => {})
+        async _corkyUnsub(tab) {
+            tab = tab || this.activeTab
+            if (!tab) return
+            const h = tab.corkyHandle
+            tab.corkyHandle = null
+            if (h != null && tab.corkyFeed) {
+                await Promise.resolve(tab.corkyFeed.unsubscribe(h)).catch(() => {})
             }
         },
 
@@ -2799,8 +2820,16 @@ export default {
         },
 
         teardownCorky() {
-            this._corkyGen = (this._corkyGen || 0) + 1   // invalidate in-flight selects
-            this._corkyCancelSelectRetry()   // don't let a pending retry fire post-teardown
+            // Invalidate EVERY tab's in-flight select epoch + cancel its pending
+            // retry so nothing fires against the torn-down client (per-tab now).
+            for (const t of (this.chartTabs || [])) {
+                if (!t) continue
+                if (t._stream) t._stream.gen = (t._stream.gen || 0) + 1
+                this._corkyCancelSelectRetry(t)
+                t.corkyLoading = false
+                t.corkyProgress = null
+                t.corkyError = null
+            }
             this._corkyUnsub()
             this._positionsStopOpenStream()
             this._stopAuditStream()
