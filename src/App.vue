@@ -134,6 +134,7 @@
             @bt-list-runs="btListRuns"
             @bt-inspect-strategy="btInspectStrategy"
             @bt-select-run="btSelectRun"
+            @bt-set-metric-filters="btSetMetricFilters"
             @bt-plot-run="btPlotRun"
             @bt-select-trade="btSelectTrade"
             @bt-select-candidate="btSelectCandidate"
@@ -388,6 +389,7 @@ import { buildSearchQuery, buildCondition, barrierTargetSpec } from '../src/help
 import { backtestSeriesOverlays, backtestTradeMarkers } from '../src/helpers/feed/backtest-overlays.js'
 import { detectRunShape } from '../src/helpers/feed/backtest-shape.js'
 import { pickTimeframe, paddedCandleRange, coarsenTimeframe } from '../src/helpers/feed/pick-timeframe.js'
+import { pushRecent } from './helpers/recency.js'
 import {
     tradeMarkers, positionSizeSeries, buySellHistogram, cumulativeFees, positionWindow,
     orderMarkers, openCloseMarkers,
@@ -510,6 +512,10 @@ export default {
             backtests: {
                 strategies: [], runs: [], filters: { strategy: '', symbol: '', status: '', timeframe: '', runType: '' },
                 selectedRun: null, detail: {}, loading: false, error: null,
+                // App-level so they PERSIST across opening a run/candidate in a new
+                // tab or viewing a detail: column metric filters + recency-graded
+                // click history (last-5 run/candidate ids, most-recent first).
+                metricFilters: [], clickHistory: [],
             },
 
             // positionPlot (a position plotted on the chart: trades + detail panes)
@@ -2250,6 +2256,9 @@ export default {
 
         async btSelectRun(run) {
             if (!run) return
+            // Recency-grade the click: remember the last-5 opened run ids (most
+            // recent first) so the list can tint the rows brighter→older.
+            this.backtests.clickHistory = pushRecent(this.backtests.clickHistory, run.run_id)
             this.backtests.selectedRun = run
             this.positionsActiveTab = 'bt-detail'   // open this run's details in its tab
             this._btStopProgress()
@@ -2280,6 +2289,12 @@ export default {
             // metrics table / period returns / trades). Universe studies carry no
             // equity timeline, so there is nothing to overview/plot.
             if (shape.chartable) this._btLoadOverview(run)
+        },
+
+        // App-level column metric filters (replace wholesale; the bar emits the
+        // full new array). Kept here so they PERSIST across detail/new-tab views.
+        btSetMetricFilters(filters) {
+            this.backtests.metricFilters = Array.isArray(filters) ? filters : []
         },
 
         // Race a promise against a timeout so a hung/oversized gateway response
@@ -2933,6 +2948,7 @@ export default {
             this.backtests = {
                 strategies: [], runs: [], filters: { strategy: '', symbol: '', status: '' },
                 selectedRun: null, detail: {}, loading: false, error: null,
+                metricFilters: [], clickHistory: [],
             }
             this.searchTabs = []
             this.searchTabSeq = 0

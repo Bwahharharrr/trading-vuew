@@ -291,4 +291,32 @@ describe('CorkyBacktestsPanel', () => {
     // No inline detail pane is rendered here anymore.
     expect(w.find('.bt-detail').exists()).toBe(false)
   })
+
+  test('the metric filter bar renders above the runs table', () => {
+    const w = mountPanel()
+    expect(w.find('.bt-filters .mfb').exists()).toBe(true)
+    // Offers the numeric metric columns (not the boolean "Beat") for filtering.
+    const opts = w.findAll('.bt-filters .mfb-col option').map((o) => o.text())
+    expect(opts).toContain('Net P/L')
+    expect(opts).toContain('Score v2')
+    expect(opts).not.toContain('Beat')
+  })
+
+  test('a metric filter hides non-matching runs', () => {
+    const twoRuns = [
+      { run_id: 'win', strategy: 's', symbols: ['tBTCUSD'], trade_timeframe: '1h', status: 'completed', metrics: { total_net_profit: '1250.50' } },
+      { run_id: 'lose', strategy: 't', symbols: ['tETHUSD'], trade_timeframe: '1h', status: 'completed', metrics: { total_net_profit: '500' } },
+    ]
+    const w = mountPanel({ runs: twoRuns, metricFilters: [{ key: 'total_net_profit', label: 'Net P/L', op: '>', value: 1000 }] })
+    const rows = w.findAll('.bt-runs .bt-row')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].text()).toContain('tBTCUSD')
+    expect(w.find('.bt-runs-head').text()).toContain('1')   // count reflects the filter
+  })
+
+  test('a clicked run carries the bt-recent-0 recency class (most recent)', () => {
+    const w = mountPanel({ clickHistory: [runs[0].run_id] })
+    const row = w.find('.bt-runs .bt-row')
+    expect(row.classes()).toContain('bt-recent-0')
+  })
 })

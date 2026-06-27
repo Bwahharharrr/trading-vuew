@@ -60,6 +60,11 @@
     <div class="bt-body">
         <!-- Runs list -->
         <div class="bt-runs">
+            <!-- Numeric column filters (App-owned, persisted across tabs/views). -->
+            <div class="bt-filters">
+                <MetricFilterBar :columns="filterableCols" :filters="metricFilters"
+                                 @update:filters="$emit('update:metric-filters', $event)" />
+            </div>
             <div class="bt-runs-head">
                 Runs<span class="bt-count">{{ filteredRuns.length }}</span>
                 <span v-if="filters.strategy" class="bt-dim">· {{ filters.strategy }}</span>
@@ -86,7 +91,7 @@
                 </thead>
                 <tbody>
                     <tr v-for="r in sortedRuns" :key="r.run_id" class="bt-row"
-                        :class="{ active: selectedRun && selectedRun.run_id === r.run_id }"
+                        :class="[{ active: selectedRun && selectedRun.run_id === r.run_id }, recencyClass(r.run_id, clickHistory, 'bt-recent')]"
                         tabindex="0" role="button"
                         @click="$emit('select-run', r)"
                         @keydown.enter.prevent="$emit('select-run', r)">
@@ -110,9 +115,13 @@
 // bottom dock. App owns the feed + state; this emits intents. All money/quantity
 // values are DECIMAL STRINGS — displayed verbatim, never float-parsed here.
 import { detectRunShape } from '../../helpers/feed/backtest-shape.js'
+import { applyMetricFilters } from '../../helpers/metric-filter.js'
+import { recencyClass } from '../../helpers/recency.js'
+import MetricFilterBar from './MetricFilterBar.vue'
 
 export default {
     name: 'CorkyBacktestsPanel',
+    components: { MetricFilterBar },
     created() { this._shapeCache = new Map() },   // run_id → detected shape
     props: {
         strategies: { type: Array, default: () => [] },
@@ -122,8 +131,14 @@ export default {
         selectedRun: { type: Object, default: null },
         loading: { type: Boolean, default: false },
         error: { type: String, default: null },
+        // App-owned numeric column filters ({ key, label, op, value }) — persisted
+        // across tabs/views so opening a run in a new tab keeps them applied.
+        metricFilters: { type: Array, default: () => [] },
+        // App-owned recency list (most-recent run_id FIRST, capped) for graded
+        // row-highlighting of recently opened runs.
+        clickHistory: { type: Array, default: () => [] },
     },
-    emits: ['refresh-strategies', 'update:filter', 'list-runs', 'inspect-strategy', 'select-run'],
+    emits: ['refresh-strategies', 'update:filter', 'list-runs', 'inspect-strategy', 'select-run', 'update:metric-filters'],
     data() {
         return {
             // Strategy parameter/indicator block: collapsed by default so the long
@@ -180,14 +195,21 @@ export default {
             }
             return out
         },
+        // Numeric metric columns offered to the MetricFilterBar (Net P/L, Return,
+        // vs B&H, Max/Avg/Score v2, Sharpe, Sortino, PF, RF, Avg Trades) — the
+        // boolean "Beat" column isn't numerically filterable.
+        filterableCols() {
+            return this.metricCols.filter((c) => c.fmt !== 'bool').map((c) => ({ key: c.metric, label: c.label }))
+        },
         // Apply the CLIENT-side filters (timeframe + run type) the gateway list
         // doesn't support; strategy/symbol/status were already applied server-side.
+        // Then the App-owned numeric metric filters (AND of "<col> <op> <value>").
         filteredRuns() {
             const tf = this.filters.timeframe || ''
             const rt = this.filters.runType || ''
-            if (!tf && !rt) return this.runs
-            return this.runs.filter((r) =>
+            const base = (!tf && !rt) ? this.runs : this.runs.filter((r) =>
                 (!tf || r.trade_timeframe === tf) && (!rt || this.runShape(r).kind === rt))
+            return applyMetricFilters(base, this.metricFilters, (r, key) => Number(this.metric(r, key)))
         },
         // Client-side sortable run list (the backend returns the full set; the
         // user orders by any column). Symbols sort by their joined string; metric
@@ -274,6 +296,9 @@ export default {
         },
         // Raw decimal-string metric value off a run summary (or undefined).
         metric(r, key) { return (r.metrics || {})[key] },
+        // Recency CSS class ('bt-recent-0'..'bt-recent-4') for a run's row, by how
+        // recently it was clicked/opened (0 = most recent), or '' if not in history.
+        recencyClass,
         // Compact symbol list: first 5, then "… & N more" (full list on hover).
         fmtSymbols(symbols) {
             const a = Array.isArray(symbols) ? symbols : []
@@ -444,10 +469,21 @@ export default {
 .bt-sum-cell { font-variant-numeric: tabular-nums; }
 .bt-summary td.pos { color: #23a776; }
 .bt-summary td.neg { color: #e54150; }
+/* Numeric column-filter bar above the runs table. */
+.bt-filters { padding: 6px 10px; border-bottom: 1px solid #1c212e; background: #121827; }
 .bt-row { cursor: pointer; }
 .bt-row:nth-child(even) { background: rgba(255, 255, 255, 0.025); }   /* zebra striping */
 .bt-row:hover { background: #1e222d; }
-.bt-row.active { background: rgba(53,167,118,0.12); }
+/* Recency-graded highlight: brightest green for the most recently opened run
+   (-0), fading to a faint tint for the oldest remembered (-4). Above zebra. */
+.bt-row.bt-recent-0 { background: rgba(53,167,118,0.30); }
+.bt-row.bt-recent-1 { background: rgba(53,167,118,0.22); }
+.bt-row.bt-recent-2 { background: rgba(53,167,118,0.15); }
+.bt-row.bt-recent-3 { background: rgba(53,167,118,0.09); }
+.bt-row.bt-recent-4 { background: rgba(53,167,118,0.05); }
+/* The active selection keeps a clear accent (left border) so it reads even when
+   it's also one of the recently opened rows. */
+.bt-row.active { background: rgba(53,167,118,0.12); box-shadow: inset 3px 0 0 #35a776; }
 .sym { color: #fff; font-weight: 600; }
 .time { color: #808a9d; }
 .bt-badge { font-size: 10px; text-transform: uppercase; padding: 1px 7px; border-radius: 9px; background: #2a2e39; color: #b0b6c0; }

@@ -140,4 +140,33 @@ describe('CorkyUniverseStudy', () => {
     expect(mountStudy({ loading: true, artifact: null }).text()).toContain('Loading study artifact')
     expect(mountStudy({ error: 'boom', artifact: null }).find('.us-err').text()).toContain('boom')
   })
+
+  test('a candidate column filter hides non-matching candidates', async () => {
+    const w = mountStudy()
+    expect(w.findAll('.us-table tbody .bt-row')).toHaveLength(2)   // both candidates
+    // Filter on Score > 1300 — only the rank-1 candidate (score 1414.6) passes.
+    w.findComponent({ name: 'MetricFilterBar' }).vm.$emit('update:filters', [
+      { key: 'score', label: 'Score', op: '>', value: 1300 },
+    ])
+    await w.vm.$nextTick()
+    const rows = w.findAll('.us-table tbody .bt-row')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].text()).toContain('1414.60')
+    // Clearing the filter brings the hidden candidate back.
+    w.findComponent({ name: 'MetricFilterBar' }).vm.$emit('update:filters', [])
+    await w.vm.$nextTick()
+    expect(w.findAll('.us-table tbody .bt-row')).toHaveLength(2)
+  })
+
+  test('clicking a candidate row tints it us-recent-0 (recency history)', async () => {
+    const w = mountStudy()
+    const rows = w.findAll('.us-table tbody .bt-row')
+    await rows[1].trigger('click')   // run_index 7
+    expect(w.findAll('.us-table tbody .bt-row')[1].classes()).toContain('us-recent-0')
+    // A second click on a different row demotes the first to us-recent-1.
+    await w.findAll('.us-table tbody .bt-row')[0].trigger('click')   // run_index 52
+    const after = w.findAll('.us-table tbody .bt-row')
+    expect(after[0].classes()).toContain('us-recent-0')
+    expect(after[1].classes()).toContain('us-recent-1')
+  })
 })

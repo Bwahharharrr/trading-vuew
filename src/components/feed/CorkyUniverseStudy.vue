@@ -23,6 +23,9 @@
                 Candidates ({{ candidates.length }})
                 <span v-if="chartable" class="us-dim">· click a row to plot it</span>
             </div>
+            <!-- Numeric column filters (App-state-independent, per-study local). -->
+            <MetricFilterBar class="us-filters" :columns="filterableCandidateCols" :filters="candidateFilters"
+                             @update:filters="candidateFilters = $event" />
             <table class="bt-table us-table">
                 <thead><tr>
                     <th>#</th>
@@ -30,15 +33,18 @@
                     <th>Parameters</th>
                 </tr></thead>
                 <tbody>
-                    <template v-for="(cand, i) in candidates" :key="i">
-                        <tr class="bt-row" :class="{ open: expanded === i, active: selectedRunIndex != null && cand.runIndex === selectedRunIndex }"
-                            @click="onRowClick(cand, i)">
-                            <td class="us-rank">{{ cand.runIndex != null ? cand.runIndex : i }}</td>
+                    <template v-for="cand in shownCandidates" :key="cand._i">
+                        <tr class="bt-row" :class="[
+                                { open: expanded === cand._i, active: selectedRunIndex != null && cand.runIndex === selectedRunIndex },
+                                recencyClass(cand.runIndex != null ? cand.runIndex : cand._i, candidateHistory, 'us-recent')
+                            ]"
+                            @click="onRowClick(cand, cand._i)">
+                            <td class="us-rank">{{ cand.runIndex != null ? cand.runIndex : cand._i }}</td>
                             <td v-for="c in candidateCols" :key="c.key" class="num" :class="c.sign ? signOf(cand[c.key]) : ''">{{ fmtCell(cand[c.key], c) }}</td>
                             <td class="us-params" :title="paramStr(cand.params)">{{ paramStr(cand.params) || '—' }}</td>
                         </tr>
                         <!-- Per-symbol breakdown for the expanded candidate (universe). -->
-                        <tr v-if="expanded === i && cand.perSymbol.length" class="us-sub-row">
+                        <tr v-if="expanded === cand._i && cand.perSymbol.length" class="us-sub-row">
                             <td :colspan="candidateCols.length + 2">
                                 <table class="bt-table us-subtable">
                                     <thead><tr>
@@ -72,6 +78,10 @@
 </template>
 
 <script>
+import MetricFilterBar from './MetricFilterBar.vue'
+import { applyMetricFilters } from '../../helpers/metric-filter.js'
+import { pushRecent, recencyClass } from '../../helpers/recency.js'
+
 // CorkyUniverseStudy — renders a multi-candidate study artifact (sweep /
 // optimize / universe / walk-forward): the candidate ranking table + per-symbol
 // breakdown (universe), optimization metadata, and a raw-JSON fallback. For
@@ -142,6 +152,7 @@ const PER_SYMBOL_COLS = [
 
 export default {
     name: 'CorkyUniverseStudy',
+    components: { MetricFilterBar },
     props: {
         run: { type: Object, default: null },
         artifact: { type: Object, default: null },
@@ -152,7 +163,10 @@ export default {
         selectedRunIndex: { type: Number, default: null },
     },
     emits: ['select-candidate'],
-    data() { return { expanded: -1, showRaw: false } },
+    // candidateFilters / candidateHistory are per-study local state: the study is
+    // self-contained, so column filters + recency-graded click history live here
+    // (and reset naturally when a different artifact is mounted).
+    data() { return { expanded: -1, showRaw: false, candidateFilters: [], candidateHistory: [] } },
     computed: {
         // Universe candidates carry cross-symbol robustness aggregates; sweep/
         // optimize candidates carry a single backtest's metrics.
@@ -172,9 +186,12 @@ export default {
                 || (u && u.summary && u.summary.runs)
                 || a.runs || (a.summary && a.summary.runs) || a.candidates || a.rankings || []
             if (!Array.isArray(raw)) return []
-            return raw.map((c) => {
+            return raw.map((c, i) => {
                 const lk = look(c)   // merges metrics / report.metrics / aggregate
                 const row = {
+                    // _i is the ORIGINAL candidate index — kept stable across the
+                    // filter so expand/select/recency key off the same identity.
+                    _i: i,
                     runIndex: pick(c, ['run_index', 'index', 'candidate_index']),
                     params: pick(c, ['parameters', 'params', 'parameter_set', 'parameter_values']) || {},
                     perSymbol: this._perSymbol(c),
@@ -182,6 +199,16 @@ export default {
                 for (const col of this.candidateCols) row[col.key] = pick(lk, col.names)
                 return row
             })
+        },
+        // Columns offered in the filter bar — every numeric candidate metric
+        // column (the rank/Parameters cells aren't filterable thresholds).
+        filterableCandidateCols() {
+            return this.candidateCols.map((c) => ({ key: c.key, label: c.label }))
+        },
+        // Candidates after applying the active numeric column filters (AND). Each
+        // row already exposes col.key as a numeric-ish field (row[col.key]).
+        shownCandidates() {
+            return applyMetricFilters(this.candidates, this.candidateFilters, (row, key) => Number(row[key]))
         },
         // Optimization metadata key/value chips (sampler, objective, counts, …).
         optMetaRows() {
@@ -200,7 +227,11 @@ export default {
         rawJson() { try { return JSON.stringify(this.artifact, null, 2) } catch (_) { return '(unserializable)' } },
     },
     methods: {
+        recencyClass,
         onRowClick(cand, i) {
+            // Record the click in the recency-graded history (most-recent first)
+            // BEFORE selecting/expanding, keyed by run_index when present.
+            this.candidateHistory = pushRecent(this.candidateHistory, cand.runIndex != null ? cand.runIndex : i)
             if (this.chartable && cand.runIndex != null) this.$emit('select-candidate', Number(cand.runIndex))
             else this.expanded = this.expanded === i ? -1 : i
         },
@@ -267,6 +298,14 @@ export default {
 .us-table .bt-row:hover { background: #1e222d; }
 .us-table .bt-row.open { background: rgba(187,134,252,0.10); }
 .us-table .bt-row.active { background: rgba(53,167,118,0.16); box-shadow: inset 3px 0 0 #35a776; }
+/* Recency-graded click history: brightest (most recent, -0) → darkest (-4),
+   green-tinted off the #35a776 accent. -0 also gets the accent inset bar. */
+.us-table .bt-row.us-recent-0 { background: rgba(53,167,118,0.22); box-shadow: inset 3px 0 0 #35a776; }
+.us-table .bt-row.us-recent-1 { background: rgba(53,167,118,0.16); }
+.us-table .bt-row.us-recent-2 { background: rgba(53,167,118,0.11); }
+.us-table .bt-row.us-recent-3 { background: rgba(53,167,118,0.07); }
+.us-table .bt-row.us-recent-4 { background: rgba(53,167,118,0.04); }
+.us-filters { margin: 2px 0 6px; }
 .us-rank { font-weight: 700; color: #bb86fc; }
 .us-params { color: #808a9d; max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
 .us-sub-row > td { padding: 0 8px 8px 24px; background: #11151f; }

@@ -80,10 +80,13 @@
                         :runs="backtests.runs || []"
                         :filters="backtests.filters || {}"
                         :selected-run="backtests.selectedRun || null"
+                        :metric-filters="backtests.metricFilters || []"
+                        :click-history="backtests.clickHistory || []"
                         :loading="!!backtests.loading"
                         :error="backtests.error || null"
                         @refresh-strategies="$emit('bt-refresh-strategies')"
                         @update:filter="$emit('bt-update-filter', $event)"
+                        @update:metric-filters="$emit('bt-set-metric-filters', $event)"
                         @list-runs="$emit('bt-list-runs')"
                         @inspect-strategy="$emit('bt-inspect-strategy', $event)"
                         @select-run="$emit('bt-select-run', $event)" />
@@ -198,7 +201,7 @@ export default {
         'update:open', 'update:active-tab', 'update:active-account',
         'select-position', 'audit-position', 'load-more', 'refresh', 'resize-start',
         'run-search', 'cancel-search', 'close-search-tab', 'select-result',
-        'bt-refresh-strategies', 'bt-update-filter', 'bt-list-runs', 'bt-inspect-strategy',
+        'bt-refresh-strategies', 'bt-update-filter', 'bt-set-metric-filters', 'bt-list-runs', 'bt-inspect-strategy',
         'bt-select-run', 'bt-plot-run', 'bt-select-trade', 'bt-select-candidate', 'bt-close-detail',
     ],
     computed: {
