@@ -199,8 +199,10 @@ export default {
                 // a reload restores every open chart. Back-compat: when absent,
                 // boot falls back to the single corkyLast.
                 corkyTabs: typeof this.serializeChartTabs === 'function' ? this.serializeChartTabs() : null,
-                // Right-panel width (user-resizable via its left-edge handle).
+                // Right-panel width (user-resizable via its left-edge handle) +
+                // collapsed state (the SOURCE-title toggle button).
                 panelWidth: this.panelWidth,
+                rightPanelCollapsed: this.rightPanelCollapsed,
                 // Positions dock: open/height + active tab (gateway mode).
                 positionsDockOpen: this.positionsDockOpen,
                 positionsDockHeight: this.positionsDockHeight,

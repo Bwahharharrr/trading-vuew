@@ -155,12 +155,25 @@
     <!-- Right-panel left-edge drag handle: resize the panel (width persisted).
          Fixed-positioned at the boundary so the panel's internal scroll can't
          move it. -->
-    <div class="panel-resizer"
+    <div v-show="!rightPanelCollapsed" class="panel-resizer"
         :style="{ right: rightPanelWidth + 'px' }"
         @mousedown="startPanelResize"></div>
 
+    <!-- Collapse / expand the right panel. Pinned at the panel's LEFT edge, level
+         with the SOURCE title: collapsing closes the panel (the chart takes the
+         space); reopening restores the previous width. -->
+    <button class="panel-collapse-toggle"
+        :class="{ collapsed: rightPanelCollapsed }"
+        :style="{ right: rightPanelWidth + 'px' }"
+        @click="toggleRightPanel"
+        :aria-expanded="rightPanelCollapsed ? 'false' : 'true'"
+        :aria-label="rightPanelCollapsed ? 'Expand panel' : 'Collapse panel'"
+        :title="rightPanelCollapsed ? 'Expand panel' : 'Collapse panel'">
+        <span class="pct-chevron">{{ rightPanelCollapsed ? '‹' : '›' }}</span>
+    </button>
+
     <!-- Right Panel -->
-    <div class="right-panel" :style="{ width: rightPanelWidth + 'px', height: height + 'px' }">
+    <div class="right-panel" :class="{ collapsed: rightPanelCollapsed }" :style="{ width: rightPanelWidth + 'px', height: height + 'px' }">
         <!-- Source toggle: File (default) | Gateway (Corky) -->
         <div class="panel-section">
             <div class="section-title">Source</div>
@@ -638,6 +651,15 @@ export default {
                 if (tv && typeof tv.updateLayout === 'function') tv.updateLayout(true)
             })
         },
+        // Collapsing/expanding the right panel is a large chartWidth change — same
+        // story as the dock height: the canvas needs an explicit relayout. (Watched
+        // on the boolean, not rightPanelWidth, so a resize DRAG doesn't spam it.)
+        rightPanelCollapsed() {
+            this.$nextTick(() => {
+                const tv = this.$refs.tradingVue
+                if (tv && typeof tv.updateLayout === 'function') tv.updateLayout(true)
+            })
+        },
         // NOTE: the old `chart` watcher moved into the chart-tabs mixin
         // (onTabCubeReplaced) so cube-REPLACE (tf/file load) is cleanly separated
         // from tab-ACTIVATE (switch, never destroys a backgrounded cube).
@@ -672,6 +694,9 @@ export default {
             this._corkyRestorePending = !!this._savedCorkyTabs
             if (Number.isFinite(Number(savedState.panelWidth))) {
                 this.panelWidth = Number(savedState.panelWidth)
+            }
+            if (typeof savedState.rightPanelCollapsed === 'boolean') {
+                this.rightPanelCollapsed = savedState.rightPanelCollapsed
             }
             // Positions dock layout (gateway mode).
             if (typeof savedState.positionsDockOpen === 'boolean') {
@@ -3045,6 +3070,9 @@ body {
     overflow-x: hidden;
     box-sizing: border-box;
 }
+/* Fully closed: drop the 1px left border so no sliver remains at the edge and the
+   chart fills the freed space exactly (border-box doesn't suppress border paint). */
+.right-panel.collapsed { border-left: 0; }
 
 /* Drag handle on the right panel's left border: widen/narrow the panel.
    Fixed at the boundary (style binds `right`), straddling the border line. */
@@ -3060,6 +3088,30 @@ body {
 .panel-resizer:hover {
     background: rgba(53, 167, 118, 0.35);
 }
+/* Collapse/expand toggle — pinned at the panel's left edge (right = panel width,
+   set inline) so it tracks the edge when open and sits at the viewport edge when
+   collapsed. A small tab on the chart side of the border. */
+.panel-collapse-toggle {
+    position: fixed;
+    top: 8px;
+    width: 22px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid #2a2e39;
+    border-right: none;
+    border-radius: 4px 0 0 4px;
+    background: #1e222d;
+    color: #808a9d;
+    cursor: pointer;
+    z-index: 1001; /* above the resizer (1000) */
+    transition: color 0.12s, background 0.12s;
+}
+.panel-collapse-toggle:hover { color: #d1d4dc; background: #262b38; }
+.panel-collapse-toggle:focus-visible { outline: 2px solid #35a776; outline-offset: -1px; }
+.pct-chevron { font-size: 16px; line-height: 1; font-weight: 700; }
 
 .panel-section {
     padding: 12px 15px;

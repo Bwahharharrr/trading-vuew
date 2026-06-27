@@ -524,6 +524,7 @@ describe('file-manager: save/load storage round-trip', () => {
       corkyEnabled: { 'V|S': { kinds: [] } },
       corkyLast: { venue: 'V', symbol: 'S', timeframe: '1m' },
       panelWidth: 333,
+      rightPanelCollapsed: false,
       positionsDockOpen: false,
       positionsDockHeight: 200,
       positionsActiveTab: 'open',
@@ -555,6 +556,7 @@ describe('file-manager: save/load storage round-trip', () => {
       corkyLast: { venue: 'V', symbol: 'S', timeframe: '1m' },
       corkyTabs: null,   // no tab system on the fake ctx → serializeChartTabs absent
       panelWidth: 333,
+      rightPanelCollapsed: false,
       positionsDockOpen: false,
       positionsDockHeight: 200,
       positionsActiveTab: 'open',

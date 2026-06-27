@@ -15,6 +15,10 @@ export default {
             // handle; persisted (saveStateToStorage). Default a bit wider than
             // the old fixed RIGHTBAR=250.
             panelWidth: 300,
+            // Right panel collapsed (toggle button left of the 'Source' title):
+            // fully closes the panel (width 0, chart gets the space); reopening
+            // restores panelWidth. Persisted.
+            rightPanelCollapsed: false,
             // Bottom positions dock (gateway mode only). Expanded by default; a
             // thin tab/header bar stays shown when collapsed. The body height is
             // user-resizable via the dock's top-edge drag handle. Both persisted.
@@ -42,6 +46,7 @@ export default {
             }
         },
         rightPanelWidth() {
+            if (this.rightPanelCollapsed) return 0   // fully closed → chart gets the space
             const w = Number(this.panelWidth)
             const min = 220
             const max = Math.max(min, Math.floor(this.width * 0.6))
@@ -106,6 +111,13 @@ export default {
             document.body.style.userSelect = ''
             // Clamp what we persist to what rightPanelWidth actually renders.
             this.panelWidth = this.rightPanelWidth
+            if (typeof this.saveStateToStorage === 'function') this.saveStateToStorage()
+        },
+        // Collapse the right panel fully (width 0 → chart takes the space) or
+        // reopen it to its remembered panelWidth. The rightPanelCollapsed watcher
+        // relays out the chart canvas; the new width is persisted.
+        toggleRightPanel() {
+            this.rightPanelCollapsed = !this.rightPanelCollapsed
             if (typeof this.saveStateToStorage === 'function') this.saveStateToStorage()
         },
 
