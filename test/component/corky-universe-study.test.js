@@ -5,7 +5,7 @@
 // (feature-detected fields), a per-symbol breakdown on expand, and a raw-JSON
 // fallback. The artifact schema is NOT hard-coded — these tests pin the
 // feature-detection across two differently-shaped artifacts.
-import { test, expect, describe } from 'vitest'
+import { test, expect, describe, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CorkyUniverseStudy from '../../src/components/feed/CorkyUniverseStudy.vue'
 
@@ -90,6 +90,55 @@ describe('CorkyUniverseStudy', () => {
     expect(w.text()).toContain('No ranked candidates')
     await w.find('.us-raw-toggle').trigger('click')
     expect(w.find('.us-raw-pre').text()).toContain('weird_unknown_shape')
+  })
+
+  test('Copy button writes the raw JSON to the clipboard, toasts at the cursor, then auto-dismisses', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    const orig = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    vi.useFakeTimers()
+    try {
+      const w = mountStudy()
+      await w.find('.us-raw-copy').trigger('click', { clientX: 100, clientY: 200 })
+      await w.vm.$nextTick(); await w.vm.$nextTick()   // resolve the async write → set the toast
+      expect(writeText).toHaveBeenCalledTimes(1)
+      expect(writeText.mock.calls[0][0]).toContain('"run_index": 52')   // the raw artifact JSON
+      // Toast is teleported to <body>, positioned just off the cursor.
+      const toast = document.body.querySelector('.us-copy-toast')
+      expect(toast).toBeTruthy()
+      expect(toast.textContent).toContain('Copied')
+      expect(toast.style.left).toBe('112px')   // clientX + 12
+      expect(toast.style.top).toBe('212px')    // clientY + 12
+      // Auto-dismisses after its short timeout.
+      vi.advanceTimersByTime(1200)
+      await w.vm.$nextTick()
+      expect(document.body.querySelector('.us-copy-toast')).toBeFalsy()
+      w.unmount()
+    } finally {
+      vi.useRealTimers()
+      if (orig) Object.defineProperty(navigator, 'clipboard', orig)
+      else delete navigator.clipboard
+    }
+  })
+
+  test('Copy falls back to execCommand when the async clipboard API is unavailable', async () => {
+    const orig = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+    const exec = vi.fn().mockReturnValue(true)
+    document.execCommand = exec
+    try {
+      const w = mountStudy()
+      await w.find('.us-raw-copy').trigger('click', { clientX: 0, clientY: 0 })
+      await w.vm.$nextTick(); await w.vm.$nextTick()
+      expect(exec).toHaveBeenCalledWith('copy')
+      const toast = document.body.querySelector('.us-copy-toast')
+      expect(toast).toBeTruthy()
+      expect(toast.textContent).toContain('Copied')
+      w.vm.$el && w.unmount()
+    } finally {
+      if (orig) Object.defineProperty(navigator, 'clipboard', orig)
+      else delete navigator.clipboard
+    }
   })
 
   test('renders the real sweep artifact.runs shape (parameters.values + report.metrics)', () => {

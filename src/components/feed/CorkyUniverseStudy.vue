@@ -73,10 +73,20 @@
              this guarantees the data is inspectable even if a field is renamed). -->
         <div class="us-raw">
             <button class="us-raw-toggle" @click="showRaw = !showRaw">{{ showRaw ? '▾' : '▸' }} Raw artifact JSON</button>
+            <button class="us-raw-copy" type="button" title="Copy raw JSON to clipboard" @click="copyRaw">⧉ Copy</button>
             <pre v-if="showRaw" class="us-raw-pre">{{ rawJson }}</pre>
         </div>
     </template>
     <div v-else class="us-msg">No artifact available.</div>
+
+    <!-- Tiny confirmation that floats up beside the cursor, then auto-dismisses
+         (fixed → viewport coords; teleported so no overflow/stacking clip). -->
+    <Teleport to="body">
+        <div v-if="copyToast.show" class="us-copy-toast" :class="{ err: !copyToast.ok }"
+             :style="{ left: copyToast.x + 'px', top: copyToast.y + 'px' }">
+            {{ copyToast.ok ? '✓ Copied' : 'Copy failed' }}
+        </div>
+    </Teleport>
 </div>
 </template>
 
@@ -170,7 +180,8 @@ export default {
     // The parent reuses this instance across studies (no remount), so the watch
     // on `studyKey` below resets them when the shown study changes — otherwise a
     // prior study's filters/recency would leak onto the next one.
-    data() { return { expanded: -1, showRaw: false, candidateFilters: [], candidateHistory: [] } },
+    data() { return { expanded: -1, showRaw: false, candidateFilters: [], candidateHistory: [], copyToast: { show: false, ok: true, x: 0, y: 0 } } },
+    beforeUnmount() { if (this._copyTimer) clearTimeout(this._copyTimer) },
     watch: {
         studyKey() {
             this.candidateFilters = []
@@ -238,6 +249,43 @@ export default {
     },
     methods: {
         recencyClass,
+        // Copy the raw artifact JSON to the clipboard. Prefers the async Clipboard
+        // API (secure contexts), falls back to a hidden-textarea execCommand for
+        // older / non-secure ones. Either way a brief toast confirms by the cursor.
+        async copyRaw(e) {
+            const text = this.rawJson
+            let ok = false
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(text)
+                    ok = true
+                } else {
+                    ok = this._fallbackCopy(text)
+                }
+            } catch (_) {
+                ok = this._fallbackCopy(text)   // permission/denied → try the legacy path
+            }
+            this._showCopyToast(e, ok)
+        },
+        _fallbackCopy(text) {
+            try {
+                const ta = document.createElement('textarea')
+                ta.value = text
+                ta.setAttribute('readonly', '')
+                ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none;'
+                document.body.appendChild(ta)
+                ta.select()
+                const ok = document.execCommand('copy')
+                document.body.removeChild(ta)
+                return ok
+            } catch (_) { return false }
+        },
+        _showCopyToast(e, ok) {
+            // Offset slightly off the pointer so the toast sits beside, not under it.
+            this.copyToast = { show: true, ok, x: ((e && e.clientX) || 0) + 12, y: ((e && e.clientY) || 0) + 12 }
+            if (this._copyTimer) clearTimeout(this._copyTimer)
+            this._copyTimer = setTimeout(() => { this.copyToast.show = false }, 1100)
+        },
         // ── Per-column numeric filters (header [+]). Local per-study state; one
         //    filter per column (re-apply replaces it).
         filterForCandidateCol(key) { return this.candidateFilters.find((f) => f.key === key) || null },
@@ -340,7 +388,23 @@ export default {
 .us-raw { margin: 12px 0; }
 .us-raw-toggle { background: #131722; color: #808a9d; border: 1px solid #2a2e39; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 11px; }
 .us-raw-toggle:hover { color: #d1d4dc; }
+.us-raw-copy { margin-left: 6px; background: #131722; color: #808a9d; border: 1px solid #2a2e39; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 11px; }
+.us-raw-copy:hover { color: #35a776; border-color: #35a776; }
 .us-raw-pre { max-height: 320px; overflow: auto; background: #0e1320; border: 1px solid #1c212e; border-radius: 4px; padding: 8px; font-size: 11px; margin-top: 6px; }
+/* Cursor-anchored copy confirmation: fades in, drifts up, fades out (~1.1s). */
+.us-copy-toast {
+    position: fixed; z-index: 9999; pointer-events: none; white-space: nowrap;
+    background: #1f2937; color: #d1fadf; border: 1px solid rgba(53,167,118,0.55);
+    border-radius: 5px; padding: 3px 9px; font-size: 11px; font-weight: 600;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.45); animation: us-copy-fade 1.1s ease-out forwards;
+}
+.us-copy-toast.err { color: #f3c1c5; border-color: rgba(229,65,80,0.55); }
+@keyframes us-copy-fade {
+    0% { opacity: 0; transform: translateY(4px); }
+    15% { opacity: 1; transform: translateY(0); }
+    70% { opacity: 1; transform: translateY(-2px); }
+    100% { opacity: 0; transform: translateY(-8px); }
+}
 .bt-type { font-size: 10px; padding: 1px 7px; border-radius: 9px; }
 .bt-type.t-universe { background: rgba(255,127,0,0.16); color: #ff9f40; }
 .pos { color: #23a776; }
