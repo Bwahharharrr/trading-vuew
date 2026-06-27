@@ -561,3 +561,17 @@ Tells & proof, in order:
 38. **Bisect UNCOMMITTED edits by backup + `git checkout HEAD -- <file>`.** Copy
     the working files to `/tmp`, reset to HEAD, then re-apply one file at a time
     and test — proves causation instead of assuming the latest change is guilty.
+39. **Vue 3: keep components SINGLE-ROOT, or `$el.contains()` silently breaks.**
+    A sibling comment (or second element) at the template root makes the component
+    a multi-root fragment, so `this.$el` becomes the fragment ANCHOR node — not the
+    element. Any outside-click/dismiss handler using `this.$el.contains(e.target)`
+    then reports clicks INSIDE the component as "outside" and tears the UI down on
+    the first interaction (e.g. a popover that closes the instant you click its
+    input). Fix: one root element (move comments inside it), and prefer an explicit
+    `ref` (`this.$refs.root.contains(...)`) over `$el` for containment — the ref
+    always resolves to the real element even under a fragment.
+40. **Test the REAL event sequence, not just `.trigger('click')`.** A pointer click
+    fires `mousedown` BEFORE `click`. A handler bound to document `mousedown`
+    (capture) won't be exercised by `trigger('click')` alone, so a dismiss-on-
+    mousedown bug passes every click-only test. Pin interaction handlers by firing
+    `mousedown` (with an in-component target) and asserting the UI stays put.

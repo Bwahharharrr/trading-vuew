@@ -1,7 +1,11 @@
 <template>
-<!-- The wrapper swallows clicks so opening/using the filter never triggers the
-     column's sort handler on the enclosing <th>. -->
-<span class="cfb" @click.stop>
+<span ref="root" class="cfb" @click.stop>
+    <!-- IMPORTANT: this <span> must be the SOLE template root. A sibling comment
+         or element at the root would make Vue treat the component as a multi-root
+         fragment, so this.$el becomes the fragment anchor and $el.contains() (used
+         by the outside-click dismiss) returns false for clicks INSIDE the popover
+         — closing it the instant you click the value box. The @click.stop also
+         keeps clicks off the enclosing <th> sort handler. -->
     <button class="cfb-btn" :class="{ active: !!filter }" type="button"
             :title="filter ? `${column.label} ${filter.op} ${filter.value} — click to edit` : `Filter ${column.label}`"
             @click.stop="toggle">
@@ -70,7 +74,11 @@ export default {
             document.removeEventListener('mousedown', this._onDocDown, true)
         },
         _onDocDown(e) {
-            if (this.$el && !this.$el.contains(e.target)) this.close()
+            // Use the explicit root ref (always the <span>) rather than $el, which
+            // would be a fragment anchor if a second root node ever crept in — and
+            // then wrongly report every in-popover click as "outside".
+            const root = this.$refs.root
+            if (root && !root.contains(e.target)) this.close()
         },
         apply() {
             if (!this.canApply) return

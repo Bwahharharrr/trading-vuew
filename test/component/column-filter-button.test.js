@@ -74,6 +74,24 @@ describe('ColumnFilterButton', () => {
     expect(w.emitted('apply')[0][0]).toEqual({ key: 'total_net_profit', label: 'Net P/L', op: '>', value: 42 })
   })
 
+  test('interacting INSIDE the popover (mousedown on the value box / Apply) never dismisses it', async () => {
+    // Reproduces the real pointer sequence: a click fires mousedown FIRST. The
+    // value box and Apply are inside the component, so the outside-click dismiss
+    // must not fire (regression: a root-level comment made $el a fragment anchor,
+    // so $el.contains() reported these inside clicks as "outside" and closed it).
+    const w = mountBtn()
+    await w.find('.cfb-btn').trigger('click')
+    expect(w.find('.cfb-pop').exists()).toBe(true)
+    await w.find('.cfb-val').trigger('mousedown')
+    expect(w.find('.cfb-pop').exists()).toBe(true)        // clicking the box keeps it open
+    await w.find('.cfb-val').setValue('1234')
+    await w.find('.cfb-apply').trigger('mousedown')
+    expect(w.find('.cfb-pop').exists()).toBe(true)        // mousedown on Apply keeps it open
+    await w.find('.cfb-apply').trigger('click')
+    expect(w.emitted('apply')[0][0]).toEqual({ key: 'total_net_profit', label: 'Net P/L', op: '>', value: 1234 })
+    w.unmount()
+  })
+
   test('a click outside the component dismisses the popover', async () => {
     const w = mountBtn()
     await w.find('.cfb-btn').trigger('click')
