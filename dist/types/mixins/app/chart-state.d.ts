@@ -7,6 +7,7 @@ declare namespace _default {
         width: number;
         height: number;
         panelWidth: number;
+        rightPanelCollapsed: boolean;
         positionsDockOpen: boolean;
         positionsDockHeight: number;
         config: {
@@ -38,6 +39,7 @@ declare namespace _default {
         function onResize(): void;
         function startPanelResize(e: any): void;
         function endPanelResize(): void;
+        function toggleRightPanel(): void;
         function resetView(): void;
         function captureScreen(): Promise<void>;
         function _captureViaHtml2Canvas(): Promise<void>;

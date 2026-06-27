@@ -577,6 +577,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         width: number;
         height: number;
         panelWidth: number;
+        rightPanelCollapsed: boolean;
         positionsDockOpen: boolean;
         positionsDockHeight: number;
         config: {
@@ -608,6 +609,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         onResize(): void;
         startPanelResize(e: any): void;
         endPanelResize(): void;
+        toggleRightPanel(): void;
         resetView(): void;
         captureScreen(): Promise<void>;
         _captureViaHtml2Canvas(): Promise<void>;
