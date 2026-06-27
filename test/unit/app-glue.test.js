@@ -457,6 +457,16 @@ describe('runtime-id targeting + ride-through retry', () => {
     vi.useRealTimers()
   })
 
+  test('a successful select clears a previously-armed retry timer (no stale teardown of the good stream)', async () => {
+    const feed = mkFeed()   // subscribe succeeds
+    const app = mkApp({ corkyStates: STATES, corkyFeed: feed })
+    app._stream.retryTimer = setTimeout(() => {}, 9999)   // a stale armed retry from a prior failure
+    app._stream.retries = 2
+    await app.corkySelect({ venue: 'bitfinex', symbol: 'tBTCUSD', timeframe: '1m', indicators: [] })
+    expect(app._stream.retryTimer).toBeNull()   // success cleared it
+    expect(app._stream.retries).toBe(0)
+  })
+
   test('a non-retryable error surfaces immediately', async () => {
     const feed = mkFeed({ subscribe: vi.fn(async () => { throw Object.assign(new Error('bad'), { retryable: false }) }) })
     const app = mkApp({ corkyStates: STATES, corkyFeed: feed })

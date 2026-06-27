@@ -827,17 +827,19 @@ export default {
         // Discover the catalog → populate the reactive `corkyStates`. Uses the
         // dedicated discover feed (not a tab's stream feed), so it works even when
         // no tab has a stream yet.
-        async corkyDiscover(venue) {
+        // `quiet` skips the load chrome (loading/error are active-tab shims, so a
+        // BACKGROUND tab's ride-through retry must not flash a phantom spinner or
+        // clear a real error on the tab the user is actually looking at).
+        async corkyDiscover(venue, quiet) {
             if (!this.corkyDiscoverFeed) return
-            this.corkyLoading = true
-            this.corkyError = null
+            if (!quiet) { this.corkyLoading = true; this.corkyError = null }
             try {
                 const list = await this.corkyDiscoverFeed.discover(venue)
                 this.corkyStates = Array.isArray(list) ? list : (list ? [list] : [])
             } catch (err) {
-                this.corkyError = this._corkyErr(err)
+                if (!quiet) this.corkyError = this._corkyErr(err)
             } finally {
-                this.corkyLoading = false
+                if (!quiet) this.corkyLoading = false
             }
             return this.corkyStates
         },
@@ -937,6 +939,9 @@ export default {
             // discovery chrome (loading/progress/error shims) tracks the active tab.
             const tab = targetTab || this.activeTab
             if (!tab) return
+            // Belt-and-braces: a timer-armed retry can fire after its tab was
+            // closed — bail if it's no longer a member (close also bumps its epoch).
+            if (Array.isArray(this.chartTabs) && !this.chartTabs.includes(tab)) return
             this._ensureTabFeed(tab)
             const feed = tab.corkyFeed
             if (!feed) return
@@ -1067,19 +1072,20 @@ export default {
                                     }
                                 }
                                 this._corkyPendingRange = null   // consume once
-                                // The gateway load wiped onchart — restore the
-                                // price-alarm renderer (same alarms array).
-                                if (this.priceAlarms.length) this.ensurePriceAlarmOverlay()
-                                // …and the plotted position's trades + detail panes.
-                                this.syncPositionOverlays()
-                                // …and the active search match's vertical marker
-                                // + Barrier Symmetric target plan (if enriched).
-                                this.syncSignalMarker()
-                                this.syncBarrierOverlay()
-                                // …and a plotted backtest's equity/drawdown panes
-                                // + trade markers.
-                                this.syncBacktestOverlays()
+                                // The gateway load wiped onchart — restore THIS
+                                // (active) tab's overlays. Same method runs on
+                                // switch-back (activateChartTab) for a tab that
+                                // completed in the background.
+                                this._restoreActiveTabOverlays()
                             })
+                            else {
+                                // Background completion: don't leak the one-shot zoom
+                                // window to the next active tab, and mark this tab's
+                                // saved range stale so switch-back refits cleanly
+                                // (the wipe ran, so the old range no longer fits).
+                                this._corkyPendingRange = null
+                                tab.range = null
+                            }
                             // THIS tab's search result loaded — clear its row's
                             // "loading onto chart" feedback (data lands regardless
                             // of which tab is on screen).
@@ -1103,7 +1109,14 @@ export default {
                 // must NOT touch this tab's live selection state.
                 if (gen !== st.gen || !handle) return
                 tab.corkyHandle = handle
-                st.retries = 0     // a clean subscribe clears this tab's ride-through
+                // A clean subscribe clears this tab's ride-through retry COMPLETELY —
+                // including a still-armed timer (success paths that bypass
+                // _corkyCancelSelectRetry, e.g. search/backtest/position plot, would
+                // otherwise let a stale timer fire and tear down the good stream).
+                clearTimeout(st.retryTimer)
+                st.retryTimer = null
+                st.retryKeepSpinner = false
+                st.retries = 0
                 st.retryOpts = null
                 // Remember the selection so a reload reopens it.
                 tab.corkyLast = {
@@ -1172,15 +1185,18 @@ export default {
             }
             clearTimeout(st.retryTimer)
             st.retryTimer = setTimeout(() => {
+                // The tab may have been closed since we armed — no-op then.
+                if (Array.isArray(this.chartTabs) && !this.chartTabs.includes(tab)) return
                 // The client's bounded backoff gives up after ~16s; past that NOTHING
                 // re-opens the socket unless we do it here. connect() resets the budget.
                 if (this.corkyClient && this.corkyClient.isDead &&
                     this.corkyClient.isDead()) {
                     this.corkyClient.connect()
                 }
-                // A restarted runtime may have a NEW runtime_id — re-discover first,
-                // then re-select THIS tab (passed through so a switch doesn't misroute).
-                Promise.resolve(this.corkyDiscover(opts.venue))
+                // A restarted runtime may have a NEW runtime_id — re-discover first
+                // (QUIET: a background retry must not flash the active tab's chrome),
+                // then re-select THIS tab (passed so a switch doesn't misroute).
+                Promise.resolve(this.corkyDiscover(opts.venue, true))
                     .then(() => this.corkySelect(opts, tab))
             }, delay)
             return true
@@ -1244,6 +1260,21 @@ export default {
                 // tab's (which can differ mid-switch due to the deferred set_loader).
                 cube.onrange((range) => this._corkyHistoryLoader(range, tab))
             }
+        },
+
+        // Re-add the active tab's on-chart overlays (a gateway load wipes the cube's
+        // onchart/offchart). Called on the active tab's history-complete AND on
+        // switch-BACK to a tab that completed in the background (its overlay sync was
+        // skipped while it was hidden). The sync methods read this.chart (= active
+        // cube) + the active-tab overlay shims, so they target the right cube once
+        // the tab is active; each self-guards on its per-tab state.
+        _restoreActiveTabOverlays() {
+            if (this.feedMode !== 'gateway') return
+            if (this.priceAlarms && this.priceAlarms.length) this.ensurePriceAlarmOverlay()
+            this.syncPositionOverlays()
+            this.syncSignalMarker()
+            this.syncBarrierOverlay()
+            this.syncBacktestOverlays()
         },
 
         // Panel: add a timeframe → patch the candle-state, re-discover, then

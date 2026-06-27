@@ -135,6 +135,31 @@ describe('chart-tabs: create / switch / close', () => {
         expect(tab1.corkyFeed).toBeNull()
     })
 
+    it('closeChartTab invalidates the closed tab\'s epoch + cancels its retry (no post-close re-subscribe)', () => {
+        const tab1 = host.createChartTab()
+        tab1._stream = { gen: 5, retryTimer: setTimeout(() => {}, 9999), retryOpts: { venue: 'V' } }
+        tab1.corkyFeed = { dispose: vi.fn() }
+        const cancel = vi.fn()
+        host._corkyCancelSelectRetry = cancel
+        host.closeChartTab(tab1.id)
+        expect(tab1._stream.gen).toBe(6)             // epoch bumped → an armed retry's select no-ops
+        expect(cancel).toHaveBeenCalledWith(tab1)    // its retry timer is cancelled
+    })
+
+    it('activateChartTab re-applies overlays for a tab that completed in the background', () => {
+        host.feedMode = 'gateway'
+        host._corkyBindActiveCube = vi.fn()
+        const restore = vi.fn()
+        host._restoreActiveTabOverlays = restore
+        const tab1 = host.createChartTab()
+        tab1.corkyCurrent = { venue: 'V', symbol: 'S', timeframe: '1h' }
+        tab1.corkyHandle = { id: 'h' }               // already loaded → non-lazy branch
+        host.activateChartTab(host.chartTabs[0].id)  // switch away
+        restore.mockClear()
+        host.activateChartTab(tab1.id)               // switch back to the loaded tab
+        expect(restore).toHaveBeenCalled()           // overlays re-applied on switch-back
+    })
+
     it('caps at maxChartTabs and destroyAllChartTabs releases every cube', () => {
         while (host.chartTabs.length < host.maxChartTabs) host.createChartTab()
         expect(host.chartTabs).toHaveLength(8)

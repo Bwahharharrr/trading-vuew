@@ -19,6 +19,7 @@ const M = App.methods
 
 function mkCtx() {
     const ctx = {
+        feedMode: 'gateway',   // _restoreActiveTabOverlays guards on this
         corkyStates: [{ venue: 'BITFINEX', symbol: 'tBTCUSD', available_timeframes: ['1h'], indicators: [] }],
         corkyCurrent: null,
         corkyEnabled: {},
@@ -61,7 +62,8 @@ function mkCtx() {
         saveStateToStorage: vi.fn(),
     }
     for (const m of ['corkySelect', '_corkyUnsub', '_corkyMem', '_corkyErr',
-        '_navStatusLabel', '_corkyScheduleSelectRetry', '_corkyBindActiveCube', '_ensureTabFeed']) {
+        '_navStatusLabel', '_corkyScheduleSelectRetry', '_corkyBindActiveCube', '_ensureTabFeed',
+        '_restoreActiveTabOverlays']) {
         ctx[m] = M[m]
     }
     ctx.activeTab = ctx   // the tab corkySelect targets IS this ctx

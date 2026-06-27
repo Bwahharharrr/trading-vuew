@@ -200,6 +200,12 @@ export default {
                 } else if (typeof tv.resetChart === 'function') {
                     tv.resetChart()
                 }
+                // Re-apply this tab's on-chart overlays — it may have completed its
+                // load while BACKGROUND (the active-only history-complete sync was
+                // skipped then). Idempotent; self-guards on per-tab overlay state.
+                if (this.feedMode === 'gateway' && typeof this._restoreActiveTabOverlays === 'function') {
+                    this._restoreActiveTabOverlays()
+                }
             })
         },
 
@@ -307,6 +313,13 @@ export default {
 
         _destroyChartTabCube(tab) {
             if (!tab) return
+            // Mirror teardownCorky: invalidate this tab's in-flight select epoch +
+            // cancel its ride-through retry BEFORE disposing. Otherwise an armed
+            // retry timer fires after the cube is gone, rebuilds a CorkyFeed over
+            // the destroyed cube and re-subscribes a self-perpetuating live stream
+            // (the closeChartTab feed-leak class).
+            if (tab._stream) tab._stream.gen = (tab._stream.gen || 0) + 1
+            if (typeof this._corkyCancelSelectRetry === 'function') this._corkyCancelSelectRetry(tab)
             // Release this tab's OWN gateway feed — unsubscribe its live stream +
             // detach its reconnect listeners — WITHOUT closing the SHARED client
             // (dispose, not destroy). Otherwise the gateway keeps pushing
