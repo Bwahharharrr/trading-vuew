@@ -29,6 +29,14 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         type: StringConstructor;
         default: null;
     };
+    metricFilters: {
+        type: ArrayConstructor;
+        default: () => never[];
+    };
+    clickHistory: {
+        type: ArrayConstructor;
+        default: () => never[];
+    };
 }>, {}, {
     strategyOpen: boolean;
     sortKey: string;
@@ -117,6 +125,12 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     onStrategy(name: any): void;
     indLabel(i: any): string;
     metric(r: any, key: any): any;
+    recencyClass: typeof recencyClass;
+    isFilterable(c: any): boolean;
+    filterForColumn(key: any): {} | null;
+    applyColumnFilter(filter: any): void;
+    clearColumnFilter(key: any): void;
+    clearAllColumnFilters(): void;
     fmtSymbols(symbols: any): string;
     runShape(r: any): any;
     _truthy(raw: any): boolean;
@@ -139,7 +153,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     } | null;
     fmtDuration(r: any): string;
     durationTitle(r: any): "" | "Bar count estimated from the data span ÷ timeframe (exact bar_count not in the run summary)";
-}, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("refresh-strategies" | "update:filter" | "list-runs" | "inspect-strategy" | "select-run")[], "refresh-strategies" | "update:filter" | "list-runs" | "inspect-strategy" | "select-run", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+}, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("refresh-strategies" | "update:filter" | "list-runs" | "inspect-strategy" | "select-run" | "update:metric-filters")[], "refresh-strategies" | "update:filter" | "list-runs" | "inspect-strategy" | "select-run" | "update:metric-filters", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
     strategies: {
         type: ArrayConstructor;
         default: () => never[];
@@ -168,12 +182,21 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         type: StringConstructor;
         default: null;
     };
+    metricFilters: {
+        type: ArrayConstructor;
+        default: () => never[];
+    };
+    clickHistory: {
+        type: ArrayConstructor;
+        default: () => never[];
+    };
 }>> & Readonly<{
     "onRefresh-strategies"?: ((...args: any[]) => any) | undefined;
     "onUpdate:filter"?: ((...args: any[]) => any) | undefined;
     "onList-runs"?: ((...args: any[]) => any) | undefined;
     "onInspect-strategy"?: ((...args: any[]) => any) | undefined;
     "onSelect-run"?: ((...args: any[]) => any) | undefined;
+    "onUpdate:metric-filters"?: ((...args: any[]) => any) | undefined;
 }>, {
     error: string;
     strategies: unknown[];
@@ -181,4 +204,47 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     loading: boolean;
     runs: unknown[];
     selectedRun: Record<string, any>;
-}, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+    metricFilters: unknown[];
+    clickHistory: unknown[];
+}, {}, {
+    ColumnFilterButton: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
+        column: {
+            type: ObjectConstructor;
+            required: true;
+        };
+        filter: {
+            type: ObjectConstructor;
+            default: null;
+        };
+    }>, {}, {
+        open: boolean;
+        ops: string[];
+        draftOp: string;
+        draftValue: string;
+    }, {
+        canApply(): boolean;
+    }, {
+        toggle(): void;
+        openPop(): void;
+        close(): void;
+        _onDocDown(e: any): void;
+        apply(): void;
+        remove(): void;
+        fmtVal(v: any): string;
+    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("clear" | "apply")[], "clear" | "apply", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+        column: {
+            type: ObjectConstructor;
+            required: true;
+        };
+        filter: {
+            type: ObjectConstructor;
+            default: null;
+        };
+    }>> & Readonly<{
+        onClear?: ((...args: any[]) => any) | undefined;
+        onApply?: ((...args: any[]) => any) | undefined;
+    }>, {
+        filter: Record<string, any>;
+    }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+import { recencyClass } from '../../helpers/recency.js';

@@ -81,7 +81,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     signClass(dec: any): "" | "pos" | "neg";
     pctText(dec: any): string;
     fmtTime(ms: any): string;
-}, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("update:open" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "refresh" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail")[], "update:open" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "refresh" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+}, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("update:open" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "refresh" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail")[], "update:open" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "refresh" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
     height: {
         type: NumberConstructor;
         default: number;
@@ -161,6 +161,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     "onSelect-result"?: ((...args: any[]) => any) | undefined;
     "onBt-refresh-strategies"?: ((...args: any[]) => any) | undefined;
     "onBt-update-filter"?: ((...args: any[]) => any) | undefined;
+    "onBt-set-metric-filters"?: ((...args: any[]) => any) | undefined;
     "onBt-list-runs"?: ((...args: any[]) => any) | undefined;
     "onBt-inspect-strategy"?: ((...args: any[]) => any) | undefined;
     "onBt-select-run"?: ((...args: any[]) => any) | undefined;
@@ -319,6 +320,14 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
             type: StringConstructor;
             default: null;
         };
+        metricFilters: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
+        clickHistory: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
     }>, {}, {
         strategyOpen: boolean;
         sortKey: string;
@@ -407,6 +416,12 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         onStrategy(name: any): void;
         indLabel(i: any): string;
         metric(r: any, key: any): any;
+        recencyClass: typeof import("../../helpers/recency.js").recencyClass;
+        isFilterable(c: any): boolean;
+        filterForColumn(key: any): {} | null;
+        applyColumnFilter(filter: any): void;
+        clearColumnFilter(key: any): void;
+        clearAllColumnFilters(): void;
         fmtSymbols(symbols: any): string;
         runShape(r: any): any;
         _truthy(raw: any): boolean;
@@ -429,7 +444,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         } | null;
         fmtDuration(r: any): string;
         durationTitle(r: any): "" | "Bar count estimated from the data span ÷ timeframe (exact bar_count not in the run summary)";
-    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("refresh-strategies" | "update:filter" | "list-runs" | "inspect-strategy" | "select-run")[], "refresh-strategies" | "update:filter" | "list-runs" | "inspect-strategy" | "select-run", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("refresh-strategies" | "update:filter" | "list-runs" | "inspect-strategy" | "select-run" | "update:metric-filters")[], "refresh-strategies" | "update:filter" | "list-runs" | "inspect-strategy" | "select-run" | "update:metric-filters", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
         strategies: {
             type: ArrayConstructor;
             default: () => never[];
@@ -458,12 +473,21 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
             type: StringConstructor;
             default: null;
         };
+        metricFilters: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
+        clickHistory: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
     }>> & Readonly<{
         "onRefresh-strategies"?: ((...args: any[]) => any) | undefined;
         "onUpdate:filter"?: ((...args: any[]) => any) | undefined;
         "onList-runs"?: ((...args: any[]) => any) | undefined;
         "onInspect-strategy"?: ((...args: any[]) => any) | undefined;
         "onSelect-run"?: ((...args: any[]) => any) | undefined;
+        "onUpdate:metric-filters"?: ((...args: any[]) => any) | undefined;
     }>, {
         error: string;
         strategies: unknown[];
@@ -471,7 +495,49 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         loading: boolean;
         runs: unknown[];
         selectedRun: Record<string, any>;
-    }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+        metricFilters: unknown[];
+        clickHistory: unknown[];
+    }, {}, {
+        ColumnFilterButton: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
+            column: {
+                type: ObjectConstructor;
+                required: true;
+            };
+            filter: {
+                type: ObjectConstructor;
+                default: null;
+            };
+        }>, {}, {
+            open: boolean;
+            ops: string[];
+            draftOp: string;
+            draftValue: string;
+        }, {
+            canApply(): boolean;
+        }, {
+            toggle(): void;
+            openPop(): void;
+            close(): void;
+            _onDocDown(e: any): void;
+            apply(): void;
+            remove(): void;
+            fmtVal(v: any): string;
+        }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("clear" | "apply")[], "clear" | "apply", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+            column: {
+                type: ObjectConstructor;
+                required: true;
+            };
+            filter: {
+                type: ObjectConstructor;
+                default: null;
+            };
+        }>> & Readonly<{
+            onClear?: ((...args: any[]) => any) | undefined;
+            onApply?: ((...args: any[]) => any) | undefined;
+        }>, {
+            filter: Record<string, any>;
+        }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+    }, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
     CorkyBacktestDetail: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
         run: {
             type: ObjectConstructor;
@@ -574,7 +640,16 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         }>, {}, {
             expanded: number;
             showRaw: boolean;
+            candidateFilters: never[];
+            candidateHistory: never[];
+            copyToast: {
+                show: boolean;
+                ok: boolean;
+                x: number;
+                y: number;
+            };
         }, {
+            studyKey(): any;
             candidateCols(): ({
                 key: string;
                 label: string;
@@ -633,6 +708,15 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
             })[];
             study(): any;
             candidates(): {
+                _i: number;
+                runIndex: any;
+                params: any;
+                perSymbol: {
+                    symbol: any;
+                }[];
+            }[];
+            shownCandidates(): {
+                _i: number;
                 runIndex: any;
                 params: any;
                 perSymbol: {
@@ -646,6 +730,14 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
             }[];
             rawJson(): string;
         }, {
+            recencyClass: typeof import("../../helpers/recency.js").recencyClass;
+            copyRaw(e: any): Promise<void>;
+            _fallbackCopy(text: any): boolean;
+            _showCopyToast(e: any, ok: any): void;
+            filterForCandidateCol(key: any): null;
+            applyCandidateFilter(filter: any): void;
+            clearCandidateFilter(key: any): void;
+            clearAllCandidateFilters(): void;
             onRowClick(cand: any, i: any): void;
             _perSymbol(c: any): {
                 symbol: any;
@@ -687,7 +779,47 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
             artifact: Record<string, any>;
             chartable: boolean;
             selectedRunIndex: number;
-        }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+        }, {}, {
+            ColumnFilterButton: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
+                column: {
+                    type: ObjectConstructor;
+                    required: true;
+                };
+                filter: {
+                    type: ObjectConstructor;
+                    default: null;
+                };
+            }>, {}, {
+                open: boolean;
+                ops: string[];
+                draftOp: string;
+                draftValue: string;
+            }, {
+                canApply(): boolean;
+            }, {
+                toggle(): void;
+                openPop(): void;
+                close(): void;
+                _onDocDown(e: any): void;
+                apply(): void;
+                remove(): void;
+                fmtVal(v: any): string;
+            }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("clear" | "apply")[], "clear" | "apply", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+                column: {
+                    type: ObjectConstructor;
+                    required: true;
+                };
+                filter: {
+                    type: ObjectConstructor;
+                    default: null;
+                };
+            }>> & Readonly<{
+                onClear?: ((...args: any[]) => any) | undefined;
+                onApply?: ((...args: any[]) => any) | undefined;
+            }>, {
+                filter: Record<string, any>;
+            }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+        }, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
     }, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
 }, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
 import { newTabIntent } from '../../helpers/open-intent.js';
