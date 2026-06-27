@@ -13,6 +13,9 @@ export default class DCCore extends DCEvents {
     _idsUnwatch: any;
     _datasetsUnwatch: any;
     destroy(): void;
+    _destroyed: boolean | undefined;
+    loader: any;
+    teardown_tvjs(): void;
     init_data($root: any): void;
     dss: {} | undefined;
     ui: ChartUI | undefined;

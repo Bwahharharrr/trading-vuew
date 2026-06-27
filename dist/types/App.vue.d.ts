@@ -1,7 +1,6 @@
 declare const _default: typeof __VLS_export;
 export default _default;
 declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
-    chart: DataCube;
     overlays: import("vue").Raw<{
         name: string;
         mixins: {
@@ -247,19 +246,12 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             state(): any;
         };
     }, import("vue").ComponentOptionsMixin, {}, string, import("vue").PublicProps, Readonly<{}> & Readonly<{}>, {}, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>>[];
-    priceAlarms: never[];
     DataCubeClass: typeof DataCube;
     feedMode: string;
     corkyClient: null;
-    corkyFeed: null;
+    corkyDiscoverFeed: null;
     corkyStates: never[];
-    corkyCurrent: null;
     corkyEnabled: {};
-    corkyLast: null;
-    corkyLoading: boolean;
-    corkyProgress: null;
-    corkyError: null;
-    corkyHandle: null;
     positionsFeed: null;
     openPositions: never[];
     historicalPositions: never[];
@@ -273,7 +265,6 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     searchFeed: null;
     searchTabs: never[];
     searchTabSeq: number;
-    searchNav: null;
     backtestsFeed: null;
     backtests: {
         strategies: never[];
@@ -290,13 +281,61 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         loading: boolean;
         error: null;
     };
-    positionPlot: null;
     auditOpen: boolean;
     auditData: null;
     auditLoading: boolean;
     auditError: null;
     auditTarget: null;
 }, {
+    corkyFeed(): any;
+    corkyCurrent: {
+        get(): any;
+        set(v: any): void;
+    };
+    corkyHandle: {
+        get(): any;
+        set(v: any): void;
+    };
+    corkyLast: {
+        get(): any;
+        set(v: any): void;
+    };
+    positionPlot: {
+        get(): any;
+        set(v: any): void;
+    };
+    searchNav: {
+        get(): any;
+        set(v: any): void;
+    };
+    priceAlarms: {
+        get(): any;
+        set(v: any): void;
+    };
+    rectDrawMode: {
+        get(): any;
+        set(v: any): void;
+    };
+    _btPlot: {
+        get(): any;
+        set(v: any): void;
+    };
+    _btProgressSub: {
+        get(): any;
+        set(v: any): void;
+    };
+    corkyLoading: {
+        get(): any;
+        set(v: any): void;
+    };
+    corkyProgress: {
+        get(): any;
+        set(v: any): void;
+    };
+    corkyError: {
+        get(): any;
+        set(v: any): void;
+    };
     positionsCurrentSymbolKey(): string;
     positionDetailRows(): {
         key: string;
@@ -305,7 +344,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     searchContext(): {
         venue: any;
         symbol: any;
-        timeframe: null;
+        timeframe: any;
         timeframes: any;
         indicators: {
             label: any;
@@ -324,13 +363,16 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
 }, {
     setFeedMode(mode: any): void;
     enterGatewayMode(): void;
-    corkyDiscover(venue: any): Promise<never[] | undefined>;
-    _corkyHistoryLoader(range: any): Promise<any>;
+    corkyDiscover(venue: any, quiet: any): Promise<never[] | undefined>;
+    _corkyHistoryLoader(range: any, tab: any): Promise<any>;
     _btMergeReportWindow(base: any, add: any): any;
-    corkySelect(opts: any): Promise<void>;
-    _corkyScheduleSelectRetry(opts: any, mapped: any): boolean;
+    corkySelect(opts: any, targetTab: any): Promise<void>;
+    _corkyScheduleSelectRetry(opts: any, mapped: any, tab: any): boolean;
     onCorkySelect(opts: any): void;
-    _corkyCancelSelectRetry(): void;
+    _corkyCancelSelectRetry(tab: any): void;
+    _ensureTabFeed(tab: any): void;
+    _corkyBindActiveCube(): void;
+    _restoreActiveTabOverlays(): void;
     onCorkyAddTimeframe(req: any): Promise<void>;
     onCorkyToggleIndicator(req: any): void;
     _syncHandleEnabled(mem: any): void;
@@ -374,7 +416,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     _corkyMem(venue: any, symbol: any): any;
     _corkyPatchAndReselect(patch: any, selectOpts: any): Promise<void>;
     onCorkyRetry(): void;
-    _corkyUnsub(): Promise<void>;
+    _corkyUnsub(tab: any): Promise<void>;
     refreshPositions(): Promise<void>;
     _applyOpenPositions(out: any): void;
     _positionsDeriveAccounts(rows: any): void;
@@ -392,8 +434,8 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     onRunSearch(form: any): void;
     onCancelSearch(tabId: any): void;
     onCloseSearchTab(tabId: any): void;
-    onSearchResultSelect({ tabId, row, index }?: {}): Promise<void>;
-    _isActiveNav(tabId: any, index: any): false;
+    onSearchResultSelect({ tabId, row, index, newTab }?: {}): Promise<void>;
+    _isActiveNav(tabId: any, index: any): boolean;
     _setNavMessage(tabId: any, index: any, message: any): void;
     _navStatusLabel(status: any): any;
     _clearSearchNav(): void;
@@ -432,7 +474,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     loadHistoryPage(reset?: boolean, { silent }?: {
         silent?: boolean | undefined;
     }): Promise<void>;
-    onPositionSelect(pos: any): Promise<void>;
+    onPositionSelect(pos: any, newTab: any): Promise<void>;
     _isOpenPosition(pos: any, audit: any): boolean;
     _plotWindow(pos: any, audit: any): {
         start: any;
@@ -557,7 +599,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         };
         rightPanelWidth(): any;
         chartWidth(): number;
-        chartHeight(): number;
+        chartHeight(): any;
         bottomPanelHeight(): number;
         bottomDockHeight(): number;
         timeframes(): string[];
@@ -579,7 +621,6 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     };
 } | {
     data(): {
-        rectDrawMode: boolean;
         isDrawing: boolean;
         rectStart: null;
         rectCurrent: null;
@@ -632,6 +673,111 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         currentFileMeta(newMeta: any, oldMeta: any): void;
     };
     beforeUnmount(): void;
+} | {
+    data(): {
+        chartTabs: never[];
+        activeChartTabId: null;
+        maxChartTabs: number;
+    };
+    computed: {
+        activeTab(): any;
+        activeChart(): any;
+        chart: {
+            get(): any;
+            set(dc: any): void;
+        };
+        chartTabBarHeight(): number;
+    };
+    created(): void;
+    methods: {
+        _makeChartTab(chart: any, extra?: {}): {
+            id: string;
+            title: string;
+            chart: any;
+            corkyFeed: null;
+            corkyCurrent: null;
+            corkyHandle: null;
+            corkyLast: null;
+            range: null;
+            corkyLoading: boolean;
+            corkyProgress: null;
+            corkyError: null;
+            _stream: import("vue").Raw<{
+                gen: number;
+                retryOpts: null;
+                retryTimer: null;
+                retries: number;
+                retryKeepSpinner: boolean;
+            }>;
+            positionPlot: null;
+            searchNav: null;
+            priceAlarms: never[];
+            rectDrawMode: boolean;
+            btPlot: null;
+            btProgressSub: null;
+        };
+        setupChartCube(dc: any): void;
+        seedInitialChartTab(): void;
+        onTabCubeReplaced(tab: any, dc: any): void;
+        createChartTab(): {
+            id: string;
+            title: string;
+            chart: any;
+            corkyFeed: null;
+            corkyCurrent: null;
+            corkyHandle: null;
+            corkyLast: null;
+            range: null;
+            corkyLoading: boolean;
+            corkyProgress: null;
+            corkyError: null;
+            _stream: import("vue").Raw<{
+                gen: number;
+                retryOpts: null;
+                retryTimer: null;
+                retries: number;
+                retryKeepSpinner: boolean;
+            }>;
+            positionPlot: null;
+            searchNav: null;
+            priceAlarms: never[];
+            rectDrawMode: boolean;
+            btPlot: null;
+            btProgressSub: null;
+        } | null;
+        activateChartTab(id: any): void;
+        serializeChartTabs(): any;
+        restoreChartTabs(saved: any): number;
+        _appendChartTab(): {
+            id: string;
+            title: string;
+            chart: any;
+            corkyFeed: null;
+            corkyCurrent: null;
+            corkyHandle: null;
+            corkyLast: null;
+            range: null;
+            corkyLoading: boolean;
+            corkyProgress: null;
+            corkyError: null;
+            _stream: import("vue").Raw<{
+                gen: number;
+                retryOpts: null;
+                retryTimer: null;
+                retries: number;
+                retryKeepSpinner: boolean;
+            }>;
+            positionPlot: null;
+            searchNav: null;
+            priceAlarms: never[];
+            rectDrawMode: boolean;
+            btPlot: null;
+            btProgressSub: null;
+        } | null;
+        closeChartTab(id: any): void;
+        _destroyChartTabCube(tab: any): void;
+        destroyAllChartTabs(): void;
+    };
 }, import("vue").ComponentOptionsMixin, {}, string, import("vue").PublicProps, Readonly<{}> & Readonly<{}>, {}, {}, {
     TradingVue: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
         titleTxt: {
@@ -846,6 +992,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         custom_event(d: any): void;
         range_changed(r: any): void;
         set_loader(dc: any): void;
+        clear_loader(): void;
         parse_colors(colors: any): void;
         a11y_keydown(e: any): void;
         mousedown(): void;
@@ -1851,6 +1998,41 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             data?: any;
         }> & Readonly<{}>, {}, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
     }, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+    ChartTabBar: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
+        tabs: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
+        activeId: {
+            type: StringConstructor;
+            default: null;
+        };
+        max: {
+            type: NumberConstructor;
+            default: number;
+        };
+    }>, {}, {}, {}, {}, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("create" | "select" | "close")[], "create" | "select" | "close", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+        tabs: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
+        activeId: {
+            type: StringConstructor;
+            default: null;
+        };
+        max: {
+            type: NumberConstructor;
+            default: number;
+        };
+    }>> & Readonly<{
+        onSelect?: ((...args: any[]) => any) | undefined;
+        onClose?: ((...args: any[]) => any) | undefined;
+        onCreate?: ((...args: any[]) => any) | undefined;
+    }>, {
+        max: number;
+        tabs: unknown[];
+        activeId: string;
+    }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
     IndicatorSettings: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
         indicatorName: {
             type: StringConstructor;
@@ -2052,7 +2234,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         onToggleLayer(row: any, ind: any, layer: any): void;
         badgeText(tf: any): "pending" | "stale" | "ready";
         badgeClass(tf: any): "badge-pending" | "badge-stale" | "badge-ready";
-        onSelectTimeframe(row: any, tf: any): void;
+        onSelectTimeframe(row: any, tf: any, ev: any): void;
         isVenueExpanded(venue: any): boolean;
         toggleVenue(venue: any): void;
         isSymbolExpanded(key: any): boolean;
@@ -2167,6 +2349,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         runDetailTitle(): string;
         activeAccountKey(): string;
     }, {
+        newTabIntent: typeof import("./helpers/open-intent.js").newTabIntent;
         selectTab(tab: any): void;
         accountKey(a: any): string;
         onAccountChange(ev: any): void;
@@ -2360,6 +2543,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             statusLabel(): any;
             errorText(): any;
         }, {
+            newTabIntent: typeof import("./helpers/open-intent.js").newTabIntent;
             isActive(i: any): boolean;
             barrierCell(m: any): {
                 label: string;
@@ -2414,6 +2598,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
                 default: null;
             };
         }>, {}, {
+            strategyOpen: boolean;
             sortKey: string;
             sortDir: number;
             metricCols: ({
@@ -2673,12 +2858,42 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
                     label: string;
                     fmt: string;
                     names: string[];
+                    title?: undefined;
+                    sign?: undefined;
+                } | {
+                    key: string;
+                    label: string;
+                    fmt: string;
+                    title: string;
+                    names: string[];
                     sign?: undefined;
                 } | {
                     key: string;
                     label: string;
                     fmt: string;
                     sign: boolean;
+                    names: string[];
+                    title?: undefined;
+                })[] | ({
+                    key: string;
+                    label: string;
+                    fmt: string;
+                    names: string[];
+                    title?: undefined;
+                    sign?: undefined;
+                } | {
+                    key: string;
+                    label: string;
+                    fmt: string;
+                    title: string;
+                    names: string[];
+                    sign?: undefined;
+                } | {
+                    key: string;
+                    label: string;
+                    fmt: string;
+                    sign: boolean;
+                    title: string;
                     names: string[];
                 })[];
                 perSymbolCols(): ({

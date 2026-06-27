@@ -29,7 +29,7 @@ declare namespace _default {
         };
         function rightPanelWidth(): any;
         function chartWidth(): number;
-        function chartHeight(): number;
+        function chartHeight(): any;
         function bottomPanelHeight(): number;
         function bottomDockHeight(): number;
         function timeframes(): string[];

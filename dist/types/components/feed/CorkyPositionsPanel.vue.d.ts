@@ -71,6 +71,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     runDetailTitle(): string;
     activeAccountKey(): string;
 }, {
+    newTabIntent: typeof newTabIntent;
     selectTab(tab: any): void;
     accountKey(a: any): string;
     onAccountChange(ev: any): void;
@@ -264,6 +265,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         statusLabel(): any;
         errorText(): any;
     }, {
+        newTabIntent: typeof newTabIntent;
         isActive(i: any): boolean;
         barrierCell(m: any): {
             label: string;
@@ -318,6 +320,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
             default: null;
         };
     }>, {}, {
+        strategyOpen: boolean;
         sortKey: string;
         sortDir: number;
         metricCols: ({
@@ -577,12 +580,42 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
                 label: string;
                 fmt: string;
                 names: string[];
+                title?: undefined;
+                sign?: undefined;
+            } | {
+                key: string;
+                label: string;
+                fmt: string;
+                title: string;
+                names: string[];
                 sign?: undefined;
             } | {
                 key: string;
                 label: string;
                 fmt: string;
                 sign: boolean;
+                names: string[];
+                title?: undefined;
+            })[] | ({
+                key: string;
+                label: string;
+                fmt: string;
+                names: string[];
+                title?: undefined;
+                sign?: undefined;
+            } | {
+                key: string;
+                label: string;
+                fmt: string;
+                title: string;
+                names: string[];
+                sign?: undefined;
+            } | {
+                key: string;
+                label: string;
+                fmt: string;
+                sign: boolean;
+                title: string;
                 names: string[];
             })[];
             perSymbolCols(): ({
@@ -657,3 +690,4 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
     }, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
 }, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+import { newTabIntent } from '../../helpers/open-intent.js';

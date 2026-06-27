@@ -16,7 +16,6 @@ export default class DataCube extends DCCore {
     show(query: any): void;
     hide(query: any): void;
     onrange(callback: any): void;
-    loader: any;
 }
 import DCCore from './dc_core.js';
 import AggTool from './agg_tool.js';

@@ -108,12 +108,42 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
             label: string;
             fmt: string;
             names: string[];
+            title?: undefined;
+            sign?: undefined;
+        } | {
+            key: string;
+            label: string;
+            fmt: string;
+            title: string;
+            names: string[];
             sign?: undefined;
         } | {
             key: string;
             label: string;
             fmt: string;
             sign: boolean;
+            names: string[];
+            title?: undefined;
+        })[] | ({
+            key: string;
+            label: string;
+            fmt: string;
+            names: string[];
+            title?: undefined;
+            sign?: undefined;
+        } | {
+            key: string;
+            label: string;
+            fmt: string;
+            title: string;
+            names: string[];
+            sign?: undefined;
+        } | {
+            key: string;
+            label: string;
+            fmt: string;
+            sign: boolean;
+            title: string;
             names: string[];
         })[];
         perSymbolCols(): ({

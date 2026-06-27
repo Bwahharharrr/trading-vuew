@@ -61,7 +61,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     onToggleLayer(row: any, ind: any, layer: any): void;
     badgeText(tf: any): "pending" | "stale" | "ready";
     badgeClass(tf: any): "badge-pending" | "badge-stale" | "badge-ready";
-    onSelectTimeframe(row: any, tf: any): void;
+    onSelectTimeframe(row: any, tf: any, ev: any): void;
     isVenueExpanded(venue: any): boolean;
     toggleVenue(venue: any): void;
     isSymbolExpanded(key: any): boolean;

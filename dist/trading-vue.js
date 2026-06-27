@@ -24449,6 +24449,9 @@ pointers: 1 },
 					dc.range_changed(r, tf);
 				};
 			},
+			clear_loader() {
+				this.onrange = null;
+			},
 			parse_colors(colors) {
 				const defs = this.$options.props;
 				let usedFlat = false;
@@ -25583,9 +25586,29 @@ pointers: 1 },
 			}
 		}
 		destroy() {
-			if (this._settingsUnwatch) this._settingsUnwatch();
-			if (this._idsUnwatch) this._idsUnwatch();
-			if (this._datasetsUnwatch) this._datasetsUnwatch();
+			if (this._destroyed) return;
+			this._destroyed = true;
+			this.teardown_tvjs();
+			if (this.agg) this.agg.destroy();
+			if (this.ww) this.ww.destroy();
+			this.loader = null;
+		}
+		teardown_tvjs() {
+			if (this._settingsUnwatch) {
+				this._settingsUnwatch();
+				this._settingsUnwatch = null;
+			}
+			if (this._idsUnwatch) {
+				this._idsUnwatch();
+				this._idsUnwatch = null;
+			}
+			if (this._datasetsUnwatch) {
+				this._datasetsUnwatch();
+				this._datasetsUnwatch = null;
+			}
+			this._cachedSettings = this._cachedSettingsKey = null;
+			this._cachedIds = this._cachedIdsKey = null;
+			this.tv = null;
 		}
 		init_data($root) {
 			if (!("chart" in this.data)) this.data["chart"] = {
@@ -25908,11 +25931,12 @@ pointers: 1 },
 			}
 			this.st_id = setTimeout(() => {
 				this.st_id = null;
-				this.raf_id = requestAnimationFrame(() => {
+				if (typeof requestAnimationFrame === "function") this.raf_id = requestAnimationFrame(() => {
 					this.raf_id = null;
 					this._lastUpdate = Date.now();
 					this.update();
 				});
+				else this.raf_id = null;
 			}, remaining);
 		}
 		refine(sym, upd) {

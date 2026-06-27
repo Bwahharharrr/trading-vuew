@@ -15,6 +15,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     statusLabel(): any;
     errorText(): any;
 }, {
+    newTabIntent: typeof newTabIntent;
     isActive(i: any): boolean;
     barrierCell(m: any): {
         label: string;
@@ -39,3 +40,4 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
 }>, {
     nav: Record<string, any>;
 }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+import { newTabIntent } from '../../helpers/open-intent.js';

@@ -13,6 +13,7 @@ export class CorkyFeed extends FeedSource {
     client: CorkyClient;
     dc: import("../datacube.js").default;
     subscribeTimeoutMs: any;
+    _feedId: any;
     _subCounter: number;
     _subs: Map<any, any>;
     _activeSubId: string | null;
@@ -111,6 +112,15 @@ export class CorkyFeed extends FeedSource {
      * @returns {Promise<void>}
      */
     unsubscribe(handle: object | string): Promise<void>;
+    /**
+     * Release this feed WITHOUT closing the SHARED client: detach the connection-
+     * lifecycle listeners it registered in the ctor (so a torn-down feed can't keep
+     * resubscribing on reconnect) and unsubscribe every stream (stops the gateway
+     * pushing live_update + drops the fan-out + frees the retained wire history).
+     * Use this when MULTIPLE feeds share one client (one CorkyFeed per chart tab):
+     * closing the socket here would kill every other tab's + the dock feeds' stream.
+     */
+    dispose(): void;
 }
 export default CorkyFeed;
 import { FeedSource } from './feed-source.js';

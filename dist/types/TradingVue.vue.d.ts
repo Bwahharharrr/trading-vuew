@@ -213,6 +213,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     custom_event(d: any): void;
     range_changed(r: any): void;
     set_loader(dc: any): void;
+    clear_loader(): void;
     parse_colors(colors: any): void;
     a11y_keydown(e: any): void;
     mousedown(): void;

@@ -30,6 +30,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         default: null;
     };
 }>, {}, {
+    strategyOpen: boolean;
     sortKey: string;
     sortDir: number;
     metricCols: ({

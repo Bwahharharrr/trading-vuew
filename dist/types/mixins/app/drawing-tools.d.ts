@@ -13,7 +13,6 @@ export function boxReadout(grid: any, { topY, botY, leftX, rightX }: {
 };
 declare namespace _default {
     function data(): {
-        rectDrawMode: boolean;
         isDrawing: boolean;
         rectStart: null;
         rectCurrent: null;
