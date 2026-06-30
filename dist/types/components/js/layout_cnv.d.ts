@@ -16,6 +16,7 @@ export function layout_cnv(self: any): {
         raw: any;
     }[];
 };
+export function layout_cnv_cached(self: any, cache: any): any;
 export function layout_vol(self: any): {
     x1: number;
     x2: number;
