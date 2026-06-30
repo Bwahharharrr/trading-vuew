@@ -10,6 +10,7 @@ declare namespace _default {
         rightPanelCollapsed: boolean;
         positionsDockOpen: boolean;
         positionsDockHeight: number;
+        positionsDockMaximized: boolean;
         config: {
             DEFAULT_LEN: number;
             TB_BORDER: number;
@@ -30,9 +31,9 @@ declare namespace _default {
         };
         function rightPanelWidth(): any;
         function chartWidth(): number;
-        function chartHeight(): any;
+        function chartHeight(): number;
         function bottomPanelHeight(): number;
-        function bottomDockHeight(): number;
+        function bottomDockHeight(): any;
         function timeframes(): string[];
     }
     namespace methods {

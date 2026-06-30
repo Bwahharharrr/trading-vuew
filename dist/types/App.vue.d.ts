@@ -428,6 +428,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     _positionsStopOpenStream(): void;
     _positionsStartPoll(): void;
     togglePositionsDock(open: any): void;
+    toggleDockMaximize(max: any): void;
     setPositionsTab(tab: any): void;
     _indicatorOptions(state: any): {
         label: any;
@@ -583,6 +584,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         rightPanelCollapsed: boolean;
         positionsDockOpen: boolean;
         positionsDockHeight: number;
+        positionsDockMaximized: boolean;
         config: {
             DEFAULT_LEN: number;
             TB_BORDER: number;
@@ -603,9 +605,9 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         };
         rightPanelWidth(): any;
         chartWidth(): number;
-        chartHeight(): any;
+        chartHeight(): number;
         bottomPanelHeight(): number;
-        bottomDockHeight(): number;
+        bottomDockHeight(): any;
         timeframes(): string[];
     };
     methods: {
@@ -2292,6 +2294,10 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             type: BooleanConstructor;
             default: boolean;
         };
+        maximized: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
         activeTab: {
             type: StringConstructor;
             default: string;
@@ -2364,12 +2370,16 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         signClass(dec: any): "" | "pos" | "neg";
         pctText(dec: any): string;
         fmtTime(ms: any): string;
-    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("update:open" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "refresh" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail")[], "update:open" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "refresh" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "refresh" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail")[], "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "refresh" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
         height: {
             type: NumberConstructor;
             default: number;
         };
         open: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        maximized: {
             type: BooleanConstructor;
             default: boolean;
         };
@@ -2431,6 +2441,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         };
     }>> & Readonly<{
         "onUpdate:open"?: ((...args: any[]) => any) | undefined;
+        "onUpdate:maximized"?: ((...args: any[]) => any) | undefined;
         "onUpdate:active-tab"?: ((...args: any[]) => any) | undefined;
         "onUpdate:active-account"?: ((...args: any[]) => any) | undefined;
         "onSelect-position"?: ((...args: any[]) => any) | undefined;
@@ -2457,6 +2468,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         height: number;
         loading: boolean;
         open: boolean;
+        maximized: boolean;
         activeTab: string;
         openPositions: unknown[];
         historicalPositions: unknown[];
