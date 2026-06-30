@@ -113,9 +113,14 @@ export default {
                 })
             ].concat(props.hs || []))
         },
-        redraw() {
+        redraw(freshGridLayout) {
             if (!this.renderer) return
-            this.renderer.update()
+            // freshGridLayout: the RenderScheduler drain hands the grid its
+            // just-built layout slice so it paints the current frame's scale
+            // without waiting for the reactive prop flush. Sidebar/Botbar ignore
+            // the arg (their renderer.update takes none) — redraw stays the
+            // single paint primitive.
+            this.renderer.update(freshGridLayout)
         },
         // Redraw only the dynamic (crosshair) layer - much faster for cursor moves
         redrawDynamic() {

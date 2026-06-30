@@ -5,6 +5,7 @@ import Utils from '../../stuff/utils.js'
 import { createCursorEventPool } from '../../stuff/pool.js'
 import { ZoomManager, PanManager, GridRenderer } from './grid/index.js'
 import { loadGestures } from '../../stuff/gestures.js'
+import { LEVEL, RENDER_SCHEDULER } from '../../render/render-scheduler.js'
 
 export default class Grid {
 
@@ -66,20 +67,34 @@ export default class Grid {
         const { Hammer, Hamster } = await loadGestures()
         if (this._destroyed) return // unmounted while gestures were loading
         this.hm = Hamster(this.canvasDynamic || this.canvas)
-        // Throttle wheel events to ~60fps for smooth zoom
-        this._throttledWheel = Utils.rafThrottle((delta, event) => {
-            this.zoomManager.mousezoom(-delta * 50, event)
-        })
+        // Legacy per-source rafThrottle (rollback path). With the RenderScheduler
+        // on, wheel zoom is coalesced by the single rAF spine instead — created
+        // lazily so the scheduler path allocates no unused throttle.
+        if (!RENDER_SCHEDULER) {
+            this._throttledWheel = Utils.rafThrottle((delta, event) => {
+                this.zoomManager.mousezoom(-delta * 50, event)
+            })
+        }
         this.hm.wheel((event, delta) => {
             // preventDefault must run SYNCHRONOUSLY in the wheel dispatch — the
-            // RAF-throttled handler fires a frame later, when it is a documented
-            // no-op (page scroll / browser ctrl-zoom were no longer blocked).
+            // deferred (RAF / scheduler-drain) handler fires a frame later, when
+            // it is a documented no-op (page scroll / browser ctrl-zoom were no
+            // longer blocked).
             if (this.wmode !== 'pass' && event.originalEvent &&
                 !(this.wmode === 'click' && !this.$p.meta.activated)) {
                 event.originalEvent.preventDefault()
                 if (event.preventDefault) event.preventDefault()
             }
-            this._throttledWheel(delta, event)
+            if (RENDER_SCHEDULER) {
+                // Defer the zoom into the drain (latest-event-wins, one run per
+                // frame — same coalescing the rafThrottle gave).
+                this._scheduleGesture(
+                    () => this.zoomManager.mousezoom(-delta * 50, event),
+                    LEVEL.REPOSITION
+                )
+            } else {
+                this._throttledWheel(delta, event)
+            }
         })
 
         let mc = this.mc = new Hammer.Manager(this.canvasDynamic || this.canvas)
@@ -120,28 +135,22 @@ export default class Grid {
             this.comp.$emit('cursor-locked', true)
         })
 
-        // Throttle panmove for smoother drag performance
-        this._throttledPanmove = Utils.rafThrottle((event) => {
-            if (Utils.is_mobile) {
-                this.calc_offset()
-                this.renderer.propagate('mousemove', this.touch2mouse(event))
-            }
-            if (this.drug) {
-                this.panManager.mousedrag(
-                    this.drug.x + event.deltaX,
-                    this.drug.y + event.deltaY
+        // Legacy rafThrottle (rollback path); the scheduler coalesces panmove via
+        // the single rAF spine instead.
+        if (!RENDER_SCHEDULER) {
+            this._throttledPanmove = Utils.rafThrottle(
+                (event) => this._panmove_work(event)
+            )
+        }
+        mc.on('panmove', event => {
+            if (RENDER_SCHEDULER) {
+                this._scheduleGesture(
+                    () => this._panmove_work(event), LEVEL.REPOSITION
                 )
-                // Reuse pooled cursor event object
-                this._pooledCursorEvent.grid_id = this.id
-                this._pooledCursorEvent.x = event.center.x + this.offset_x
-                this._pooledCursorEvent.y = event.center.y + this.offset_y
-                this._pooledCursorEvent.mode = undefined
-                this.comp.$emit('cursor-changed', this._pooledCursorEvent)
-            } else if (this.cursor.mode === 'aim') {
-                this.emit_cursor_coord(event)
+            } else {
+                this._throttledPanmove(event)
             }
         })
-        mc.on('panmove', event => this._throttledPanmove(event))
 
         mc.on('panend', event => {
             if (Utils.is_mobile && this.drug) {
@@ -173,7 +182,17 @@ export default class Grid {
         })
 
         mc.on('pinch', event => {
-            if (this.pinch) this.zoomManager.pinchzoom(event.scale)
+            if (!this.pinch) return
+            if (RENDER_SCHEDULER) {
+                // Previously UNthrottled (N rebuilds/frame). Routed through the
+                // drain it collapses to one rebuild/frame (latest scale wins).
+                this._scheduleGesture(
+                    () => this.zoomManager.pinchzoom(event.scale),
+                    LEVEL.REPOSITION
+                )
+            } else {
+                this.zoomManager.pinchzoom(event.scale)
+            }
         })
 
         mc.on('press', event => {
@@ -312,9 +331,46 @@ export default class Grid {
     new_layer(layer) { this.renderer.new_layer(layer) }
     del_layer(id) { this.renderer.del_layer(id) }
     show_hide_layer(event) { this.renderer.show_hide_layer(event) }
-    update() { this.renderer.update() }
+    update(freshGridLayout) { this.renderer.update(freshGridLayout) }
     markStaticDirty() { this.renderer.markStaticDirty() }
     propagate(name, event) { this.renderer.propagate(name, event) }
+
+    // The panmove body, shared by the legacy rafThrottle and the scheduler drain.
+    _panmove_work(event) {
+        if (Utils.is_mobile) {
+            this.calc_offset()
+            this.renderer.propagate('mousemove', this.touch2mouse(event))
+        }
+        if (this.drug) {
+            this.panManager.mousedrag(
+                this.drug.x + event.deltaX,
+                this.drug.y + event.deltaY
+            )
+            // Reuse pooled cursor event object
+            this._pooledCursorEvent.grid_id = this.id
+            this._pooledCursorEvent.x = event.center.x + this.offset_x
+            this._pooledCursorEvent.y = event.center.y + this.offset_y
+            this._pooledCursorEvent.mode = undefined
+            this.comp.$emit('cursor-changed', this._pooledCursorEvent)
+        } else if (this.cursor.mode === 'aim') {
+            this.emit_cursor_coord(event)
+        }
+    }
+
+    // Defer a gesture into the chart's single rAF drain (latest-wins). The drain
+    // runs `_pendingGesture`, which mutates range → the UNCHANGED synchronous
+    // range_changed → subset+update_layout, then paints — coalescing the whole
+    // gesture burst to one rebuild+paint per frame. If no scheduler is reachable
+    // (RENDER_SCHEDULER off, or mounted outside a Chart) run it synchronously.
+    _scheduleGesture(work, level) {
+        this._pendingGesture = work
+        if (this.comp && this.comp._invalidate && this.comp._invalidate(level)) {
+            return
+        }
+        // No scheduler — fall back to immediate execution (legacy semantics).
+        this._pendingGesture = null
+        work()
+    }
 
     change_range() {
         if (!this.range.length || this.data.length < 2) return
@@ -344,9 +400,11 @@ export default class Grid {
         if (this._gestureend) rm("gestureend", this._gestureend)
         if (this.mc) this.mc.destroy()
         if (this.hm) this.hm.unwheel()
-        // Cancel any pending throttled callbacks
+        // Cancel any pending throttled callbacks (legacy path) + drop a deferred
+        // gesture so the scheduler drain can't run it against a torn-down grid.
         if (this._throttledWheel) this._throttledWheel.cancel()
         if (this._throttledPanmove) this._throttledPanmove.cancel()
+        this._pendingGesture = null
         // Clear any pending one-shot timeouts
         if (this._pressTimeout) clearTimeout(this._pressTimeout)
         if (this._clickTimeout) clearTimeout(this._clickTimeout)

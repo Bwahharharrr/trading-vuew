@@ -29,6 +29,7 @@ import Markers from "./overlays/Markers.vue"
 
 import { validateOverlayComponent } from '../helpers/schema/validate-overlay.js'
 import { report } from '../helpers/schema/diagnostics.js'
+import { LEVEL, RENDER_SCHEDULER } from '../render/render-scheduler.js'
 
 
 export default {
@@ -40,6 +41,9 @@ export default {
     ],
     mixins: [Canvas, UxList],
     components: { Crosshair, KeyboardListener },
+    // Provided by Chart (lazy getter). null when RENDER_SCHEDULER is off or the
+    // Grid is mounted outside a Chart — call sites then take the legacy branch.
+    inject: { tvRenderScheduler: { default: null } },
     created() {
         // Vue 3: Initialize event handlers in created() using arrow functions
         // so they capture 'this' at call time (methods aren't bound in data())
@@ -205,6 +209,20 @@ export default {
         })
     },
     methods: {
+        // Resolve the chart-wide RenderScheduler (or null for the legacy path).
+        _sched() {
+            if (!RENDER_SCHEDULER) return null
+            const get = this.tvRenderScheduler
+            return get ? get() : null
+        },
+        // Route a render source into the single rAF spine. Returns true when the
+        // scheduler took it (caller skips its legacy nextTick/rAF paint).
+        _invalidate(level) {
+            const s = this._sched()
+            if (!s) return false
+            s.invalidate(level)
+            return true
+        },
         new_layer(layer) {
             if (!this.renderer) {
                 // Queue layer until renderer is ready
@@ -450,6 +468,15 @@ export default {
         rangeKey(newKey, oldKey) {
             if (!newKey || newKey === oldKey) return
             this.renderKey++
+            // Skip the redundant trailing paint: when the spine's drain mutated
+            // range INSIDE the drain (gesture/fade), it already painted this exact
+            // range and stamped the key — this watcher then fires a frame later for
+            // a byte-identical result. Don't schedule a second rebuild+paint.
+            const sched = this.tvRenderScheduler && this.tvRenderScheduler()
+            if (sched && sched._paintedRangeKey === newKey) return
+            // Coalesce the static repaint into the single rAF spine; legacy path
+            // keeps its own nextTick redraw.
+            if (this._invalidate(LEVEL.REPOSITION)) return
             nextTick(() => this.redraw())
         },
         // Watch cursor changes for redraw - use RAF to batch updates.
@@ -459,13 +486,26 @@ export default {
         // single-canvas FALLBACK (crosshair lives on the static canvas, drawn in
         // renderStatic), where a coalesced RAF redraw is still correct.
         'cursor.x': function(newX) {
-            if (this.renderer && this.renderer.hasDualCanvas) return
+            // The shared cursor moved. Route EVERY pane through the spine at Cursor
+            // level so the drain repaints the crosshair on every pane — including
+            // non-active SIBLINGS (offcharts / detached volume), whose dual-canvas
+            // crosshair would otherwise FREEZE: grid.js draws the crosshair
+            // synchronously for the HOVERED pane only, so siblings rely on this
+            // repaint. The drain's Cursor pass is dynamic-only for dual-canvas (no
+            // static/golden impact) and never demotes a pending Reposition/Full.
+            if (this._invalidate(LEVEL.CURSOR)) return
+            // Fallback — no scheduler (flag off / a Grid mounted outside a Chart):
+            // coalesce one redraw/frame. Dual-canvas repaints only the dynamic
+            // crosshair layer; single-canvas bakes it into the static layer (full
+            // redraw needed so candles aren't erased).
             if (this._cursorRafPending) return
             this._cursorRafPending = true
             requestAnimationFrame(() => {
                 this._cursorRafPending = false
                 if (this.$props.cursor?.locked) return
-                this.redraw()
+                const gr = this.renderer && this.renderer.renderer
+                if (gr && gr.hasDualCanvas) gr.updateDynamic()
+                else this.redraw()
             })
         },
         overlays: {
@@ -506,7 +546,10 @@ export default {
             deep: true  // Keep deep for calc() function tracking - necessary
         },
         // Redraw on the shader list change
-        shaders(n, p) { this.redraw() },
+        shaders(n, p) {
+            if (this._invalidate(LEVEL.FULL)) return
+            this.redraw()
+        },
         // Watch data changes using computed hash key
         dataKey(newKey, oldKey) {
             if (!newKey || newKey === oldKey) return
@@ -517,13 +560,17 @@ export default {
             // dynamic-only fast path (which would leave the candle frozen until
             // a pointer event). The cursor.x watcher deliberately does NOT do
             // this, so pure cursor moves still skip the static redraw.
+            // markStaticDirty MUST run before invalidate so the coalesced drain
+            // still forces a static repaint (gate: live-tick must repaint).
             if (this.renderer) this.renderer.markStaticDirty()
+            if (this._invalidate(LEVEL.FULL)) return
             nextTick(() => this.redraw())
         },
         // Watch y-axis transform changes (sidebar zoom/drag)
         yTransformKey(newKey, oldKey) {
             if (!newKey || newKey === oldKey) return
             this.renderKey++
+            if (this._invalidate(LEVEL.FULL)) return
             nextTick(() => this.redraw())
         }
     },

@@ -5,6 +5,7 @@ import Utils from '../../stuff/utils.js'
 import Layout from '../../components/js/layout.js'
 import TI from '../../components/js/ti_mapping.js'
 import Const from '../../stuff/constants.js'
+import { LEVEL, RENDER_SCHEDULER, REPOSITION_FAST } from '../../render/render-scheduler.js'
 
 export default {
     methods: {
@@ -16,6 +17,123 @@ export default {
             this.update_layout()
             this.$emit('range-changed', r)
             if (this.$props.ib) this.save_data_t()
+            // Paint via the single rAF spine. The synchronous rebuild above stays
+            // (so the reactive Sidebar/Botbar `rangeKey` watchers repaint against a
+            // FRESH layout, exactly as before); only the GRID static paint is
+            // coalesced into the drain. Skip when called from inside the drain
+            // itself (deferred gesture) — the drain paints once it returns, and a
+            // re-invalidate there would just schedule a redundant trailing frame.
+            if (RENDER_SCHEDULER && this._scheduler && !this._inDrain) {
+                this._scheduler.invalidate(LEVEL.REPOSITION)
+            }
+        },
+
+        // Drain callback for the single rAF spine (RenderScheduler, plan §3 Phase
+        // 2). Runs ONCE per frame with the merged level. Two stages:
+        //   1) run any deferred GESTURE work (wheel/pan/pinch were stored instead
+        //      of executed at the event). Running it here mutates `range` and
+        //      calls the UNCHANGED synchronous range_changed → subset+update_layout,
+        //      so the reactive cascade (sidebars/botbar) repaints against a fresh
+        //      layout right after this drain — no staleness.
+        //   2) paint the grid static layer once (canvas.js redraw stays the paint
+        //      primitive). Cursor level paints the dynamic layer only (single-canvas
+        //      fallback; the dual-canvas crosshair is drawn synchronously in
+        //      grid.js and never reaches this path).
+        // Phase 3 — the Reposition fast path is realised INSIDE the rebuild: a pan's
+        // deferred gesture → range_changed → update_layout → candles_n_vol now
+        // REUSES the kept bars' cached candle geometry (price transform stable,
+        // ≤5% churn; see layout.js) instead of recomputing every candle, while the
+        // O(visible) grid skeleton (xs/ys/A/B/sidebar) is rebuilt byte-identically.
+        // The AUTHORITATIVE reuse gate is candles_n_vol's exact-equality A/B/px_step/
+        // interval/height check (co-located with the geometry build, so a wrong
+        // verdict can never emit a wrong pixel). REPOSITION_FAST is the rollback
+        // that forces a full candle rebuild (Phase-2 behaviour). NOTE: repositionPass()
+        // / priceScale.recompute() below are TESTED-but-not-yet-wired scaffolding for
+        // the deferred drain-side decision seam (the next increment that skips the
+        // grid-skeleton rebuild too) — the drain does NOT consult them today.
+        _render_drain(level) {
+            const secs = this.$refs.sec
+            if (!secs) return
+            this._inDrain = true
+            try {
+                // Stage 1 — deferred gesture work (latest-wins, one run/frame).
+                // Per-grid isolation: one grid's gesture throwing must not abort
+                // the other grids' work or drop the whole frame's paint.
+                for (let i = 0; i < secs.length; i++) {
+                    const gv = secs[i] && secs[i].$refs.grid
+                    const g = gv && gv.renderer            // grid.js Grid instance
+                    if (g && g._pendingGesture) {
+                        const work = g._pendingGesture
+                        g._pendingGesture = null
+                        try { work() } catch (e) { console.error('[render-drain] gesture work failed:', e) }
+                    }
+                }
+                // Stage 2 — paint. Hand each grid its FRESH layout slice (the
+                // just-rebuilt chartLayout.grids[i]); the reactive `layout` prop
+                // hasn't flushed yet inside this same frame, so reading it would
+                // paint a stale scale.
+                const grids = this.chartLayout && this.chartLayout.grids
+                const cursorOnly = level <= LEVEL.CURSOR
+                for (let i = 0; i < secs.length; i++) {
+                    const gv = secs[i] && secs[i].$refs.grid
+                    if (!gv) continue
+                    const fresh = grids && grids[i]
+                    try {
+                        if (cursorOnly) {
+                            // Cursor level: repaint only the crosshair. Dual-canvas
+                            // has its own dynamic layer (updateDynamic, on EVERY
+                            // pane incl. non-active siblings); single-canvas bakes
+                            // the crosshair into the static draw, so a full redraw
+                            // is required to avoid erasing candles.
+                            const r = gv.renderer && gv.renderer.renderer  // GridRenderer
+                            if (r && r.hasDualCanvas) {
+                                r.updateDynamic()
+                            } else if (gv.redraw) {
+                                gv.redraw(fresh)
+                            }
+                        } else if (gv.redraw) {
+                            gv.redraw(fresh)
+                        }
+                    } catch (e) { console.error('[render-drain] grid paint failed:', e) }
+                }
+                // Record the range just painted so the trailing rangeKey watcher
+                // (range was mutated INSIDE this drain, so it fires a frame later)
+                // can skip a redundant byte-identical rebuild+paint. Static drains
+                // only; an out-of-drain range mutation (e.g. the ib path) won't
+                // match this key and so still invalidates normally.
+                if (!cursorOnly && this._scheduler) {
+                    const r = this.range
+                    this._scheduler._paintedRangeKey = (r && r.length >= 2) ? `${r[0]},${r[1]}` : ''
+                }
+            } finally {
+                this._inDrain = false
+            }
+        },
+
+        // repositionPass — the Reposition fast-path DECISION (plan §1#2 / §3 Phase
+        // 3). Given the upcoming visible slice, answers "is this a pure pan that
+        // keeps the price transform (A,B) stable?" by running the spine's
+        // priceScale.recompute (minmax → hi/lo → A,B, byte-identical to
+        // GridMaker's) against the PREVIOUS frame's scale and checking `!changed`.
+        // It ESCALATES (returns false) for the first build, offcharts present, log/
+        // manual/overlay-driven y (recompute returns null), or an A/B move — those
+        // need a Full rebuild. This is the explicit, testable decision seam; the
+        // ACTUAL geometry reuse and its authoritative EXACT-equality guards live in
+        // candles_n_vol (layout.js), so a wrong verdict here can never produce a
+        // wrong pixel — only a missed/taken optimization. Off ⇒ always Full.
+        // NOT wired into _render_drain yet — scaffolding for the deferred grid-
+        // skeleton-skip increment; covered by reposition-geometry.test.js.
+        repositionPass(visible) {
+            if (!REPOSITION_FAST) return false
+            if (this.offsub && this.offsub.length) return false
+            const lay = this.chartLayout
+            const g0 = lay && lay.grids && lay.grids[0]
+            const ps = g0 && g0.priceScale
+            if (!ps) return false
+            if (g0.grid && g0.grid.logScale) return false
+            const cand = ps.recompute(visible, this.$props.config.EXPAND)
+            if (!cand) return false
+            return !cand.changed
         },
 
         // Keep the visible range overlapping the data so a redraw never empties
@@ -370,6 +488,20 @@ export default {
             if (this._hook_data) this.ce('?chart-data', nw)
             this.update_last_values()
             this.rerender++
+            // The synchronous update_layout(nw) above already rebuilt the layout;
+            // coalesce the GRID static repaint into the single rAF drain. (The
+            // Grid.dataKey watcher also invalidates — both merge to one drain.)
+            if (RENDER_SCHEDULER && this._scheduler) {
+                this._scheduler.invalidate(LEVEL.FULL)
+            }
+        }
+    },
+
+    beforeUnmount() {
+        // Tear down the render spine so a pending frame can't fire post-unmount.
+        if (this._scheduler) {
+            this._scheduler.destroy()
+            this._scheduler = null
         }
     }
 }

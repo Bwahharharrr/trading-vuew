@@ -1,127 +1,73 @@
-// Layout functional interface
-// Performance optimized with memoization for coordinate transforms
+// Layout functional interface — now a THIN ADAPTER over the scale-engine spine.
+//
+// The coordinate transforms (t2screen/$2screen/screen2$/...) and their memo
+// caches used to be born inside this closure on every `new Layout()`. They now
+// live on first-class TimeScale + PriceScale objects (src/render/scales/*) that
+// carry a `version`; this adapter just BINDS the same closure surface onto `self`
+// so every overlay / tool / shader is untouched. The math is byte-identical.
+//
+// GridMaker injects the scales it owns (a per-grid PriceScale; the master grid's
+// shared TimeScale, borrowed by offcharts). Direct callers (unit harnesses) may
+// invoke `layout_fn(self, range)` with only the loose `self.*` fields — in that
+// case we derive equivalent scales from `self` so the surface is identical either
+// way. The version-keyed memo clears live INSIDE the scale objects.
 
-import Utils from '../../stuff/utils.js'
-import math from '../../stuff/math.js'
+import { createTimeScale } from '../../render/scales/time-scale.js'
+import { createPriceScale } from '../../render/scales/price-scale.js'
 
-export default function(self, range) {
+export default function(self, range, timeScale, priceScale) {
 
-    const ib = self.ti_map.ib
-    const dt = range[1] - range[0]
-    const r = self.spacex / dt
-    const ls = self.grid.logScale || false
+    // Use the injected scales (GridMaker path); otherwise derive them from the
+    // loose self.* fields (direct-call / test path). Same closure surface.
+    const ts = timeScale || createTimeScale({
+        ti_map: self.ti_map,
+        range,
+        spacex: self.spacex,
+        px_step: self.px_step,
+        startx: self.startx,
+    })
+    const ps = priceScale || createPriceScale({
+        A: self.A,
+        B: self.B,
+        hi: self.$_hi,
+        lo: self.$_lo,
+        height: self.height,
+        logScale: (self.grid && self.grid.logScale) || false,
+    })
 
-    // Memoization caches - cleared automatically on layout recalculation
-    // since a new layout_fn instance is created each time
-    const t2screenCache = new Map()
-    const $2screenCache = new Map()
-    const screen2$Cache = new Map()
+    // Expose the scales for the version-based dirty seam (later phases) and for
+    // offcharts to borrow the master x. Additive, plain fields on a markRaw'd
+    // layout — no reactivity, no deep watcher.
+    self.timeScale = ts
+    self.priceScale = ps
 
-    // Cache size limit to prevent unbounded memory growth
-    const MAX_CACHE_SIZE = 2000
-
-    // Cached timestamp array for magnet lookups, tied to candle array identity.
-    // Rebuilt only when the underlying candles array reference changes, so
-    // t_magnet/c_magnet don't re-scan the whole array on every call.
-    let magnetCn = null
-    let magnetTs = null
-    const magnet_ts = cn => {
-        if (cn !== magnetCn) {
-            magnetCn = cn
-            magnetTs = cn.map(x => x.raw[0])
-        }
-        return magnetTs
-    }
+    // The candle array a magnet snaps to: the grid's own candles, or the master
+    // grid's for offcharts (resolved lazily at call time, after candles_n_vol).
+    const magnetCn = () => self.candles || self.master_grid.candles
 
     Object.assign(self, {
-        // Time to screen coordinates (memoized)
-        t2screen: t => {
-            // Check cache first
-            let cached = t2screenCache.get(t)
-            if (cached !== undefined) return cached
-
-            let tVal = t
-            if (ib) tVal = self.ti_map.smth2i(t)
-            const result = Math.floor((tVal - range[0]) * r) - 0.5
-
-            // Store in cache with size limit
-            if (t2screenCache.size < MAX_CACHE_SIZE) {
-                t2screenCache.set(t, result)
-            }
-            return result
-        },
-        // $ to screen coordinates (memoized)
-        $2screen: y => {
-            // Check cache first
-            let cached = $2screenCache.get(y)
-            if (cached !== undefined) return cached
-
-            let yVal = y
-            if (ls) yVal = math.log(y)
-            const result = Math.floor(yVal * self.A + self.B) - 0.5
-
-            // Store in cache with size limit
-            if ($2screenCache.size < MAX_CACHE_SIZE) {
-                $2screenCache.set(y, result)
-            }
-            return result
-        },
+        // Time to screen coordinates (memoized by TimeScale)
+        t2screen: t => ts.t2screen(t),
+        // $ to screen coordinates (memoized by PriceScale)
+        $2screen: y => ps.$2screen(y),
         // Time-axis nearest step
-        t_magnet: t => {
-            if (ib) t = self.ti_map.smth2i(t)
-            const cn = self.candles || self.master_grid.candles
-            const arr = magnet_ts(cn)
-            const i = Utils.nearest_a(t, arr)[0]
-            if (!cn[i]) return
-            return Math.floor(cn[i].x) - 0.5
-        },
-        // Screen-Y to dollar value (memoized)
-        screen2$: y => {
-            // Check cache first
-            let cached = screen2$Cache.get(y)
-            if (cached !== undefined) return cached
-
-            let result
-            if (ls) {
-                result = math.exp((y - self.B) / self.A)
-            } else {
-                result = (y - self.B) / self.A
-            }
-
-            // Store in cache with size limit
-            if (screen2$Cache.size < MAX_CACHE_SIZE) {
-                screen2$Cache.set(y, result)
-            }
-            return result
-        },
+        t_magnet: t => ts.t_magnet(t, magnetCn()),
+        // Screen-Y to dollar value (memoized by PriceScale)
+        screen2$: y => ps.screen2$(y),
         // Screen-X to timestamp
-        screen2t: x => {
-            // TODO: most likely Math.floor not needed
-            // return Math.floor(range[0] + x / r)
-            return range[0] + x / r
-        },
+        screen2t: x => ts.screen2t(x),
         // $-axis nearest step
         $_magnet: price => { },
         // Nearest candlestick
-        c_magnet: t => {
-            const cn = self.candles || self.master_grid.candles
-            const arr = magnet_ts(cn)
-            const i = Utils.nearest_a(t, arr)[0]
-            return cn[i]
-        },
+        c_magnet: t => ts.c_magnet(t, magnetCn()),
         // Index of the nearest candlestick (avoids O(n) indexOf at call site)
-        c_magnet_i: t => {
-            const cn = self.candles || self.master_grid.candles
-            const arr = magnet_ts(cn)
-            return Utils.nearest_a(t, arr)[0]
-        },
+        c_magnet_i: t => ts.c_magnet_i(t, magnetCn()),
         // Nearest data points
         data_magnet: t => {  /* TODO: implement */ },
         // Clear memoization caches (call when range changes significantly)
         clearCoordCaches: () => {
-            t2screenCache.clear()
-            $2screenCache.clear()
-            screen2$Cache.clear()
+            ts.clearCache()
+            ps.clearCache()
         }
     })
 

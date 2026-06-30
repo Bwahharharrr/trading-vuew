@@ -11,13 +11,17 @@ import GridMaker from './grid_maker.js'
 import Utils from '../../stuff/utils.js'
 import math from '../../stuff/math.js'
 import log_scale from './log_scale.js'
+import { REPOSITION_FAST } from '../../render/render-scheduler.js'
 
 // Layout cache for candles and volume computations
 // Key format: `${range[0]},${range[1]},${sub.length},${interval}`
+// `meta` mirrors the geometry-affecting transform params (raw, NOT toFixed) so
+// the Reposition fast path can EXACT-compare them to decide candle-y reuse.
 const layoutCache = {
     key: '',
     candles: null,
-    volume: null
+    volume: null,
+    meta: null
 }
 
 // PERFORMANCE: Check if object has any own property without creating an array
@@ -192,6 +196,44 @@ function Layout(params) {
             return
         }
 
+        // Pre-calculate common values
+        const candleW = self.px_step * $p.config.CANDLEW
+        const A = self.A
+        const B = self.B
+
+        // ── REPOSITION fast path (plan §1#2 / §2.1, "candles_n_vol splice/reuse").
+        // The key missed but the price transform (A,B), bar width (px_step) and
+        // pane height/interval are byte-IDENTICAL to the cached build (EXACT
+        // equality — never toFixed): a pan only shifts `range`, and a live in-band
+        // tick only moves the last bar. For every KEPT bar (matched by raw-row
+        // identity) o/h/l/c = floor(price·A+B) are therefore unchanged and only x
+        // moved — so we COPY the cached candle and overwrite x (recomputed with the
+        // IDENTICAL floor formula, NOT a float translate — the §2.1 ±1px golden
+        // trap), skipping the per-bar y-math (4 floors / log_scale.candle). The
+        // LAST visible bar is ALWAYS rebuilt (live intra-candle tick term,
+        // layout.js:184). Only engages when the churn (bars entering+leaving) is
+        // ≤5% of the visible window. Volume is always rebuilt (its x1/x2 chain is
+        // sequential and h tracks the visible-set max). Byte-identical to a full
+        // rebuild — pinned by test/unit/reposition-geometry.test.js. Disabled
+        // wholesale by the REPOSITION_FAST rollback switch.
+        const lastIdx = sub.length - 1
+        let byRaw = null
+        const meta = layoutCache.meta
+        if (REPOSITION_FAST && layoutCache.candles && meta &&
+            meta.A === A && meta.B === B && meta.px_step === self.px_step &&
+            meta.interval === interval && meta.height === $p.height) {
+            const old = layoutCache.candles
+            const map = new Map()
+            for (let i = 0; i < old.length; i++) map.set(old[i].raw, old[i])
+            let kept = 0
+            for (let i = 0; i < sub.length; i++) {
+                if (i !== lastIdx && map.has(sub[i])) kept++
+            }
+            const churn = (sub.length - kept) + (old.length - kept)
+            // +1 absorbs the always-rebuilt last bar in the entering count.
+            if (churn <= 0.05 * sub.length + 1) byRaw = map
+        }
+
         let maxv = Utils.maxAtIndex(sub, 5)
         let vs = maxv > 0 ? $p.config.VOLSCALE * $p.height / maxv : 0
         let x1, x2, mid, prev = undefined
@@ -199,15 +241,15 @@ function Layout(params) {
         let splitter = self.px_step > 5 ? 1 : 0
         let hf_px_step = self.px_step * 0.5
 
-        // Pre-calculate common values
-        const candleW = self.px_step * $p.config.CANDLEW
-        const A = self.A
-        const B = self.B
-
         for (let i = 0; i < sub.length; i++) {
             let p = sub[i]
             mid = self.t2screen(p[0]) + 0.5
-            self.candles.push(mgrid.logScale ?
+            // Reuse the kept bar's cached candle (y unchanged; only x moves). The
+            // copy preserves every field of either shape (linear {x,w,o,h,l,c,z,
+            // raw} or the log variant) and just re-points x — format-agnostic.
+            const cand = (byRaw && i !== lastIdx) ? byRaw.get(p) : undefined
+            self.candles.push(cand !== undefined ? { ...cand, x: mid } :
+                (mgrid.logScale ?
                 log_scale.candle(self, mid, p, $p): {
                 x: mid,
                 w: candleW,
@@ -217,7 +259,7 @@ function Layout(params) {
                 c: Math.floor(p[4] * A + B),
                 z: p[6],
                 raw: p
-            })
+            }))
             // Clear volume bar if there is a time gap
             if (sub[i-1] && p[0] - sub[i-1][0] > interval) {
                 prev = null
@@ -239,6 +281,9 @@ function Layout(params) {
         layoutCache.key = cacheKey
         layoutCache.candles = self.candles
         layoutCache.volume = self.volume
+        layoutCache.meta = {
+            A, B, px_step: self.px_step, interval, height: $p.height
+        }
     }
 
     // Main grid

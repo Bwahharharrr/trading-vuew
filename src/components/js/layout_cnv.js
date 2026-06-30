@@ -107,8 +107,18 @@ export function layout_cnv_cached(self, cache) {
     // still skips the ~2N-object geometry rebuild — a clear net win.
     const maxv = Utils.maxAtIndex(sub, 5)
 
+    // Scale VERSIONS (plan §1#2 — wire the sub-pane into the version-keyed cache).
+    // A,B,px_step + the t2screen anchors already fingerprint the geometry; the
+    // versions make the key reflect the scale-engine spine directly so a future
+    // in-place Reposition (which bumps version without changing the A/B numbers it
+    // re-derived to the same value) still busts this pane's cache. Constant ('0')
+    // under the current per-frame-rebuild model, so additive and inert today.
+    const tsv = lay.timeScale ? lay.timeScale.version : ''
+    const psv = lay.priceScale ? lay.priceScale.version : ''
+
     const key = `${lay.A},${lay.B},${lay.px_step},${lay.height},` +
-        `${n},${$p.tf},${$p.interval},${tiTf},${tFirst},${tLast},${lbKey},${maxv}`
+        `${n},${$p.tf},${$p.interval},${tiTf},${tFirst},${tLast},${lbKey},${maxv},` +
+        `${tsv},${psv}`
 
     if (cache.key === key && cache.val) return cache.val
 

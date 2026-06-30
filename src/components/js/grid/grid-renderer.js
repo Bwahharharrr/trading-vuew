@@ -101,10 +101,26 @@ export default class GridRenderer {
 
     // Check if only crosshair needs update
     _detectCrosshairOnlyUpdate() {
-        // Check if layout object changed (y-axis zoom, resize, etc.)
+        // Scale-version seam (plan §2.2 — the reactivity migration, same class as
+        // dataVersion→cd.revision: explicit + shallow, no deep watcher). Dirty when
+        // the price/time scale MOVED. Tracks both the scale object IDENTITY (a fresh
+        // `new Layout` births new scales at version 0 → identity changes every
+        // frame, the per-frame rebuild model — this subsumes the old `_lastLayoutRef`
+        // check) AND the monotonic VERSION (a future in-place Reposition bumps
+        // `version` WITHOUT changing identity). Either ⇒ static dirty. Strictly
+        // additive: it can only ADD a dirty trigger, never swallow one, so a live
+        // tick / pan can never be missed.
         const layoutRef = this.layout
-        if (this._lastLayoutRef !== layoutRef) {
+        const ps = layoutRef && layoutRef.priceScale
+        const ts = layoutRef && layoutRef.timeScale
+        const psv = ps ? ps.version : -1
+        const tsv = ts ? ts.version : -1
+        if (this._lastLayoutRef !== layoutRef ||
+            this._lastPS !== ps || this._lastTS !== ts ||
+            this._lastPSV !== psv || this._lastTSV !== tsv) {
             this._lastLayoutRef = layoutRef
+            this._lastPS = ps; this._lastTS = ts
+            this._lastPSV = psv; this._lastTSV = tsv
             this._staticDirty = true
             this._overlaysDirty = true
             return false
@@ -146,9 +162,14 @@ export default class GridRenderer {
         return false
     }
 
-    update() {
+    update(freshGridLayout) {
         const comp = this.grid.comp
-        const layout = comp.layoutOverride || this.$p.layout?.grids?.[this.id]
+        // `freshGridLayout` (RenderScheduler drain) is the just-built
+        // chartLayout.grids[id], passed directly because the reactive `layout`
+        // PROP only flushes on the post-drain microtask — reading it here would
+        // paint a frame-stale scale. Falls back to the prop for the legacy path.
+        const layout = freshGridLayout || comp.layoutOverride ||
+            this.$p.layout?.grids?.[this.id]
         this.grid.layout = layout
         this.grid.interval = this.$p.interval
 

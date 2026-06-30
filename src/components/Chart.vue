@@ -46,6 +46,7 @@ import GridResizer from './GridResizer.vue'
 import Shaders from '../mixins/shaders.js'
 import DataTrack from '../mixins/datatrack.js'
 import Layout from './js/layout.js'
+import { RenderScheduler, RENDER_SCHEDULER } from '../render/render-scheduler.js'
 
 // Decomposed chart mixins
 import { ChartRange, ChartResize, ChartCursor, ChartEvents } from '../mixins/chart/index.js'
@@ -110,6 +111,24 @@ export default {
 
         this.update_last_values()
         this.init_shaders(this.skin)
+
+        // Single rAF render spine (plan §1#1 / §3 Phase 2). One mask + one rafId
+        // per chart; every render source funnels through scheduler.invalidate(),
+        // and `_render_drain` (ChartRange mixin) runs the coalesced rebuild+paint
+        // once per frame. Gated behind RENDER_SCHEDULER — when off, the scheduler
+        // is never created and every routed call site takes its legacy
+        // rafThrottle/nextTick branch.
+        if (RENDER_SCHEDULER) {
+            this._scheduler = new RenderScheduler(
+                (level) => this._render_drain(level)
+            )
+        }
+    },
+    // Expose the scheduler to descendant Grids (Section → Grid) without a prop.
+    // Lazy getter: provide() resolves during setup, before created() builds the
+    // instance, so hand back a function the Grid calls after mount.
+    provide() {
+        return { tvRenderScheduler: () => this._scheduler || null }
     },
     methods: {
         section_props(i) {

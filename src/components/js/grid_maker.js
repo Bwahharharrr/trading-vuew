@@ -4,6 +4,8 @@ import math from '../../stuff/math.js'
 
 import layout_fn from './layout_fn.js'
 import log_scale from './log_scale.js'
+import { createTimeScale } from '../../render/scales/time-scale.js'
+import { createPriceScale } from '../../render/scales/price-scale.js'
 
 const { TIMESCALES, $SCALES, WEEK, MONTH, YEAR, HOUR, DAY } = Const
 const MAX_INT = Number.MAX_SAFE_INTEGER
@@ -569,9 +571,25 @@ function GridMaker(id, params, master_grid = null) {
 
             self.grid = grid // Grid params
 
+            // Scale-engine spine (Phase 1): GridMaker OWNS a per-grid PriceScale
+            // (each grid has its own A/B); the MASTER grid owns the shared
+            // TimeScale and offcharts borrow it (same x-map as today — same range
+            // and spacex). The closures bound by layout_fn delegate to these.
+            const priceScale = createPriceScale({
+                A: self.A, B: self.B, hi: self.$_hi, lo: self.$_lo,
+                height, logScale: ls,
+            })
+            const timeScale = (master_grid && master_grid.timeScale)
+                ? master_grid.timeScale
+                : createTimeScale({
+                    ti_map: self.ti_map, range,
+                    spacex: self.spacex, px_step: self.px_step,
+                    startx: self.startx,
+                })
+
             // Here we add some helpful functions for
             // plugin creators
-            return layout_fn(self, range)
+            return layout_fn(self, range, timeScale, priceScale)
 
         },
         get_layout: () => self,
