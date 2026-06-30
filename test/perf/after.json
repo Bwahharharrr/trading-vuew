@@ -1,0 +1,159 @@
+{
+  "generatedAt": "2026-06-30T02:33:20.301Z",
+  "node": "v24.12.0",
+  "harness": "test/perf/render-bench-after.mjs (path-tweak of render-bench.mjs)",
+  "config": {
+    "N": 1000,
+    "INTERVAL": 60000,
+    "HEIGHT": 400,
+    "PX_STEP": 6,
+    "CANDLEW": 0.6,
+    "VOLSCALE": 0.15,
+    "OVERRIDE_COLOR": "#ffaa00",
+    "OVERRIDE_EVERY": 50
+  },
+  "metrics": [
+    {
+      "name": "candle_count",
+      "value": 1000,
+      "unit": "candles",
+      "scenario": "candle_draw"
+    },
+    {
+      "name": "ctx_ops_per_frame",
+      "value": 4004,
+      "unit": "ops",
+      "scenario": "candle_draw"
+    },
+    {
+      "name": "style_assignments_per_frame",
+      "value": 7,
+      "unit": "assignments",
+      "scenario": "candle_draw"
+    },
+    {
+      "name": "min_style_assignments_per_frame",
+      "value": 7,
+      "unit": "assignments",
+      "scenario": "candle_draw"
+    },
+    {
+      "name": "draw_wall_clock",
+      "value": 0.1482,
+      "unit": "ms",
+      "scenario": "candle_draw"
+    },
+    {
+      "name": "bar_count",
+      "value": 1000,
+      "unit": "bars",
+      "scenario": "indicator_pane_alloc"
+    },
+    {
+      "name": "objects_per_call",
+      "value": 2000,
+      "unit": "objects",
+      "scenario": "indicator_pane_alloc"
+    },
+    {
+      "name": "objects_two_calls",
+      "value": 2000,
+      "unit": "objects",
+      "scenario": "indicator_pane_alloc"
+    },
+    {
+      "name": "cache_hits",
+      "value": 1,
+      "unit": "hits",
+      "scenario": "indicator_pane_alloc"
+    },
+    {
+      "name": "layout_cnv_wall_clock",
+      "value": 0.0022,
+      "unit": "ms",
+      "scenario": "indicator_pane_alloc"
+    }
+  ],
+  "details": {
+    "candle_draw": {
+      "candleCount": 1000,
+      "opsPerFrame": 4004,
+      "styleAssignmentsPerFrame": 7,
+      "minStyleAssignments": 7,
+      "wallClockMsMedian": 0.14822894,
+      "legacyWallClockMsMedian": 0.24657243999999998,
+      "counts": {
+        "beginPath": 2,
+        "moveTo": 1000,
+        "lineTo": 1000,
+        "stroke": 2,
+        "fill": 0,
+        "fillRect": 2000,
+        "fillText": 0,
+        "fillStyleAssign": 5,
+        "strokeStyleAssign": 2
+      },
+      "distinctStyleStates": [
+        "f:#23a776",
+        "f:#23a77642",
+        "f:#e54150",
+        "f:#e5415042",
+        "f:#ffaa00",
+        "s:#23a776",
+        "s:#e54150"
+      ],
+      "timing": {
+        "iters": 50,
+        "runs": [
+          0.15352446,
+          0.14822894,
+          0.15523884000000002,
+          0.14653158,
+          0.17446614,
+          0.10198826,
+          0.10296922
+        ],
+        "legacyRuns": [
+          0.25544452,
+          0.24841942,
+          0.24630984,
+          0.24623425999999998,
+          0.24703004,
+          0.24584347999999998,
+          0.24657243999999998
+        ]
+      }
+    },
+    "indicator_pane_alloc": {
+      "barCount": 1000,
+      "objectsPerCall": 2000,
+      "objectsRepeatCall": 0,
+      "objectsTwoCalls": 2000,
+      "cacheHits": 1,
+      "rebuiltNoCache": false,
+      "wallClockMsMedian": 0.00217636,
+      "legacyWallClockMsMedian": 0.07062412,
+      "timing": {
+        "iters": 50,
+        "runs": [
+          0.0026069599999999997,
+          0.00217636,
+          0.00214758,
+          0.00237856,
+          0.00232296,
+          0.00202978,
+          0.00201696
+        ],
+        "legacyRuns": [
+          0.08218816000000001,
+          0.06879756000000001,
+          0.05659274,
+          0.07062412,
+          0.09778411999999999,
+          0.08474892,
+          0.03673706
+        ]
+      }
+    }
+  }
+}
