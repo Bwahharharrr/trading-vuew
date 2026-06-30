@@ -60,6 +60,8 @@
                 </option>
             </select>
             <button class="pd-icon" title="Refresh" @click="$emit('refresh')">⟳</button>
+            <button class="pd-icon" :title="maximized ? 'Restore' : 'Maximize'"
+                    @click="$emit('update:maximized', !maximized)">{{ maximized ? '⤡' : '⤢' }}</button>
             <button class="pd-icon" :title="open ? 'Collapse' : 'Expand'"
                     @click="$emit('update:open', !open)">{{ open ? '▾' : '▴' }}</button>
         </div>
@@ -175,6 +177,8 @@ export default {
     props: {
         height: { type: Number, default: 34 },
         open: { type: Boolean, default: false },
+        // Dock maximized → fills the whole chart+dock area (chart shrinks to 0).
+        maximized: { type: Boolean, default: false },
         // 'open' | 'historical' | 'search' | a Search Results tab id.
         activeTab: { type: String, default: 'open' },
         openPositions: { type: Array, default: () => [] },
@@ -198,7 +202,7 @@ export default {
         backtests: { type: Object, default: () => ({}) },
     },
     emits: [
-        'update:open', 'update:active-tab', 'update:active-account',
+        'update:open', 'update:maximized', 'update:active-tab', 'update:active-account',
         'select-position', 'audit-position', 'load-more', 'refresh', 'resize-start',
         'run-search', 'cancel-search', 'close-search-tab', 'select-result',
         'bt-refresh-strategies', 'bt-update-filter', 'bt-set-metric-filters', 'bt-list-runs', 'bt-inspect-strategy',

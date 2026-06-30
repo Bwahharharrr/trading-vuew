@@ -147,11 +147,30 @@ describe('CorkyPositionsPanel — events', () => {
 
     test('refresh + collapse icons emit', async () => {
         const w = mountPanel()
-        const icons = w.findAll('.pd-icon')
+        const icons = w.findAll('.pd-icon')   // [refresh, maximize, collapse]
         await icons[0].trigger('click')   // refresh
-        await icons[1].trigger('click')   // collapse
+        await icons[2].trigger('click')   // collapse
         expect(w.emitted('refresh')).toBeTruthy()
         expect(w.emitted('update:open')[0]).toEqual([false])
+    })
+
+    test('maximize button: ⤢ normally / ⤡ when maximized, emits update:maximized', async () => {
+        const w = mountPanel()
+        const icons = w.findAll('.pd-icon')
+        expect(icons).toHaveLength(3)              // refresh, maximize, collapse
+        const maxBtn = icons[1]
+        expect(maxBtn.text()).toBe('⤢')
+        expect(maxBtn.attributes('title')).toBe('Maximize')
+        await maxBtn.trigger('click')
+        expect(w.emitted('update:maximized')[0]).toEqual([true])
+
+        // When already maximized it flips to the Restore glyph and emits false.
+        const wMax = mountPanel({ maximized: true })
+        const restoreBtn = wMax.findAll('.pd-icon')[1]
+        expect(restoreBtn.text()).toBe('⤡')
+        expect(restoreBtn.attributes('title')).toBe('Restore')
+        await restoreBtn.trigger('click')
+        expect(wMax.emitted('update:maximized')[0]).toEqual([false])
     })
 
     test('Load more shows when more history is available and emits', async () => {

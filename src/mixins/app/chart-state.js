@@ -24,6 +24,11 @@ export default {
             // user-resizable via the dock's top-edge drag handle. Both persisted.
             positionsDockOpen: true,
             positionsDockHeight: 240,
+            // Dock maximized (the ⤢ button beside the collapse toggle): expands
+            // the dock to fill the whole chart+dock area (chart → 0); Restore
+            // returns it to the resizable positionsDockHeight. Mirrors the
+            // rightPanelCollapsed pattern; persisted.
+            positionsDockMaximized: false,
             config: {
                 DEFAULT_LEN: 200,
                 TB_BORDER: 5,
@@ -57,9 +62,11 @@ export default {
             return this.width - this.rightPanelWidth
         },
         chartHeight() {
-            // chartTabBarHeight (chart-tabs mixin) is the top tab strip.
-            return this.height - this.bottomPanelHeight - this.bottomDockHeight
-                - (this.chartTabBarHeight || 0)
+            // chartTabBarHeight (chart-tabs mixin) is the top tab strip. Clamp to
+            // >= 0 so a maximized dock (chart → 0) can't yield a negative canvas
+            // height that would break layout / grid_maker.
+            return Math.max(0, this.height - this.bottomPanelHeight - this.bottomDockHeight
+                - (this.chartTabBarHeight || 0))
         },
         bottomPanelHeight() {
             return 44
@@ -71,7 +78,14 @@ export default {
         bottomDockHeight() {
             if (this.feedMode !== 'gateway') return 0
             const HEADER = 34
-            if (!this.positionsDockOpen) return HEADER
+            if (!this.positionsDockOpen) return HEADER          // collapsed wins first
+            // Maximized: fill the whole chart+dock area (chart → 0) by mirroring
+            // chartHeight's subtraction of the bottom controls bar + chart tab
+            // strip. Guard with a sane floor so a tiny viewport can't go negative.
+            if (this.positionsDockMaximized) {
+                const full = this.height - this.bottomPanelHeight - (this.chartTabBarHeight || 0)
+                return Math.max(HEADER + 120, full)
+            }
             const maxBody = Math.max(120, Math.floor(this.height * 0.6))
             const body = Math.min(maxBody, Math.max(120, Number(this.positionsDockHeight) || 240))
             return HEADER + body

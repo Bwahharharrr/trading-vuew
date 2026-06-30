@@ -115,6 +115,7 @@
             v-if="feedMode === 'gateway'"
             :height="bottomDockHeight"
             :open="positionsDockOpen"
+            :maximized="positionsDockMaximized"
             :active-tab="positionsActiveTab"
             :open-positions="openPositions"
             :historical-positions="historicalPositions"
@@ -140,6 +141,7 @@
             @bt-select-candidate="btSelectCandidate"
             @bt-close-detail="btCloseDetail"
             @update:open="togglePositionsDock"
+            @update:maximized="toggleDockMaximize"
             @update:active-tab="setPositionsTab"
             @update:active-account="setPositionsAccount"
             @select-position="onPositionSelect"
@@ -710,6 +712,9 @@ export default {
             }
             if (Number.isFinite(Number(savedState.positionsDockHeight))) {
                 this.positionsDockHeight = Number(savedState.positionsDockHeight)
+            }
+            if (typeof savedState.positionsDockMaximized === 'boolean') {
+                this.positionsDockMaximized = savedState.positionsDockMaximized
             }
             if (savedState.positionsActiveTab === 'open' || savedState.positionsActiveTab === 'historical') {
                 this.positionsActiveTab = savedState.positionsActiveTab
@@ -1993,7 +1998,22 @@ export default {
 
         togglePositionsDock(open) {
             this.positionsDockOpen = open
+            // Collapsing clears maximize so re-expanding restores the normal
+            // resizable body (mirrors the resize-handle guard below).
+            if (!open) this.positionsDockMaximized = false
             if (open && this.positionsActiveTab === 'historical') this._ensureHistoryLoaded()
+            this._positionsSyncStreams()
+            this.saveStateToStorage()
+        },
+
+        // Maximize the dock to full page height (chart → 0) or restore it to its
+        // resizable height. Maximizing a collapsed dock opens it first.
+        toggleDockMaximize(max) {
+            this.positionsDockMaximized = max
+            if (max && !this.positionsDockOpen) this.positionsDockOpen = true
+            if (this.positionsDockOpen && this.positionsActiveTab === 'historical') this._ensureHistoryLoaded()
+            // Maximize can open a collapsed dock — (re)start its streams, exactly
+            // as togglePositionsDock does. Idempotent/guarded → no-op on restore.
             this._positionsSyncStreams()
             this.saveStateToStorage()
         },
@@ -2872,6 +2892,14 @@ export default {
 
         // Top-edge drag to resize the dock body (mirrors startPanelResize).
         startPositionsDockResize(ev) {
+            // A manual drag means the user is choosing a concrete height — exit
+            // maximize so the clamp logic resumes. Seed the resizable height from
+            // the current (full) body BEFORE clearing the flag, so the drag
+            // starts where the dock actually is, not from a stale value (HEADER=34).
+            if (this.positionsDockMaximized) {
+                this.positionsDockHeight = Math.max(120, this.bottomDockHeight - 34)
+                this.positionsDockMaximized = false
+            }
             const startY = ev.clientY
             const startH = this.positionsDockHeight
             this._onDockResizeMove = (e) => {
