@@ -39,7 +39,27 @@ function deepToRaw(obj, seen) {
     seen.add(obj)
 
     if (Array.isArray(obj)) {
-        return obj.map(item => deepToRaw(item, seen))
+        // Lazy copy: only allocate a new array when an element actually had to
+        // be unwrapped. An already-raw array is returned BY REFERENCE — the
+        // immediately-following postMessage structured-clone copies it exactly
+        // once on transfer, so the previous unconditional .map() was a pure
+        // redundant deep clone on the main thread. This matters most for the
+        // large 'upload-data' OHLCV payload: chart.data is markRaw'd with plain
+        // numeric rows (dc_core.js), so the whole dataset now passes through
+        // untouched instead of being rebuilt row-by-row before being cloned
+        // again by postMessage. No aliasing hazard: postMessage clones
+        // synchronously and these buffers are never transferred (detached).
+        let copy = null
+        for (let i = 0; i < obj.length; i++) {
+            const item = obj[i]
+            const raw = deepToRaw(item, seen)
+            if (copy === null) {
+                if (raw === item) continue   // still identical → defer the copy
+                copy = obj.slice(0, i)       // first divergence → clone the prefix
+            }
+            copy.push(raw)
+        }
+        return copy === null ? obj : copy
     }
 
     const result = {}
