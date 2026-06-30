@@ -7,8 +7,12 @@
 // RenderEngine extraction must preserve — pulled into Phase 1 (per review) so
 // the riskiest visual refactor lands with a baseline, not after one.
 import { Canvas } from 'skia-canvas'
-import CandleExt from '../../src/components/primitives/candle.js'
-import VolbarExt from '../../src/components/primitives/volbar.js'
+// Rasterise the RUNTIME batched draw path (the one Candles.vue uses), not the
+// legacy per-item CandleExt/VolbarExt classes — so the pixel golden actually
+// covers the code users see. drawCandles/drawVolbars produce byte-identical
+// pixels to the per-item primitives (only the draw ORDER of non-overlapping
+// same-colour rects changes). See tasks/render-perf-constraints.md §1.4.
+import { drawCandles, drawVolbars } from '../../src/components/primitives/candle-draw.js'
 
 const BG = '#141823'
 
@@ -49,10 +53,15 @@ export function renderCandles(candles, opts = {}) {
 
   const overlay = { ...STYLE, $props: { layout: { height } } }
 
+  // Build the candle + volume geometry arrays (the shape layout_cnv emits),
+  // then draw them through the batched runtime primitives. Volume UNDER
+  // candles (bottom pane), exactly as Candles.vue draws them.
+  const cnvCandles = []
+  const cnvVols = []
   for (let i = 0; i < n; i++) {
     const raw = candles[i]
     const cx = i * step + step / 2
-    const data = {
+    cnvCandles.push({
       raw,
       x: cx,
       w,
@@ -60,12 +69,11 @@ export function renderCandles(candles, opts = {}) {
       h: y(raw[2]),
       l: y(raw[3]),
       c: y(raw[4]),
-    }
-    new CandleExt(overlay, ctx, data)
+    })
 
     // Volume bar in the bottom pane.
     const vh = (raw[5] / vMax) * (volPaneH - 6)
-    new VolbarExt(overlay, ctx, {
+    cnvVols.push({
       raw,
       x1: cx - w / 2,
       x2: cx + w / 2,
@@ -73,6 +81,9 @@ export function renderCandles(candles, opts = {}) {
       green: raw[4] >= raw[1],
     })
   }
+
+  drawVolbars(ctx, cnvVols, overlay, height)
+  drawCandles(ctx, cnvCandles, overlay)
 
   return { canvas, ctx, width, height }
 }

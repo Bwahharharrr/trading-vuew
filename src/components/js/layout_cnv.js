@@ -64,6 +64,60 @@ export function layout_cnv(self) {
 
 }
 
+// Memoized wrapper around layout_cnv for the indicator-pane draw path.
+//
+// Candles.vue calls layout_cnv(self) inside draw() on EVERY frame when the
+// overlay is an on/off-chart indicator (sub !== main data), rebuilding ~2*N
+// candle/volume objects uncached. The main pane already caches this geometry
+// (layout.js layoutCache). This mirrors that cache, but stored per-overlay-
+// instance via the caller-owned `cache` object ({ key, val }).
+//
+// The fingerprint captures every input that affects the built geometry:
+//   - price transform A/B            (-> o/h/l/c pixels)
+//   - px_step                        (-> candle width + bar spacing)
+//   - layout height                  (-> volume scale)
+//   - horizontal screen anchors      (-> t2screen mapping, i.e. range/zoom/pan)
+//     sampled at the first & last bar timestamps (two points pin the affine map
+//     for both time- and index-based axes)
+//   - sub.length, tf, interval, ti_map.tf  (-> interval ratio + bar count)
+//   - the LAST bar's OHLCV + colour  (-> a live intra-candle tick mutates only
+//     this bar in place; without it the key would hit and serve stale geometry,
+//     the exact bug layout.js's last-bar term guards — see layout.js:184)
+//   - the visible-set volume MAX  (-> the volume bar scale vs = VOLSCALE*h/maxv;
+//     an INTERIOR bar's volume can move the max while length + last bar are
+//     unchanged, which would otherwise serve a stale, mis-scaled volume pane)
+//
+// Colour is NOT part of the geometry and is re-read from raw[6/7/8] at draw
+// time, so a palette recolour of earlier bars is reflected on a cache HIT.
+export function layout_cnv_cached(self, cache) {
+    const $p = self.$props
+    const lay = $p.layout
+    const sub = $p.data
+    const n = sub.length
+    const lb = n ? sub[n - 1] : null
+    const fb = n ? sub[0] : null
+    const lbKey = lb ?
+        `${lb[1]},${lb[2]},${lb[3]},${lb[4]},${lb[5]},${lb[6]}` : ''
+    const t2s = lay.t2screen
+    const tFirst = (fb && t2s) ? t2s(fb[0]) : ''
+    const tLast = (lb && t2s) ? t2s(lb[0]) : ''
+    const tiTf = lay.ti_map ? lay.ti_map.tf : ''
+    // Volume scale depends on the max volume across the WHOLE visible set, so an
+    // interior-bar volume change must bust the cache. O(N) scan, but a cache hit
+    // still skips the ~2N-object geometry rebuild — a clear net win.
+    const maxv = Utils.maxAtIndex(sub, 5)
+
+    const key = `${lay.A},${lay.B},${lay.px_step},${lay.height},` +
+        `${n},${$p.tf},${$p.interval},${tiTf},${tFirst},${tLast},${lbKey},${maxv}`
+
+    if (cache.key === key && cache.val) return cache.val
+
+    const cnv = layout_cnv(self)
+    cache.key = key
+    cache.val = cnv
+    return cnv
+}
+
 export function layout_vol(self) {
 
     let $p = self.$props

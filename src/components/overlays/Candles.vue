@@ -4,8 +4,8 @@
 // PERFORMANCE: Uses static draw functions instead of creating objects per candle
 
 import Overlay from '../../mixins/overlay.js'
-import { layout_cnv } from '../js/layout_cnv.js'
-import { drawCandle, drawVolbar } from '../primitives/candle-draw.js'
+import { layout_cnv_cached } from '../js/layout_cnv.js'
+import { drawCandles, drawVolbars } from '../primitives/candle-draw.js'
 import Price from '../primitives/price.js'
 
 export default {
@@ -38,25 +38,24 @@ export default {
                     candles: this.$props.layout.candles,
                     volume: this.$props.layout.volume,
                 }
-            // Else, as offchart / onchart indicator:
+            // Else, as offchart / onchart indicator. The main pane caches its
+            // geometry in layout.js; the indicator path rebuilt ~2*N objects
+            // every frame — memoize it per-overlay-instance on a layout
+            // fingerprint (see layout_cnv_cached).
             } else {
-                cnv = layout_cnv(this)
+                if (!this._cnvCache) this._cnvCache = { key: '', val: null }
+                cnv = layout_cnv_cached(this, this._cnvCache)
             }
 
-            // PERFORMANCE: Use static draw functions instead of creating new objects
-            // This eliminates GC pressure from creating 1000+ objects per frame
+            // PERFORMANCE: color-batched array draws (one state-set + one path
+            // per resolved colour) instead of per-candle state churn. Volume
+            // UNDER candles; pixel-identical to the per-item draw (only the
+            // order of non-overlapping same-colour draws changes).
             if (this.show_volume) {
-                let cv = cnv.volume
-                const layoutHeight = this.$props.layout.height
-                for (let i = 0, n = cv.length; i < n; i++) {
-                    drawVolbar(ctx, cv[i], this, layoutHeight)
-                }
+                drawVolbars(ctx, cnv.volume, this, this.$props.layout.height)
             }
 
-            let cc = cnv.candles
-            for (let i = 0, n = cc.length; i < n; i++) {
-                drawCandle(ctx, cc[i], this)
-            }
+            drawCandles(ctx, cnv.candles, this)
 
             if (this.price_line) {
                 this._init_price()   // pre-init draw (runtime add) — see above
