@@ -31,7 +31,7 @@ function mkCtx(stubs = {}) {
         positionsDockOpen: false,
         // collaborators that the targeted methods call; default to spies so a
         // focused test can assert call args without dragging in stream wiring.
-        _positionsSyncStreams: vi.fn(),
+        _positionsSyncStreams: vi.fn(), _strategySyncStreams: vi.fn(),
         _ensureHistoryLoaded: vi.fn(),
     }
     for (const m of ['refreshPositions', '_applyOpenPositions', '_positionsDeriveAccounts',

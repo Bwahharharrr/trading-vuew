@@ -57,7 +57,7 @@ describe('dock maximize — App.toggleDockMaximize', () => {
         const ctx = {
             positionsDockOpen: false, positionsDockMaximized: false,
             positionsActiveTab: 'open',
-            _ensureHistoryLoaded: vi.fn(), _positionsSyncStreams: vi.fn(), saveStateToStorage: vi.fn(),
+            _ensureHistoryLoaded: vi.fn(), _positionsSyncStreams: vi.fn(), _strategySyncStreams: vi.fn(), saveStateToStorage: vi.fn(),
         }
         M.toggleDockMaximize.call(ctx, true)
         expect(ctx.positionsDockMaximized).toBe(true)
@@ -70,7 +70,7 @@ describe('dock maximize — App.toggleDockMaximize', () => {
         const ctx = {
             positionsDockOpen: true, positionsDockMaximized: true,
             positionsActiveTab: 'open',
-            _ensureHistoryLoaded: vi.fn(), _positionsSyncStreams: vi.fn(), saveStateToStorage: vi.fn(),
+            _ensureHistoryLoaded: vi.fn(), _positionsSyncStreams: vi.fn(), _strategySyncStreams: vi.fn(), saveStateToStorage: vi.fn(),
         }
         M.toggleDockMaximize.call(ctx, false)
         expect(ctx.positionsDockMaximized).toBe(false)
@@ -82,7 +82,7 @@ describe('dock maximize — App.toggleDockMaximize', () => {
         const ctx = {
             positionsDockOpen: false, positionsDockMaximized: false,
             positionsActiveTab: 'historical',
-            _ensureHistoryLoaded: vi.fn(), _positionsSyncStreams: vi.fn(), saveStateToStorage: vi.fn(),
+            _ensureHistoryLoaded: vi.fn(), _positionsSyncStreams: vi.fn(), _strategySyncStreams: vi.fn(), saveStateToStorage: vi.fn(),
         }
         M.toggleDockMaximize.call(ctx, true)
         expect(ctx._ensureHistoryLoaded).toHaveBeenCalledTimes(1)
@@ -94,7 +94,7 @@ describe('dock maximize — collapse clears maximize (togglePositionsDock)', () 
         const ctx = {
             positionsDockOpen: true, positionsDockMaximized: true,
             positionsActiveTab: 'open',
-            _ensureHistoryLoaded: vi.fn(), _positionsSyncStreams: vi.fn(), saveStateToStorage: vi.fn(),
+            _ensureHistoryLoaded: vi.fn(), _positionsSyncStreams: vi.fn(), _strategySyncStreams: vi.fn(), saveStateToStorage: vi.fn(),
         }
         M.togglePositionsDock.call(ctx, false)           // ▾ collapse
         expect(ctx.positionsDockOpen).toBe(false)

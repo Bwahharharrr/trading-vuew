@@ -59,6 +59,7 @@ function mkCtx() {
         syncSignalMarker: vi.fn(),
         syncBarrierOverlay: vi.fn(),
         syncBacktestOverlays: vi.fn(),
+        syncStrategyOverlays: vi.fn(),
         saveStateToStorage: vi.fn(),
     }
     for (const m of ['corkySelect', '_corkyUnsub', '_corkyMem', '_corkyErr',

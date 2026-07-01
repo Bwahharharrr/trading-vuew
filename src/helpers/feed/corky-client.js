@@ -84,6 +84,14 @@ const TERMINAL_EVENT = {
     get_backtest_progress:       'backtest_progress',
     get_backtest_chart_overlays: 'backtest_chart_overlays',
     get_backtest_report_overlays:'backtest_report_overlays',
+    // strategy-runtime read flows (one-shot). The event.type ≠ the payload
+    // FIELD it carries (see _resultFor): e.g. get_strategy_runtime → event
+    // type 'strategy_runtime' → event.runtime.
+    list_strategy_runtimes:      'strategy_runtimes',
+    get_strategy_runtime:        'strategy_runtime',
+    get_strategy_ticker:         'strategy_ticker',
+    list_strategy_decisions:     'strategy_decisions',
+    get_strategy_chart_overlays: 'strategy_chart_overlays',
 }
 
 // Subscription-stream event types: carry a subscription_id and (usually) a null
@@ -99,6 +107,10 @@ const STREAM_EVENT_TYPES = new Set([
     // + increasing sequence; no separate accept event, so the FIRST update
     // resolves the originating subscribe (mirrors the auth-position streams).
     'backtest_progress_update',
+    // strategy-runtime stream: FULL REPLACEMENT runtime set each update, by
+    // subscription_id + increasing sequence; no separate accept event, so the
+    // FIRST update resolves the originating subscribe (same model as above).
+    'strategy_runtime_update',
 ])
 
 export class CorkyError extends Error {
@@ -529,6 +541,71 @@ export class CorkyClient {
         return this._request(command)
     }
 
+    // ── strategy-runtime senders (read-only) ─────────────────────────────────────
+    // One-shot reads resolve on their terminal event's named field (see
+    // _resultFor). The runtime subscription streams `strategy_runtime_update`
+    // (a FULL REPLACEMENT set applied by increasing sequence) and resolves on
+    // its FIRST update — same model as the auth-position / backtest streams.
+
+    /** List strategy runtimes → resolves the `runtimes` array. */
+    listStrategyRuntimes() { return this._request({ type: 'list_strategy_runtimes' }) }
+
+    /** Inspect one runtime → resolves the `runtime` object. */
+    getStrategyRuntime(runtime_id) {
+        if (!runtime_id) throw new Error('getStrategyRuntime: runtime_id is required')
+        return this._request({ type: 'get_strategy_runtime', runtime_id })
+    }
+
+    /** Inspect one ticker within a runtime → resolves the `ticker` object. */
+    getStrategyTicker(runtime_id, ticker_id) {
+        if (!runtime_id || !ticker_id) {
+            throw new Error('getStrategyTicker: runtime_id and ticker_id are required')
+        }
+        return this._request({ type: 'get_strategy_ticker', runtime_id, ticker_id })
+    }
+
+    /** Recent decisions for a runtime → resolves the `decisions` array. Optional
+     *  { ticker_id } filters to one ticker; { limit } caps the count. */
+    listStrategyDecisions(runtime_id, opts = {}) {
+        if (!runtime_id) throw new Error('listStrategyDecisions: runtime_id is required')
+        const command = { type: 'list_strategy_decisions', runtime_id }
+        if (opts.ticker_id != null) command.ticker_id = opts.ticker_id
+        if (opts.limit != null) command.limit = opts.limit
+        return this._request(command)
+    }
+
+    /** Strategy chart overlays (decision/fill/order/allocation markers) →
+     *  resolves the `overlays` array. Optional { timeframe, start_ms, end_ms }
+     *  window the result. */
+    getStrategyChartOverlays(runtime_id, ticker_id, opts = {}) {
+        if (!runtime_id || !ticker_id) {
+            throw new Error('getStrategyChartOverlays: runtime_id and ticker_id are required')
+        }
+        const command = { type: 'get_strategy_chart_overlays', runtime_id, ticker_id }
+        if (opts.timeframe != null) command.timeframe = opts.timeframe
+        if (opts.start_ms != null) command.start_ms = opts.start_ms
+        if (opts.end_ms != null) command.end_ms = opts.end_ms
+        return this._request(command)
+    }
+
+    /**
+     * Stream runtime snapshots. Resolves with the FIRST `strategy_runtime_update`;
+     * register `onSubscription(subscription_id, …)` (or pass `onEvent`) for the
+     * ongoing FULL-REPLACEMENT updates (apply by increasing `sequence`). Scope the
+     * stream by `runtime_id` OR `strategy` (at least one is required).
+     */
+    subscribeStrategyRuntime(opts = {}) {
+        const { subscription_id, runtime_id, strategy, onEvent } = opts
+        if (!subscription_id) throw new Error('subscribeStrategyRuntime: subscription_id is required')
+        if (runtime_id == null && strategy == null) {
+            throw new Error('subscribeStrategyRuntime: runtime_id or strategy is required')
+        }
+        const command = { type: 'subscribe_strategy_runtime', subscription_id }
+        if (runtime_id != null) command.runtime_id = runtime_id
+        if (strategy != null) command.strategy = strategy
+        return this._request(command, { subscription_id, onEvent })
+    }
+
     // ── outbound plumbing ──────────────────────────────────────────────────────
 
     _nextRequestId() {
@@ -698,6 +775,13 @@ export class CorkyClient {
         if (type === 'strategies') return event.strategies
         if (type === 'strategy') return event.strategy
         if (type === 'backtest_runs') return event.runs
+        // strategy-runtime reads: each returns its named payload slice (the
+        // event type differs from the field it carries — see TERMINAL_EVENT).
+        if (type === 'strategy_runtimes') return event.runtimes
+        if (type === 'strategy_runtime') return event.runtime
+        if (type === 'strategy_ticker') return event.ticker
+        if (type === 'strategy_decisions') return event.decisions
+        if (type === 'strategy_chart_overlays') return event.overlays
         // backtest_run keeps {run_id, artifact}; progress/overlays keep the full
         // event (callers read .events / .overlays / .trades / series_descriptors).
         return event

@@ -32,16 +32,17 @@ function mountPanel(props = {}) {
 }
 
 describe('CorkyPositionsPanel — rendering', () => {
-    test('shows the base tabs (Open / Historical / Search Signals / Backtests) with counts', () => {
+    test('shows the base tabs (Open / Historical / Search Signals / Backtests / Strategy) with counts', () => {
         const w = mountPanel()
         const tabs = w.findAll('.pd-tab')
-        // Open Positions, Historical, Search Signals, Backtests (no result tabs yet).
-        expect(tabs).toHaveLength(4)
+        // Open Positions, Historical, Search Signals, Backtests, Strategy (no result tabs yet).
+        expect(tabs).toHaveLength(5)
         expect(tabs[0].text()).toContain('Open Positions')
         expect(tabs[0].text()).toContain(String(openRows.length))
         expect(tabs[1].text()).toContain('Historical')
         expect(tabs[2].text()).toContain('Search Signals')
         expect(tabs[3].text()).toContain('Backtests')
+        expect(tabs[4].text()).toContain('Strategy')
     })
 
     test('the Backtests tab renders the backtests panel', () => {
@@ -67,17 +68,48 @@ describe('CorkyPositionsPanel — rendering', () => {
         const run = { run_id: 'r1', strategy: 'ema_cross_all_in_v1', venue: 'BITFINEX', symbols: ['tBTCUSD'], trade_timeframe: '1h', status: 'completed', metrics: { profit_factor: '1.33' } }
         const w = mountPanel({ activeTab: 'bt-detail', backtests: { runs: [run], filters: {}, selectedRun: run, detail: {} } })
         const tabs = w.findAll('.pd-tab')
-        expect(tabs).toHaveLength(5)                      // base 4 + Run-Details
-        expect(tabs[4].text()).toContain('ema_cross_all_in_v1 · tBTCUSD · 1h')
+        expect(tabs).toHaveLength(6)                      // base 5 + Run-Details
+        expect(tabs[5].text()).toContain('ema_cross_all_in_v1 · tBTCUSD · 1h')
         expect(w.find('.btd').exists()).toBe(true)        // the detail body
         // closing the tab emits bt-close-detail
-        await tabs[4].find('.pd-tab-close').trigger('click')
+        await tabs[5].find('.pd-tab-close').trigger('click')
         expect(w.emitted('bt-close-detail')).toBeTruthy()
     })
 
     test('no Run-Details tab when no run is selected', () => {
         const w = mountPanel({ activeTab: 'backtests', backtests: { runs: [], filters: {}, selectedRun: null, detail: {} } })
-        expect(w.findAll('.pd-tab')).toHaveLength(4)
+        expect(w.findAll('.pd-tab')).toHaveLength(5)   // base tabs incl. Strategy, no Run-Details
+    })
+
+    test('the Strategy tab renders the strategy panel', () => {
+        const runtimes = [{ runtime_id: 'v8-tail-repair-live-main', state: 'Ready', mode: 'live', strategy: 'ema_v8', ticker_allocations: [], ticker_orders: [], order_status_counts: {}, auth_wallet_balances: [] }]
+        const w = mountPanel({ activeTab: 'strategy', strategy: { runtimes, selectedRuntimeId: '', decisions: [] } })
+        expect(w.find('.sr').exists()).toBe(true)
+        expect(w.findComponent({ name: 'CorkyStrategyPanel' }).exists()).toBe(true)
+    })
+
+    test('the Strategy tab shows a runtime count badge', () => {
+        const runtimes = [{ runtime_id: 'a', state: 'Ready', mode: 'live' }, { runtime_id: 'b', state: 'Ready', mode: 'shadow_live' }]
+        const w = mountPanel({ strategy: { runtimes } })
+        const strategyTab = w.findAll('.pd-tab').find((t) => t.text().includes('Strategy'))
+        expect(strategyTab.text()).toContain('2')
+    })
+
+    test('dock forwards the strategy bundle down and bubbles intents up as strategy-*', () => {
+        const runtimes = [{ runtime_id: 'v8-tail-repair-live-main', state: 'Ready', mode: 'live', strategy: 'ema_v8', ticker_allocations: [], ticker_orders: [], order_status_counts: {}, auth_wallet_balances: [] }]
+        const decisions = [{ decision_id: 'd1', ticker_id: 'x', symbol: 'tX', timeframe: '1m', outcome: 'no_intents' }]
+        const w = mountPanel({ activeTab: 'strategy', strategy: { runtimes, selectedRuntimeId: 'v8-tail-repair-live-main', decisions, streaming: true } })
+        const child = w.findComponent({ name: 'CorkyStrategyPanel' })
+        // Down: bundle spreads into the child's individual props.
+        expect(child.props('runtimes')).toEqual(runtimes)
+        expect(child.props('selectedRuntimeId')).toBe('v8-tail-repair-live-main')
+        expect(child.props('decisions')).toEqual(decisions)
+        expect(child.props('streaming')).toBe(true)
+        // Up: select-runtime → strategy-select-runtime, refresh → strategy-refresh.
+        child.vm.$emit('select-runtime', 'v8-tail-repair-status-main')
+        expect(w.emitted('strategy-select-runtime').pop()[0]).toBe('v8-tail-repair-status-main')
+        child.vm.$emit('refresh')
+        expect(w.emitted('strategy-refresh')).toBeTruthy()
     })
 
     test('renders open rows with the ticker symbol', () => {

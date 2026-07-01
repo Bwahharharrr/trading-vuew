@@ -94,7 +94,7 @@ describe('auto-load runs on opening the Backtests tab', () => {
     const c = {
       positionsActiveTab: 'open', backtests: { runs: [], loading: false },
       backtestsFeed: { listRuns: vi.fn(async () => []) },
-      _ensureHistoryLoaded: vi.fn(), _positionsSyncStreams: vi.fn(), saveStateToStorage: vi.fn(),
+      _ensureHistoryLoaded: vi.fn(), _positionsSyncStreams: vi.fn(), _strategySyncStreams: vi.fn(), saveStateToStorage: vi.fn(),
       btListRuns: vi.fn(),
     }
     c.setPositionsTab = M.setPositionsTab

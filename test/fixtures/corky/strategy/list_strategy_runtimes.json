@@ -1,0 +1,409 @@
+{
+  "schema_version": 1,
+  "request_id": "p1",
+  "event": {
+    "type": "strategy_runtimes",
+    "runtimes": [
+      {
+        "runtime_id": "v8-tail-repair-live-main",
+        "state": "Ready",
+        "generated_at_ms": 1782937600019,
+        "mode": "live",
+        "strategy": "ema_regime_breakout_v8",
+        "target_public_runtime_id": "public-market-main",
+        "control_audit_path": "/root/.corky/strategy-runtime/v8-tail-repair-live-20260701T143936Z/controls.jsonl",
+        "public_snapshots_seen": 2367,
+        "matching_public_snapshots_seen": 2367,
+        "feature_requirements": 2,
+        "features_ready": 2,
+        "pending_control_requests": 0,
+        "pending_feature_reasons": [],
+        "last_public_snapshot_ms": 1782937479142,
+        "target_private_runtime_id": "private-account-main",
+        "live_operator_approval": {
+          "path": "/root/.corky/approvals/v8-tail-repair-catchup12-renew-20260701T1955Z.json",
+          "approval_id": "v8-test-catchup12-renew-20260701T1955Z",
+          "approved_by": "codex",
+          "approved_at_ms": 1782935729878,
+          "expires_at_ms": 1782950129878,
+          "action": "guarded_test_order_mutation",
+          "statement": "APPROVE_GUARDED_TEST_ORDER_MUTATION",
+          "account_id": "primary-account",
+          "target_private_runtime_id": "private-account-main",
+          "strategy_id": "ema_regime_breakout_v8",
+          "strategy_instance_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z",
+          "trade_timeframe": "1m",
+          "context_timeframes": [
+            "1D"
+          ],
+          "venue": "BITFINEX",
+          "quote_currency": "TESTUSD",
+          "symbols": [
+            "tTESTADA:TESTUSD",
+            "tTESTBTC:TESTUSD"
+          ],
+          "max_order_notional": "12",
+          "live_validation_proof": {
+            "kind": "non_mutating_test_live_validation",
+            "command": "CORKY_RUN_LIVE=1 scripts/validate.sh live",
+            "log_path": "/root/.corky/approvals/live-validation-20260701T143936Z.log",
+            "log_sha256": "sha256:a8c6794426aacd16412fb080da849d110da8599825f25d14671a2bb93b987993",
+            "completed_at_ms": 1782917836734
+          },
+          "canary_review_path": "/root/.corky/strategy-runtime/v8-tail-repair-live-20260701T143936Z/v8-tail-repair-1m-canary-review.md",
+          "reason": "renew guarded TEST approval after forward canary parity pass; keep v8 tail-repair live-capable on TESTADA/TESTBTC only"
+        },
+        "auth_gate_configured": true,
+        "auth_snapshots_seen": 1686,
+        "matching_auth_snapshots_seen": 1686,
+        "auth_ready": true,
+        "pending_auth_reasons": [],
+        "auth_wallet_balances": [
+          {
+            "wallet_type": "exchange",
+            "currency": "TESTADA",
+            "class": "exchange",
+            "balance": "0"
+          },
+          {
+            "wallet_type": "exchange",
+            "currency": "TESTBTC",
+            "class": "exchange",
+            "balance": "0.00016972",
+            "available": "0.00016972"
+          },
+          {
+            "wallet_type": "exchange",
+            "currency": "TESTUSD",
+            "class": "exchange",
+            "balance": "7989.6614248",
+            "available": "7989.6614248"
+          },
+          {
+            "wallet_type": "exchange",
+            "currency": "TESTUSDT",
+            "class": "exchange",
+            "balance": "0.00000001",
+            "available": "0.00000001"
+          },
+          {
+            "wallet_type": "funding",
+            "currency": "TESTUSD",
+            "class": "funding",
+            "balance": "37848.6630756",
+            "available": "37848.6630756"
+          },
+          {
+            "wallet_type": "margin",
+            "currency": "TESTBTC",
+            "class": "margin",
+            "balance": "0.05",
+            "available": "0.05"
+          },
+          {
+            "wallet_type": "margin",
+            "currency": "TESTUSD",
+            "class": "margin",
+            "balance": "3362.56379525",
+            "available": "3362.56379525"
+          },
+          {
+            "wallet_type": "margin",
+            "currency": "TESTUSDTF0",
+            "class": "margin",
+            "balance": "55578.97275383",
+            "available": "54590.60275383"
+          }
+        ],
+        "auth_target_open_positions": [],
+        "last_auth_snapshot_ms": 1782937480324,
+        "allocation_ledger_path": "/root/.corky/strategy-runtime/v8-tail-repair-live-20260701T143936Z/retry-nometa-20260701T154834Z/allocation-ledger.repaired-20260701T1914Z.jsonl",
+        "allocation_configured": true,
+        "allocation_ready": true,
+        "pending_allocation_reasons": [],
+        "allocation_events": 15,
+        "allocation_account_id": "primary-account",
+        "allocation_strategy_instance_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z",
+        "allocation_strategy_status": "active",
+        "allocation_quote_currency": "TESTUSD",
+        "allocation_wallet_type": "exchange",
+        "allocation_observed_balance": "8000.000330571827200000000000",
+        "allocation_observed_available": "8000.000330571827200000000000",
+        "allocation_unallocated_available": "0.000000001827200000000000",
+        "ticker_allocations": [
+          {
+            "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+            "status": "waiting",
+            "allocated_equity": "3999.7790308180752",
+            "available_cash": "3999.7790308180752000000000000",
+            "reserved_cash": "0.000000000000000000000000000",
+            "locked_margin": "0.0000000000000",
+            "position_quantity": "0.00000000",
+            "realized_pnl": "-0.2211344669248",
+            "unrealized_pnl": "0",
+            "fees_paid": "0",
+            "last_decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:target-state-catch-up:1782899280000:1782934440000:1782934551795",
+            "last_event": "fill_attributed"
+          },
+          {
+            "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+            "status": "long",
+            "allocated_equity": "3999.9939555517514627321292292",
+            "available_cash": "3989.8823939850000000000000000",
+            "reserved_cash": "0.0000000000000000000000000000",
+            "locked_margin": "10.111561566751462732129229204",
+            "position_quantity": "0.00016774",
+            "position_avg_price": "60281.158738234545917069447978",
+            "realized_pnl": "-0.0062097332485372678707707962",
+            "unrealized_pnl": "0",
+            "fees_paid": "0",
+            "last_decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:target-state-catch-up:1782899280000:1782934440000:1782934551795",
+            "last_event": "fill_attributed"
+          }
+        ],
+        "order_journal_path": "/root/.corky/strategy-runtime/v8-tail-repair-live-20260701T143936Z/retry-nometa-20260701T154834Z/order-journal.jsonl",
+        "order_events": 15,
+        "orders_total": 5,
+        "orders_active_or_pending": 0,
+        "order_status_counts": {
+          "accepted": 0,
+          "canceled": 0,
+          "filled": 5,
+          "open": 0,
+          "partially_filled": 0,
+          "queued": 0,
+          "rejected": 0,
+          "sent": 0
+        },
+        "ticker_orders": [
+          {
+            "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+            "symbol": "tTESTADA:TESTUSD",
+            "orders_total": 2,
+            "orders_active_or_pending": 0,
+            "order_status_counts": {
+              "accepted": 0,
+              "canceled": 0,
+              "filled": 2,
+              "open": 0,
+              "partially_filled": 0,
+              "queued": 0,
+              "rejected": 0,
+              "sent": 0
+            },
+            "last_event": "order_filled",
+            "last_event_ts_ms": 1782934603323
+          },
+          {
+            "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+            "symbol": "tTESTBTC:TESTUSD",
+            "orders_total": 3,
+            "orders_active_or_pending": 0,
+            "order_status_counts": {
+              "accepted": 0,
+              "canceled": 0,
+              "filled": 3,
+              "open": 0,
+              "partially_filled": 0,
+              "queued": 0,
+              "rejected": 0,
+              "sent": 0
+            },
+            "last_event": "order_filled",
+            "last_event_ts_ms": 1782934603323
+          }
+        ],
+        "market_data_audit_path": "/root/.corky/strategy-runtime/v8-tail-repair-live-20260701T143936Z/restart-auth-session-20260701T190741Z/market-data-forward-after-target-state-20260701T1937Z.jsonl",
+        "decision_audit_path": "/root/.corky/strategy-runtime/v8-tail-repair-live-20260701T143936Z/restart-auth-session-20260701T190741Z/decisions-forward-after-target-state-20260701T1937Z.jsonl",
+        "decision_events": 93,
+        "last_decision_ms": 1782937599595,
+        "ledger_events": 0,
+        "fills": 0
+      },
+      {
+        "runtime_id": "v8-tail-repair-status-main",
+        "state": "Ready",
+        "generated_at_ms": 1782923622163,
+        "mode": "shadow_live",
+        "strategy": "ema_regime_breakout_v8",
+        "target_public_runtime_id": "public-market-main",
+        "public_snapshots_seen": 150,
+        "matching_public_snapshots_seen": 150,
+        "feature_requirements": 2,
+        "features_ready": 2,
+        "pending_control_requests": 0,
+        "pending_feature_reasons": [],
+        "last_public_snapshot_ms": 1782923601129,
+        "target_private_runtime_id": "private-account-main",
+        "auth_gate_configured": true,
+        "auth_snapshots_seen": 107,
+        "matching_auth_snapshots_seen": 107,
+        "auth_ready": true,
+        "pending_auth_reasons": [],
+        "auth_wallet_balances": [
+          {
+            "wallet_type": "exchange",
+            "currency": "TESTADA",
+            "class": "exchange",
+            "balance": "64.84881728",
+            "available": "64.84881728"
+          },
+          {
+            "wallet_type": "exchange",
+            "currency": "TESTBTC",
+            "class": "exchange",
+            "balance": "0.0001717",
+            "available": "0.0001717"
+          },
+          {
+            "wallet_type": "exchange",
+            "currency": "TESTUSD",
+            "class": "exchange",
+            "balance": "7979.63729032",
+            "available": "7979.63729032"
+          },
+          {
+            "wallet_type": "exchange",
+            "currency": "TESTUSDT",
+            "class": "exchange",
+            "balance": "0.00000001",
+            "available": "0.00000001"
+          },
+          {
+            "wallet_type": "funding",
+            "currency": "TESTUSD",
+            "class": "funding",
+            "balance": "37848.6630756",
+            "available": "37848.6630756"
+          },
+          {
+            "wallet_type": "margin",
+            "currency": "TESTBTC",
+            "class": "margin",
+            "balance": "0.05",
+            "available": "0.05"
+          },
+          {
+            "wallet_type": "margin",
+            "currency": "TESTUSD",
+            "class": "margin",
+            "balance": "3362.56379525",
+            "available": "3362.56379525"
+          },
+          {
+            "wallet_type": "margin",
+            "currency": "TESTUSDTF0",
+            "class": "margin",
+            "balance": "55578.97275383",
+            "available": "54590.60275383"
+          }
+        ],
+        "auth_target_open_positions": [],
+        "last_auth_snapshot_ms": 1782923614806,
+        "allocation_ledger_path": "/root/.corky/strategy-runtime/v8-tail-repair-live-20260701T143936Z/retry-nometa-20260701T154834Z/allocation-ledger.jsonl",
+        "allocation_configured": true,
+        "allocation_ready": true,
+        "pending_allocation_reasons": [],
+        "allocation_events": 10,
+        "allocation_account_id": "primary-account",
+        "allocation_strategy_instance_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z",
+        "allocation_strategy_status": "active",
+        "allocation_quote_currency": "TESTUSD",
+        "allocation_wallet_type": "exchange",
+        "allocation_observed_balance": "8000.000330571827200000000000",
+        "allocation_observed_available": "8000.000330571827200000000000",
+        "allocation_unallocated_available": "0.000000001827200000000000",
+        "ticker_allocations": [
+          {
+            "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+            "status": "long",
+            "allocated_equity": "4000.0001652850",
+            "available_cash": "3989.8681860731728000000000000",
+            "reserved_cash": "0.000000000000000000000000000",
+            "locked_margin": "10.1319792118272",
+            "position_quantity": "64.84881728",
+            "position_avg_price": "0.15624",
+            "realized_pnl": "0",
+            "unrealized_pnl": "0",
+            "fees_paid": "0",
+            "last_decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:target-state-catch-up:1782899280000:1782920880000:1782920880000",
+            "last_event": "fill_attributed"
+          },
+          {
+            "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+            "status": "long",
+            "allocated_equity": "4000.0001652850",
+            "available_cash": "3989.7691042450000000000000000",
+            "reserved_cash": "0.000000000000000000000000000",
+            "locked_margin": "10.23106104",
+            "position_quantity": "0.00016972",
+            "position_avg_price": "60282",
+            "realized_pnl": "0",
+            "unrealized_pnl": "0",
+            "fees_paid": "0",
+            "last_decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:target-state-catch-up:1782899280000:1782920880000:1782920880000",
+            "last_event": "fill_attributed"
+          }
+        ],
+        "order_journal_path": "/root/.corky/strategy-runtime/v8-tail-repair-live-20260701T143936Z/retry-nometa-20260701T154834Z/order-journal.jsonl",
+        "order_events": 6,
+        "orders_total": 2,
+        "orders_active_or_pending": 0,
+        "order_status_counts": {
+          "accepted": 0,
+          "canceled": 0,
+          "filled": 2,
+          "open": 0,
+          "partially_filled": 0,
+          "queued": 0,
+          "rejected": 0,
+          "sent": 0
+        },
+        "ticker_orders": [
+          {
+            "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+            "symbol": "tTESTADA:TESTUSD",
+            "orders_total": 1,
+            "orders_active_or_pending": 0,
+            "order_status_counts": {
+              "accepted": 0,
+              "canceled": 0,
+              "filled": 1,
+              "open": 0,
+              "partially_filled": 0,
+              "queued": 0,
+              "rejected": 0,
+              "sent": 0
+            },
+            "last_event": "order_filled",
+            "last_event_ts_ms": 1782921307806
+          },
+          {
+            "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+            "symbol": "tTESTBTC:TESTUSD",
+            "orders_total": 1,
+            "orders_active_or_pending": 0,
+            "order_status_counts": {
+              "accepted": 0,
+              "canceled": 0,
+              "filled": 1,
+              "open": 0,
+              "partially_filled": 0,
+              "queued": 0,
+              "rejected": 0,
+              "sent": 0
+            },
+            "last_event": "order_filled",
+            "last_event_ts_ms": 1782921307806
+          }
+        ],
+        "market_data_audit_path": "/root/.corky/strategy-runtime/v8-tail-repair-live-20260701T143936Z/market-data.jsonl",
+        "decision_audit_path": "/root/.corky/strategy-runtime/v8-tail-repair-live-20260701T143936Z/decisions.jsonl",
+        "decision_events": 68,
+        "last_decision_ms": 1782923622163,
+        "ledger_events": 0,
+        "fills": 0
+      }
+    ]
+  }
+}

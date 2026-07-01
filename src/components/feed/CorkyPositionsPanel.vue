@@ -26,6 +26,11 @@
                     @click="selectTab('backtests')">
                 Backtests
             </button>
+            <button class="pd-tab" role="tab" :aria-selected="activeTab === 'strategy'"
+                    :class="{ active: activeTab === 'strategy' }"
+                    @click="selectTab('strategy')">
+                Strategy<span v-if="(strategy.runtimes||[]).length" class="pd-count">{{ strategy.runtimes.length }}</span>
+            </button>
             <!-- Reusable single Run-Details tab: appears once a run is selected,
                  re-targets to whichever run is clicked, closable. -->
             <button v-if="backtests.selectedRun"
@@ -92,6 +97,17 @@
                         @list-runs="$emit('bt-list-runs')"
                         @inspect-strategy="$emit('bt-inspect-strategy', $event)"
                         @select-run="$emit('bt-select-run', $event)" />
+
+        <!-- Strategy runtimes — presentational; App owns the feed/subscription. -->
+        <corky-strategy-panel v-if="activeTab === 'strategy'"
+                        :runtimes="strategy.runtimes || []"
+                        :selected-runtime-id="strategy.selectedRuntimeId || ''"
+                        :decisions="strategy.decisions || []"
+                        :streaming="!!strategy.streaming"
+                        :loading="!!strategy.loading"
+                        :error="strategy.error || null"
+                        @select-runtime="$emit('strategy-select-runtime', $event)"
+                        @refresh="$emit('strategy-refresh')" />
 
         <!-- One reusable Run-Details tab body -->
         <corky-backtest-detail v-else-if="activeTab === 'bt-detail' && backtests.selectedRun"
@@ -170,10 +186,11 @@ import SearchSignalsForm from './SearchSignalsForm.vue'
 import SearchResults from './SearchResults.vue'
 import CorkyBacktestsPanel from './CorkyBacktestsPanel.vue'
 import CorkyBacktestDetail from './CorkyBacktestDetail.vue'
+import CorkyStrategyPanel from './CorkyStrategyPanel.vue'
 
 export default {
     name: 'CorkyPositionsPanel',
-    components: { SearchSignalsForm, SearchResults, CorkyBacktestsPanel, CorkyBacktestDetail },
+    components: { SearchSignalsForm, SearchResults, CorkyBacktestsPanel, CorkyBacktestDetail, CorkyStrategyPanel },
     props: {
         height: { type: Number, default: 34 },
         open: { type: Boolean, default: false },
@@ -200,6 +217,9 @@ export default {
         // Strategies/Backtests state bundle: { strategies, runs, filters,
         // selectedRun, detail, loading, error }.
         backtests: { type: Object, default: () => ({}) },
+        // Strategy-runtime state bundle: { runtimes, selectedRuntimeId, decisions,
+        // streaming, loading, error }.
+        strategy: { type: Object, default: () => ({}) },
     },
     emits: [
         'update:open', 'update:maximized', 'update:active-tab', 'update:active-account',
@@ -207,6 +227,7 @@ export default {
         'run-search', 'cancel-search', 'close-search-tab', 'select-result',
         'bt-refresh-strategies', 'bt-update-filter', 'bt-set-metric-filters', 'bt-list-runs', 'bt-inspect-strategy',
         'bt-select-run', 'bt-plot-run', 'bt-select-trade', 'bt-select-candidate', 'bt-close-detail',
+        'strategy-select-runtime', 'strategy-refresh',
     ],
     computed: {
         rows() {

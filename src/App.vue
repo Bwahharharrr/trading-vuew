@@ -130,6 +130,9 @@
             :search-context="searchContext"
             :search-nav="searchNav"
             :backtests="backtests"
+            :strategy="strategy"
+            @strategy-select-runtime="strategySelectRuntime"
+            @strategy-refresh="strategyRefresh"
             @bt-refresh-strategies="btLoadStrategies"
             @bt-update-filter="btUpdateFilter"
             @bt-list-runs="btListRuns"
@@ -387,6 +390,8 @@ import { CorkyFeed } from '../src/helpers/feed/corky-feed.js'
 import { CorkyPositionsFeed } from '../src/helpers/feed/corky-positions-feed.js'
 import { CorkySearchFeed } from '../src/helpers/feed/corky-search-feed.js'
 import { CorkyBacktestsFeed } from '../src/helpers/feed/corky-backtests-feed.js'
+import { CorkyStrategyFeed } from '../src/helpers/feed/corky-strategy-feed.js'
+import { overlaysToMarkers } from '../src/helpers/feed/corky-strategy-transforms.js'
 import { buildSearchQuery, buildCondition, barrierTargetSpec } from '../src/helpers/feed/search-query.js'
 import { backtestSeriesOverlays, backtestTradeMarkers } from '../src/helpers/feed/backtest-overlays.js'
 import { detectRunShape } from '../src/helpers/feed/backtest-shape.js'
@@ -426,6 +431,22 @@ function deriveCorkyUrl() {
         return `${proto}//127.0.0.1:${CORKY_GATEWAY_PORT}`
     }
     return `${proto}//${window.location.host}/live-ws/${CORKY_GATEWAY_PORT}`
+}
+
+// Default live strategy runtime to select + subscribe (matches the panel's
+// default; falls back to the first runtime when absent from the set).
+const DEFAULT_STRATEGY_RUNTIME_ID = 'v8-tail-repair-live-main'
+
+// Distinct on-chart marker style per strategy-overlay class. `anchor` picks the
+// owning candle's price the glyph rides on ('h'=high above, 'l'=low below), so
+// the classes visually separate. `control` = a manual strategy_control_audit
+// marker (distinguished by SOURCE, not kind). Reused by syncStrategyOverlays.
+const STRATEGY_MARKER_STYLES = {
+    decision:   { color: '#58a6ff', shape: 'circle',        anchor: 'h', z: 150 },
+    allocation: { color: '#bb86fc', shape: 'diamond',       anchor: 'l', z: 151 },
+    order:      { color: '#d97706', shape: 'square',        anchor: 'h', z: 152 },
+    fill:       { color: '#23a776', shape: 'triangle-up',   anchor: 'l', z: 154 },
+    control:    { color: '#f5c518', shape: 'triangle-down', anchor: 'h', z: 156 },
 }
 
 // App mixins (decomposed concerns)
@@ -518,6 +539,18 @@ export default {
                 // tab or viewing a detail: column metric filters + recency-graded
                 // click history (last-5 run/candidate ids, most-recent first).
                 metricFilters: [], clickHistory: [],
+            },
+
+            // ── Strategy runtimes (read-only via the gateway) ──
+            strategyFeed: null,
+            // One reactive bundle passed to CorkyStrategyPanel. `runtimes` is the
+            // selectable set (from list_strategy_runtimes, live-upserted by the
+            // runtime subscription); `overlays` maps ticker_id → raw chart-overlay
+            // rows for the on-chart Markers plot; `decisions` are the selected
+            // runtime's audit rows (both tickers). App owns selection + streaming.
+            strategy: {
+                runtimes: [], selectedRuntimeId: DEFAULT_STRATEGY_RUNTIME_ID,
+                decisions: [], overlays: {}, streaming: false, loading: false, error: null,
             },
 
             // positionPlot (a position plotted on the chart: trades + detail panes)
@@ -824,6 +857,9 @@ export default {
                 this.searchFeed = new CorkySearchFeed({ client: this.corkyClient })
                 // Strategies/backtests: read-only over the same socket.
                 this.backtestsFeed = new CorkyBacktestsFeed({ client: this.corkyClient })
+                // Strategy runtimes ride the same socket (read-only reads + a live
+                // full-replacement runtime subscription); surfaced in the dock.
+                this.strategyFeed = new CorkyStrategyFeed({ client: this.corkyClient })
                 // Create the initial tab's stream feed + wire its lazy "load older
                 // candles on pan-left" loader onto the active cube. (Each tab gets
                 // its own feed; the loader backfills the revealed older range on
@@ -1311,6 +1347,7 @@ export default {
             this.syncSignalMarker()
             this.syncBarrierOverlay()
             this.syncBacktestOverlays()
+            this.syncStrategyOverlays()
         },
 
         // Panel: add a timeframe → patch the candle-state, re-discover, then
@@ -1911,6 +1948,7 @@ export default {
                 const out = await this.positionsFeed.listOpen({ include_historical: false })
                 this._applyOpenPositions(out)
                 this._positionsSyncStreams()
+                this._strategySyncStreams()
             } catch (err) {
                 this.positionsError = this._positionsErrText(err)
             } finally {
@@ -1960,6 +1998,18 @@ export default {
             else this._positionsStopOpenStream()
         },
 
+        // Subscribe the live runtime stream ONLY while the Strategy tab is the
+        // visible dock tab; stop otherwise (mirrors _positionsSyncStreams so the
+        // subscription doesn't keep streaming when the dock is collapsed / another
+        // tab is active). The one-time data load lives in strategyOpen, so
+        // re-entering the tab re-subscribes without re-fetching.
+        _strategySyncStreams() {
+            const want = this.feedMode === 'gateway' && this.positionsDockOpen &&
+                this.positionsActiveTab === 'strategy' && !!this.strategyFeed
+            if (want) this._strategySubscribe()
+            else this._strategyStopSubscribe()
+        },
+
         _positionsStartOpenStream() {
             if (!this.positionsFeed || this._openSubHandle) return
             if (!this.positionsFeed.streamingSupported) { this._positionsStartPoll(); return }
@@ -2003,6 +2053,7 @@ export default {
             if (!open) this.positionsDockMaximized = false
             if (open && this.positionsActiveTab === 'historical') this._ensureHistoryLoaded()
             this._positionsSyncStreams()
+            this._strategySyncStreams()
             this.saveStateToStorage()
         },
 
@@ -2015,6 +2066,7 @@ export default {
             // Maximize can open a collapsed dock — (re)start its streams, exactly
             // as togglePositionsDock does. Idempotent/guarded → no-op on restore.
             this._positionsSyncStreams()
+            this._strategySyncStreams()
             this.saveStateToStorage()
         },
 
@@ -2026,7 +2078,13 @@ export default {
             if (tab === 'backtests' && !this.backtests.runs.length && !this.backtests.loading) {
                 this.btListRuns()
             }
+            // Open the Strategy tab → load the runtime set (+ selected detail) and
+            // start the live full-replacement subscription, once.
+            if (tab === 'strategy' && !this.strategy.runtimes.length && !this.strategy.loading) {
+                this.strategyOpen()
+            }
             this._positionsSyncStreams()
+            this._strategySyncStreams()
             this.saveStateToStorage()
         },
 
@@ -2605,6 +2663,250 @@ export default {
             this.backtests.detail = { ...this.backtests.detail, plottedRunId: plot.runId, plotting: false }
         },
 
+        // ── Strategy runtimes ────────────────────────────────────────────────────
+        // Read-only surface over CorkyStrategyFeed: the runtime SET + a live
+        // full-replacement subscription (both runtimes stay selectable; the default
+        // live runtime is subscribed). Money/quantity fields flow through as decimal
+        // strings — the panel/transforms render them verbatim (never float-parsed).
+
+        _strategyErr(err) { return err ? (err.message || err.code || String(err)) : null },
+
+        // Effective default runtime id: the configured default when present in the
+        // set, else the first available (so a renamed/absent default still works).
+        _strategyDefaultRuntimeId() {
+            const ids = (this.strategy.runtimes || []).map((r) => r && r.runtime_id)
+            if (ids.includes(DEFAULT_STRATEGY_RUNTIME_ID)) return DEFAULT_STRATEGY_RUNTIME_ID
+            return ids[0] || DEFAULT_STRATEGY_RUNTIME_ID
+        },
+
+        // Ticker ids for a runtime, from its allocations then orders (deduped, order
+        // preserved) — drives the per-ticker ticker/decision/overlay reads.
+        _strategyTickerIds(runtime) {
+            const ids = []
+            const seen = new Set()
+            for (const src of [runtime && runtime.ticker_allocations, runtime && runtime.ticker_orders]) {
+                for (const t of (Array.isArray(src) ? src : [])) {
+                    const id = t && t.ticker_id
+                    if (id && !seen.has(id)) { seen.add(id); ids.push(id) }
+                }
+            }
+            return ids
+        },
+
+        // Open the Strategy tab: list runtimes, resolve/default the selection, load
+        // the selected runtime's detail (tickers + decisions + overlays), then start
+        // the live subscription. Idempotent — a refresh reloads the one-shot reads
+        // and leaves the (already-running) subscription in place.
+        async strategyOpen() {
+            if (!this.strategyFeed) return
+            this.strategy.loading = true; this.strategy.error = null
+            try {
+                const runtimes = await this.strategyFeed.listRuntimes() || []
+                this.strategy.runtimes = runtimes
+                const ids = runtimes.map((r) => r && r.runtime_id)
+                if (!ids.includes(this.strategy.selectedRuntimeId)) {
+                    this.strategy.selectedRuntimeId = this._strategyDefaultRuntimeId()
+                }
+                await this._strategyLoadRuntime(this.strategy.selectedRuntimeId)
+                this._strategySubscribe()
+            } catch (err) {
+                this.strategy.error = this._strategyErr(err)
+            } finally {
+                this.strategy.loading = false
+            }
+        },
+
+        // Load one runtime's full snapshot (upserted into the set) plus every
+        // ticker's allocation, decisions and chart overlays (1m). Populates the
+        // selected-runtime detail + drives the on-chart markers. Staleness-guarded:
+        // a selection change mid-fetch abandons the stale load.
+        async _strategyLoadRuntime(runtime_id) {
+            if (!this.strategyFeed || !runtime_id) return
+            let runtime
+            try {
+                runtime = await this.strategyFeed.getRuntime(runtime_id)
+            } catch (err) { this.strategy.error = this._strategyErr(err); return }
+            if (this.strategy.selectedRuntimeId !== runtime_id) return   // superseded
+            if (runtime) this._strategyUpsertRuntimes([runtime])
+            const tickerIds = this._strategyTickerIds(runtime)
+            const results = await Promise.all(tickerIds.map((tid) => Promise.all([
+                this.strategyFeed.getTicker(runtime_id, tid).catch(() => null),
+                this.strategyFeed.listDecisions(runtime_id, { ticker_id: tid, limit: 50 }).catch(() => []),
+                this.strategyFeed.getChartOverlays(runtime_id, tid, { timeframe: '1m' }).catch(() => []),
+            ])))
+            if (this.strategy.selectedRuntimeId !== runtime_id) return   // superseded mid-fetch
+            const decisions = []
+            const overlays = {}
+            const avgByTid = {}
+            tickerIds.forEach((tid, i) => {
+                const [tk, ds, ov] = results[i]
+                if (Array.isArray(ds)) decisions.push(...ds)
+                overlays[tid] = Array.isArray(ov) ? ov : []
+                // Consume the per-ticker read: position_avg_price is present on the
+                // get_strategy_ticker allocation but absent from the runtime
+                // snapshot's ticker_allocations, so carry it across.
+                const avg = tk && tk.allocation && tk.allocation.position_avg_price
+                if (avg != null && avg !== '') avgByTid[tid] = avg
+            })
+            if (runtime && Object.keys(avgByTid).length) {
+                this._strategyUpsertRuntimes([{
+                    ...runtime,
+                    ticker_allocations: (runtime.ticker_allocations || []).map((a) =>
+                        (a && avgByTid[a.ticker_id] != null)
+                            ? { ...a, position_avg_price: avgByTid[a.ticker_id] } : a),
+                }])
+            }
+            this.strategy.decisions = decisions
+            this.strategy.overlays = overlays
+            this.syncStrategyOverlays()
+        },
+
+        // Select a different runtime row: change the selection + reload its detail.
+        // The live subscription stays pinned to the default live runtime (so its row
+        // keeps updating), and the whole set stays selectable.
+        strategySelectRuntime(runtime_id) {
+            if (!runtime_id || runtime_id === this.strategy.selectedRuntimeId) return
+            this.strategy.selectedRuntimeId = runtime_id
+            this._strategyLoadRuntime(runtime_id)
+        },
+
+        // Manual refresh: reload the runtime set + selected detail (the subscription,
+        // if running, keeps live-updating the set on top).
+        strategyRefresh() { this.strategyOpen() },
+
+        // Start the live runtime subscription (once). Scoped to the default live
+        // runtime; each update is a FULL-REPLACEMENT snapshot applied by increasing
+        // sequence (see _strategyApplyUpdate). No-op when streaming is unsupported.
+        _strategySubscribe() {
+            if (!this.strategyFeed || this._strategySub) return
+            if (this.strategyFeed.streamingSupported === false) return
+            this._strategySub = this.strategyFeed.subscribeRuntime(
+                { subscription_id: 'strategy-runtime', runtime_id: this._strategyDefaultRuntimeId() }, {
+                    onData: (runtimes) => this._strategyApplyUpdate(runtimes),
+                    onError: () => { this.strategy.streaming = false },   // keep last-good set
+                })
+            this.strategy.streaming = true
+        },
+
+        _strategyStopSubscribe() {
+            if (this._strategySub && this.strategyFeed) {
+                try { this.strategyFeed.unsubscribe(this._strategySub) } catch (_) { /* gone */ }
+            }
+            this._strategySub = null
+            if (this.strategy) this.strategy.streaming = false
+        },
+
+        // Apply a FULL-REPLACEMENT runtime update from the subscription. The feed
+        // already dropped stale/duplicate/reconnect-replay sequences (and resets
+        // its watermark on reconnect), so there is no App-level sequence guard.
+        // The update carries the current snapshot of the runtime(s) it covers —
+        // upserted by runtime_id into the selectable set (order preserved), so
+        // out-of-scope rows (e.g. the non-subscribed runtime) stay selectable.
+        _strategyApplyUpdate(runtimes) {
+            if (!Array.isArray(runtimes) || !runtimes.length) return   // keep last-good
+            this._strategyUpsertRuntimes(runtimes)
+            this.strategy.streaming = true
+        },
+
+        // Upsert runtimes into `strategy.runtimes` by runtime_id (replace in place,
+        // preserving order; append unknown ones). Shared by the one-shot detail read
+        // and the subscription's full-replacement apply.
+        _strategyUpsertRuntimes(runtimes) {
+            const set = (this.strategy.runtimes || []).slice()
+            for (const rt of runtimes) {
+                if (!rt || !rt.runtime_id) continue
+                const i = set.findIndex((r) => r && r.runtime_id === rt.runtime_id)
+                if (i >= 0) set.splice(i, 1, rt)
+                else set.push(rt)
+            }
+            this.strategy.runtimes = set
+        },
+
+        _removeStrategyOverlays(dc) {
+            for (const side of ['onchart', 'offchart']) {
+                const arr = dc.data && dc.data[side]
+                if (!Array.isArray(arr)) continue
+                for (let i = arr.length - 1; i >= 0; i--) {
+                    if (arr[i] && arr[i].settings && arr[i].settings.$strategyOverlay) arr.splice(i, 1)
+                }
+            }
+            if (typeof dc.update_ids === 'function') dc.update_ids()
+        },
+
+        // Price of the loaded candle the given timestamp rides on (last candle with
+        // t <= ts). `field` selects high/low/close. null when no candle covers it —
+        // the marker is then skipped (Markers.vue skips non-finite y anyway).
+        _strategyCandlePriceAt(candles, ts, field) {
+            if (!Array.isArray(candles) || !candles.length) return null
+            let lo = 0; let hi = candles.length - 1; let ans = -1
+            while (lo <= hi) {
+                const mid = (lo + hi) >> 1
+                if (candles[mid][0] <= ts) { ans = mid; lo = mid + 1 } else hi = mid - 1
+            }
+            if (ans < 0) return null
+            const c = candles[ans]
+            const idx = field === 'h' ? 2 : field === 'l' ? 3 : 4
+            const v = c && c[idx]
+            return Number.isFinite(Number(v)) ? Number(v) : null
+        },
+
+        // Reconcile the on-chart strategy markers (decision/fill/order/allocation +
+        // manual control) to the charted symbol's overlays. Called after every
+        // history-complete (a candle load wipes onchart) and on each strategy load.
+        // One Markers overlay per class, anchored to the loaded candles and clipped
+        // to the loaded window — nothing plots when the charted symbol has no
+        // strategy overlays (or the candles aren't loaded yet).
+        syncStrategyOverlays() {
+            const dc = this.chart
+            if (!dc || !dc.data || typeof dc.add !== 'function') return
+            this._removeStrategyOverlays(dc)
+            const cur = this.corkyCurrent
+            if (!cur || !cur.symbol) return
+            // Flatten every ticker's overlays, keep only those for the charted symbol.
+            const all = []
+            for (const k of Object.keys(this.strategy.overlays || {})) {
+                for (const o of (this.strategy.overlays[k] || [])) {
+                    if (o && o.symbol === cur.symbol) all.push(o)
+                }
+            }
+            if (!all.length) return
+            const candles = dc.data.chart && dc.data.chart.data
+            const loaded = this._loadedCandleRange()
+            const lo = loaded ? loaded[0] : -Infinity
+            const hi = loaded ? loaded[1] : Infinity
+            // Group by display class. A manual control marker plots on its own
+            // `control` layer — recognized EITHER by kind:'control' (the gateway's
+            // shape) OR by source strategy_control_audit on any base kind. Reuses
+            // overlaysToMarkers' normalization, then partitions control out.
+            const grouped = overlaysToMarkers(all)
+            const buckets = { decision: [], fill: [], order: [], allocation: [], control: [] }
+            for (const kind of ['decision', 'fill', 'order', 'allocation', 'control']) {
+                for (const m of grouped[kind]) {
+                    (m.source === 'strategy_control_audit' || m.kind === 'control'
+                        ? buckets.control : buckets[kind]).push(m)
+                }
+            }
+            for (const kind of Object.keys(buckets)) {
+                const st = STRATEGY_MARKER_STYLES[kind]
+                const rows = []
+                for (const m of buckets[kind]) {
+                    const ts = m.timestamp_ms
+                    if (!(ts >= lo && ts <= hi)) continue   // clip to the loaded window
+                    const y = this._strategyCandlePriceAt(candles, ts, st.anchor)
+                    if (y == null) continue
+                    rows.push([ts, y, m.label])
+                }
+                if (!rows.length) continue
+                dc.add('onchart', {
+                    name: 'Strategy ' + kind, type: 'Markers', grid: { id: 0 }, data: rows,
+                    settings: {
+                        $strategyOverlay: true, $uuid: 'strategy-' + kind, 'z-index': st.z,
+                        legend: false, color: st.color, shape: st.shape, markerSize: 7, showLabel: false,
+                    },
+                })
+            }
+        },
+
         setPositionsAccount(acct) {
             this.positionsActiveAccount = acct
             // History is per-account — reset and reload for the new account.
@@ -2964,6 +3266,10 @@ export default {
             if (this.backtestsFeed) {
                 try { this.backtestsFeed.destroy() } catch (_) { /* already gone */ }
             }
+            this._strategyStopSubscribe()
+            if (this.strategyFeed) {
+                try { this.strategyFeed.destroy() } catch (_) { /* already gone */ }
+            }
             // Now close the ONE shared client (the feeds above only disposed).
             if (this.corkyClient && typeof this.corkyClient.close === 'function') {
                 try { this.corkyClient.close() } catch (_) { /* already gone */ }
@@ -2977,6 +3283,12 @@ export default {
                 strategies: [], runs: [], filters: { strategy: '', symbol: '', status: '' },
                 selectedRun: null, detail: {}, loading: false, error: null,
                 metricFilters: [], clickHistory: [],
+            }
+            this.strategyFeed = null
+            this._strategySub = null
+            this.strategy = {
+                runtimes: [], selectedRuntimeId: DEFAULT_STRATEGY_RUNTIME_ID,
+                decisions: [], overlays: {}, streaming: false, loading: false, error: null,
             }
             this.searchTabs = []
             this.searchTabSeq = 0

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "request_id": "b1",
+  "event": {
+    "type": "strategy_ticker",
+    "ticker": {
+      "runtime_id": "v8-tail-repair-live-main",
+      "state": "Ready",
+      "generated_at_ms": 1782937697973,
+      "mode": "live",
+      "strategy": "ema_regime_breakout_v8",
+      "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+      "symbol": "tTESTBTC:TESTUSD",
+      "allocation": {
+        "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+        "status": "long",
+        "allocated_equity": "3999.9939555517514627321292292",
+        "available_cash": "3989.8823939850000000000000000",
+        "reserved_cash": "0.0000000000000000000000000000",
+        "locked_margin": "10.111561566751462732129229204",
+        "position_quantity": "0.00016774",
+        "position_avg_price": "60281.158738234545917069447978",
+        "realized_pnl": "-0.0062097332485372678707707962",
+        "unrealized_pnl": "0",
+        "fees_paid": "0",
+        "last_decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:target-state-catch-up:1782899280000:1782934440000:1782934551795",
+        "last_event": "fill_attributed"
+      },
+      "orders": {
+        "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+        "symbol": "tTESTBTC:TESTUSD",
+        "orders_total": 3,
+        "orders_active_or_pending": 0,
+        "order_status_counts": {
+          "accepted": 0,
+          "canceled": 0,
+          "filled": 3,
+          "open": 0,
+          "partially_filled": 0,
+          "queued": 0,
+          "rejected": 0,
+          "sent": 0
+        },
+        "last_event": "order_filled",
+        "last_event_ts_ms": 1782934603323
+      },
+      "last_decision_ms": 1782937697949,
+      "auth_ready": true,
+      "allocation_ready": true,
+      "pending_auth_reasons": [],
+      "pending_allocation_reasons": []
+    }
+  }
+}
