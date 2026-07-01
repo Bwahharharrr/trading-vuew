@@ -299,6 +299,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     auditError: null;
     auditTarget: null;
 }, {
+    chartEmpty(): boolean;
     corkyFeed(): any;
     corkyCurrent: {
         get(): any;
