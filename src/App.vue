@@ -26,6 +26,16 @@
                 @alarm-moved="onAlarmMoved">
             </trading-vue>
 
+            <!-- Empty state: nothing loaded yet. An opaque cover hides the empty
+                 grid / Volume legend / axes and invites the user to pick a source. -->
+            <div v-if="chartEmpty" class="chart-empty">
+                <div class="chart-empty-inner">
+                    <div class="chart-empty-icon">▤</div>
+                    <div class="chart-empty-msg">Select a ticker, position, strategy or backtest</div>
+                    <div class="chart-empty-sub">Pick one from the source panel or the dock below to load a chart.</div>
+                </div>
+            </div>
+
             <!-- Left toolbar for drawing tools -->
             <div class="left-toolbar">
                 <button
@@ -567,6 +577,20 @@ export default {
         }
     },
     computed: {
+        // True when the active chart has no candles loaded yet — drives the
+        // empty-state placeholder (and hides the empty grid / axes / Volume legend).
+        chartEmpty() {
+            const dc = this.chart
+            const data = dc && dc.data
+            if (!data) return true
+            // Depend on the store revision (reactive) so an IN-PLACE data load
+            // flips this — the ohlcv rows are markRaw'd, so a bare length change
+            // wouldn't recompute. Guarded: no-op if the back-ref is absent.
+            const cd = data.$cd
+            if (cd && typeof cd.revision === 'function') cd.revision()
+            const ohlcv = data.chart && data.chart.data
+            return !ohlcv || ohlcv.length === 0
+        },
         // ── Per-tab gateway stream shims (concurrent-live) ────────────────────
         // Each chart tab owns its own CorkyFeed + stream, all live at once. These
         // resolve to the ACTIVE tab so the existing corky code (corkySelect, the
@@ -3359,6 +3383,23 @@ body {
     position: relative;
     overflow: hidden;
 }
+/* Empty state: an opaque cover over the (empty) chart so the grid, axes and
+   Volume legend are hidden and only the "pick a source" invite shows. */
+.chart-empty {
+    position: absolute;
+    inset: 0;
+    z-index: 20;                /* above the chart chrome + drawing toolbar */
+    background: #121827;        /* opaque, matches the chart back */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px;
+}
+.chart-empty-inner { max-width: 440px; user-select: none; }
+.chart-empty-icon { font-size: 42px; line-height: 1; color: #2b3446; margin-bottom: 14px; }
+.chart-empty-msg { font-size: 16px; font-weight: 600; color: #c4ccda; letter-spacing: 0.01em; }
+.chart-empty-sub { margin-top: 8px; font-size: 12px; color: #6b7686; }
 
 /* Bottom Panel */
 .bottom-panel {
@@ -3467,6 +3508,18 @@ body {
 }
 .panel-collapse-toggle:hover { color: #d1d4dc; background: #262b38; }
 .panel-collapse-toggle:focus-visible { outline: 2px solid #35a776; outline-offset: -1px; }
+/* Collapsed: make the reopen handle OBVIOUS so a closed panel never reads as a
+   missing one — a bright green right-edge line, green chevron + tint, slightly
+   wider, and a soft glow to draw the eye. */
+.panel-collapse-toggle.collapsed {
+    width: 26px;
+    background: rgba(53,167,118,0.14);
+    border-color: rgba(53,167,118,0.55);
+    color: #35a776;
+    box-shadow: inset -3px 0 0 #35a776, 0 0 10px rgba(53,167,118,0.35);
+}
+.panel-collapse-toggle.collapsed:hover { background: rgba(53,167,118,0.26); color: #35a776; }
+.panel-collapse-toggle.collapsed .pct-chevron { color: #35a776; }
 .pct-chevron { font-size: 16px; line-height: 1; font-weight: 700; }
 
 .panel-section {
