@@ -77,9 +77,12 @@ export default class Grid {
     new_layer(layer: any): void;
     del_layer(id: any): void;
     show_hide_layer(event: any): void;
-    update(): void;
+    update(freshGridLayout: any): void;
     markStaticDirty(): void;
     propagate(name: any, event: any): void;
+    _panmove_work(event: any): void;
+    _scheduleGesture(work: any, level: any): void;
+    _pendingGesture: any;
     change_range(): void;
     destroy(): void;
 }

@@ -41,7 +41,11 @@ export default class GridRenderer {
     show_hide_layer(event: any): void;
     markStaticDirty(): void;
     _detectCrosshairOnlyUpdate(): boolean;
-    update(): void;
+    _lastPS: any;
+    _lastTS: any;
+    _lastPSV: any;
+    _lastTSV: any;
+    update(freshGridLayout: any): void;
     updateDynamic(): void;
     _shaderProps(): {
         layout: null;

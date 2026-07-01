@@ -1,6 +1,8 @@
 declare namespace _default {
     namespace methods {
         function range_changed(r: any): void;
+        function _render_drain(level: any): void;
+        function repositionPass(visible: any): boolean;
         function clamp_range(r: any): any;
         function goto(t: any): void;
         function setRange(t1: any, t2: any): void;
@@ -54,5 +56,6 @@ declare namespace _default {
         function forced_tf(n: any, p: any): void;
         function dataHashKey(newKey: any, oldKey: any): void;
     }
+    function beforeUnmount(): void;
 }
 export default _default;

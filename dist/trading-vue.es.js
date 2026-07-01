@@ -1456,8 +1456,16 @@ var GridRenderer = class {
 	}
 	_detectCrosshairOnlyUpdate() {
 		const layoutRef = this.layout;
-		if (this._lastLayoutRef !== layoutRef) {
+		const ps = layoutRef && layoutRef.priceScale;
+		const ts = layoutRef && layoutRef.timeScale;
+		const psv = ps ? ps.version : -1;
+		const tsv = ts ? ts.version : -1;
+		if (this._lastLayoutRef !== layoutRef || this._lastPS !== ps || this._lastTS !== ts || this._lastPSV !== psv || this._lastTSV !== tsv) {
 			this._lastLayoutRef = layoutRef;
+			this._lastPS = ps;
+			this._lastTS = ts;
+			this._lastPSV = psv;
+			this._lastTSV = tsv;
 			this._staticDirty = true;
 			this._overlaysDirty = true;
 			return false;
@@ -1488,8 +1496,9 @@ var GridRenderer = class {
 		}
 		return false;
 	}
-	update() {
-		const layout = this.grid.comp.layoutOverride || this.$p.layout?.grids?.[this.id];
+	update(freshGridLayout) {
+		const comp = this.grid.comp;
+		const layout = freshGridLayout || comp.layoutOverride || this.$p.layout?.grids?.[this.id];
 		this.grid.layout = layout;
 		this.grid.interval = this.$p.interval;
 		if (!layout) return;
@@ -3712,6 +3721,69 @@ function loadGestures() {
 	return inFlight;
 }
 //#endregion
+//#region src/render/render-scheduler.js
+var LEVEL = Object.freeze({
+	NONE: -1,
+	CURSOR: 0,
+	REPOSITION: 1,
+	FULL: 2
+});
+function defaultRaf(cb) {
+	return typeof requestAnimationFrame !== "undefined" ? requestAnimationFrame(cb) : setTimeout(() => cb(typeof performance !== "undefined" ? performance.now() : Date.now()), 16);
+}
+function defaultCaf(id) {
+	if (id == null) return;
+	if (typeof cancelAnimationFrame !== "undefined") cancelAnimationFrame(id);
+	else clearTimeout(id);
+}
+var RenderScheduler = class {
+	constructor(onDrain, opts = {}) {
+		this._onDrain = onDrain;
+		this._mask = LEVEL.NONE;
+		this._rafId = null;
+		this._raf = opts.raf || defaultRaf;
+		this._caf = opts.caf || defaultCaf;
+		this._drainBound = () => this._drain();
+	}
+	invalidate(level = LEVEL.FULL) {
+		if (level > this._mask) this._mask = level;
+		if (this._rafId == null) this._rafId = this._raf(this._drainBound);
+	}
+	_drain() {
+		this._rafId = null;
+		const lvl = this._mask;
+		this._mask = LEVEL.NONE;
+		if (lvl === LEVEL.NONE) return;
+		const fn = this._onDrain;
+		if (fn) fn(lvl);
+	}
+	flush() {
+		if (this._rafId != null) {
+			this._caf(this._rafId);
+			this._rafId = null;
+		}
+		const lvl = this._mask;
+		this._mask = LEVEL.NONE;
+		if (lvl === LEVEL.NONE) return;
+		const fn = this._onDrain;
+		if (fn) fn(lvl);
+	}
+	get pending() {
+		return this._mask;
+	}
+	get scheduled() {
+		return this._rafId != null;
+	}
+	destroy() {
+		if (this._rafId != null) {
+			this._caf(this._rafId);
+			this._rafId = null;
+		}
+		this._mask = LEVEL.NONE;
+		this._onDrain = null;
+	}
+};
+//#endregion
 //#region src/components/js/grid.js
 var Grid = class {
 	constructor(canvas, comp, canvasDynamic = null) {
@@ -3758,15 +3830,12 @@ var Grid = class {
 		const { Hammer, Hamster } = await loadGestures();
 		if (this._destroyed) return;
 		this.hm = Hamster(this.canvasDynamic || this.canvas);
-		this._throttledWheel = utils_default.rafThrottle((delta, event) => {
-			this.zoomManager.mousezoom(-delta * 50, event);
-		});
 		this.hm.wheel((event, delta) => {
 			if (this.wmode !== "pass" && event.originalEvent && !(this.wmode === "click" && !this.$p.meta.activated)) {
 				event.originalEvent.preventDefault();
 				if (event.preventDefault) event.preventDefault();
 			}
-			this._throttledWheel(delta, event);
+			this._scheduleGesture(() => this.zoomManager.mousezoom(-delta * 50, event), LEVEL.REPOSITION);
 		});
 		let mc = this.mc = new Hammer.Manager(this.canvasDynamic || this.canvas);
 		let T = utils_default.is_mobile ? 10 : 0;
@@ -3798,21 +3867,9 @@ var Grid = class {
 			this.comp.$emit("cursor-changed", this._pooledCursorEvent);
 			this.comp.$emit("cursor-locked", true);
 		});
-		this._throttledPanmove = utils_default.rafThrottle((event) => {
-			if (utils_default.is_mobile) {
-				this.calc_offset();
-				this.renderer.propagate("mousemove", this.touch2mouse(event));
-			}
-			if (this.drug) {
-				this.panManager.mousedrag(this.drug.x + event.deltaX, this.drug.y + event.deltaY);
-				this._pooledCursorEvent.grid_id = this.id;
-				this._pooledCursorEvent.x = event.center.x + this.offset_x;
-				this._pooledCursorEvent.y = event.center.y + this.offset_y;
-				this._pooledCursorEvent.mode = void 0;
-				this.comp.$emit("cursor-changed", this._pooledCursorEvent);
-			} else if (this.cursor.mode === "aim") this.emit_cursor_coord(event);
+		mc.on("panmove", (event) => {
+			this._scheduleGesture(() => this._panmove_work(event), LEVEL.REPOSITION);
 		});
-		mc.on("panmove", (event) => this._throttledPanmove(event));
 		mc.on("panend", (event) => {
 			if (utils_default.is_mobile && this.drug) this.panManager.pan_fade(event);
 			this.drug = null;
@@ -3837,7 +3894,8 @@ var Grid = class {
 			this.pinch = null;
 		});
 		mc.on("pinch", (event) => {
-			if (this.pinch) this.zoomManager.pinchzoom(event.scale);
+			if (!this.pinch) return;
+			this._scheduleGesture(() => this.zoomManager.pinchzoom(event.scale), LEVEL.REPOSITION);
 		});
 		mc.on("press", (event) => {
 			if (!utils_default.is_mobile) return;
@@ -3949,14 +4007,34 @@ var Grid = class {
 	show_hide_layer(event) {
 		this.renderer.show_hide_layer(event);
 	}
-	update() {
-		this.renderer.update();
+	update(freshGridLayout) {
+		this.renderer.update(freshGridLayout);
 	}
 	markStaticDirty() {
 		this.renderer.markStaticDirty();
 	}
 	propagate(name, event) {
 		this.renderer.propagate(name, event);
+	}
+	_panmove_work(event) {
+		if (utils_default.is_mobile) {
+			this.calc_offset();
+			this.renderer.propagate("mousemove", this.touch2mouse(event));
+		}
+		if (this.drug) {
+			this.panManager.mousedrag(this.drug.x + event.deltaX, this.drug.y + event.deltaY);
+			this._pooledCursorEvent.grid_id = this.id;
+			this._pooledCursorEvent.x = event.center.x + this.offset_x;
+			this._pooledCursorEvent.y = event.center.y + this.offset_y;
+			this._pooledCursorEvent.mode = void 0;
+			this.comp.$emit("cursor-changed", this._pooledCursorEvent);
+		} else if (this.cursor.mode === "aim") this.emit_cursor_coord(event);
+	}
+	_scheduleGesture(work, level) {
+		this._pendingGesture = work;
+		if (this.comp && this.comp._invalidate && this.comp._invalidate(level)) return;
+		this._pendingGesture = null;
+		work();
 	}
 	change_range() {
 		if (!this.range.length || this.data.length < 2) return;
@@ -3977,6 +4055,7 @@ var Grid = class {
 		if (this.hm) this.hm.unwheel();
 		if (this._throttledWheel) this._throttledWheel.cancel();
 		if (this._throttledPanmove) this._throttledPanmove.cancel();
+		this._pendingGesture = null;
 		if (this._pressTimeout) clearTimeout(this._pressTimeout);
 		if (this._clickTimeout) clearTimeout(this._clickTimeout);
 		if (this._cursorEventPool && this._pooledCursorEvent) this._cursorEventPool.release(this._pooledCursorEvent);
@@ -4067,9 +4146,9 @@ var canvas_default = {
 				}
 			})].concat(props.hs || []));
 		},
-		redraw() {
+		redraw(freshGridLayout) {
 			if (!this.renderer) return;
-			this.renderer.update();
+			this.renderer.update(freshGridLayout);
 		},
 		redrawDynamic() {
 			if (!this.renderer) return;
@@ -5235,7 +5314,9 @@ function layout_cnv_cached(self, cache) {
 	const tLast = lb && t2s ? t2s(lb[0]) : "";
 	const tiTf = lay.ti_map ? lay.ti_map.tf : "";
 	const maxv = utils_default.maxAtIndex(sub, 5);
-	const key = `${lay.A},${lay.B},${lay.px_step},${lay.height},${n},${$p.tf},${$p.interval},${tiTf},${tFirst},${tLast},${lbKey},${maxv}`;
+	const tsv = lay.timeScale ? lay.timeScale.version : "";
+	const psv = lay.priceScale ? lay.priceScale.version : "";
+	const key = `${lay.A},${lay.B},${lay.px_step},${lay.height},${n},${$p.tf},${$p.interval},${tiTf},${tFirst},${tLast},${lbKey},${maxv},${tsv},${psv}`;
 	if (cache.key === key && cache.val) return cache.val;
 	const cnv = layout_cnv(self);
 	cache.key = key;
@@ -6941,6 +7022,7 @@ var _sfc_main$16 = {
 		Crosshair: _sfc_main$36,
 		KeyboardListener: _sfc_main$35
 	},
+	inject: { tvRenderScheduler: { default: null } },
 	created() {
 		this.layer_events = {
 			"new-grid-layer": (d) => this.new_layer(d),
@@ -7082,6 +7164,16 @@ var _sfc_main$16 = {
 		});
 	},
 	methods: {
+		_sched() {
+			const get = this.tvRenderScheduler;
+			return get ? get() : null;
+		},
+		_invalidate(level) {
+			const s = this._sched();
+			if (!s) return false;
+			s.invalidate(level);
+			return true;
+		},
 		new_layer(layer) {
 			if (!this.renderer) {
 				this.pendingLayers.push(layer);
@@ -7256,16 +7348,21 @@ var _sfc_main$16 = {
 		rangeKey(newKey, oldKey) {
 			if (!newKey || newKey === oldKey) return;
 			this.renderKey++;
+			const sched = this.tvRenderScheduler && this.tvRenderScheduler();
+			if (sched && sched._paintedRangeKey === newKey) return;
+			if (this._invalidate(LEVEL.REPOSITION)) return;
 			nextTick(() => this.redraw());
 		},
 		"cursor.x": function(newX) {
-			if (this.renderer && this.renderer.hasDualCanvas) return;
+			if (this._invalidate(LEVEL.CURSOR)) return;
 			if (this._cursorRafPending) return;
 			this._cursorRafPending = true;
 			requestAnimationFrame(() => {
 				this._cursorRafPending = false;
 				if (this.$props.cursor?.locked) return;
-				this.redraw();
+				const gr = this.renderer && this.renderer.renderer;
+				if (gr && gr.hasDualCanvas) gr.updateDynamic();
+				else this.redraw();
 			});
 		},
 		overlays: {
@@ -7301,17 +7398,20 @@ var _sfc_main$16 = {
 			deep: true
 		},
 		shaders(n, p) {
+			if (this._invalidate(LEVEL.FULL)) return;
 			this.redraw();
 		},
 		dataKey(newKey, oldKey) {
 			if (!newKey || newKey === oldKey) return;
 			this.renderKey++;
 			if (this.renderer) this.renderer.markStaticDirty();
+			if (this._invalidate(LEVEL.FULL)) return;
 			nextTick(() => this.redraw());
 		},
 		yTransformKey(newKey, oldKey) {
 			if (!newKey || newKey === oldKey) return;
 			this.renderKey++;
+			if (this._invalidate(LEVEL.FULL)) return;
 			nextTick(() => this.redraw());
 		}
 	},
@@ -8655,7 +8755,7 @@ var Section_default = /*#__PURE__*/ _plugin_vue_export_helper_default(_sfc_main$
 //#region src/components/js/botbar.js
 var { MINUTE15, MINUTE, HOUR: HOUR$1, DAY: DAY$1, WEEK: WEEK$1, MONTH: MONTH$1, YEAR: YEAR$1, MONTHMAP } = constants_default;
 var measureTextCache$1 = /* @__PURE__ */ new Map();
-var MAX_CACHE_SIZE$1 = 100;
+var MAX_CACHE_SIZE$3 = 100;
 var Botbar = class {
 	constructor(canvas, comp, canvasDynamic = null) {
 		this.canvas = canvas;
@@ -8675,7 +8775,7 @@ var Botbar = class {
 	measureTextCached(text) {
 		const key = `${this.ctx.font}|${text}`;
 		if (measureTextCache$1.has(key)) return measureTextCache$1.get(key);
-		if (measureTextCache$1.size >= MAX_CACHE_SIZE$1) {
+		if (measureTextCache$1.size >= MAX_CACHE_SIZE$3) {
 			const firstKey = measureTextCache$1.keys().next().value;
 			measureTextCache$1.delete(firstKey);
 		}
@@ -9177,79 +9277,274 @@ var datatrack_default = {
 	}
 };
 //#endregion
-//#region src/components/js/layout_fn.js
-function layout_fn_default(self, range) {
-	const ib = self.ti_map.ib;
-	const dt = range[1] - range[0];
-	const r = self.spacex / dt;
-	const ls = self.grid.logScale || false;
-	const t2screenCache = /* @__PURE__ */ new Map();
-	const $2screenCache = /* @__PURE__ */ new Map();
-	const screen2$Cache = /* @__PURE__ */ new Map();
-	const MAX_CACHE_SIZE = 2e3;
+//#region src/render/scales/time-scale.js
+var MAX_CACHE_SIZE$2 = 2e3;
+function createTimeScale(params) {
+	let ti_map = params.ti_map;
+	let ib = ti_map ? ti_map.ib : false;
+	let range = params.range;
+	let spacex = params.spacex;
+	let px_step = params.px_step;
+	let startx = params.startx;
+	let r = spacex / (range[1] - range[0]);
+	let version = 0;
+	const t2sCache = /* @__PURE__ */ new Map();
+	let cacheVer = -1;
 	let magnetCn = null;
 	let magnetTs = null;
-	const magnet_ts = (cn) => {
+	function ensureFresh() {
+		if (cacheVer !== version) {
+			t2sCache.clear();
+			cacheVer = version;
+		}
+	}
+	function magnet_ts(cn) {
 		if (cn !== magnetCn) {
 			magnetCn = cn;
 			magnetTs = cn.map((x) => x.raw[0]);
 		}
 		return magnetTs;
-	};
-	Object.assign(self, {
-		t2screen: (t) => {
-			let cached = t2screenCache.get(t);
+	}
+	return {
+		get version() {
+			return version;
+		},
+		get range() {
+			return range;
+		},
+		get spacex() {
+			return spacex;
+		},
+		get px_step() {
+			return px_step;
+		},
+		get startx() {
+			return startx;
+		},
+		get r() {
+			return r;
+		},
+		get ib() {
+			return ib;
+		},
+		get ti_map() {
+			return ti_map;
+		},
+		set(p) {
+			let changed = false;
+			if (p.range && (p.range[0] !== range[0] || p.range[1] !== range[1])) {
+				range = p.range;
+				changed = true;
+			}
+			if (p.spacex !== void 0 && p.spacex !== spacex) {
+				spacex = p.spacex;
+				changed = true;
+			}
+			if (p.px_step !== void 0 && p.px_step !== px_step) {
+				px_step = p.px_step;
+				changed = true;
+			}
+			if (p.startx !== void 0) startx = p.startx;
+			if (p.ti_map && p.ti_map !== ti_map) {
+				ti_map = p.ti_map;
+				ib = ti_map.ib;
+				changed = true;
+			}
+			if (changed) {
+				r = spacex / (range[1] - range[0]);
+				version++;
+			}
+			return changed;
+		},
+		t2screen(t) {
+			ensureFresh();
+			const cached = t2sCache.get(t);
 			if (cached !== void 0) return cached;
 			let tVal = t;
-			if (ib) tVal = self.ti_map.smth2i(t);
+			if (ib) tVal = ti_map.smth2i(t);
 			const result = Math.floor((tVal - range[0]) * r) - .5;
-			if (t2screenCache.size < MAX_CACHE_SIZE) t2screenCache.set(t, result);
+			if (t2sCache.size < MAX_CACHE_SIZE$2) t2sCache.set(t, result);
 			return result;
 		},
-		$2screen: (y) => {
-			let cached = $2screenCache.get(y);
-			if (cached !== void 0) return cached;
-			let yVal = y;
-			if (ls) yVal = math_default.log(y);
-			const result = Math.floor(yVal * self.A + self.B) - .5;
-			if ($2screenCache.size < MAX_CACHE_SIZE) $2screenCache.set(y, result);
-			return result;
+		screen2t(x) {
+			return range[0] + x / r;
 		},
-		t_magnet: (t) => {
-			if (ib) t = self.ti_map.smth2i(t);
-			const cn = self.candles || self.master_grid.candles;
+		t_magnet(t, cn) {
+			if (ib) t = ti_map.smth2i(t);
 			const arr = magnet_ts(cn);
 			const i = utils_default.nearest_a(t, arr)[0];
 			if (!cn[i]) return;
 			return Math.floor(cn[i].x) - .5;
 		},
-		screen2$: (y) => {
-			let cached = screen2$Cache.get(y);
-			if (cached !== void 0) return cached;
-			let result;
-			if (ls) result = math_default.exp((y - self.B) / self.A);
-			else result = (y - self.B) / self.A;
-			if (screen2$Cache.size < MAX_CACHE_SIZE) screen2$Cache.set(y, result);
-			return result;
-		},
-		screen2t: (x) => {
-			return range[0] + x / r;
-		},
-		$_magnet: (price) => {},
-		c_magnet: (t) => {
-			const cn = self.candles || self.master_grid.candles;
+		c_magnet(t, cn) {
 			const arr = magnet_ts(cn);
 			return cn[utils_default.nearest_a(t, arr)[0]];
 		},
-		c_magnet_i: (t) => {
-			const arr = magnet_ts(self.candles || self.master_grid.candles);
+		c_magnet_i(t, cn) {
+			const arr = magnet_ts(cn);
 			return utils_default.nearest_a(t, arr)[0];
 		},
+		clearCache() {
+			t2sCache.clear();
+			cacheVer = version;
+		}
+	};
+}
+//#endregion
+//#region src/render/scales/price-scale.js
+var MAX_CACHE_SIZE$1 = 2e3;
+function createPriceScale(params) {
+	let A = params.A;
+	let B = params.B;
+	let hi = params.hi;
+	let lo = params.lo;
+	let height = params.height;
+	let logScale = params.logScale || false;
+	let version = 0;
+	const $2sCache = /* @__PURE__ */ new Map();
+	const s2$Cache = /* @__PURE__ */ new Map();
+	let cacheVer = -1;
+	function ensureFresh() {
+		if (cacheVer !== version) {
+			$2sCache.clear();
+			s2$Cache.clear();
+			cacheVer = version;
+		}
+	}
+	return {
+		get version() {
+			return version;
+		},
+		get A() {
+			return A;
+		},
+		get B() {
+			return B;
+		},
+		get hi() {
+			return hi;
+		},
+		get lo() {
+			return lo;
+		},
+		get height() {
+			return height;
+		},
+		get logScale() {
+			return logScale;
+		},
+		set(p) {
+			let changed = false;
+			if (p.A !== void 0 && p.A !== A) {
+				A = p.A;
+				changed = true;
+			}
+			if (p.B !== void 0 && p.B !== B) {
+				B = p.B;
+				changed = true;
+			}
+			if (p.hi !== void 0) hi = p.hi;
+			if (p.lo !== void 0) lo = p.lo;
+			if (p.height !== void 0) height = p.height;
+			if (p.logScale !== void 0 && p.logScale !== logScale) {
+				logScale = p.logScale;
+				changed = true;
+			}
+			if (changed) version++;
+			return changed;
+		},
+		recompute(visible, expand) {
+			if (logScale || !visible || visible.length < 2) return null;
+			let h = -Infinity, l = Infinity;
+			for (let i = 0, n = visible.length; i < n; i++) {
+				const x = visible[i];
+				if (x[2] > h) h = x[2];
+				if (x[3] < l) l = x[3];
+			}
+			if (!isFinite(h) || !isFinite(l)) return null;
+			const exp = expand || 0;
+			let nhi = h + (h - l) * exp;
+			let nlo = l - (h - l) * exp;
+			if (nhi === nlo) {
+				if (nhi === 0) {
+					nhi = 1;
+					nlo = -1;
+				}
+				const pad = Math.abs(nhi) * .05 || 1;
+				nhi += pad;
+				nlo -= pad;
+			}
+			const nA = -height / (nhi - nlo);
+			const nB = -nhi * nA;
+			return {
+				A: nA,
+				B: nB,
+				hi: nhi,
+				lo: nlo,
+				changed: nA !== A || nB !== B
+			};
+		},
+		$2screen(y) {
+			ensureFresh();
+			const cached = $2sCache.get(y);
+			if (cached !== void 0) return cached;
+			let yVal = y;
+			if (logScale) yVal = math_default.log(y);
+			const result = Math.floor(yVal * A + B) - .5;
+			if ($2sCache.size < MAX_CACHE_SIZE$1) $2sCache.set(y, result);
+			return result;
+		},
+		screen2$(y) {
+			ensureFresh();
+			const cached = s2$Cache.get(y);
+			if (cached !== void 0) return cached;
+			let result;
+			if (logScale) result = math_default.exp((y - B) / A);
+			else result = (y - B) / A;
+			if (s2$Cache.size < MAX_CACHE_SIZE$1) s2$Cache.set(y, result);
+			return result;
+		},
+		clearCache() {
+			$2sCache.clear();
+			s2$Cache.clear();
+			cacheVer = version;
+		}
+	};
+}
+//#endregion
+//#region src/components/js/layout_fn.js
+function layout_fn_default(self, range, timeScale, priceScale) {
+	const ts = timeScale || createTimeScale({
+		ti_map: self.ti_map,
+		range,
+		spacex: self.spacex,
+		px_step: self.px_step,
+		startx: self.startx
+	});
+	const ps = priceScale || createPriceScale({
+		A: self.A,
+		B: self.B,
+		hi: self.$_hi,
+		lo: self.$_lo,
+		height: self.height,
+		logScale: self.grid && self.grid.logScale || false
+	});
+	self.timeScale = ts;
+	self.priceScale = ps;
+	const magnetCn = () => self.candles || self.master_grid.candles;
+	Object.assign(self, {
+		t2screen: (t) => ts.t2screen(t),
+		$2screen: (y) => ps.$2screen(y),
+		t_magnet: (t) => ts.t_magnet(t, magnetCn()),
+		screen2$: (y) => ps.screen2$(y),
+		screen2t: (x) => ts.screen2t(x),
+		$_magnet: (price) => {},
+		c_magnet: (t) => ts.c_magnet(t, magnetCn()),
+		c_magnet_i: (t) => ts.c_magnet_i(t, magnetCn()),
 		data_magnet: (t) => {},
 		clearCoordCaches: () => {
-			t2screenCache.clear();
-			$2screenCache.clear();
-			screen2$Cache.clear();
+			ts.clearCache();
+			ps.clearCache();
 		}
 	});
 	return self;
@@ -9636,7 +9931,21 @@ function GridMaker(id, params, master_grid = null) {
 			apply_sizes();
 			if (master_grid) self.master_grid = master_grid;
 			self.grid = grid;
-			return layout_fn_default(self, range);
+			const priceScale = createPriceScale({
+				A: self.A,
+				B: self.B,
+				hi: self.$_hi,
+				lo: self.$_lo,
+				height,
+				logScale: ls
+			});
+			return layout_fn_default(self, range, master_grid && master_grid.timeScale ? master_grid.timeScale : createTimeScale({
+				ti_map: self.ti_map,
+				range,
+				spacex: self.spacex,
+				px_step: self.px_step,
+				startx: self.startx
+			}), priceScale);
 		},
 		get_layout: () => self,
 		set_sidebar: (v) => self.sb = v,
@@ -9648,7 +9957,8 @@ function GridMaker(id, params, master_grid = null) {
 var layoutCache = {
 	key: "",
 	candles: null,
-	volume: null
+	volume: null,
+	meta: null
 };
 function hasAnyProperty(obj) {
 	for (const key in obj) if (Object.prototype.hasOwnProperty.call(obj, key)) return true;
@@ -9723,18 +10033,33 @@ function Layout(params) {
 			self.volume = layoutCache.volume;
 			return;
 		}
+		const candleW = self.px_step * $p.config.CANDLEW;
+		const A = self.A;
+		const B = self.B;
+		const lastIdx = sub.length - 1;
+		let byRaw = null;
+		const meta = layoutCache.meta;
+		if (layoutCache.candles && meta && meta.A === A && meta.B === B && meta.px_step === self.px_step && meta.interval === interval && meta.height === $p.height) {
+			const old = layoutCache.candles;
+			const map = /* @__PURE__ */ new Map();
+			for (let i = 0; i < old.length; i++) map.set(old[i].raw, old[i]);
+			let kept = 0;
+			for (let i = 0; i < sub.length; i++) if (i !== lastIdx && map.has(sub[i])) kept++;
+			if (sub.length - kept + (old.length - kept) <= .05 * sub.length + 1) byRaw = map;
+		}
 		let maxv = utils_default.maxAtIndex(sub, 5);
 		let vs = maxv > 0 ? $p.config.VOLSCALE * $p.height / maxv : 0;
 		let x1, x2, mid, prev = void 0;
 		let splitter = self.px_step > 5 ? 1 : 0;
 		let hf_px_step = self.px_step * .5;
-		const candleW = self.px_step * $p.config.CANDLEW;
-		const A = self.A;
-		const B = self.B;
 		for (let i = 0; i < sub.length; i++) {
 			let p = sub[i];
 			mid = self.t2screen(p[0]) + .5;
-			self.candles.push(mgrid.logScale ? log_scale_default.candle(self, mid, p, $p) : {
+			const cand = byRaw && i !== lastIdx ? byRaw.get(p) : void 0;
+			self.candles.push(cand !== void 0 ? {
+				...cand,
+				x: mid
+			} : mgrid.logScale ? log_scale_default.candle(self, mid, p, $p) : {
 				x: mid,
 				w: candleW,
 				o: Math.floor(p[1] * A + B),
@@ -9760,6 +10085,13 @@ function Layout(params) {
 		layoutCache.key = cacheKey;
 		layoutCache.candles = self.candles;
 		layoutCache.volume = self.volume;
+		layoutCache.meta = {
+			A,
+			B,
+			px_step: self.px_step,
+			interval,
+			height: $p.height
+		};
 	}
 	const hs = grid_hs();
 	let specs = {
@@ -9969,6 +10301,60 @@ var _sfc_main$6 = {
 					this.update_layout();
 					this.$emit("range-changed", r);
 					if (this.$props.ib) this.save_data_t();
+					if (this._scheduler && !this._inDrain) this._scheduler.invalidate(LEVEL.REPOSITION);
+				},
+				_render_drain(level) {
+					const secs = this.$refs.sec;
+					if (!secs) return;
+					this._inDrain = true;
+					try {
+						for (let i = 0; i < secs.length; i++) {
+							const gv = secs[i] && secs[i].$refs.grid;
+							const g = gv && gv.renderer;
+							if (g && g._pendingGesture) {
+								const work = g._pendingGesture;
+								g._pendingGesture = null;
+								try {
+									work();
+								} catch (e) {
+									console.error("[render-drain] gesture work failed:", e);
+								}
+							}
+						}
+						const grids = this.chartLayout && this.chartLayout.grids;
+						const cursorOnly = level <= LEVEL.CURSOR;
+						for (let i = 0; i < secs.length; i++) {
+							const gv = secs[i] && secs[i].$refs.grid;
+							if (!gv) continue;
+							const fresh = grids && grids[i];
+							try {
+								if (cursorOnly) {
+									const r = gv.renderer && gv.renderer.renderer;
+									if (r && r.hasDualCanvas) r.updateDynamic();
+									else if (gv.redraw) gv.redraw(fresh);
+								} else if (gv.redraw) gv.redraw(fresh);
+							} catch (e) {
+								console.error("[render-drain] grid paint failed:", e);
+							}
+						}
+						if (!cursorOnly && this._scheduler) {
+							const r = this.range;
+							this._scheduler._paintedRangeKey = r && r.length >= 2 ? `${r[0]},${r[1]}` : "";
+						}
+					} finally {
+						this._inDrain = false;
+					}
+				},
+				repositionPass(visible) {
+					if (this.offsub && this.offsub.length) return false;
+					const lay = this.chartLayout;
+					const g0 = lay && lay.grids && lay.grids[0];
+					const ps = g0 && g0.priceScale;
+					if (!ps) return false;
+					if (g0.grid && g0.grid.logScale) return false;
+					const cand = ps.recompute(visible, this.$props.config.EXPAND);
+					if (!cand) return false;
+					return !cand.changed;
 				},
 				clamp_range(r) {
 					const ohlcv = this.ohlcv;
@@ -10222,6 +10608,13 @@ var _sfc_main$6 = {
 					if (this._hook_data) this.ce("?chart-data", nw);
 					this.update_last_values();
 					this.rerender++;
+					if (this._scheduler) this._scheduler.invalidate(LEVEL.FULL);
+				}
+			},
+			beforeUnmount() {
+				if (this._scheduler) {
+					this._scheduler.destroy();
+					this._scheduler = null;
 				}
 			}
 		},
@@ -10476,6 +10869,10 @@ var _sfc_main$6 = {
 		this.updater = new CursorUpdater(this);
 		this.update_last_values();
 		this.init_shaders(this.skin);
+		this._scheduler = new RenderScheduler((level) => this._render_drain(level));
+	},
+	provide() {
+		return { tvRenderScheduler: () => this._scheduler || null };
 	},
 	methods: {
 		section_props(i) {

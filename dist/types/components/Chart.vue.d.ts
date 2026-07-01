@@ -128,6 +128,8 @@ declare const __VLS_export: import("vue").DefineComponent<{
 } | {
     methods: {
         range_changed(r: any): void;
+        _render_drain(level: any): void;
+        repositionPass(visible: any): boolean;
         clamp_range(r: any): any;
         goto(t: any): void;
         setRange(t1: any, t2: any): void;
@@ -181,6 +183,7 @@ declare const __VLS_export: import("vue").DefineComponent<{
         forced_tf(n: any, p: any): void;
         dataHashKey(newKey: any, oldKey: any): void;
     };
+    beforeUnmount(): void;
 } | {
     methods: {
         on_resize_grids(e: any): void;
@@ -327,6 +330,8 @@ declare const __VLS_export: import("vue").DefineComponent<{
             dataKey(): string;
             yTransformKey(): string;
         }, {
+            _sched(): any;
+            _invalidate(level: any): boolean;
             new_layer(layer: any): void;
             del_layer(layer: any): void;
             on_dblclick(e: any): void;
@@ -351,7 +356,7 @@ declare const __VLS_export: import("vue").DefineComponent<{
                 create_canvas(h_arg: any, id: any, props: any): import("vue").VNode<import("vue").RendererNode, import("vue").RendererElement, {
                     [key: string]: any;
                 }>;
-                redraw(): void;
+                redraw(freshGridLayout: any): void;
                 redrawDynamic(): void;
             };
             computed: {
@@ -440,7 +445,7 @@ declare const __VLS_export: import("vue").DefineComponent<{
                 create_canvas(h_arg: any, id: any, props: any): import("vue").VNode<import("vue").RendererNode, import("vue").RendererElement, {
                     [key: string]: any;
                 }>;
-                redraw(): void;
+                redraw(freshGridLayout: any): void;
                 redrawDynamic(): void;
             };
             computed: {
@@ -590,7 +595,7 @@ declare const __VLS_export: import("vue").DefineComponent<{
             create_canvas(h_arg: any, id: any, props: any): import("vue").VNode<import("vue").RendererNode, import("vue").RendererElement, {
                 [key: string]: any;
             }>;
-            redraw(): void;
+            redraw(freshGridLayout: any): void;
             redrawDynamic(): void;
         };
         computed: {
@@ -653,4 +658,6 @@ declare const __VLS_export: import("vue").DefineComponent<{
         colors?: any;
         layout?: any;
     }> & Readonly<{}>, {}, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
-}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+}, {}, string, () => {
+    tvRenderScheduler: () => never;
+}, true, {}, any>;
