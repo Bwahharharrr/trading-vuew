@@ -1,0 +1,98 @@
+/**
+ * Group `auth_wallet_balances[]` by `class` into `[{ class, wallets }]`, in the
+ * canonical WALLET_CLASS_ORDER, dropping empty groups. Wallet objects are passed
+ * through UNCHANGED — balance / available stay decimal strings.
+ */
+export function groupWalletBalancesByClass(balances: any): {
+    class: string;
+    wallets: any;
+}[];
+/**
+ * Classify a strategy/allocation status string into `{ status, raw, known, tone,
+ * group, isPosition, isHalted }`. `tone` drives colour, `group` buckets the row
+ * (flat / position / alert / halted), `isPosition` marks long|short, `isHalted`
+ * marks paused|bust_locked. Unknown / null → known:false, tone/group 'unknown'.
+ */
+export function classifyStrategyStatus(raw: any): {
+    status: string;
+    raw: any;
+    known: boolean;
+    tone: any;
+    group: any;
+    isPosition: any;
+    isHalted: any;
+};
+/**
+ * Classify a runtime READINESS state (e.g. 'Ready') — the delivery/health axis,
+ * separate from the strategy status above. Returns `{ state, ready, tone }`.
+ */
+export function classifyRuntimeReadiness(state: any): {
+    state: string;
+    ready: boolean;
+    tone: string;
+};
+/**
+ * Classify the RUNTIME-level allocation_strategy_status ROLLUP (e.g. 'active' /
+ * 'inactive') — a coarse per-runtime health axis, DISTINCT from the per-ticker
+ * waiting/long/short/… status (classifyStrategyStatus) and the readiness state.
+ * Kept separate so a healthy 'active' rollup renders positively instead of the
+ * neutral 'unknown' tone the per-ticker classifier would give it.
+ */
+export function classifyRuntimeStrategyRollup(raw: any): {
+    status: string;
+    known: boolean;
+    tone: string;
+};
+/**
+ * Group `overlays[]` into `{ decision, fill, order, allocation, control, other }`,
+ * each a list of normalized markers `{ timestamp_ms, kind, label, status, source,
+ * decision_id, symbol, ticker_id, timeframe, order_status_counts }` in input
+ * order. Rows without a `timestamp_ms` are skipped; unknown kinds fold to `other`.
+ */
+export function overlaysToMarkers(overlays: any): {
+    decision: never[];
+    fill: never[];
+    order: never[];
+    allocation: never[];
+    control: never[];
+    other: never[];
+};
+/**
+ * Split an `order_status_counts` map into `{ local:{ queued }, dispatched:{…},
+ * localTotal, dispatchedTotal, total }`. Counts are integers → coerced with a
+ * safe Number (missing → 0); this is NOT money, so no precision is at stake.
+ */
+export function splitOrderStatusCounts(counts: any): {
+    local: {
+        queued: number;
+    };
+    dispatched: {};
+    localTotal: number;
+    dispatchedTotal: number;
+    total: number;
+};
+/**
+ * True when a live-operator approval has expired (expires_at_ms < now). A missing
+ * approval, or one without a numeric expiry, is treated as NOT stale (there is
+ * nothing to expire). `now` is injectable so the check is pure/testable.
+ */
+export function isApprovalStale(approval: any, now?: number): boolean;
+/**
+ * Summarize a `live_operator_approval` for display: `{ present, stale,
+ * expiresAtMs, approvedAtMs, maxOrderNotional, tradeTimeframe, contextTimeframes,
+ * symbols }`. `maxOrderNotional` stays a DECIMAL STRING (verbatim). `stale` flags
+ * an expired approval (expires_at_ms < now).
+ */
+export function approvalStatus(approval: any, now?: number): {
+    present: boolean;
+    stale: boolean;
+    expiresAtMs: any;
+    approvedAtMs: any;
+    maxOrderNotional: any;
+    tradeTimeframe: any;
+    contextTimeframes: any;
+    symbols: any;
+};
+export const WALLET_CLASS_ORDER: string[];
+export const OVERLAY_KINDS: string[];
+export const DISPATCHED_STATUS_KEYS: string[];

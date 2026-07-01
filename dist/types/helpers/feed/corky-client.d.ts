@@ -157,6 +157,26 @@ export class CorkyClient {
     /** Normalized report/account overlays → resolves the full event. Pass
      *  start_ms/end_ms to window and max_points to downsample equity_curve. */
     getBacktestReportOverlays(opts?: {}): Promise<any>;
+    /** List strategy runtimes → resolves the `runtimes` array. */
+    listStrategyRuntimes(): Promise<any>;
+    /** Inspect one runtime → resolves the `runtime` object. */
+    getStrategyRuntime(runtime_id: any): Promise<any>;
+    /** Inspect one ticker within a runtime → resolves the `ticker` object. */
+    getStrategyTicker(runtime_id: any, ticker_id: any): Promise<any>;
+    /** Recent decisions for a runtime → resolves the `decisions` array. Optional
+     *  { ticker_id } filters to one ticker; { limit } caps the count. */
+    listStrategyDecisions(runtime_id: any, opts?: {}): Promise<any>;
+    /** Strategy chart overlays (decision/fill/order/allocation markers) →
+     *  resolves the `overlays` array. Optional { timeframe, start_ms, end_ms }
+     *  window the result. */
+    getStrategyChartOverlays(runtime_id: any, ticker_id: any, opts?: {}): Promise<any>;
+    /**
+     * Stream runtime snapshots. Resolves with the FIRST `strategy_runtime_update`;
+     * register `onSubscription(subscription_id, …)` (or pass `onEvent`) for the
+     * ongoing FULL-REPLACEMENT updates (apply by increasing `sequence`). Scope the
+     * stream by `runtime_id` OR `strategy` (at least one is required).
+     */
+    subscribeStrategyRuntime(opts?: {}): Promise<any>;
     _nextRequestId(): string;
     _request(command: any, meta?: {}): Promise<any>;
     _send(frame: any): void;

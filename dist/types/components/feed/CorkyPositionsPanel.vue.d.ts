@@ -69,6 +69,10 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         type: ObjectConstructor;
         default: () => {};
     };
+    strategy: {
+        type: ObjectConstructor;
+        default: () => {};
+    };
 }>, {}, {}, {
     rows(): unknown[];
     activeSearchTab(): {} | null;
@@ -85,7 +89,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     signClass(dec: any): "" | "pos" | "neg";
     pctText(dec: any): string;
     fmtTime(ms: any): string;
-}, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "refresh" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail")[], "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "refresh" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+}, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("refresh" | "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail" | "strategy-select-runtime" | "strategy-refresh")[], "refresh" | "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail" | "strategy-select-runtime" | "strategy-refresh", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
     height: {
         type: NumberConstructor;
         default: number;
@@ -154,7 +158,12 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         type: ObjectConstructor;
         default: () => {};
     };
+    strategy: {
+        type: ObjectConstructor;
+        default: () => {};
+    };
 }>> & Readonly<{
+    onRefresh?: ((...args: any[]) => any) | undefined;
     "onUpdate:open"?: ((...args: any[]) => any) | undefined;
     "onUpdate:maximized"?: ((...args: any[]) => any) | undefined;
     "onUpdate:active-tab"?: ((...args: any[]) => any) | undefined;
@@ -162,7 +171,6 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     "onSelect-position"?: ((...args: any[]) => any) | undefined;
     "onAudit-position"?: ((...args: any[]) => any) | undefined;
     "onLoad-more"?: ((...args: any[]) => any) | undefined;
-    onRefresh?: ((...args: any[]) => any) | undefined;
     "onResize-start"?: ((...args: any[]) => any) | undefined;
     "onRun-search"?: ((...args: any[]) => any) | undefined;
     "onCancel-search"?: ((...args: any[]) => any) | undefined;
@@ -178,8 +186,11 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     "onBt-select-trade"?: ((...args: any[]) => any) | undefined;
     "onBt-select-candidate"?: ((...args: any[]) => any) | undefined;
     "onBt-close-detail"?: ((...args: any[]) => any) | undefined;
+    "onStrategy-select-runtime"?: ((...args: any[]) => any) | undefined;
+    "onStrategy-refresh"?: ((...args: any[]) => any) | undefined;
 }>, {
     error: string;
+    strategy: Record<string, any>;
     height: number;
     loading: boolean;
     open: boolean;
@@ -831,5 +842,129 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
             }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
         }, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
     }, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+    CorkyStrategyPanel: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
+        runtimes: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
+        selectedRuntimeId: {
+            type: StringConstructor;
+            default: string;
+        };
+        decisions: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
+        loading: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        error: {
+            type: StringConstructor;
+            default: null;
+        };
+        streaming: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        now: {
+            type: NumberConstructor;
+            default: number;
+        };
+    }>, {}, {}, {
+        activeRuntimeId(): any;
+        selectedRuntime(): {} | null;
+        walletGroups(): {
+            class: string;
+            wallets: any;
+        }[];
+        approval(): {
+            present: boolean;
+            stale: boolean;
+            expiresAtMs: any;
+            approvedAtMs: any;
+            maxOrderNotional: any;
+            tradeTimeframe: any;
+            contextTimeframes: any;
+            symbols: any;
+        };
+        orderSplit(): {
+            local: {
+                queued: number;
+            };
+            dispatched: {};
+            localTotal: number;
+            dispatchedTotal: number;
+            total: number;
+        };
+        dispatchedKeys(): string[];
+        tickerRows(): any;
+        decisionGroups(): any[];
+    }, {
+        readiness(state: any): {
+            state: string;
+            ready: boolean;
+            tone: string;
+        };
+        statusClasses(raw: any): string[];
+        statusLabel(raw: any): string;
+        rollupClasses(raw: any): string[];
+        dash(v: any): any;
+        dash0(v: any): any;
+        boolText(v: any): "—" | "yes" | "no";
+        gateClass(ok: any): "" | "pos" | "neg";
+        signClass(dec: any): "" | "pos" | "neg";
+        numOr0(v: any): number;
+        orderCountsTitle(split: any): string;
+        intentsTitle(intents: any): string;
+        checksTitle(checks: any): string;
+        risksFailed(checks: any): boolean;
+        deltasTitle(deltas: any): string;
+        claimsTitle(claims: any): string;
+        outcomeClass(outcome: any): "" | "neg" | "act";
+        shortFp(fp: any): string;
+        _symbolFromTickerId(id: any): any;
+        fmtTime(ms: any): string;
+    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("select-runtime" | "refresh")[], "select-runtime" | "refresh", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+        runtimes: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
+        selectedRuntimeId: {
+            type: StringConstructor;
+            default: string;
+        };
+        decisions: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
+        loading: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        error: {
+            type: StringConstructor;
+            default: null;
+        };
+        streaming: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        now: {
+            type: NumberConstructor;
+            default: number;
+        };
+    }>> & Readonly<{
+        "onSelect-runtime"?: ((...args: any[]) => any) | undefined;
+        onRefresh?: ((...args: any[]) => any) | undefined;
+    }>, {
+        error: string;
+        loading: boolean;
+        runtimes: unknown[];
+        selectedRuntimeId: string;
+        decisions: unknown[];
+        streaming: boolean;
+        now: number;
+    }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
 }, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
 import { newTabIntent } from '../../helpers/open-intent.js';
