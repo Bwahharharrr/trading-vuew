@@ -10,7 +10,7 @@ import {
   classifyStrategyStatus, classifyRuntimeReadiness,
   OVERLAY_KINDS, overlaysToMarkers,
   DISPATCHED_STATUS_KEYS, splitOrderStatusCounts,
-  isApprovalStale, approvalStatus,
+  isApprovalStale, approvalStatus, fmtDecimal,
 } from '../../src/helpers/feed/corky-strategy-transforms.js'
 
 import runtimesFx from '../fixtures/corky/strategy/list_strategy_runtimes.json'
@@ -23,6 +23,40 @@ const liveRuntime = runtimesFx.event.runtimes.find((r) => r.runtime_id === 'v8-t
 const overlays = overlaysFx.event.overlays
 
 // ── wallet balances grouped by class ──────────────────────────────────────────
+describe('fmtDecimal — clean decimal display (never float-parses)', () => {
+  it('drops unnecessary trailing precision', () => {
+    expect(fmtDecimal('0.0000')).toBe('0')
+    expect(fmtDecimal('1.2500')).toBe('1.25')
+    expect(fmtDecimal('1617.080000')).toBe('1,617.08')
+    expect(fmtDecimal('100.00')).toBe('100')
+    expect(fmtDecimal('0.15624')).toBe('0.15624')
+  })
+  it('groups the integer part with thousands separators (opt-out via group:false)', () => {
+    expect(fmtDecimal('10000')).toBe('10,000')
+    expect(fmtDecimal('1234567.5')).toBe('1,234,567.5')
+    expect(fmtDecimal('10000', { group: false })).toBe('10000')
+  })
+  it('handles negatives + strips redundant leading zeros', () => {
+    expect(fmtDecimal('-5.50')).toBe('-5.5')
+    expect(fmtDecimal('-0.0')).toBe('0')          // negative zero → 0
+    expect(fmtDecimal('007.10')).toBe('7.1')
+    expect(fmtDecimal('.5')).toBe('0.5')
+  })
+  it('preserves arbitrary precision — no float round-trip', () => {
+    // a 28-digit price would lose precision under Number(); string ops keep it.
+    expect(fmtDecimal('0.1234567890123456789012345678')).toBe('0.1234567890123456789012345678')
+    expect(fmtDecimal('123456789012345678901234567890')).toBe('123,456,789,012,345,678,901,234,567,890')
+  })
+  it('null / empty → dash; non-numeric values pass through verbatim', () => {
+    expect(fmtDecimal(null)).toBe('—')
+    expect(fmtDecimal('')).toBe('—')
+    expect(fmtDecimal('  ')).toBe('—')
+    expect(fmtDecimal(undefined, { dash: 'n/a' })).toBe('n/a')
+    expect(fmtDecimal('waiting')).toBe('waiting')     // label → untouched
+    expect(fmtDecimal('1-2')).toBe('1-2')             // range → untouched
+  })
+})
+
 describe('groupWalletBalancesByClass', () => {
   it('groups the live runtime wallets by class in canonical order, verbatim', () => {
     const groups = groupWalletBalancesByClass(liveRuntime.auth_wallet_balances)

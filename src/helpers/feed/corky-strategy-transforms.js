@@ -16,6 +16,40 @@
 // COUNTS and epoch-ms timestamps. Callers may Number() a decimal string later for
 // SORT / COLOUR only — never for display.
 
+// ── decimal-string display formatting (NEVER float-parses) ───────────────────
+/**
+ * Format a decimal STRING for display: drop unnecessary trailing precision
+ * (`0.0000` → `0`, `1.2500` → `1.25`, `1617.080000` → `1,617.08`) and group the
+ * integer part with thousands separators. PURE STRING MANIPULATION — the value is
+ * never Number()-parsed, so arbitrary-precision decimals are preserved exactly.
+ *
+ * - null / '' / whitespace → '—'
+ * - a value that isn't a plain decimal number is returned verbatim (never mangled)
+ * - `opts.group === false` skips the thousands separators
+ *
+ * @param {string|number|null|undefined} raw
+ * @param {{group?: boolean, dash?: string}} [opts]
+ * @returns {string}
+ */
+export function fmtDecimal(raw, opts = {}) {
+  const dash = opts.dash != null ? opts.dash : '—'
+  if (raw == null) return dash
+  const t = String(raw).trim()
+  if (t === '') return dash
+  // Only a plain (optionally signed) decimal is reformatted; anything else
+  // (ranges, labels, hex, etc.) passes through untouched.
+  if (!/^-?\d*\.?\d*$/.test(t) || !/\d/.test(t)) return t
+  const neg = t[0] === '-'
+  let body = neg ? t.slice(1) : t
+  let [int = '', frac = ''] = body.split('.')
+  frac = frac.replace(/0+$/, '')             // drop trailing zeros
+  int = int.replace(/^0+(?=\d)/, '')          // strip leading zeros, keep one
+  if (int === '') int = '0'
+  if (opts.group !== false) int = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  const out = frac ? `${int}.${frac}` : int
+  return (neg && out !== '0') ? `-${out}` : out
+}
+
 // ── wallet balances, grouped by class ────────────────────────────────────────
 // The gateway tags each wallet with a `class`: exchange / margin / funding /
 // derivative / other. Group verbatim (no field is touched) into that canonical
