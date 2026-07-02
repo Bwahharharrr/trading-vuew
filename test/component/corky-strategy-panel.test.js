@@ -103,24 +103,24 @@ describe('CorkyStrategyPanel — Summary tab', () => {
     })
 })
 
-describe('CorkyStrategyPanel — Balances tab (wallet → allocation → tickers)', () => {
-    test('renders a card per wallet; the allocation wallet (exchange TESTUSD) is flagged + carries the pool', async () => {
+describe('CorkyStrategyPanel — Balances tab (auth wallets + wallet allocation tree)', () => {
+    test('lists auth wallets grouped by class; the legacy allocation tree is a single TESTUSD card', async () => {
         const w = await tab(mountPanel(), 'Balances')
-        const wallets = w.findAll('.sr-wallet')
-        expect(wallets.length).toBe(liveRuntime.auth_wallet_balances.length)   // 8 wallets, one card each
+        // auth wallets grouped by class (exchange / margin / funding) — every wallet row shows.
+        const rows = w.findAll('.sr-wtable tbody tr')
+        expect(rows).toHaveLength(liveRuntime.auth_wallet_balances.length)   // 8 balances across classes
+        expect(w.findAll('.sr-wclass-grp').length).toBeGreaterThanOrEqual(3) // exchange, margin, funding
+        expect(w.text()).toContain('7,989.6614248')       // exchange TESTUSD balance (grouped)
+        // wallet allocation tree — no wallet_allocations[] on this older fixture → ONE
+        // synthesized card (allocation_quote_currency) CLEARLY MARKED legacy / inferred.
         const alloc = w.find('.sr-wallet.alloc')
         expect(alloc.exists()).toBe(true)
         expect(alloc.find('.sym').text()).toBe('TESTUSD')
-        // the allocation pool block + formatted balance (grouped, trailing zeros gone)
-        expect(alloc.text()).toContain('STRATEGY ALLOCATION')
-        expect(alloc.text()).toContain('7,989.6614248')       // exchange TESTUSD balance
+        expect(w.find('.sr-body .sr-legacy-tag').text().toLowerCase()).toContain('legacy')
         expect(alloc.text()).toContain('8,000.0003305718272') // observed (pool)
-        // a NON-allocation wallet shows no ticker table
-        const funding = w.findAll('.sr-wallet').find((x) => x.text().includes('funding'))
-        expect(funding.find('.sr-alloc').exists()).toBe(false)
     })
 
-    test('the allocation wallet nests the ticker allocations, decimals formatted + precision preserved', async () => {
+    test('the allocation card nests the ticker claim rows, decimals formatted + precision preserved', async () => {
         const w = await tab(mountPanel(), 'Balances')
         const rows = w.findAll('.sr-wallet.alloc .sr-alloc tbody tr')
         expect(rows).toHaveLength(liveRuntime.ticker_allocations.length)   // 2
@@ -129,29 +129,39 @@ describe('CorkyStrategyPanel — Balances tab (wallet → allocation → tickers
         expect(btc.text()).toContain('60,281.158738234545917069447978')
     })
 
-    test('waiting vs long allocations get DISTINCT status badges', async () => {
+    test('waiting vs long claims get DISTINCT ticker-status style badges', async () => {
         const w = await tab(mountPanel(), 'Balances')
         const badges = w.findAll('.sr-wallet.alloc .st-badge')
         const waiting = badges.find((b) => b.text() === 'waiting')
         const long = badges.find((b) => b.text() === 'long')
-        expect(waiting.classes()).toContain('st-waiting')
-        expect(long.classes()).toContain('st-long')
+        expect(waiting.classes()).toContain('sts-muted-grey')
+        expect(long.classes()).toContain('sts-positive-green')
         expect(waiting.classes()).not.toEqual(long.classes())
     })
 
-    test('every risk status (waiting…capital_shortfall) is visually distinct', async () => {
+    test('ticker-status styles: long/short/waiting are distinct; the attention family (paused/degraded/capital_shortfall) shares one style; bust_locked is lockout', async () => {
         const statuses = ['waiting', 'long', 'short', 'paused', 'degraded', 'bust_locked', 'capital_shortfall']
         const ticker_allocations = statuses.map((status, i) => ({
             ticker_id: `V:t${i}:TESTUSD`, status, allocated_equity: '0', available_cash: '0',
             reserved_cash: '0', locked_margin: '0', position_quantity: '0', realized_pnl: '0',
             unrealized_pnl: '0', fees_paid: '0', last_event: 'x',
         }))
-        const rt = { ...liveRuntime, ticker_allocations, ticker_orders: [] }
+        const rt = { ...liveRuntime, wallet_allocations: undefined, ticker_allocations, ticker_orders: [] }
         const w = await tab(mountPanel({ runtimes: [rt], selectedRuntimeId: rt.runtime_id }), 'Balances')
         const badges = w.findAll('.sr-wallet.alloc .st-badge')
         expect(badges).toHaveLength(statuses.length)
-        const keys = badges.map((b) => b.classes().slice().sort().join('|'))
-        expect(new Set(keys).size).toBe(statuses.length)
+        // badge TEXT distinguishes every status.
+        expect(badges.map((b) => b.text())).toEqual(statuses)
+        // style families: long/short/waiting/lockout distinct; the 3 attention states collapse.
+        const styleOf = (b) => b.classes().find((c) => c.startsWith('sts-'))
+        expect(styleOf(badges[0])).toBe('sts-muted-grey')      // waiting
+        expect(styleOf(badges[1])).toBe('sts-positive-green')  // long
+        expect(styleOf(badges[2])).toBe('sts-short-distinct')  // short
+        expect(styleOf(badges[3])).toBe('sts-attention')       // paused
+        expect(styleOf(badges[4])).toBe('sts-attention')       // degraded
+        expect(styleOf(badges[5])).toBe('sts-lockout')         // bust_locked
+        expect(styleOf(badges[6])).toBe('sts-attention')       // capital_shortfall
+        expect(new Set(badges.map(styleOf)).size).toBe(5)      // 5 distinct style families
     })
 
     test('colours realized P/L by textual sign; pure-zero stays neutral', async () => {

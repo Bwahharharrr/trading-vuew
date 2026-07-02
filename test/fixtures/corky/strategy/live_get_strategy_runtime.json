@@ -1,0 +1,890 @@
+{
+  "schema_version": 1,
+  "request_id": "b",
+  "event": {
+    "type": "strategy_runtime",
+    "runtime": {
+      "runtime_id": "v8-tail-repair-live-main",
+      "process_kind": "corky-strategy-runtime",
+      "state": "Degraded",
+      "generated_at_ms": 1783011258106,
+      "mode": "live",
+      "strategy": "ema_regime_breakout_v8",
+      "strategy_id": "ema_regime_breakout_v8",
+      "strategy_instance_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z",
+      "strategy_config_path": "/root/.corky/strategy-runtime/v8-tail-repair-live-20260701T143936Z/v8-tail-repair-testusd-1m-catchup12-live-lineage.toml",
+      "strategy_config_sha256": "sha256:f3fa7fbba67a5721f123ab588270d5d51f2820478e7faa3d3b3f0a16f3fdb4b4",
+      "strategy_params_sha256": "sha256:516d5fc6ae942048a26417ed7773030875541cddae75798b902ed059cd622c5b",
+      "strategy_params_canonical_json": "{\"atr_average_period\":80,\"atr_percentile_lookback_bars\":0,\"atr_period\":14,\"bearish_pre_cross_momentum_atr\":\"1\",\"breakout_lookback\":50,\"cash_fraction\":\"0.001\",\"cooldown_bars\":24,\"core_position_fraction\":\"0.5\",\"daily_bear_context_block_non_breakout_entries\":0,\"daily_bear_context_exit_fraction\":\"0\",\"daily_bear_context_loss_cooldown_bars\":0,\"daily_bear_context_loss_min_count\":1,\"daily_bear_context_loss_size_factor\":\"1\",\"daily_bear_context_size_factor\":\"1\",\"daily_bull_context_size_bonus\":\"0\",\"daily_context_exit_min_profit_atr\":\"1\",\"daily_macd_bear_exit_cooldown_bars\":0,\"daily_macd_bear_exit_fraction\":\"0\",\"daily_macd_bear_exit_symbol_cooldown_bars\":\"\",\"daily_macd_bear_exit_symbols\":\"\",\"dead_trade_bars\":16,\"dead_trade_min_progress_atr\":\"0.5\",\"efficiency_lookback_bars\":10,\"entry_window_bars\":12,\"exit_atr_multiple\":\"0\",\"fast_failure_atr_multiple\":\"1\",\"fast_failure_bars\":6,\"fast_period\":50,\"high_atr_percentile_threshold\":\"0.95\",\"high_atr_size_fraction\":\"1\",\"hourly_bear_context_block_non_breakout_entries\":1,\"hourly_bear_context_loss_cooldown_bars\":0,\"hourly_bear_context_loss_min_count\":1,\"hourly_bear_context_loss_size_factor\":\"1\",\"hourly_bear_context_size_factor\":\"0.5\",\"hourly_bull_context_size_bonus\":\"0\",\"initial_stop_atr_multiple\":\"2\",\"late_trend_pullback_max_atr\":\"0\",\"late_trend_pullback_min_atr\":\"0\",\"loss_cooldown_bars\":0,\"mae_derisk_atr\":\"0\",\"mae_derisk_bars\":0,\"mae_derisk_fraction\":\"0\",\"mae_exit_atr\":\"0\",\"mae_exit_bars\":0,\"max_breakout_trend_age_bars\":0,\"max_consecutive_realized_losses\":0,\"max_pre_cross_gap_atr\":\"0.5\",\"max_pyramid_adds\":1,\"max_readd_pullback_depth_atr\":\"0\",\"max_symbol_loss_stop_hits\":0,\"mfe_giveback_activation_atr\":\"0\",\"mfe_giveback_exit_fraction\":\"0\",\"mfe_giveback_pct\":\"0\",\"mfe_giveback_preserve_fraction\":\"0\",\"mid_atr_percentile_threshold\":\"0\",\"mid_atr_size_fraction\":\"1\",\"min_adx\":\"25\",\"min_atr_expansion\":\"1.1\",\"min_breakout_atr_extension\":\"0\",\"min_breakout_body_range_fraction\":\"0\",\"min_breakout_close_position\":\"0\",\"min_breakout_range_expansion\":\"0\",\"min_donchian_width_atr\":\"2\",\"min_efficiency_ratio\":\"0.15\",\"min_ema_spread_atr\":\"0.5\",\"min_momentum_acceleration_atr\":\"0\",\"min_participation_adx\":\"20\",\"min_participation_atr_expansion\":\"1\",\"min_participation_ema_spread_atr\":\"0.25\",\"min_participation_score\":6,\"min_participation_slow_slope_atr\":\"0.05\",\"min_pre_cross_momentum_atr\":\"0.75\",\"min_readd_pullback_depth_atr\":\"0\",\"min_regime_bars\":4,\"min_secular_slope_atr\":\"0\",\"min_short_adx\":\"35\",\"min_short_atr_expansion\":\"1.1\",\"min_short_donchian_width_atr\":\"4\",\"min_short_efficiency_ratio\":\"0.25\",\"min_short_ema_spread_atr\":\"0.75\",\"min_short_slow_slope_atr\":\"0.05\",\"min_slow_slope_atr\":\"0.05\",\"participation_loss_cooldown_bars\":72,\"participation_loss_min_count\":1,\"participation_loss_size_factor\":\"0.35\",\"pyramid_cash_fraction\":\"0\",\"pyramid_min_profit_atr\":\"0.5\",\"readd_pullback_extension_atr\":\"1\",\"scale_action_cooldown_bars\":3,\"scale_out_extension_atr\":\"0\",\"scale_out_fraction\":\"0.1\",\"secular_ema_period\":0,\"short_cash_fraction\":\"0\",\"slope_lookback_bars\":12,\"slow_exit_atr_multiple\":\"0\",\"slow_exit_max_mfe_atr\":\"0\",\"slow_period\":150,\"symbol_loss_stop_cash\":\"0\",\"symbol_loss_stop_cooldown_bars\":0,\"symbol_loss_stop_size_decay\":\"1\",\"symbol_loss_stop_size_recovery_bars\":0,\"symbol_profit_boost_cash\":\"300000\",\"symbol_profit_boost_size_bonus\":\"0.5\",\"volume_rejection_block_non_breakout_entries\":1,\"volume_rejection_cooldown_bars\":24,\"volume_rejection_exit_fraction\":\"0.25\",\"volume_rejection_exit_mfe_giveback_activation_atr\":\"0\",\"volume_rejection_exit_mfe_giveback_pct\":\"0\",\"volume_rejection_exit_min_profit_atr\":\"0.5\",\"volume_rejection_exit_require_daily_macd_bearish\":0,\"volume_rejection_exit_require_hourly_bearish\":1,\"volume_rejection_exit_require_participation_entry\":0,\"volume_rejection_exit_symbols\":\"\",\"volume_reversal_participation_daily_crup_bearish_size_factor\":\"1\",\"volume_reversal_participation_daily_macd_restore_factor\":\"0\",\"volume_reversal_participation_daily_macd_restore_require_daily_crup_confluence\":0,\"volume_reversal_participation_daily_macd_restore_require_daily_scmr_non_bearish\":0,\"volume_reversal_participation_profit_bypass_cash\":\"0\",\"volume_reversal_participation_profit_restore_factor\":\"1\",\"volume_reversal_participation_size_factor\":\"1\",\"volume_reversal_participation_symbols\":\"\",\"volume_reversal_participation_weak_volume_size_factor\":\"1\",\"volume_reversal_size_bonus\":\"0\"}",
+      "strategy_descriptor_schema_version": 1,
+      "trade_timeframe": "1m",
+      "context_timeframes": [
+        "1D"
+      ],
+      "lineage_status": "verified",
+      "lineage_reasons": [
+        "candidate artifact verified against runtime params hash"
+      ],
+      "universe_backtest_run_id": "confirm-universe:ema_regime_breakout_v8:BITFINEX:tAAVE:USD+tAAVE:UST+tADABTC+tADAUSD+tALGUSD+tAPTUSD+tATOUSD+tAVAX:BTC+tAVAX:USD+tBTCF0:USTF0+tBTCUSD+tETHBTC+tETHF0:BTCF0+tSOLBTC+tSOLUSD+tTRXUSD+tXLMBTC+tXLMUSD+tXMRBTC+tXRPBTC+tXRPUSD+tZECBTC+tZECUSD:1h:1364770800000:1782388800000:grid:0:1:1:asof:1782388800000:paramfp:f58ab8ba0f1e8630",
+      "candidate_rank": 1,
+      "candidate_run_index": 0,
+      "candidate_params_sha256": "sha256:516d5fc6ae942048a26417ed7773030875541cddae75798b902ed059cd622c5b",
+      "candidate_artifact_path": "/root/.corky/backtests/runs/confirm-universe%3Aema_regime_breakout_v8%3ABITFINEX%3AtAAVE%3AUSD%2BtAAVE%3AUST%2BtADABTC%2BtADAUSD%2BtALGUSD%2BtAPTUSD__0a7eb679965c55ec.json",
+      "lineage_note": "fixed-config v8 tail-repair confirmation artifact for guarded TEST live canary",
+      "candidate_metrics": {
+        "score": "2489.4291953342143298811347346",
+        "institutional_score": "2489.4291953342143298811347346",
+        "beat_buy_hold": 20,
+        "lower_tail_return": "0.88044112117837773715060174",
+        "max_drawdown_pct": "1.2998767191590444572552524997",
+        "avg_trades": "326.26086956521739130434782609"
+      },
+      "target_public_runtime_id": "public-market-main",
+      "dependencies": [
+        {
+          "kind": "public",
+          "dependency_runtime_id": "public-market-main"
+        },
+        {
+          "kind": "private",
+          "dependency_runtime_id": "private-account-main"
+        }
+      ],
+      "control_audit_path": "/root/.corky/strategy-runtime/v8-tail-repair-live-20260701T143936Z/controls.jsonl",
+      "public_snapshots_seen": 10040,
+      "matching_public_snapshots_seen": 10040,
+      "feature_requirements": 2,
+      "features_ready": 2,
+      "pending_control_requests": 0,
+      "pending_feature_reasons": [],
+      "last_public_snapshot_ms": 1783011040946,
+      "target_private_runtime_id": "private-account-main",
+      "live_operator_approval": {
+        "path": "/root/.corky/approvals/v8-tail-repair-catchup12-renew-20260702T143423Z.json",
+        "approval_id": "v8-test-catchup12-renew-20260702T143423Z",
+        "approved_by": "codex",
+        "approved_at_ms": 1783002863492,
+        "expires_at_ms": 1783017263492,
+        "action": "guarded_test_order_mutation",
+        "statement": "APPROVE_GUARDED_TEST_ORDER_MUTATION",
+        "account_id": "primary-account",
+        "target_private_runtime_id": "private-account-main",
+        "strategy_id": "ema_regime_breakout_v8",
+        "strategy_instance_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z",
+        "trade_timeframe": "1m",
+        "context_timeframes": [
+          "1D"
+        ],
+        "venue": "BITFINEX",
+        "quote_currency": "TESTUSD",
+        "symbols": [
+          "tTESTADA:TESTUSD",
+          "tTESTBTC:TESTUSD"
+        ],
+        "max_order_notional": "12",
+        "live_validation_proof": {
+          "kind": "non_mutating_test_live_validation",
+          "command": "CORKY_RUN_LIVE=1 scripts/validate.sh live",
+          "log_path": "/root/.corky/approvals/live-validation-20260701T143936Z.log",
+          "log_sha256": "sha256:a8c6794426aacd16412fb080da849d110da8599825f25d14671a2bb93b987993",
+          "completed_at_ms": 1782917836734
+        },
+        "canary_review_path": "/root/.corky/strategy-runtime/v8-tail-repair-live-20260701T143936Z/v8-tail-repair-1m-canary-review.md",
+        "reason": "renew guarded TEST approval after explicit operator approval; continue sidecar catch-up and TEST resume for tTESTADA/tTESTBTC only"
+      },
+      "auth_gate_configured": true,
+      "auth_snapshots_seen": 7101,
+      "matching_auth_snapshots_seen": 7101,
+      "auth_ready": true,
+      "pending_auth_reasons": [],
+      "auth_wallet_balances": [
+        {
+          "wallet_type": "exchange",
+          "currency": "TESTBTC",
+          "class": "exchange",
+          "balance": "0.00000198",
+          "available": "0.00000198"
+        },
+        {
+          "wallet_type": "exchange",
+          "currency": "TESTUSD",
+          "class": "exchange",
+          "balance": "7999.78868881",
+          "available": "7999.78868881"
+        },
+        {
+          "wallet_type": "exchange",
+          "currency": "TESTUSDT",
+          "class": "exchange",
+          "balance": "0.00000001",
+          "available": "0.00000001"
+        },
+        {
+          "wallet_type": "funding",
+          "currency": "TESTUSD",
+          "class": "funding",
+          "balance": "37848.6630756",
+          "available": "37848.6630756"
+        },
+        {
+          "wallet_type": "margin",
+          "currency": "TESTBTC",
+          "class": "margin",
+          "balance": "0.05",
+          "available": "0.05"
+        },
+        {
+          "wallet_type": "margin",
+          "currency": "TESTUSD",
+          "class": "margin",
+          "balance": "3362.56379525",
+          "available": "3362.56379525"
+        },
+        {
+          "wallet_type": "margin",
+          "currency": "TESTUSDTF0",
+          "class": "margin",
+          "balance": "55578.97275383",
+          "available": "54590.60275383"
+        }
+      ],
+      "auth_target_open_positions": [],
+      "last_auth_snapshot_ms": 1783011042909,
+      "allocation_ledger_path": "/root/.corky/strategy-runtime/v8-tail-repair-live-20260701T143936Z/retry-nometa-20260701T154834Z/allocation-ledger.repaired-20260701T1914Z.jsonl",
+      "allocation_configured": true,
+      "allocation_ready": true,
+      "pending_allocation_reasons": [],
+      "allocation_events": 44,
+      "allocation_account_id": "primary-account",
+      "allocation_strategy_instance_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z",
+      "allocation_strategy_status": "active",
+      "allocation_quote_currency": "TESTUSD",
+      "allocation_wallet_type": "exchange",
+      "allocation_observed_balance": "8000.000330571827200000000000",
+      "allocation_observed_available": "8000.000330571827200000000000",
+      "allocation_unallocated_available": "0.000000001827200000000000",
+      "ticker_allocations": [
+        {
+          "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+          "status": "entering",
+          "status_since_ms": 1783008300000,
+          "status_reason": "reservation_created",
+          "allocated_equity": "3999.7574515595762",
+          "available_cash": "3991.7619364139086071762000000",
+          "reserved_cash": "7.995515145667592823800000000",
+          "locked_margin": "0.0000000000000",
+          "position_quantity": "0.00000000",
+          "realized_pnl": "-0.2427137254238",
+          "unrealized_pnl": "0",
+          "fees_paid": "0",
+          "last_decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTADA:TESTUSD:1m:1783008480000",
+          "last_event": "reservation_created"
+        },
+        {
+          "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+          "status": "waiting",
+          "status_since_ms": 1783003586799,
+          "status_reason": "manual_resume:operator approved guarded TEST order mutation; sidecar catch-up repaired to latest stable closed minute; resume live TEST trading observation",
+          "allocated_equity": "4000.0312372550000000000000000",
+          "available_cash": "4000.0312372550000000000000000",
+          "reserved_cash": "0.0000000000000000000000000008",
+          "locked_margin": "0.000000000000000000000000000",
+          "position_quantity": "0.00000000",
+          "realized_pnl": "0.0310719699999999999999999998",
+          "unrealized_pnl": "0",
+          "fees_paid": "0",
+          "last_decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTBTC:TESTUSD:1m:1782944820000",
+          "last_event": "manual_resume:operator approved guarded TEST order mutation; sidecar catch-up repaired to latest stable closed minute; resume live TEST trading observation"
+        }
+      ],
+      "tickers": [
+        {
+          "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+          "symbol": "tTESTADA:TESTUSD",
+          "status": "entering",
+          "status_since_ms": 1783008300000,
+          "status_reason": "reservation_created",
+          "last_decision_ms": 1783008240000,
+          "last_decision_summary": "no_intents",
+          "recent_decisions": [
+            {
+              "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTADA:TESTUSD:1m:1783008000000",
+              "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+              "symbol": "tTESTADA:TESTUSD",
+              "timeframe": "1m",
+              "decision_ts_ms": 1783008000000,
+              "outcome": "no_intents",
+              "intent_count": 0,
+              "risk_checks": [
+                {
+                  "name": "shadow_live_preflight",
+                  "status": "not_applicable",
+                  "detail": "no order intents were produced"
+                },
+                {
+                  "name": "auth_order_control",
+                  "status": "not_applicable",
+                  "detail": "no queued orders required auth order control dispatch"
+                }
+              ],
+              "queued_order_count": 0,
+              "ledger_event_count": 0,
+              "fill_count": 0,
+              "rejected_order_count": 0
+            },
+            {
+              "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTADA:TESTUSD:1m:1783008060000",
+              "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+              "symbol": "tTESTADA:TESTUSD",
+              "timeframe": "1m",
+              "decision_ts_ms": 1783008060000,
+              "outcome": "no_intents",
+              "intent_count": 0,
+              "risk_checks": [
+                {
+                  "name": "shadow_live_preflight",
+                  "status": "not_applicable",
+                  "detail": "no order intents were produced"
+                },
+                {
+                  "name": "auth_order_control",
+                  "status": "not_applicable",
+                  "detail": "no queued orders required auth order control dispatch"
+                }
+              ],
+              "queued_order_count": 0,
+              "ledger_event_count": 0,
+              "fill_count": 0,
+              "rejected_order_count": 0
+            },
+            {
+              "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTADA:TESTUSD:1m:1783008120000",
+              "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+              "symbol": "tTESTADA:TESTUSD",
+              "timeframe": "1m",
+              "decision_ts_ms": 1783008120000,
+              "outcome": "no_intents",
+              "intent_count": 0,
+              "risk_checks": [
+                {
+                  "name": "shadow_live_preflight",
+                  "status": "not_applicable",
+                  "detail": "no order intents were produced"
+                },
+                {
+                  "name": "auth_order_control",
+                  "status": "not_applicable",
+                  "detail": "no queued orders required auth order control dispatch"
+                }
+              ],
+              "queued_order_count": 0,
+              "ledger_event_count": 0,
+              "fill_count": 0,
+              "rejected_order_count": 0
+            },
+            {
+              "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTADA:TESTUSD:1m:1783008180000",
+              "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+              "symbol": "tTESTADA:TESTUSD",
+              "timeframe": "1m",
+              "decision_ts_ms": 1783008180000,
+              "outcome": "no_intents",
+              "intent_count": 0,
+              "risk_checks": [
+                {
+                  "name": "shadow_live_preflight",
+                  "status": "not_applicable",
+                  "detail": "no order intents were produced"
+                },
+                {
+                  "name": "auth_order_control",
+                  "status": "not_applicable",
+                  "detail": "no queued orders required auth order control dispatch"
+                }
+              ],
+              "queued_order_count": 0,
+              "ledger_event_count": 0,
+              "fill_count": 0,
+              "rejected_order_count": 0
+            },
+            {
+              "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTADA:TESTUSD:1m:1783008240000",
+              "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+              "symbol": "tTESTADA:TESTUSD",
+              "timeframe": "1m",
+              "decision_ts_ms": 1783008240000,
+              "outcome": "no_intents",
+              "intent_count": 0,
+              "risk_checks": [
+                {
+                  "name": "shadow_live_preflight",
+                  "status": "not_applicable",
+                  "detail": "no order intents were produced"
+                },
+                {
+                  "name": "auth_order_control",
+                  "status": "not_applicable",
+                  "detail": "no queued orders required auth order control dispatch"
+                }
+              ],
+              "queued_order_count": 0,
+              "ledger_event_count": 0,
+              "fill_count": 0,
+              "rejected_order_count": 0
+            }
+          ]
+        },
+        {
+          "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+          "symbol": "tTESTBTC:TESTUSD",
+          "status": "waiting",
+          "status_since_ms": 1783003586799,
+          "status_reason": "manual_resume:operator approved guarded TEST order mutation; sidecar catch-up repaired to latest stable closed minute; resume live TEST trading observation",
+          "last_decision_ms": 1783008300000,
+          "last_decision_summary": "no_intents",
+          "recent_decisions": [
+            {
+              "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTBTC:TESTUSD:1m:1783007940000",
+              "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+              "symbol": "tTESTBTC:TESTUSD",
+              "timeframe": "1m",
+              "decision_ts_ms": 1783007940000,
+              "outcome": "no_intents",
+              "intent_count": 0,
+              "risk_checks": [
+                {
+                  "name": "shadow_live_preflight",
+                  "status": "not_applicable",
+                  "detail": "no order intents were produced"
+                },
+                {
+                  "name": "auth_order_control",
+                  "status": "not_applicable",
+                  "detail": "no queued orders required auth order control dispatch"
+                }
+              ],
+              "queued_order_count": 0,
+              "ledger_event_count": 0,
+              "fill_count": 0,
+              "rejected_order_count": 0
+            },
+            {
+              "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTBTC:TESTUSD:1m:1783008000000",
+              "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+              "symbol": "tTESTBTC:TESTUSD",
+              "timeframe": "1m",
+              "decision_ts_ms": 1783008000000,
+              "outcome": "no_intents",
+              "intent_count": 0,
+              "risk_checks": [
+                {
+                  "name": "shadow_live_preflight",
+                  "status": "not_applicable",
+                  "detail": "no order intents were produced"
+                },
+                {
+                  "name": "auth_order_control",
+                  "status": "not_applicable",
+                  "detail": "no queued orders required auth order control dispatch"
+                }
+              ],
+              "queued_order_count": 0,
+              "ledger_event_count": 0,
+              "fill_count": 0,
+              "rejected_order_count": 0
+            },
+            {
+              "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTBTC:TESTUSD:1m:1783008060000",
+              "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+              "symbol": "tTESTBTC:TESTUSD",
+              "timeframe": "1m",
+              "decision_ts_ms": 1783008060000,
+              "outcome": "no_intents",
+              "intent_count": 0,
+              "risk_checks": [
+                {
+                  "name": "shadow_live_preflight",
+                  "status": "not_applicable",
+                  "detail": "no order intents were produced"
+                },
+                {
+                  "name": "auth_order_control",
+                  "status": "not_applicable",
+                  "detail": "no queued orders required auth order control dispatch"
+                }
+              ],
+              "queued_order_count": 0,
+              "ledger_event_count": 0,
+              "fill_count": 0,
+              "rejected_order_count": 0
+            },
+            {
+              "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTBTC:TESTUSD:1m:1783008120000",
+              "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+              "symbol": "tTESTBTC:TESTUSD",
+              "timeframe": "1m",
+              "decision_ts_ms": 1783008120000,
+              "outcome": "no_intents",
+              "intent_count": 0,
+              "risk_checks": [
+                {
+                  "name": "shadow_live_preflight",
+                  "status": "not_applicable",
+                  "detail": "no order intents were produced"
+                },
+                {
+                  "name": "auth_order_control",
+                  "status": "not_applicable",
+                  "detail": "no queued orders required auth order control dispatch"
+                }
+              ],
+              "queued_order_count": 0,
+              "ledger_event_count": 0,
+              "fill_count": 0,
+              "rejected_order_count": 0
+            },
+            {
+              "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTBTC:TESTUSD:1m:1783008180000",
+              "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+              "symbol": "tTESTBTC:TESTUSD",
+              "timeframe": "1m",
+              "decision_ts_ms": 1783008180000,
+              "outcome": "no_intents",
+              "intent_count": 0,
+              "risk_checks": [
+                {
+                  "name": "shadow_live_preflight",
+                  "status": "not_applicable",
+                  "detail": "no order intents were produced"
+                },
+                {
+                  "name": "auth_order_control",
+                  "status": "not_applicable",
+                  "detail": "no queued orders required auth order control dispatch"
+                }
+              ],
+              "queued_order_count": 0,
+              "ledger_event_count": 0,
+              "fill_count": 0,
+              "rejected_order_count": 0
+            },
+            {
+              "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTBTC:TESTUSD:1m:1783008240000",
+              "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+              "symbol": "tTESTBTC:TESTUSD",
+              "timeframe": "1m",
+              "decision_ts_ms": 1783008240000,
+              "outcome": "no_intents",
+              "intent_count": 0,
+              "risk_checks": [
+                {
+                  "name": "shadow_live_preflight",
+                  "status": "not_applicable",
+                  "detail": "no order intents were produced"
+                },
+                {
+                  "name": "auth_order_control",
+                  "status": "not_applicable",
+                  "detail": "no queued orders required auth order control dispatch"
+                }
+              ],
+              "queued_order_count": 0,
+              "ledger_event_count": 0,
+              "fill_count": 0,
+              "rejected_order_count": 0
+            },
+            {
+              "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTBTC:TESTUSD:1m:1783008300000",
+              "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+              "symbol": "tTESTBTC:TESTUSD",
+              "timeframe": "1m",
+              "decision_ts_ms": 1783008300000,
+              "outcome": "no_intents",
+              "intent_count": 0,
+              "risk_checks": [
+                {
+                  "name": "shadow_live_preflight",
+                  "status": "not_applicable",
+                  "detail": "no order intents were produced"
+                },
+                {
+                  "name": "auth_order_control",
+                  "status": "not_applicable",
+                  "detail": "no queued orders required auth order control dispatch"
+                }
+              ],
+              "queued_order_count": 0,
+              "ledger_event_count": 0,
+              "fill_count": 0,
+              "rejected_order_count": 0
+            }
+          ]
+        }
+      ],
+      "order_journal_path": "/root/.corky/strategy-runtime/v8-tail-repair-live-20260701T143936Z/retry-nometa-20260701T154834Z/order-journal.jsonl",
+      "order_events": 53,
+      "orders_total": 19,
+      "orders_active_or_pending": 2,
+      "orders_submitted_nonterminal": 0,
+      "order_status_counts": {
+        "accepted": 0,
+        "canceled": 0,
+        "filled": 12,
+        "open": 0,
+        "partially_filled": 0,
+        "queued": 2,
+        "rejected": 5,
+        "sent": 0
+      },
+      "ticker_orders": [
+        {
+          "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+          "symbol": "tTESTADA:TESTUSD",
+          "orders_total": 8,
+          "orders_active_or_pending": 2,
+          "orders_submitted_nonterminal": 0,
+          "order_status_counts": {
+            "accepted": 0,
+            "canceled": 0,
+            "filled": 4,
+            "open": 0,
+            "partially_filled": 0,
+            "queued": 2,
+            "rejected": 2,
+            "sent": 0
+          },
+          "last_event": "order_queued",
+          "last_event_ts_ms": 1783008480000
+        },
+        {
+          "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+          "symbol": "tTESTBTC:TESTUSD",
+          "orders_total": 11,
+          "orders_active_or_pending": 0,
+          "orders_submitted_nonterminal": 0,
+          "order_status_counts": {
+            "accepted": 0,
+            "canceled": 0,
+            "filled": 8,
+            "open": 0,
+            "partially_filled": 0,
+            "queued": 0,
+            "rejected": 3,
+            "sent": 0
+          },
+          "last_event": "request_rejected",
+          "last_event_ts_ms": 1782953400000
+        }
+      ],
+      "market_data_audit_path": "/root/.corky/strategy-runtime/v8-tail-repair-live-20260701T143936Z/restart-auth-session-20260701T190741Z/market-data-forward-after-target-state-20260701T1937Z.jsonl",
+      "decision_audit_path": "/root/.corky/strategy-runtime/v8-tail-repair-live-20260701T143936Z/restart-auth-session-20260701T190741Z/decisions-forward-after-target-state-20260701T1937Z.jsonl",
+      "decision_events": 2450,
+      "last_decision_ms": 1783011257265,
+      "recent_decisions": [
+        {
+          "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTBTC:TESTUSD:1m:1783007940000",
+          "ticker_id": "bitfinex:tTESTBTC:TESTUSD",
+          "symbol": "tTESTBTC:TESTUSD",
+          "timeframe": "1m",
+          "decision_ts_ms": 1783007940000,
+          "outcome": "no_intents",
+          "intent_count": 0,
+          "risk_checks": [
+            {
+              "name": "shadow_live_preflight",
+              "status": "not_applicable",
+              "detail": "no order intents were produced"
+            },
+            {
+              "name": "auth_order_control",
+              "status": "not_applicable",
+              "detail": "no queued orders required auth order control dispatch"
+            }
+          ],
+          "queued_order_count": 0,
+          "ledger_event_count": 0,
+          "fill_count": 0,
+          "rejected_order_count": 0
+        },
+        {
+          "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTADA:TESTUSD:1m:1783008000000",
+          "ticker_id": "bitfinex:tTESTADA:TESTUSD",
+          "symbol": "tTESTADA:TESTUSD",
+          "timeframe": "1m",
+          "decision_ts_ms": 1783008000000,
+          "outcome": "no_intents",
+          "intent_count": 0,
+          "risk_checks": [
+            {
+              "name": "shadow_live_preflight",
+              "status": "not_applicable",
+              "detail": "no order intents were produced"
+            },
+            {
+              "name": "auth_order_control",
+              "status": "not_applicable",
+              "detail": "no queued orders required auth order control dispatch"
+            }
+          ],
+          "queued_order_count": 0,
+          "ledger_event_count": 0,
+          "fill_count": 0,
+          "rejected_order_count": 0
+        },
+        {
+          "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTBTC:TESTUSD:1m:1783008000000",
+          "ticker_id": "bitfinex:tTESTBTC:TESTUSD",
+          "symbol": "tTESTBTC:TESTUSD",
+          "timeframe": "1m",
+          "decision_ts_ms": 1783008000000,
+          "outcome": "no_intents",
+          "intent_count": 0,
+          "risk_checks": [
+            {
+              "name": "shadow_live_preflight",
+              "status": "not_applicable",
+              "detail": "no order intents were produced"
+            },
+            {
+              "name": "auth_order_control",
+              "status": "not_applicable",
+              "detail": "no queued orders required auth order control dispatch"
+            }
+          ],
+          "queued_order_count": 0,
+          "ledger_event_count": 0,
+          "fill_count": 0,
+          "rejected_order_count": 0
+        },
+        {
+          "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTADA:TESTUSD:1m:1783008060000",
+          "ticker_id": "bitfinex:tTESTADA:TESTUSD",
+          "symbol": "tTESTADA:TESTUSD",
+          "timeframe": "1m",
+          "decision_ts_ms": 1783008060000,
+          "outcome": "no_intents",
+          "intent_count": 0,
+          "risk_checks": [
+            {
+              "name": "shadow_live_preflight",
+              "status": "not_applicable",
+              "detail": "no order intents were produced"
+            },
+            {
+              "name": "auth_order_control",
+              "status": "not_applicable",
+              "detail": "no queued orders required auth order control dispatch"
+            }
+          ],
+          "queued_order_count": 0,
+          "ledger_event_count": 0,
+          "fill_count": 0,
+          "rejected_order_count": 0
+        },
+        {
+          "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTBTC:TESTUSD:1m:1783008060000",
+          "ticker_id": "bitfinex:tTESTBTC:TESTUSD",
+          "symbol": "tTESTBTC:TESTUSD",
+          "timeframe": "1m",
+          "decision_ts_ms": 1783008060000,
+          "outcome": "no_intents",
+          "intent_count": 0,
+          "risk_checks": [
+            {
+              "name": "shadow_live_preflight",
+              "status": "not_applicable",
+              "detail": "no order intents were produced"
+            },
+            {
+              "name": "auth_order_control",
+              "status": "not_applicable",
+              "detail": "no queued orders required auth order control dispatch"
+            }
+          ],
+          "queued_order_count": 0,
+          "ledger_event_count": 0,
+          "fill_count": 0,
+          "rejected_order_count": 0
+        },
+        {
+          "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTADA:TESTUSD:1m:1783008120000",
+          "ticker_id": "bitfinex:tTESTADA:TESTUSD",
+          "symbol": "tTESTADA:TESTUSD",
+          "timeframe": "1m",
+          "decision_ts_ms": 1783008120000,
+          "outcome": "no_intents",
+          "intent_count": 0,
+          "risk_checks": [
+            {
+              "name": "shadow_live_preflight",
+              "status": "not_applicable",
+              "detail": "no order intents were produced"
+            },
+            {
+              "name": "auth_order_control",
+              "status": "not_applicable",
+              "detail": "no queued orders required auth order control dispatch"
+            }
+          ],
+          "queued_order_count": 0,
+          "ledger_event_count": 0,
+          "fill_count": 0,
+          "rejected_order_count": 0
+        },
+        {
+          "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTBTC:TESTUSD:1m:1783008120000",
+          "ticker_id": "bitfinex:tTESTBTC:TESTUSD",
+          "symbol": "tTESTBTC:TESTUSD",
+          "timeframe": "1m",
+          "decision_ts_ms": 1783008120000,
+          "outcome": "no_intents",
+          "intent_count": 0,
+          "risk_checks": [
+            {
+              "name": "shadow_live_preflight",
+              "status": "not_applicable",
+              "detail": "no order intents were produced"
+            },
+            {
+              "name": "auth_order_control",
+              "status": "not_applicable",
+              "detail": "no queued orders required auth order control dispatch"
+            }
+          ],
+          "queued_order_count": 0,
+          "ledger_event_count": 0,
+          "fill_count": 0,
+          "rejected_order_count": 0
+        },
+        {
+          "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTADA:TESTUSD:1m:1783008180000",
+          "ticker_id": "bitfinex:tTESTADA:TESTUSD",
+          "symbol": "tTESTADA:TESTUSD",
+          "timeframe": "1m",
+          "decision_ts_ms": 1783008180000,
+          "outcome": "no_intents",
+          "intent_count": 0,
+          "risk_checks": [
+            {
+              "name": "shadow_live_preflight",
+              "status": "not_applicable",
+              "detail": "no order intents were produced"
+            },
+            {
+              "name": "auth_order_control",
+              "status": "not_applicable",
+              "detail": "no queued orders required auth order control dispatch"
+            }
+          ],
+          "queued_order_count": 0,
+          "ledger_event_count": 0,
+          "fill_count": 0,
+          "rejected_order_count": 0
+        },
+        {
+          "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTBTC:TESTUSD:1m:1783008180000",
+          "ticker_id": "bitfinex:tTESTBTC:TESTUSD",
+          "symbol": "tTESTBTC:TESTUSD",
+          "timeframe": "1m",
+          "decision_ts_ms": 1783008180000,
+          "outcome": "no_intents",
+          "intent_count": 0,
+          "risk_checks": [
+            {
+              "name": "shadow_live_preflight",
+              "status": "not_applicable",
+              "detail": "no order intents were produced"
+            },
+            {
+              "name": "auth_order_control",
+              "status": "not_applicable",
+              "detail": "no queued orders required auth order control dispatch"
+            }
+          ],
+          "queued_order_count": 0,
+          "ledger_event_count": 0,
+          "fill_count": 0,
+          "rejected_order_count": 0
+        },
+        {
+          "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTADA:TESTUSD:1m:1783008240000",
+          "ticker_id": "bitfinex:tTESTADA:TESTUSD",
+          "symbol": "tTESTADA:TESTUSD",
+          "timeframe": "1m",
+          "decision_ts_ms": 1783008240000,
+          "outcome": "no_intents",
+          "intent_count": 0,
+          "risk_checks": [
+            {
+              "name": "shadow_live_preflight",
+              "status": "not_applicable",
+              "detail": "no order intents were produced"
+            },
+            {
+              "name": "auth_order_control",
+              "status": "not_applicable",
+              "detail": "no queued orders required auth order control dispatch"
+            }
+          ],
+          "queued_order_count": 0,
+          "ledger_event_count": 0,
+          "fill_count": 0,
+          "rejected_order_count": 0
+        },
+        {
+          "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTBTC:TESTUSD:1m:1783008240000",
+          "ticker_id": "bitfinex:tTESTBTC:TESTUSD",
+          "symbol": "tTESTBTC:TESTUSD",
+          "timeframe": "1m",
+          "decision_ts_ms": 1783008240000,
+          "outcome": "no_intents",
+          "intent_count": 0,
+          "risk_checks": [
+            {
+              "name": "shadow_live_preflight",
+              "status": "not_applicable",
+              "detail": "no order intents were produced"
+            },
+            {
+              "name": "auth_order_control",
+              "status": "not_applicable",
+              "detail": "no queued orders required auth order control dispatch"
+            }
+          ],
+          "queued_order_count": 0,
+          "ledger_event_count": 0,
+          "fill_count": 0,
+          "rejected_order_count": 0
+        },
+        {
+          "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTBTC:TESTUSD:1m:1783008300000",
+          "ticker_id": "bitfinex:tTESTBTC:TESTUSD",
+          "symbol": "tTESTBTC:TESTUSD",
+          "timeframe": "1m",
+          "decision_ts_ms": 1783008300000,
+          "outcome": "no_intents",
+          "intent_count": 0,
+          "risk_checks": [
+            {
+              "name": "shadow_live_preflight",
+              "status": "not_applicable",
+              "detail": "no order intents were produced"
+            },
+            {
+              "name": "auth_order_control",
+              "status": "not_applicable",
+              "detail": "no queued orders required auth order control dispatch"
+            }
+          ],
+          "queued_order_count": 0,
+          "ledger_event_count": 0,
+          "fill_count": 0,
+          "rejected_order_count": 0
+        }
+      ],
+      "ledger_events": 0,
+      "fills": 0,
+      "last_error": "market data: bitfinex order command send failed: auth order control request strategy-auth-order-52238f8470654165a46e0f549d3d7b46 returned Rejected: control request missing or stale runtime control session peer=v8-tail-repair-live-main@private-account-main:session:20260701T190741Z:f51e0188600840a68c288ebfe8e735f3 runtime_id=private-account-main"
+    }
+  }
+}

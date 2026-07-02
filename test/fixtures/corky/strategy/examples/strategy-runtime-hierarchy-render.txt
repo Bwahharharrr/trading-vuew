@@ -1,0 +1,45 @@
+corky-strategy-runtime runtimes=2 ready=1 degraded=1
+  runtime_id: v8-tail-repair-live-main selectable=true state=Ready mode=live strategy_id=ema_regime_breakout_v8 strategy_instance_id=v8-tail-repair-testusd-1m-live-20260701T143936Z lineage_status=verified
+    lineage: run_id=universe-v8-tail-repair-20260630 candidate_rank=1 candidate_run_index=0 params_hash=sha256:516d5fc6ae942048a26417ed7773030875541cddae75798b902ed059cd622c5b
+    tickers:
+      BITFINEX:tTESTADA:TESTUSD symbol=tTESTADA:TESTUSD status=waiting reason=no entry signal selectable=true
+      BITFINEX:tTESTBTC:TESTUSD symbol=tTESTBTC:TESTUSD status=long reason=entry fill reconciled selectable=true
+    depends on:
+      public runtime: public-market-main
+      private runtime: private-account-main
+    drilldown:
+      approval: id=approval-v8-tail-repair-test-1 expires_at_ms=1782964400000 max_order_notional=12 trade_timeframe=1m
+      auth: ready=true snapshots=31/32 reasons=none
+      wallets:
+        class=exchange wallet_type=exchange currency=TESTUSD balance=9800 available=9775
+        class=funding wallet_type=funding currency=TESTUSD balance=100 available=100
+        class=margin wallet_type=margin currency=TESTUSD balance=0 available=0
+        class=derivative wallet_type=derivative currency=TESTUSD balance=0 available=0
+      allocation: ready=true account=primary-account quote=TESTUSD observed_balance=9800 observed_available=9775 unallocated=0 reasons=none
+      wallet_allocations:
+        account=primary-account class=exchange wallet_type=exchange currency=TESTUSD observed_balance=9800 observed_available=9775 allocated_to_strategy=9800 unallocated_available=0 tickers=BITFINEX:tTESTADA:TESTUSD; BITFINEX:tTESTBTC:TESTUSD
+          ticker=BITFINEX:tTESTADA:TESTUSD status=waiting allocated_equity=4900 available_cash=4899 reserved_cash=1 locked_margin=0 position_quantity=0
+          ticker=BITFINEX:tTESTBTC:TESTUSD status=long allocated_equity=4900 available_cash=4780 reserved_cash=0 locked_margin=120 position_quantity=0.002
+      orders: total=17 active_or_pending=1 submitted_nonterminal=1 oldest_submitted_ts_ms=1782952200000 counts=accepted=0,canceled=0,filled=12,open=0,partially_filled=0,queued=0,rejected=4,sent=1
+      audits: market_data=/tmp/corky/strategy-runtime/v8-tail-repair-market-data.jsonl decisions=/tmp/corky/strategy-runtime/v8-tail-repair-decisions.jsonl orders=/tmp/corky/strategy-runtime/v8-tail-repair-orders.jsonl controls=/tmp/corky/strategy-runtime/v8-tail-repair-controls.jsonl
+  runtime_id: strategy-runtime-status-matrix selectable=true state=Degraded mode=shadow_live strategy_id=ema_regime_breakout_v8 strategy_instance_id=status-matrix-shadow-live lineage_status=mismatch
+    lineage: run_id=universe-v8-mismatch-fixture candidate_rank=4 candidate_run_index=3 params_hash=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+    tickers:
+      BITFINEX:tTESTXLM:TESTUSD symbol=tTESTXLM:TESTUSD status=short reason=short exposure adopted for fixture selectable=true
+      BITFINEX:tTESTDOT:TESTUSD symbol=tTESTDOT:TESTUSD status=paused reason=operator paused before repair selectable=true
+      BITFINEX:tTESTSOL:TESTUSD symbol=tTESTSOL:TESTUSD status=bust_locked reason=ticker claim exhausted selectable=true
+      BITFINEX:tTESTLTC:TESTUSD symbol=tTESTLTC:TESTUSD status=degraded reason=auth reconciliation stale selectable=true
+    depends on:
+      public runtime: public-market-main
+      private runtime: private-account-main
+    drilldown:
+      approval: none
+      auth: ready=false snapshots=2/2 reasons=private account snapshot is stale
+      wallets:
+        none
+      allocation: ready=false account=none quote=TESTUSD observed_balance=none observed_available=none unallocated=none reasons=manual approval required after bust lockout
+      wallet_allocations:
+        none
+      orders: total=0 active_or_pending=0 submitted_nonterminal=0 oldest_submitted_ts_ms=none counts=none
+      audits: market_data=none decisions=none orders=none controls=none
+      error: private account snapshot is stale

@@ -1,7 +1,7 @@
 <template>
 <div class="sr">
-    <!-- Tabbed interface (replaces the old STRATEGY | N runtimes | live header).
-         App owns the feed/subscription; this only renders + emits intents. -->
+    <!-- Drilldown view tabs (Summary / Balances / Decision Audit) for the SELECTED
+         runtime. App owns the feed/subscription; this only renders + emits intents. -->
     <div class="sr-tabs" role="tablist" aria-label="Strategy views">
         <button v-for="t in TABS" :key="t.id" class="sr-tab" :class="{ active: activeTab === t.id }"
                 role="tab" :aria-selected="activeTab === t.id" @click="activeTab = t.id">{{ t.label }}</button>
@@ -12,43 +12,133 @@
 
     <div v-if="error" class="sr-error">{{ error }}</div>
 
-    <!-- Runtime selector: one row per runtime in the replacement set. Default
-         (v8-tail-repair-live-main) highlighted; others selectable. Hidden only
-         for a single auto-selected runtime (its id shows in the Summary head). -->
-    <div v-if="loading || runtimes.length !== 1" class="sr-runtimes" role="tablist" aria-label="Strategy runtimes">
+    <!-- ═══ HIERARCHY ═══ process group → runtime rows (selectable, open the
+         drilldown) → child TICKER rows (status + reason) + DEPENDENCY rows. -->
+    <div class="sr-hier" role="tree" aria-label="Strategy runtime hierarchy">
         <div v-if="loading && !runtimes.length" class="sr-msg">Loading runtimes…</div>
         <div v-else-if="!runtimes.length" class="sr-msg">No strategy runtimes available.</div>
-        <button v-for="rt in runtimes" :key="rt.runtime_id"
-                class="sr-rt" :class="{ active: rt.runtime_id === activeRuntimeId }"
-                role="tab" :aria-selected="rt.runtime_id === activeRuntimeId"
-                @click="$emit('select-runtime', rt.runtime_id)">
-            <span class="sr-rt-id">{{ rt.runtime_id }}</span>
-            <span class="sr-rt-strategy">{{ rt.strategy }}</span>
-            <span class="sr-mode" :class="'mode-' + rt.mode">{{ rt.mode }}</span>
-            <span class="rt-badge" :class="'tone-' + readiness(rt.state).tone">{{ readiness(rt.state).state }}</span>
-            <span v-if="rt.allocation_strategy_status" class="st-badge"
-                  :class="rollupClasses(rt.allocation_strategy_status)">{{ rt.allocation_strategy_status }}</span>
-        </button>
+        <div v-else v-for="pg in processGroups" :key="pg.process_kind" class="sr-proc" role="group">
+            <div class="sr-proc-head">
+                <span class="sr-proc-kind">{{ pg.process_kind }}</span>
+                <span class="sr-proc-stat">runtimes={{ pg.total }} ready={{ pg.ready }} degraded={{ pg.degraded }}</span>
+            </div>
+            <div v-for="node in pg.runtimes" :key="node.rt.runtime_id" class="sr-rt-node">
+                <button class="sr-rt" :class="{ active: node.rt.runtime_id === activeRuntimeId }"
+                        role="treeitem" :aria-selected="node.rt.runtime_id === activeRuntimeId"
+                        @click="selectRuntime(node.rt.runtime_id)">
+                    <span class="sr-rt-id">{{ node.rt.runtime_id }}</span>
+                    <span class="sr-mode" :class="'mode-' + node.rt.mode">{{ node.rt.mode }}</span>
+                    <span class="sr-rt-strategy">{{ dash(node.rt.strategy_id || node.rt.strategy) }}</span>
+                    <span class="sr-rt-inst" :title="node.rt.strategy_instance_id">{{ dash(node.rt.strategy_instance_id) }}</span>
+                    <span class="sr-spacer"></span>
+                    <span class="rt-badge" :class="'tone-' + node.readiness.tone">{{ node.readiness.state }}</span>
+                    <span class="lin-badge" :class="'lin-' + node.lineage.tone"
+                          :title="'lineage ' + node.lineageRaw + (node.lineage.running ? ' — running' : ' — not presented as running')">
+                        {{ node.lineageRaw }}
+                    </span>
+                </button>
+
+                <div class="sr-rt-children">
+                    <!-- TICKER child rows: symbol + status + reason (+ submitted-order blocker). -->
+                    <div v-if="node.tickers.length" class="sr-child-grp">
+                        <button v-for="tk in node.tickers" :key="tk.ticker_id"
+                                class="sr-ticker" :class="{ active: tk.ticker_id === selectedTickerId && node.rt.runtime_id === activeRuntimeId }"
+                                role="treeitem" :title="tk.ticker_id"
+                                @click="selectTicker(node.rt.runtime_id, tk.ticker_id)">
+                            <span class="sr-tk-sym">{{ tk.symbol }}</span>
+                            <span class="st-badge" :class="tickerBadge(tk.status)">{{ tk.status.status }}</span>
+                            <span v-if="tk.status.durationMs != null" class="sr-tk-dur">for {{ fmtDur(tk.status.durationMs) }}</span>
+                            <span v-if="tk.status.reason" class="sr-tk-reason">{{ tk.status.reason }}</span>
+                            <span v-if="tk.blocker.blocked" class="sr-blocker" :title="blockerTitle(tk.blocker)">⚠ submitted order</span>
+                        </button>
+                    </div>
+                    <!-- DEPENDENCY child rows: public / private runtime. -->
+                    <div v-if="node.deps.length" class="sr-child-grp sr-deps">
+                        <span class="sr-deps-label">depends on</span>
+                        <div v-for="dep in node.deps" :key="dep.kind + ':' + dep.runtime_id" class="sr-dep">
+                            <span class="sr-dep-kind">{{ dash(dep.kind) }} runtime</span>
+                            <span class="sr-dep-id" :class="{ unknown: !dep.runtime_id }">{{ dep.runtime_id || 'unknown' }}</span>
+                            <span v-if="dep.legacy" class="sr-legacy-tag" title="inferred from target_public/private_runtime_id (older payload)">inferred</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
+    <!-- ═══ CONTROLS ═══ per-ticker DIRECT CONTROL for the SELECTED ticker
+         (pause / resume / unlock / adopt / cancel submitted orders). RENDERED ONLY
+         when a control session is available (control.available) — a session-less or
+         control-incapable runtime exposes NOTHING here. Each action requires a
+         visible operator reason; unlock/adopt add allocation/position inputs. On
+         click the panel EMITS an intent and never mutates local state — App awaits
+         the subscription full-replacement to reconcile. -->
+    <div v-if="controlEnabled && controlTarget" class="sr-controls" role="group" aria-label="Ticker controls">
+        <div class="sr-controls-head">
+            <span class="sr-ctl-title">Controls</span>
+            <span class="sr-ctl-sym sym">{{ controlTarget.symbol }}</span>
+            <span class="st-badge" :class="tickerBadge(controlTarget.statusInfo)">{{ controlTarget.statusInfo.status }}</span>
+            <span v-if="controlTarget.blocker.blocked" class="sr-blocker" :title="blockerTitle(controlTarget.blocker)">⚠ {{ controlTarget.blocker.submittedNonterminal }} submitted</span>
+            <span class="sr-spacer"></span>
+            <span v-if="controlPending" class="sr-ctl-state pending">sending…</span>
+            <span v-else-if="controlAwaiting" class="sr-ctl-state awaiting"
+                  title="Control acknowledged — awaiting the runtime / auth reconciliation update">awaiting reconciliation…</span>
+        </div>
+        <div v-if="controlTarget.capitalBlocked" class="sr-ctl-msg lineage-blocked"
+             :title="'lineage ' + controlTarget.lineageRaw + ' — not verified running'">
+            ⚠ lineage {{ controlTarget.lineageRaw }} — capital controls (unlock/adopt) withheld; halt controls only.
+        </div>
+        <div v-if="!controlTarget.actions.length" class="sr-msg sr-msg-sm">No controls available for this status.</div>
+        <template v-else>
+            <div class="sr-ctl-inputs">
+                <label class="sr-k" for="sr-ctl-reason">reason</label>
+                <input id="sr-ctl-reason" v-model="reason" class="sr-ctl-input sr-ctl-reason" type="text"
+                       placeholder="visible operator reason (required)" />
+                <template v-if="controlTarget.needsAllocation">
+                    <input v-model="unlockCurrency" class="sr-ctl-input sr-ctl-cur" type="text" placeholder="currency" />
+                    <input v-model="unlockAmount" class="sr-ctl-input sr-ctl-amt" type="text" placeholder="amount (decimal)" />
+                </template>
+                <input v-if="controlTarget.needsPosition" v-model="adoptPositionId" class="sr-ctl-input sr-ctl-pos"
+                       type="text" placeholder="position_id" />
+            </div>
+            <div class="sr-ctl-actions">
+                <button v-for="a in controlTarget.actions" :key="a.kind"
+                        class="sr-ctl-btn" :class="{ danger: a.danger }" :disabled="controlPending"
+                        @click="runControl(a)">{{ a.label }}</button>
+            </div>
+            <div v-if="controlValidation" class="sr-ctl-msg validation">{{ controlValidation }}</div>
+            <div v-if="controlError" class="sr-ctl-msg error">{{ controlError }}</div>
+        </template>
+    </div>
+    <!-- Control surface OFF (no session) but a ticker is selected: make the gap
+         explicit rather than silently dropping the affordance. -->
+    <div v-else-if="selectedTickerId" class="sr-controls sr-controls-off">
+        <span class="sr-ctl-title">Controls</span>
+        <span class="sr-ctl-unavailable"
+              title="Manual strategy controls require an active control session and a runtime that advertises direct control">unavailable — no control session</span>
+    </div>
+
+    <!-- ═══ DRILLDOWN ═══ (selected runtime) -->
     <div v-if="!selectedRuntime" class="sr-body">
         <div v-if="!loading" class="sr-msg">No strategy runtime loaded.</div>
     </div>
 
-    <!-- ═══ SUMMARY ═══ -->
+    <!-- ─── SUMMARY ─── identity + lineage + approval + auth + allocation + orders + provenance -->
     <div v-else-if="activeTab === 'summary'" class="sr-body">
         <section class="sr-sec">
             <div class="sr-sec-head">
                 Runtime <span class="sr-rt-name">{{ selectedRuntime.runtime_id }}</span>
-                <span class="rt-badge" :class="'tone-' + readiness(selectedRuntime.state).tone">{{ readiness(selectedRuntime.state).state }}</span>
+                <span class="rt-badge" :class="'tone-' + readinessInfo.tone">{{ readinessInfo.state }}</span>
                 <span class="sr-mode" :class="'mode-' + selectedRuntime.mode">{{ selectedRuntime.mode }}</span>
                 <span v-if="selectedRuntime.allocation_strategy_status" class="st-badge"
-                      :class="rollupClasses(selectedRuntime.allocation_strategy_status)">{{ selectedRuntime.allocation_strategy_status }}</span>
+                      :class="'tone-' + rollupInfo.tone">{{ selectedRuntime.allocation_strategy_status }}</span>
+                <span class="lin-badge" :class="'lin-' + lineageInfo.tone">{{ lineageRawLabel }}</span>
             </div>
             <div class="sr-grid">
-                <div class="sr-field"><span class="sr-k">strategy</span><span class="sr-v">{{ dash(selectedRuntime.strategy) }}</span></div>
-                <div class="sr-field"><span class="sr-k">public runtime</span><span class="sr-v">{{ dash(selectedRuntime.target_public_runtime_id) }}</span></div>
-                <div class="sr-field"><span class="sr-k">private runtime</span><span class="sr-v">{{ dash(selectedRuntime.target_private_runtime_id) }}</span></div>
+                <div class="sr-field"><span class="sr-k">strategy</span><span class="sr-v">{{ dash(selectedRuntime.strategy_id || selectedRuntime.strategy) }}</span></div>
+                <div class="sr-field"><span class="sr-k">instance</span><span class="sr-v" :title="selectedRuntime.strategy_instance_id">{{ dash(selectedRuntime.strategy_instance_id) }}</span></div>
+                <div class="sr-field"><span class="sr-k">public runtime</span><span class="sr-v">{{ dash(summaryDeps.public) }}</span></div>
+                <div class="sr-field"><span class="sr-k">private runtime</span><span class="sr-v">{{ dash(summaryDeps.private) }}</span></div>
                 <div class="sr-field">
                     <span class="sr-k">features</span>
                     <span class="sr-v" :class="gateClass(selectedRuntime.features_ready === selectedRuntime.feature_requirements)">
@@ -61,34 +151,93 @@
                 <div class="sr-field"><span class="sr-k">ledger / fills</span><span class="sr-v">{{ dash(selectedRuntime.ledger_events) }} / {{ dash(selectedRuntime.fills) }}</span></div>
             </div>
 
-            <!-- Observed allocation balances (decimal strings, cleanly formatted). -->
-            <div class="sr-grid">
-                <div class="sr-field"><span class="sr-k">observed balance</span><span class="sr-v mono">{{ fmt(selectedRuntime.allocation_observed_balance) }}</span></div>
-                <div class="sr-field"><span class="sr-k">observed available</span><span class="sr-v mono">{{ fmt(selectedRuntime.allocation_observed_available) }}</span></div>
-                <div class="sr-field"><span class="sr-k">unallocated available</span><span class="sr-v mono">{{ fmt(selectedRuntime.allocation_unallocated_available) }}</span></div>
-            </div>
-
             <div v-if="selectedRuntime.last_error" class="sr-lasterr">
                 <span class="sr-k">last error</span> {{ selectedRuntime.last_error }}
             </div>
+        </section>
 
-            <!-- Live-operator approval: expiry + max notional + STALE flag. -->
-            <div v-if="approval.present" class="sr-approval" :class="{ stale: approval.stale }">
+        <!-- LINEAGE — verified may present as running; mismatch/unknown must NOT. -->
+        <section class="sr-sec">
+            <div class="sr-sec-head">Lineage
+                <span class="lin-badge" :class="'lin-' + lineageInfo.tone">{{ lineageRawLabel }}</span>
+                <span v-if="lineageInfo.running" class="sr-run-tag">running</span>
+                <span v-else class="sr-norun-tag" title="lineage not verified — not presented as currently running">not verified</span>
+            </div>
+            <div class="sr-grid">
+                <div class="sr-field"><span class="sr-k">run id</span><span class="sr-v">{{ dash(selectedRuntime.universe_backtest_run_id) }}</span></div>
+                <div class="sr-field"><span class="sr-k">candidate rank</span><span class="sr-v">{{ dash(selectedRuntime.candidate_rank) }}</span></div>
+                <div class="sr-field"><span class="sr-k">candidate run index</span><span class="sr-v">{{ dash(selectedRuntime.candidate_run_index) }}</span></div>
+                <div class="sr-field"><span class="sr-k">params hash</span><span class="sr-v mono" :title="selectedRuntime.strategy_params_sha256">{{ shortSha(selectedRuntime.strategy_params_sha256) }}</span></div>
+                <div class="sr-field"><span class="sr-k">candidate params</span><span class="sr-v mono" :title="selectedRuntime.candidate_params_sha256">{{ shortSha(selectedRuntime.candidate_params_sha256) }}</span></div>
+                <div class="sr-field"><span class="sr-k">trade tf</span><span class="sr-v">{{ dash(selectedRuntime.trade_timeframe) }}</span></div>
+                <div class="sr-field"><span class="sr-k">context tf</span><span class="sr-v">{{ (selectedRuntime.context_timeframes || []).join(', ') || '—' }}</span></div>
+                <div class="sr-field"><span class="sr-k">config sha</span><span class="sr-v mono" :title="selectedRuntime.strategy_config_sha256">{{ shortSha(selectedRuntime.strategy_config_sha256) }}</span></div>
+            </div>
+            <div v-if="lineageReasons.length" class="sr-lin-reasons">
+                <div v-for="(r, i) in lineageReasons" :key="i" class="sr-lin-reason">{{ r }}</div>
+            </div>
+            <div v-if="selectedRuntime.strategy_config_path" class="sr-prov" :title="selectedRuntime.strategy_config_path">
+                <span class="sr-k">config</span> <span class="mono">{{ selectedRuntime.strategy_config_path }}</span>
+            </div>
+        </section>
+
+        <!-- APPROVAL — expiry + max notional + STALE flag (expired ⇒ not mutation-ready). -->
+        <section v-if="approval.present" class="sr-sec">
+            <div class="sr-sec-head">Approval</div>
+            <div class="sr-approval" :class="{ stale: approval.stale }">
                 <span class="sr-appr-tag">APPROVAL</span>
                 <span v-if="approval.stale" class="sr-stale" title="Approval expired (expires_at_ms < now)">⚠ STALE</span>
                 <span v-else class="sr-appr-ok">active</span>
+                <span v-if="approvalRaw.approval_id" class="sr-appr-f">id {{ approvalRaw.approval_id }}</span>
+                <span v-if="approvalRaw.approved_by" class="sr-appr-f">operator {{ approvalRaw.approved_by }}</span>
+                <span v-if="approvalRaw.action" class="sr-appr-f">scope {{ approvalRaw.action }}</span>
                 <span class="sr-appr-f">max notional <b class="mono">{{ fmt(approval.maxOrderNotional) }}</b></span>
                 <span class="sr-appr-f">expires <span class="time">{{ fmtTime(approval.expiresAtMs) }}</span></span>
                 <span v-if="approval.approvedAtMs" class="sr-appr-f">approved <span class="time">{{ fmtTime(approval.approvedAtMs) }}</span></span>
                 <span v-if="approval.tradeTimeframe" class="sr-appr-f">trade tf {{ approval.tradeTimeframe }}</span>
                 <span v-if="approval.contextTimeframes.length" class="sr-appr-f">ctx {{ approval.contextTimeframes.join(', ') }}</span>
+                <span v-if="approval.symbols.length" class="sr-appr-f">TEST {{ approval.symbols.join(', ') }}</span>
+                <span v-if="validationProof" class="sr-appr-f" :title="validationProof">validated</span>
             </div>
         </section>
 
-        <!-- Orders: local journal (queued) kept DISTINCT from dispatched. -->
+        <!-- AUTH READINESS — pending reasons are operator blockers. -->
+        <section class="sr-sec">
+            <div class="sr-sec-head">Auth readiness
+                <span class="sr-v" :class="gateClass(selectedRuntime.auth_ready)">{{ boolText(selectedRuntime.auth_ready) }}</span>
+            </div>
+            <div class="sr-grid">
+                <div class="sr-field"><span class="sr-k">snapshots</span><span class="sr-v">{{ dash(selectedRuntime.matching_auth_snapshots_seen) }} / {{ dash(selectedRuntime.auth_snapshots_seen) }}</span></div>
+                <div class="sr-field"><span class="sr-k">last snapshot</span><span class="sr-v time">{{ fmtTime(selectedRuntime.last_auth_snapshot_ms) }}</span></div>
+            </div>
+            <ul v-if="pendingAuthReasons.length" class="sr-reasons">
+                <li v-for="(r, i) in pendingAuthReasons" :key="i">{{ r }}</li>
+            </ul>
+        </section>
+
+        <!-- ALLOCATION POOL — account / quote / wallet type / observed / unallocated. -->
+        <section class="sr-sec">
+            <div class="sr-sec-head">Allocation pool
+                <span class="sr-v" :class="gateClass(selectedRuntime.allocation_ready)">{{ boolText(selectedRuntime.allocation_ready) }}</span>
+            </div>
+            <div class="sr-grid">
+                <div class="sr-field"><span class="sr-k">account</span><span class="sr-v">{{ dash(selectedRuntime.allocation_account_id) }}</span></div>
+                <div class="sr-field"><span class="sr-k">quote</span><span class="sr-v">{{ dash(selectedRuntime.allocation_quote_currency) }}</span></div>
+                <div class="sr-field"><span class="sr-k">wallet type</span><span class="sr-v">{{ dash(selectedRuntime.allocation_wallet_type) }}</span></div>
+                <div class="sr-field"><span class="sr-k">observed balance</span><span class="sr-v mono">{{ fmt(selectedRuntime.allocation_observed_balance) }}</span></div>
+                <div class="sr-field"><span class="sr-k">observed available</span><span class="sr-v mono">{{ fmt(selectedRuntime.allocation_observed_available) }}</span></div>
+                <div class="sr-field"><span class="sr-k">unallocated available</span><span class="sr-v mono">{{ fmt(selectedRuntime.allocation_unallocated_available) }}</span></div>
+            </div>
+            <ul v-if="pendingAllocationReasons.length" class="sr-reasons">
+                <li v-for="(r, i) in pendingAllocationReasons" :key="i">{{ r }}</li>
+            </ul>
+        </section>
+
+        <!-- ORDERS — local journal (queued) DISTINCT from dispatched; submitted-nonterminal blocker. -->
         <section class="sr-sec">
             <div class="sr-sec-head">Orders
                 <span class="sr-dim">total {{ dash(selectedRuntime.orders_total) }} · active/pending {{ dash(selectedRuntime.orders_active_or_pending) }}</span>
+                <span v-if="runtimeBlocker.blocked" class="sr-blocker" :title="blockerTitle(runtimeBlocker)">⚠ {{ runtimeBlocker.submittedNonterminal }} submitted</span>
             </div>
             <div class="sr-orders">
                 <div class="sr-order-grp sr-order-local" title="Durable LOCAL JOURNAL only — NOT sent to the exchange">
@@ -103,31 +252,68 @@
                     </span>
                 </div>
             </div>
+            <div v-if="runtimeBlocker.blocked" class="sr-blocker-note">
+                Submitted-nonterminal orders are attention blockers until parity/reconciliation clears them.
+                <span v-if="runtimeBlocker.oldestSubmittedTsMs">Oldest submitted <span class="time">{{ fmtTime(runtimeBlocker.oldestSubmittedTsMs) }}</span>.</span>
+            </div>
+        </section>
+
+        <!-- AUDIT PROVENANCE — display-only pointers; chart clients must NOT fetch these. -->
+        <section v-if="auditPointers.length" class="sr-sec">
+            <div class="sr-sec-head">Audit provenance <span class="sr-dim">display only — not fetched</span></div>
+            <div v-for="p in auditPointers" :key="p.k" class="sr-prov" :title="p.v">
+                <span class="sr-k">{{ p.k }}</span> <span class="mono">{{ p.v }}</span>
+            </div>
         </section>
     </div>
 
-    <!-- ═══ BALANCES ═══ -->
+    <!-- ─── BALANCES ─── auth wallets by class + wallet allocation tree. -->
     <div v-else-if="activeTab === 'balances'" class="sr-body">
-        <section class="sr-sec" v-if="walletTree.length">
-            <div class="sr-sec-head">Wallet balances<span class="sr-dim">{{ walletTree.length }}</span></div>
-            <div v-for="w in walletTree" :key="w.wallet_type + ':' + w.currency + ':' + w.class"
-                 class="sr-wallet" :class="{ alloc: w.isAllocationWallet }">
-                <div class="sr-wallet-head">
-                    <span class="sym">{{ w.currency }}</span>
-                    <span class="sr-wclass">{{ w.class }}</span>
-                    <span class="sr-spacer"></span>
-                    <span class="sr-wbal"><span class="sr-k">balance</span> <b class="mono">{{ fmt(w.balance) }}</b></span>
-                    <span class="sr-wbal"><span class="sr-k">available</span> <b class="mono">{{ fmt(w.available) }}</b></span>
-                </div>
+        <section class="sr-sec">
+            <div class="sr-sec-head">Auth wallets<span class="sr-dim">{{ totalAuthWallets }}</span></div>
+            <div v-if="!walletBalanceGroups.length" class="sr-msg sr-msg-sm">No auth wallet balances for this runtime.</div>
+            <div v-for="g in walletBalanceGroups" :key="g.class" class="sr-wclass-grp">
+                <div class="sr-wclass-head">{{ g.class }}<span class="sr-dim">{{ g.wallets.length }}</span></div>
+                <table class="sr-table sr-wtable">
+                    <thead>
+                        <tr><th>Currency</th><th>Wallet type</th><th class="num">Balance</th><th class="num">Available</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(w, i) in g.wallets" :key="w.currency + ':' + w.wallet_type + ':' + i">
+                            <td class="sym">{{ dash(w.currency) }}</td>
+                            <td>{{ dash(w.wallet_type) }}</td>
+                            <td class="num mono">{{ fmt(w.balance) }}</td>
+                            <td class="num mono">{{ fmt(w.available) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
 
-                <!-- The wallet the strategy allocates FROM: the allocation pool + the
-                     ticker allocations sourced from it. -->
-                <div v-if="w.isAllocationWallet" class="sr-wallet-alloc">
+        <!-- WALLET ALLOCATION TREE — server-computed wallet_allocations[] preferred;
+             flat allocation_* fallback is CLEARLY MARKED legacy / inferred. -->
+        <section class="sr-sec">
+            <div class="sr-sec-head">Wallet allocation tree
+                <span v-if="allocTree.legacy" class="sr-legacy-tag"
+                      title="wallet_allocations[] absent — inferred from the flat allocation_* pool; allocated_to_strategy not server-computed">legacy / inferred</span>
+                <span class="sr-dim">{{ allocTree.wallets.length }}</span>
+            </div>
+            <div v-if="!allocTree.wallets.length" class="sr-msg sr-msg-sm">No wallet allocations for this runtime.</div>
+            <div v-for="w in allocTree.wallets" :key="walletKey(w)" class="sr-wallet alloc">
+                <div class="sr-wallet-head">
+                    <span class="sym">{{ dash(w.currency) }}</span>
+                    <span v-if="w.class" class="sr-wclass">{{ w.class }}</span>
+                    <span v-if="w.wallet_type" class="sr-wtype">{{ w.wallet_type }}</span>
+                    <span class="sr-spacer"></span>
+                    <span class="sr-wbal"><span class="sr-k">allocated</span> <b class="mono">{{ w.legacy ? '—' : fmt(w.allocated_to_strategy) }}</b></span>
+                    <span class="sr-wbal"><span class="sr-k">unallocated</span> <b class="mono">{{ fmt(w.unallocated_available) }}</b></span>
+                </div>
+                <div class="sr-wallet-alloc">
                     <div class="sr-alloc-pool">
-                        <span class="sr-appr-tag">STRATEGY ALLOCATION</span>
-                        <span class="sr-appr-f">observed <b class="mono">{{ fmt(w.observedBalance) }}</b></span>
-                        <span class="sr-appr-f">available <b class="mono">{{ fmt(w.observedAvailable) }}</b></span>
-                        <span class="sr-appr-f">unallocated <b class="mono">{{ fmt(w.unallocatedAvailable) }}</b></span>
+                        <span class="sr-appr-tag">POOL</span>
+                        <span v-if="w.account_id" class="sr-appr-f">account {{ w.account_id }}</span>
+                        <span class="sr-appr-f">observed <b class="mono">{{ fmt(w.observed_balance) }}</b></span>
+                        <span class="sr-appr-f">available <b class="mono">{{ fmt(w.observed_available) }}</b></span>
                     </div>
                     <table v-if="w.tickers.length" class="sr-table sr-alloc">
                         <thead>
@@ -140,9 +326,13 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="t in w.tickers" :key="t.ticker_id">
-                                <td class="sym" :title="t.ticker_id">{{ t.symbol }}</td>
-                                <td><span class="st-badge" :class="statusClasses(t.status)">{{ statusLabel(t.status) }}</span></td>
+                            <tr v-for="t in w.tickers" :key="t.ticker_id"
+                                :class="{ selected: t.ticker_id === selectedTickerId }">
+                                <td class="sym" :title="t.ticker_id">{{ symbolOf(t.ticker_id) }}</td>
+                                <td>
+                                    <span class="st-badge" :class="tickerBadge(t._status)">{{ t._status.status }}</span>
+                                    <span v-if="t._blocker.blocked" class="sr-blocker sr-blocker-sm" :title="blockerTitle(t._blocker)">⚠</span>
+                                </td>
                                 <td class="num mono">{{ fmt(t.allocated_equity) }}</td>
                                 <td class="num mono">{{ fmt(t.available_cash) }}</td>
                                 <td class="num mono">{{ fmt(t.reserved_cash) }}</td>
@@ -159,16 +349,14 @@
                 </div>
             </div>
         </section>
-        <div v-else class="sr-msg sr-msg-sm">No wallet balances for this runtime.</div>
     </div>
 
-    <!-- ═══ DECISION AUDIT ═══ -->
+    <!-- ─── DECISION AUDIT ─── ticker drill-down. -->
     <div v-else-if="activeTab === 'audit'" class="sr-body">
         <section class="sr-sec">
             <div class="sr-sec-head">Decision audit<span class="sr-dim">{{ decisions.length }}</span></div>
             <div v-if="!auditTickers.length" class="sr-msg sr-msg-sm">No decisions loaded for this runtime.</div>
             <div v-else class="sr-audit">
-                <!-- clickable ticker list -->
                 <div class="sr-audit-list" role="tablist" aria-label="Tickers">
                     <button v-for="tk in auditTickers" :key="tk.ticker_id"
                             class="sr-audit-tk" :class="{ active: tk.ticker_id === activeAuditTicker }"
@@ -178,7 +366,6 @@
                         <span class="sr-dim">{{ tk.count }}</span>
                     </button>
                 </div>
-                <!-- the selected ticker's most-recent decisions -->
                 <div class="sr-audit-detail">
                     <table v-if="auditDecisions.length" class="sr-table sr-decisions">
                         <thead>
@@ -212,25 +399,36 @@
 </template>
 
 <script>
-// CorkyStrategyPanel — presentational Strategy-runtime view (bottom dock). App
-// owns the CorkyStrategyFeed + selection/state; this renders props + emits intents
-// (select-runtime / refresh). Three tabs: Summary / Balances / Decision Audit.
+// CorkyStrategyPanel — presentational Strategy-runtime view (bottom dock): a
+// process→runtime→ticker+dependency HIERARCHY plus a per-runtime DRILLDOWN
+// (Summary / Balances / Decision Audit). App owns the CorkyStrategyFeed +
+// selection/streaming; this renders props + emits intents (select-runtime /
+// refresh). Ticker selection (for command routing) is LOCAL UI state.
 //
 // DECIMAL SAFETY: every money/quantity field is a decimal STRING. fmt() formats
 // for display via PURE STRING MANIPULATION (trims trailing zeros, groups
 // thousands) — it never Number()-parses, so 28-digit decimals stay exact.
 // Number() is only used for colouring / order-COUNT integers.
 //
-// TWO STATUS AXES kept visually distinct: runtime READINESS (Ready/…) vs
-// strategy/allocation status (waiting/long/short/…). `queued` = durable LOCAL
-// JOURNAL only (NOT exchange-sent).
+// The three status AXES are kept visually distinct: runtime READINESS (Ready/…),
+// the coarse allocation rollup (active/…), and the per-TICKER status
+// (waiting/long/short/…) classified via classifyTickerStatus. LINEAGE is its own
+// badge: only `verified` may read as running; mismatch/unknown never do.
 import {
-    classifyStrategyStatus,
     classifyRuntimeReadiness,
     classifyRuntimeStrategyRollup,
+    classifyTickerStatus,
+    classifyLineage,
+    buildWalletAllocationTree,
+    groupWalletBalancesByClass,
+    groupRuntimesByProcess,
+    normalizeDependencies,
+    orderBlocker,
+    strategyTickerControlActions,
     splitOrderStatusCounts,
     approvalStatus,
     fmtDecimal,
+    fmtDuration,
     DISPATCHED_STATUS_KEYS,
 } from '../../helpers/feed/corky-strategy-transforms.js'
 import { isNeg } from '../../helpers/feed/corky-positions.js'
@@ -252,17 +450,78 @@ export default {
         error: { type: String, default: null },
         streaming: { type: Boolean, default: false },
         now: { type: Number, default: 0 },
+        // Direct-control session state (App-owned): { available, pending, awaiting,
+        // error }. `available` gates the WHOLE control surface — when false, NO
+        // control action renders (there is no valid control session, or the
+        // runtime does not advertise direct control). `pending`/`awaiting` drive
+        // the in-flight → awaiting-reconciliation hint; `error` surfaces a send
+        // failure. Controls MUTATE a live runtime, so this is opt-in and hidden by
+        // default.
+        control: { type: Object, default: () => ({ available: false, pending: false, awaiting: false, error: null }) },
     },
-    emits: ['select-runtime', 'refresh'],
+    emits: [
+        'select-runtime', 'refresh',
+        // Direct-control intents (App echoes them to the feed's control methods).
+        'cancel-ticker-orders', 'pause-ticker', 'resume-ticker', 'unlock-ticker', 'adopt-position',
+    ],
     data() {
         return {
             TABS,
             activeTab: 'summary',
+            // Which ticker is highlighted (kept for command routing / drilldown focus).
+            selectedTicker: '',
             // Decision-audit: which ticker's decisions are shown (local UI state).
             selectedAuditTicker: '',
+            // Control inputs (local UI state). `reason` is the MANDATORY visible
+            // operator reason; unlock/adopt add their allocation/position inputs.
+            reason: '',
+            unlockCurrency: '',
+            unlockAmount: '',
+            adoptPositionId: '',
+            controlValidation: '',
         }
     },
     computed: {
+        // Injected clock (App-owned) or wall-clock fallback. Only used for DURATION
+        // math on PUBLISHED timing fields — never invents a duration when timing is
+        // absent (classifyTickerStatus omits it).
+        nowMs() { return this.now || Date.now() },
+
+        // Process → runtime hierarchy, each runtime pre-classified (readiness,
+        // lineage, rollup) with its ticker + dependency child rows.
+        processGroups() {
+            const now = this.nowMs
+            return groupRuntimesByProcess(this.runtimes).map((g) => {
+                let ready = 0
+                let degraded = 0
+                const runtimes = g.runtimes.map((rt) => {
+                    const readiness = classifyRuntimeReadiness(rt.state)
+                    if (readiness.ready) ready++
+                    if (String(rt.state) === 'Degraded') degraded++
+                    const ordersById = this._tickerOrdersMap(rt)
+                    // Prefer the published tickers[]; fall back to ticker_allocations[]
+                    // (older runtime with no runtime.tickers[]).
+                    const src = Array.isArray(rt.tickers) && rt.tickers.length ? rt.tickers
+                        : (Array.isArray(rt.ticker_allocations) ? rt.ticker_allocations : [])
+                    const tickers = src.filter(Boolean).map((t) => ({
+                        ticker_id: t.ticker_id,
+                        symbol: t.symbol || this.symbolOf(t.ticker_id),
+                        status: classifyTickerStatus(t.status, t, now),
+                        blocker: orderBlocker(ordersById.get(t.ticker_id) || t),
+                    }))
+                    return {
+                        rt,
+                        readiness,
+                        lineage: classifyLineage(rt.lineage_status),
+                        lineageRaw: rt.lineage_status != null && rt.lineage_status !== '' ? rt.lineage_status : 'unknown',
+                        deps: normalizeDependencies(rt),
+                        tickers,
+                    }
+                })
+                return { process_kind: g.process_kind, total: g.runtimes.length, ready, degraded, runtimes }
+            })
+        },
+
         activeRuntimeId() {
             const ids = this.runtimes.map((r) => r && r.runtime_id)
             if (this.selectedRuntimeId && ids.includes(this.selectedRuntimeId)) return this.selectedRuntimeId
@@ -272,73 +531,133 @@ export default {
         selectedRuntime() {
             return this.runtimes.find((r) => r && r.runtime_id === this.activeRuntimeId) || null
         },
-        approval() {
+        selectedTickerId() {
             const rt = this.selectedRuntime
-            return approvalStatus(rt && rt.live_operator_approval, this.now || Date.now())
+            if (!rt || !this.selectedTicker) return ''
+            return this.selectedTicker
         },
-        orderSplit() {
-            return splitOrderStatusCounts(this.selectedRuntime && this.selectedRuntime.order_status_counts)
+
+        // ── direct-control surface ────────────────────────────────────────────────
+        // The whole control surface is gated on `control.available` — a valid
+        // control session that offers direct strategy control. When false, NOTHING
+        // controllable renders (the operator cannot mutate a session-less runtime).
+        controlEnabled() { return !!(this.control && this.control.available) },
+        controlPending() { return !!(this.control && this.control.pending) },
+        // awaiting is the runtime_id a control was sent to → show the hint only for
+        // that runtime (the operator's selected/active runtime).
+        controlAwaiting() { return !!this.control && this.control.awaiting === this.activeRuntimeId },
+        // Public/private dependency ids from the contract-canonical dependencies[]
+        // (falling back, inside normalizeDependencies, to the legacy target_* fields).
+        summaryDeps() {
+            const deps = normalizeDependencies(this.selectedRuntime)
+            const pick = (kind) => { const d = deps.find((x) => x && x.kind === kind); return d ? d.runtime_id : null }
+            return { public: pick('public'), private: pick('private') }
         },
-        dispatchedKeys() { return DISPATCHED_STATUS_KEYS },
-        // Per-ticker allocation rows: ticker_allocations joined with ticker_orders
-        // (order counts) by ticker_id. Each carries its own status + order split.
-        tickerRows() {
+        controlError() { return (this.control && this.control.error) || null },
+
+        // The selected ticker resolved for control: its live status + submitted-order
+        // blocker + the applicable actions (pause/resume/unlock/adopt/cancel). Null
+        // when no ticker is selected or it isn't found on the selected runtime.
+        controlTarget() {
             const rt = this.selectedRuntime
-            if (!rt) return []
-            const ordersById = new Map()
-            for (const o of (rt.ticker_orders || [])) if (o && o.ticker_id) ordersById.set(o.ticker_id, o)
-            return (rt.ticker_allocations || []).map((a) => {
-                const orders = ordersById.get(a.ticker_id) || null
-                return {
-                    ...a,
-                    symbol: (orders && orders.symbol) || this._symbolFromTickerId(a.ticker_id),
-                    orderSplit: splitOrderStatusCounts(orders && orders.order_status_counts),
-                }
-            })
-        },
-        // Balances tab: wallet balances, each annotated with the strategy allocation
-        // it sources (only the wallet matching allocation_wallet_type +
-        // allocation_quote_currency), with the ticker allocations nested under it.
-        // NOTE: the wallet↔allocation match is INFERRED here from the single-pool
-        // snapshot shape — see the backend note in the PR; an explicit per-wallet
-        // `allocated_to_strategy` + `ticker_allocations` would remove this inference.
-        walletTree() {
-            const rt = this.selectedRuntime
-            if (!rt) return []
-            const allocType = rt.allocation_wallet_type
-            const allocCcy = rt.allocation_quote_currency
-            const balances = Array.isArray(rt.auth_wallet_balances) ? rt.auth_wallet_balances : []
-            let matched = false
-            const rows = balances.map((w) => {
-                const isAlloc = allocCcy != null && w.currency === allocCcy &&
-                    (allocType == null || w.wallet_type === allocType)
-                if (isAlloc) matched = true
-                return {
-                    wallet_type: w.wallet_type, currency: w.currency,
-                    class: w.class || w.wallet_type || 'other',
-                    balance: w.balance, available: w.available,
-                    isAllocationWallet: isAlloc,
-                    observedBalance: isAlloc ? rt.allocation_observed_balance : null,
-                    observedAvailable: isAlloc ? rt.allocation_observed_available : null,
-                    unallocatedAvailable: isAlloc ? rt.allocation_unallocated_available : null,
-                    tickers: isAlloc ? this.tickerRows : [],
-                }
-            })
-            // Fallback: the allocation wallet isn't in the balances list → surface
-            // the pool + tickers as a synthetic row so allocations are never hidden.
-            if (!matched && (this.tickerRows.length || allocCcy != null)) {
-                rows.push({
-                    wallet_type: allocType || '', currency: allocCcy || '—', class: 'allocation',
-                    balance: rt.allocation_observed_balance, available: rt.allocation_observed_available,
-                    isAllocationWallet: true,
-                    observedBalance: rt.allocation_observed_balance,
-                    observedAvailable: rt.allocation_observed_available,
-                    unallocatedAvailable: rt.allocation_unallocated_available,
-                    tickers: this.tickerRows,
-                })
+            const tid = this.selectedTickerId
+            if (!rt || !tid) return null
+            const src = Array.isArray(rt.tickers) && rt.tickers.length ? rt.tickers
+                : (Array.isArray(rt.ticker_allocations) ? rt.ticker_allocations : [])
+            const tk = src.find((t) => t && t.ticker_id === tid)
+            if (!tk) return null
+            const statusInfo = classifyTickerStatus(tk.status, tk, this.nowMs)
+            const blocker = orderBlocker(this._tickerOrdersMap(rt).get(tid) || tk)
+            // Unverified (mismatched) lineage → withhold capital/position-committing
+            // controls (unlock/adopt); halt/safety controls stay available.
+            const lineage = classifyLineage(rt.lineage_status)
+            const capitalBlocked = lineage.tone === 'attention'
+            const actions = strategyTickerControlActions(statusInfo.status, blocker, { capitalBlocked })
+            return {
+                runtime_id: rt.runtime_id,
+                ticker_id: tid,
+                symbol: tk.symbol || this.symbolOf(tid),
+                statusInfo,
+                blocker,
+                actions,
+                capitalBlocked,
+                lineageRaw: lineage.raw,
+                needsAllocation: actions.some((a) => a.allocation),
+                needsPosition: actions.some((a) => a.position),
             }
-            return rows
         },
+
+        readinessInfo() { return classifyRuntimeReadiness(this.selectedRuntime && this.selectedRuntime.state) },
+        rollupInfo() { return classifyRuntimeStrategyRollup(this.selectedRuntime && this.selectedRuntime.allocation_strategy_status) },
+        lineageInfo() { return classifyLineage(this.selectedRuntime && this.selectedRuntime.lineage_status) },
+        lineageRawLabel() {
+            const s = this.selectedRuntime && this.selectedRuntime.lineage_status
+            return s != null && s !== '' ? s : 'unknown'
+        },
+        lineageReasons() {
+            const r = this.selectedRuntime && this.selectedRuntime.lineage_reasons
+            return Array.isArray(r) ? r : []
+        },
+        pendingAuthReasons() {
+            const r = this.selectedRuntime && this.selectedRuntime.pending_auth_reasons
+            return Array.isArray(r) ? r : []
+        },
+        pendingAllocationReasons() {
+            const r = this.selectedRuntime && this.selectedRuntime.pending_allocation_reasons
+            return Array.isArray(r) ? r : []
+        },
+
+        approvalRaw() { return (this.selectedRuntime && this.selectedRuntime.live_operator_approval) || {} },
+        approval() { return approvalStatus(this.approvalRaw && this.approvalRaw.approval_id ? this.approvalRaw : null, this.nowMs) },
+        validationProof() {
+            const p = this.approvalRaw && this.approvalRaw.live_validation_proof
+            return p && p.kind ? p.kind : null
+        },
+
+        orderSplit() { return splitOrderStatusCounts(this.selectedRuntime && this.selectedRuntime.order_status_counts) },
+        dispatchedKeys() { return DISPATCHED_STATUS_KEYS },
+        runtimeBlocker() { return orderBlocker(this.selectedRuntime) },
+
+        // Auth wallets grouped by class (exchange/margin/funding/derivative/other),
+        // passed through VERBATIM (balances stay decimal strings).
+        walletBalanceGroups() { return groupWalletBalancesByClass(this.selectedRuntime && this.selectedRuntime.auth_wallet_balances) },
+        totalAuthWallets() {
+            const b = this.selectedRuntime && this.selectedRuntime.auth_wallet_balances
+            return Array.isArray(b) ? b.length : 0
+        },
+
+        // Wallet → strategy → ticker allocation tree from the transform (prefers the
+        // server-computed wallet_allocations[]; marks the flat fallback legacy). Each
+        // ticker claim gets its status classified + its submitted-order blocker.
+        allocTree() {
+            const rt = this.selectedRuntime
+            if (!rt) return { legacy: false, wallets: [] }
+            const now = this.nowMs
+            const tree = buildWalletAllocationTree(rt)
+            const ordersById = this._tickerOrdersMap(rt)
+            return {
+                legacy: tree.legacy,
+                wallets: tree.wallets.map((w) => ({
+                    ...w,
+                    tickers: (w.tickers || []).map((t) => ({
+                        ...t,
+                        _status: classifyTickerStatus(t.status, t, now),
+                        _blocker: orderBlocker(ordersById.get(t.ticker_id) || t),
+                    })),
+                })),
+            }
+        },
+
+        auditPointers() {
+            const rt = this.selectedRuntime || {}
+            return [
+                { k: 'market data', v: rt.market_data_audit_path },
+                { k: 'decisions', v: rt.decision_audit_path },
+                { k: 'orders', v: rt.order_journal_path },
+                { k: 'controls', v: rt.control_audit_path },
+            ].filter((p) => p.v != null && p.v !== '')
+        },
+
         // Decisions grouped by ticker (input order) — feeds the audit ticker list.
         decisionGroups() {
             const groups = []
@@ -372,15 +691,69 @@ export default {
         },
     },
     methods: {
+        // ── selection ───────────────────────────────────────────────────────────
+        selectRuntime(id) {
+            this.selectedTicker = ''
+            this.$emit('select-runtime', id)
+        },
+        selectTicker(runtimeId, tickerId) {
+            // Selecting a ticker also selects its parent runtime (so the drilldown
+            // reflects it); ticker_id is retained for command routing.
+            if (runtimeId !== this.activeRuntimeId) this.$emit('select-runtime', runtimeId)
+            // Switching to a DIFFERENT ticker clears any in-progress control inputs
+            // so a stale reason / amount / position_id can't be sent for the new one
+            // (re-selecting the same ticker keeps an in-progress edit).
+            if (tickerId !== this.selectedTicker) {
+                this.reason = ''
+                this.unlockCurrency = ''
+                this.unlockAmount = ''
+                this.adoptPositionId = ''
+            }
+            this.selectedTicker = tickerId
+            this.controlValidation = ''
+        },
+
+        // ── direct control ──────────────────────────────────────────────────────
+        // Validate the required operator reason (+ unlock allocation / adopt
+        // position) then EMIT the intent — the panel never mutates local strategy
+        // state; App forwards the intent to the feed and waits for the subscription
+        // full-replacement to reconcile. runtime_id + ticker_id come from the
+        // discovered runtime snapshot (the routing target for the gateway).
+        runControl(action) {
+            this.controlValidation = ''
+            const t = this.controlTarget
+            if (!t || !this.controlEnabled) return
+            const reason = String(this.reason || '').trim()
+            if (!reason) { this.controlValidation = 'A visible operator reason is required.'; return }
+            const payload = { runtime_id: t.runtime_id, ticker_id: t.ticker_id, reason }
+            if (action.kind === 'unlock') {
+                const currency = String(this.unlockCurrency || '').trim()
+                const amount = String(this.unlockAmount || '').trim()
+                if (!currency || !amount) { this.controlValidation = 'Unlock requires a currency and a decimal amount.'; return }
+                // amount stays a DECIMAL STRING (never Number()-parsed).
+                payload.new_allocation = { currency, amount }
+            } else if (action.kind === 'adopt') {
+                const pid = String(this.adoptPositionId || '').trim()
+                if (!pid) { this.controlValidation = 'Adoption requires a position_id.'; return }
+                // position_id is an integer in the gateway shape — coerce a numeric
+                // string; otherwise forward verbatim.
+                payload.position_id = /^\d+$/.test(pid) ? Number(pid) : pid
+            }
+            this.$emit(action.intent, payload)
+            // Each control action must carry a freshly-entered operator reason — clear
+            // the audited inputs after a successful emit.
+            this.reason = ''
+            this.unlockAmount = ''
+            this.adoptPositionId = ''
+        },
+
         // ── formatting ──────────────────────────────────────────────────────────
-        // Clean decimal display: trims trailing zeros + groups thousands, PURE
-        // string manipulation (never float-parses). null/'' → '—'.
         fmt(v) { return fmtDecimal(v) },
+        fmtDur(ms) { return fmtDuration(ms) },
         dash(v) { return (v == null || v === '') ? '—' : v },
         dash0(v) { return (v == null || v === '') ? '0' : v },
         boolText(v) { return v === true ? 'yes' : v === false ? 'no' : '—' },
         gateClass(ok) { return ok === true ? 'pos' : ok === false ? 'neg' : '' },
-        // Colour a P/L decimal string by its TEXTUAL sign (no float maths).
         signClass(dec) {
             if (dec == null || dec === '') return ''
             const s = String(dec).trim()
@@ -388,14 +761,20 @@ export default {
             return /^0(?:\.0+)?$/.test(s) ? '' : 'pos'
         },
         numOr0(v) { const n = Number(v); return Number.isFinite(n) ? n : 0 },
+
         // ── classification helpers ──────────────────────────────────────────────
-        readiness(state) { return classifyRuntimeReadiness(state) },
-        statusClasses(raw) {
-            const info = classifyStrategyStatus(raw)
-            return [`tone-${info.tone}`, `st-${info.status}`]
+        // Ticker status → badge classes. `style` groups long/short/muted/attention/
+        // lockout/transitional/neutral; `attn`/`lockout` layer the attention family.
+        tickerBadge(info) {
+            return [`sts-${info.style}`, info.attention ? 'attn' : '', info.lockout ? 'lockout' : ''].filter(Boolean)
         },
-        statusLabel(raw) { return classifyStrategyStatus(raw).status },
-        rollupClasses(raw) { return [`tone-${classifyRuntimeStrategyRollup(raw).tone}`] },
+        blockerTitle(b) {
+            let s = `submitted-nonterminal orders: ${b.submittedNonterminal} (attention blocker until reconciliation)`
+            if (b.oldestSubmittedTsMs) s += ` — oldest ${this.fmtTime(b.oldestSubmittedTsMs)}`
+            return s
+        },
+        walletKey(w) { return [w.account_id, w.wallet_type, w.currency, w.class].join(':') },
+
         // ── decision-audit cell summaries (hover titles) ────────────────────────
         intentsTitle(intents) {
             const a = Array.isArray(intents) ? intents : []
@@ -431,10 +810,20 @@ export default {
             const s = String(fp).replace(/^sha256:/, '')
             return s.length > 10 ? s.slice(0, 10) + '…' : s
         },
-        _symbolFromTickerId(id) {
+        shortSha(sha) {
+            if (sha == null || sha === '') return '—'
+            const s = String(sha).replace(/^sha256:/, '')
+            return s.length > 12 ? 'sha256:' + s.slice(0, 12) + '…' : String(sha)
+        },
+        symbolOf(id) {
             if (!id) return ''
             const parts = String(id).split(':')
             return parts.length > 2 ? parts.slice(1).join(':') : id
+        },
+        _tickerOrdersMap(rt) {
+            const m = new Map()
+            for (const o of ((rt && rt.ticker_orders) || [])) if (o && o.ticker_id) m.set(o.ticker_id, o)
+            return m
         },
         fmtTime(ms) {
             if (!(ms > 0)) return '—'
@@ -464,20 +853,43 @@ export default {
 .sr-msg { padding: 14px; color: #808a9d; text-align: center; }
 .sr-msg-sm { padding: 8px; text-align: left; font-size: 11px; }
 
-/* Runtime selector */
-.sr-runtimes { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border-bottom: 1px solid #1c212e; }
-.sr-rt { display: flex; align-items: center; gap: 10px; text-align: left; background: #0e1320; color: #d1d4dc;
+/* ── Hierarchy ─────────────────────────────────────────────────────────────── */
+.sr-hier { flex: 0 0 auto; max-height: 44%; overflow: auto; padding: 6px 12px 8px; border-bottom: 1px solid #1c212e; }
+.sr-proc { margin-top: 6px; }
+.sr-proc-head { display: flex; align-items: baseline; gap: 10px; padding: 4px 0 6px; }
+.sr-proc-kind { color: #58a6ff; font-weight: 700; font-size: 11px; letter-spacing: 0.02em; }
+.sr-proc-stat { color: #808a9d; font-size: 11px; font-variant-numeric: tabular-nums; }
+.sr-rt-node { margin: 0 0 6px; }
+.sr-rt { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: #0e1320; color: #d1d4dc;
          border: 1px solid #2a2e39; border-radius: 4px; padding: 6px 10px; cursor: pointer; }
 .sr-rt:hover { border-color: #35a776; }
 .sr-rt.active { border-color: #35a776; box-shadow: inset 3px 0 0 #35a776; background: rgba(53,167,118,0.08); }
 .sr-rt-id { font-weight: 700; color: #fff; }
 .sr-rt-strategy { color: #808a9d; }
+.sr-rt-inst { color: #5c6470; font-size: 11px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sr-rt-name { color: #fff; font-weight: 700; text-transform: none; letter-spacing: 0; font-size: 12px; }
 .sr-mode { font-size: 10px; text-transform: uppercase; padding: 1px 6px; border-radius: 8px; background: #2a2e39; color: #b0b6c0; }
 .sr-mode.mode-live { background: rgba(229,65,80,0.16); color: #e07a85; }
 .sr-mode.mode-shadow_live { background: rgba(88,166,255,0.16); color: #58a6ff; }
+.sr-mode.mode-paper { background: rgba(129,139,157,0.16); color: #9aa4b2; }
 
-/* Body / sections */
+.sr-rt-children { padding: 4px 0 0 18px; display: flex; flex-direction: column; gap: 4px; }
+.sr-child-grp { display: flex; flex-direction: column; gap: 3px; }
+.sr-ticker { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: transparent; color: #d1d4dc;
+             border: 1px solid transparent; border-left: 2px solid #2a2e39; border-radius: 0 4px 4px 0; padding: 3px 8px; cursor: pointer; }
+.sr-ticker:hover { background: rgba(255,255,255,0.03); border-left-color: #35a776; }
+.sr-ticker.active { background: rgba(53,167,118,0.1); border-left-color: #35a776; }
+.sr-tk-sym { color: #fff; font-weight: 600; }
+.sr-tk-dur { color: #808a9d; font-size: 11px; }
+.sr-tk-reason { color: #808a9d; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-deps { padding-top: 2px; }
+.sr-deps-label { color: #5c6470; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+.sr-dep { display: flex; align-items: baseline; gap: 8px; padding: 1px 8px; border-left: 2px solid #1c212e; }
+.sr-dep-kind { color: #808a9d; font-size: 11px; }
+.sr-dep-id { color: #b0b6c0; font-size: 11px; }
+.sr-dep-id.unknown { color: #f5c518; font-style: italic; }
+
+/* ── Body / sections ───────────────────────────────────────────────────────── */
 .sr-body { flex: 1 1 0; min-height: 0; overflow: auto; padding: 4px 12px 14px; }
 .sr-sec { margin-top: 12px; }
 .sr-sec-head { display: flex; align-items: center; gap: 8px; color: #35a776; font-weight: 700; font-size: 10px;
@@ -490,6 +902,11 @@ export default {
 .mono { font-variant-numeric: tabular-nums; }
 .time { color: #808a9d; }
 .sr-lasterr { margin-top: 8px; color: #e07a85; background: rgba(229,65,80,0.08); border: 1px solid rgba(229,65,80,0.3); border-radius: 4px; padding: 6px 8px; }
+.sr-reasons { margin: 6px 0 0; padding: 0 0 0 18px; color: #f5c518; font-size: 11px; }
+.sr-lin-reasons { margin-top: 6px; }
+.sr-lin-reason { color: #808a9d; font-size: 11px; padding: 1px 0; }
+.sr-prov { margin-top: 4px; color: #5c6470; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-prov .mono { color: #6b7686; }
 
 /* Readiness badge (delivery axis) */
 .rt-badge { font-size: 10px; text-transform: uppercase; padding: 1px 7px; border-radius: 9px; background: #2a2e39; color: #b0b6c0; }
@@ -497,8 +914,27 @@ export default {
 .rt-badge.tone-pending { background: rgba(245,197,24,0.18); color: #f5c518; }
 .rt-badge.tone-unknown { background: #2a2e39; color: #808a9d; }
 
+/* Lineage badge — verified / attention (mismatch) / pending / neutral (unknown). */
+.lin-badge { font-size: 10px; text-transform: uppercase; padding: 1px 7px; border-radius: 4px; background: #2a2e39; color: #808a9d; white-space: nowrap; }
+.lin-badge.lin-verified { background: rgba(53,167,118,0.18); color: #35a776; box-shadow: inset 0 0 0 1px rgba(53,167,118,0.5); }
+.lin-badge.lin-attention { background: rgba(229,65,80,0.2); color: #ff6b7a; box-shadow: inset 0 0 0 1px rgba(229,65,80,0.6); }
+.lin-badge.lin-pending { background: rgba(245,197,24,0.16); color: #f5c518; }
+.lin-badge.lin-neutral { background: #2a2e39; color: #808a9d; }
+.sr-run-tag { font-size: 10px; color: #35a776; text-transform: uppercase; letter-spacing: 0.04em; }
+.sr-norun-tag { font-size: 10px; color: #808a9d; text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* Legacy / inferred marker */
+.sr-legacy-tag { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+                 color: #f5c518; background: rgba(245,197,24,0.14); border: 1px solid rgba(245,197,24,0.4); border-radius: 3px; padding: 0 5px; }
+
+/* Submitted-order blocker overlay */
+.sr-blocker { font-size: 10px; font-weight: 700; color: #ff9f40; background: rgba(255,159,64,0.16);
+              border: 1px solid rgba(255,159,64,0.5); border-radius: 3px; padding: 0 5px; white-space: nowrap; }
+.sr-blocker-sm { padding: 0 3px; }
+.sr-blocker-note { margin-top: 6px; color: #ff9f40; font-size: 11px; }
+
 /* Approval + allocation pool chips */
-.sr-approval { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 8px;
+.sr-approval { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px;
                border: 1px solid rgba(53,167,118,0.3); border-radius: 4px; padding: 6px 10px; background: rgba(53,167,118,0.05); }
 .sr-approval.stale { border-color: rgba(229,65,80,0.5); background: rgba(229,65,80,0.07); }
 .sr-appr-tag { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; color: #808a9d; }
@@ -518,15 +954,22 @@ export default {
 .sr-oc-v { color: #d1d4dc; font-variant-numeric: tabular-nums; }
 .sr-oc.zero .sr-oc-k, .sr-oc.zero .sr-oc-v { color: #5c6470; }
 
-/* Balances: wallet cards with a nested allocation block */
+/* Balances: auth-wallet class groups */
+.sr-wclass-grp { margin-top: 8px; }
+.sr-wclass-head { display: flex; align-items: baseline; gap: 6px; color: #b0b6c0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; padding: 4px 0; }
+.sr-wtable { margin-bottom: 4px; }
+
+/* Balances: wallet allocation cards with a nested claim table */
 .sr-wallet { border: 1px solid #2a2e39; border-radius: 5px; margin-top: 8px; overflow: hidden; }
 .sr-wallet.alloc { border-color: rgba(53,167,118,0.4); }
 .sr-wallet-head { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #131a27; }
 .sr-wclass { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #808a9d; }
+.sr-wtype { font-size: 10px; color: #6b7686; }
 .sr-wbal { font-size: 11px; color: #d1d4dc; }
 .sr-wbal .sr-k { margin-right: 4px; }
 .sr-wallet-alloc { padding: 8px 10px; border-top: 1px solid #1c212e; }
 .sr-alloc-pool { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 8px; }
+.sr-alloc tbody tr.selected { background: rgba(53,167,118,0.12); }
 
 /* Decision audit: ticker list + detail */
 .sr-audit { display: flex; gap: 10px; margin-top: 8px; align-items: flex-start; }
@@ -545,22 +988,21 @@ export default {
 .sr-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.025); }
 .sym { color: #fff; font-weight: 600; }
 
-/* Strategy/allocation status badges — one distinct treatment per status. */
+/* Status badges — runtime rollup tones + ticker-status style families. */
 .st-badge { font-size: 10px; text-transform: uppercase; padding: 1px 7px; border-radius: 9px; background: #2a2e39; color: #b0b6c0; white-space: nowrap; }
 .st-badge.tone-idle { background: rgba(129,139,157,0.18); color: #9aa4b2; }
-.st-badge.tone-long { background: rgba(53,167,118,0.18); color: #35a776; }
-.st-badge.tone-short { background: rgba(229,65,80,0.18); color: #e54150; }
-.st-badge.tone-warn { background: rgba(245,197,24,0.18); color: #f5c518; }
-.st-badge.tone-critical { background: rgba(229,65,80,0.28); color: #ff6b7a; }
-.st-badge.tone-unknown { background: #2a2e39; color: #808a9d; }
 .st-badge.tone-ready { background: rgba(53,167,118,0.18); color: #35a776; }
-.st-badge.st-waiting { box-shadow: inset 0 0 0 1px rgba(129,139,157,0.5); }
-.st-badge.st-long { box-shadow: inset 0 0 0 1px rgba(53,167,118,0.6); }
-.st-badge.st-short { box-shadow: inset 0 0 0 1px rgba(229,65,80,0.6); }
-.st-badge.st-paused { box-shadow: inset 0 0 0 1px rgba(245,197,24,0.7); border-radius: 3px; }
-.st-badge.st-degraded { box-shadow: inset 0 0 0 1px rgba(255,159,64,0.7); background: rgba(255,159,64,0.16); color: #ff9f40; }
-.st-badge.st-bust_locked { box-shadow: inset 0 0 0 1px rgba(229,65,80,0.9); background: rgba(229,65,80,0.34); color: #fff; letter-spacing: 0.04em; }
-.st-badge.st-capital_shortfall { box-shadow: inset 0 0 0 1px rgba(187,134,252,0.8); background: rgba(187,134,252,0.2); color: #bb86fc; }
+.st-badge.tone-critical { background: rgba(229,65,80,0.28); color: #ff6b7a; }
+.st-badge.tone-warn { background: rgba(245,197,24,0.18); color: #f5c518; }
+.st-badge.tone-unknown { background: #2a2e39; color: #808a9d; }
+/* ticker-status style vocabulary (classifyTickerStatus): */
+.st-badge.sts-muted-grey { background: rgba(129,139,157,0.18); color: #9aa4b2; box-shadow: inset 0 0 0 1px rgba(129,139,157,0.5); }
+.st-badge.sts-positive-green { background: rgba(53,167,118,0.18); color: #35a776; box-shadow: inset 0 0 0 1px rgba(53,167,118,0.6); }
+.st-badge.sts-short-distinct { background: rgba(229,65,80,0.18); color: #e54150; box-shadow: inset 0 0 0 1px rgba(229,65,80,0.6); border-radius: 3px; }
+.st-badge.sts-attention { background: rgba(245,197,24,0.16); color: #f5c518; box-shadow: inset 0 0 0 1px rgba(245,197,24,0.7); }
+.st-badge.sts-lockout { background: rgba(229,65,80,0.34); color: #fff; box-shadow: inset 0 0 0 1px rgba(229,65,80,0.9); letter-spacing: 0.04em; }
+.st-badge.sts-transitional { background: rgba(88,166,255,0.16); color: #58a6ff; box-shadow: inset 0 0 0 1px rgba(88,166,255,0.6); }
+.st-badge.sts-neutral { background: #2a2e39; color: #808a9d; }
 
 /* Decision audit table cells */
 .sr-outcome { font-size: 11px; }
@@ -572,4 +1014,32 @@ export default {
 
 .pos { color: #23a776; }
 .neg { color: #e54150; }
+
+/* ── Direct-control surface ─────────────────────────────────────────────────── */
+.sr-controls { flex: 0 0 auto; padding: 8px 12px; border-bottom: 1px solid #1c212e; background: #10151f; }
+.sr-controls-off { display: flex; align-items: center; gap: 10px; }
+.sr-controls-head { display: flex; align-items: center; gap: 10px; }
+.sr-ctl-title { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #ff9f40; }
+.sr-ctl-sym { font-size: 12px; }
+.sr-ctl-state { font-size: 11px; }
+.sr-ctl-state.pending { color: #f5c518; }
+.sr-ctl-state.awaiting { color: #58a6ff; }
+.sr-ctl-unavailable { font-size: 11px; color: #5c6470; font-style: italic; }
+.sr-ctl-inputs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.sr-ctl-input { background: #0e1320; color: #d1d4dc; border: 1px solid #2a2e39; border-radius: 4px; padding: 5px 8px; font-size: 12px; }
+.sr-ctl-input:focus { outline: none; border-color: #35a776; }
+.sr-ctl-reason { flex: 1 1 220px; min-width: 180px; }
+.sr-ctl-cur { width: 90px; }
+.sr-ctl-amt { width: 140px; }
+.sr-ctl-pos { width: 120px; }
+.sr-ctl-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.sr-ctl-btn { background: #131a27; color: #d1d4dc; border: 1px solid #2a2e39; border-radius: 4px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
+.sr-ctl-btn:hover:not(:disabled) { border-color: #35a776; color: #35a776; }
+.sr-ctl-btn:disabled { opacity: 0.5; cursor: default; }
+.sr-ctl-btn.danger { border-color: rgba(229,65,80,0.5); color: #ff6b7a; }
+.sr-ctl-btn.danger:hover:not(:disabled) { border-color: #e54150; color: #e54150; background: rgba(229,65,80,0.08); }
+.sr-ctl-msg { margin-top: 6px; font-size: 11px; }
+.sr-ctl-msg.validation { color: #f5c518; }
+.sr-ctl-msg.error { color: #e54150; }
+.sr-ctl-msg.lineage-blocked { color: #ff9f40; background: rgba(255,159,64,0.1); border: 1px solid rgba(255,159,64,0.35); border-radius: 4px; padding: 4px 8px; }
 </style>

@@ -56,6 +56,31 @@ export class CorkyStrategyFeed {
     return this.client.getStrategyChartOverlays(runtime_id, ticker_id, opts)
   }
 
+  // ── direct-control mutations (thin passthrough over the client) ───────────────
+  // MUTATE a live runtime — gated by an available control session; each requires a
+  // visible operator `reason` and echoes the discovered runtime id as
+  // `target_runtime_id` (runtime-targeting) when provided. On ack, do NOT mutate
+  // local state — wait for the subscription full-replacement to reconcile.
+
+  /** Pause one ticker. opts: { runtime_id, ticker_id, reason, strategy_instance_id?, target_runtime_id? }. */
+  pauseTicker(opts = {}) { return this.client.pauseStrategyTicker(opts) }
+
+  /** Resume one paused ticker. Same opts shape as pauseTicker. */
+  resumeTicker(opts = {}) { return this.client.resumeStrategyTicker(opts) }
+
+  /** Unlock one locked ticker with a positive new allocation. opts adds
+   *  { new_allocation: { currency, amount } } (amount is a decimal string). */
+  unlockTicker(opts = {}) { return this.client.unlockStrategyTicker(opts) }
+
+  /** Adopt one exact pre-existing auth position. opts: { runtime_id, ticker_id, position_id, reason, … }. */
+  adoptPosition(opts = {}) { return this.client.adoptStrategyPosition(opts) }
+
+  /** Adopt a named batch of pre-existing auth positions. opts: { runtime_id, positions:[{ticker_id,position_id}], reason, … }. */
+  adoptPositions(opts = {}) { return this.client.adoptStrategyPositions(opts) }
+
+  /** Cancel active/submitted orders on one ticker (reason is a visible operator input). */
+  cancelTickerOrders(opts = {}) { return this.client.cancelStrategyTickerOrders(opts) }
+
   // ── streaming runtime snapshots ───────────────────────────────────────────────
 
   /**

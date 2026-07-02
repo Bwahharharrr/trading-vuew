@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-get-backtest-run-running-strategy-1",
+  "event": {
+    "type": "backtest_run",
+    "run_id": "universe-v8-tail-repair-20260630",
+    "artifact": {
+      "schema_version": 1,
+      "run_id": "universe-v8-tail-repair-20260630",
+      "run_kind": "universe",
+      "plan": {
+        "strategy": "ema_regime_breakout_v8",
+        "venue": "BITFINEX",
+        "symbols": [
+          "tTESTADA:TESTUSD",
+          "tTESTBTC:TESTUSD"
+        ],
+        "trade_timeframe": "1m",
+        "context_timeframes": [
+          "5m",
+          "1D"
+        ]
+      },
+      "optimization": {
+        "sampler": "adaptive_tpe",
+        "objective": "institutional_cross_symbol_score_v2",
+        "candidate_count": 2,
+        "selected_parameter_set_count": 2,
+        "exhaustive": false
+      },
+      "candidates": [
+        {
+          "rank": 1,
+          "run_index": 0,
+          "params_sha256": "sha256:516d5fc6ae942048a26417ed7773030875541cddae75798b902ed059cd622c5b",
+          "params": {
+            "fast_ema": 12,
+            "slow_ema": 26,
+            "tail_repair": true
+          },
+          "metrics": {
+            "score": "12.50",
+            "institutional_score": "8.25",
+            "beat_buy_hold": 2,
+            "max_drawdown_pct": "0.1200",
+            "avg_trades": "4.50"
+          }
+        },
+        {
+          "rank": 2,
+          "run_index": 1,
+          "params_sha256": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+          "params": {
+            "fast_ema": 10,
+            "slow_ema": 30,
+            "tail_repair": true
+          },
+          "metrics": {
+            "score": "9.75",
+            "institutional_score": "6.10",
+            "beat_buy_hold": 1,
+            "max_drawdown_pct": "0.1800",
+            "avg_trades": "3.00"
+          }
+        }
+      ],
+      "running_strategy_instances": [
+        {
+          "runtime_id": "v8-tail-repair-live-main",
+          "strategy_instance_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z",
+          "mode": "live",
+          "lineage_status": "verified",
+          "candidate_rank": 1,
+          "candidate_run_index": 0,
+          "candidate_params_sha256": "sha256:516d5fc6ae942048a26417ed7773030875541cddae75798b902ed059cd622c5b",
+          "strategy_params_sha256": "sha256:516d5fc6ae942048a26417ed7773030875541cddae75798b902ed059cd622c5b",
+          "tickers": [
+            "BITFINEX:tTESTADA:TESTUSD",
+            "BITFINEX:tTESTBTC:TESTUSD"
+          ]
+        }
+      ]
+    }
+  }
+}

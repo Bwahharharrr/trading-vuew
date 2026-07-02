@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-list-backtest-runs-running-strategy-1",
+  "event": {
+    "type": "backtest_runs",
+    "runs": [
+      {
+        "run_id": "universe-v8-tail-repair-20260630",
+        "run_kind": "universe",
+        "strategy": "ema_regime_breakout_v8",
+        "venue": "BITFINEX",
+        "symbols": [
+          "tTESTADA:TESTUSD",
+          "tTESTBTC:TESTUSD"
+        ],
+        "trade_timeframe": "1m",
+        "status": "completed",
+        "started_at_ms": 1782864000000,
+        "completed_at_ms": 1782950400000,
+        "bar_count": 1440,
+        "first_bar_ts_ms": 1782864000000,
+        "last_bar_ts_ms": 1782950340000,
+        "optimization": {
+          "sampler": "adaptive_tpe",
+          "objective": "institutional_cross_symbol_score_v2",
+          "candidate_count": 64,
+          "selected_parameter_set_count": 64,
+          "exhaustive": false
+        },
+        "metrics": {
+          "score": "12.50",
+          "institutional_score": "8.25",
+          "symbols": 2,
+          "profitable": 2,
+          "losing": 0,
+          "beat_buy_hold": 2,
+          "median_pf": "1.85",
+          "median_recovery": "2.10",
+          "median_sharpe": "1.25",
+          "median_sortino": "1.70",
+          "median_return": "0.0825",
+          "mean_return": "0.0790",
+          "min_return": "0.0410",
+          "median_strategy_vs_buy_hold_return_pct": "0.0375",
+          "profit_factor": "1.85",
+          "recovery_factor": "2.10",
+          "sharpe_ratio": "1.25",
+          "sortino_ratio": "1.70",
+          "strategy_return_pct": "0.0825",
+          "mean_strategy_return_pct": "0.0790",
+          "min_strategy_return_pct": "0.0410",
+          "strategy_vs_buy_hold_return_pct": "0.0375",
+          "strategy_beat_buy_hold_count": 2,
+          "score_v2": "12.50",
+          "symbol_count": 2,
+          "total_trades": 9,
+          "avg_trades": "4.50"
+        },
+        "running_strategy_instances": [
+          {
+            "runtime_id": "v8-tail-repair-live-main",
+            "strategy_instance_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z",
+            "mode": "live",
+            "lineage_status": "verified",
+            "candidate_rank": 1,
+            "candidate_run_index": 0,
+            "candidate_params_sha256": "sha256:516d5fc6ae942048a26417ed7773030875541cddae75798b902ed059cd622c5b",
+            "strategy_params_sha256": "sha256:516d5fc6ae942048a26417ed7773030875541cddae75798b902ed059cd622c5b",
+            "tickers": [
+              "BITFINEX:tTESTADA:TESTUSD",
+              "BITFINEX:tTESTBTC:TESTUSD"
+            ]
+          }
+        ]
+      },
+      {
+        "run_id": "universe-v8-mismatch-fixture",
+        "run_kind": "universe",
+        "strategy": "ema_regime_breakout_v8",
+        "venue": "BITFINEX",
+        "symbols": [
+          "tTESTXLM:TESTUSD",
+          "tTESTDOT:TESTUSD"
+        ],
+        "trade_timeframe": "5m",
+        "status": "completed",
+        "started_at_ms": 1782864000000,
+        "completed_at_ms": 1782950400000,
+        "bar_count": 288,
+        "first_bar_ts_ms": 1782864000000,
+        "last_bar_ts_ms": 1782949500000,
+        "metrics": {
+          "score": "1.00",
+          "symbol_count": 2
+        }
+      }
+    ]
+  }
+}

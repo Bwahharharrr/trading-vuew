@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-get-strategy-ticker-1",
+  "event": {
+    "type": "strategy_ticker",
+    "ticker": {
+      "runtime_id": "strategy-runtime-v8-test",
+      "state": "Ready",
+      "generated_at_ms": 1779465000000,
+      "mode": "paper",
+      "strategy": "ema_regime_breakout_v8",
+      "ticker_id": "tTESTADA:TESTUSD",
+      "symbol": "tTESTADA:TESTUSD",
+      "status": "waiting",
+      "status_since_ms": 1779465000000,
+      "status_reason": "claim_rebalanced",
+      "allocation": {
+        "ticker_id": "tTESTADA:TESTUSD",
+        "status": "waiting",
+        "allocated_equity": "4900",
+        "available_cash": "4899",
+        "reserved_cash": "1",
+        "locked_margin": "0",
+        "position_quantity": "0",
+        "realized_pnl": "0",
+        "unrealized_pnl": "0",
+        "fees_paid": "0",
+        "last_decision_id": "decision-ada-1",
+        "last_event": "claim_rebalanced"
+      },
+      "orders": {
+        "ticker_id": "tTESTADA:TESTUSD",
+        "symbol": "tTESTADA:TESTUSD",
+        "orders_total": 1,
+        "orders_active_or_pending": 1,
+        "order_status_counts": {
+          "queued": 1
+        },
+        "last_event": "order_queued",
+        "last_event_ts_ms": 1779465000250
+      },
+      "last_decision_ms": 1779465000300,
+      "auth_ready": true,
+      "allocation_ready": true
+    }
+  }
+}

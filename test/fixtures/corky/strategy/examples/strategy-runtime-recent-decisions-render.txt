@@ -1,0 +1,12 @@
+recent-decisions runtime_id=v8-tail-repair-live-main source=runtime_snapshot bounded_rows=2 full_history_action=list_strategy_decisions
+  runtime-summary ticker_id=BITFINEX:tTESTADA:TESTUSD decision_id=decision-ada-wait-1 ts=1782953340000 outcome=no_intents intent_count=0 first_intent=none reason="no entry signal" queued=0 rejected=0 risk_checks=entry_signal:blocked(EMA regime not aligned)
+  runtime-summary ticker_id=BITFINEX:tTESTBTC:TESTUSD decision_id=decision-btc-long-1 ts=1782953280000 outcome=hold_position intent_count=0 first_intent=none reason="trailing stop not reached" queued=0 rejected=0 risk_checks=position_guard:passed(long position owned by strategy)
+decision-history runtime_id=v8-tail-repair-live-main source=list_strategy_decisions rows=5 rendered_rows=4 limit=4
+  history-row decision_id=decision-denied-approval-expired ticker_id=BITFINEX:tTESTADA:TESTUSD ts=1782953340000 outcome=intent_denied intent_count=1 first_intent=buy/market/tail repair entry reason="operator approval expired" denial="operator approval expired" queued=0 rejected=1 risk_checks=live_preflight:blocked(operator approval expired)
+  history-row decision_id=decision-queued-btc-entry ticker_id=BITFINEX:tTESTBTC:TESTUSD ts=1782953280000 outcome=orders_queued intent_count=1 first_intent=buy/market/tail repair entry reason="tail repair entry" denial=none queued=1 rejected=0 risk_checks=shadow_live_preflight:passed(1 order journal event(s) queued)
+  history-row decision_id=decision-rejected-ada-overcap ticker_id=BITFINEX:tTESTADA:TESTUSD ts=1782953220000 outcome=intent_rejected intent_count=1 first_intent=buy/market/tail repair entry reason="requested notional exceeds max_order_notional" denial="requested notional exceeds max_order_notional" queued=0 rejected=1 risk_checks=max_order_notional:blocked(requested notional exceeds max_order_notional=12)
+  history-row decision_id=decision-risk-failed-btc-position ticker_id=BITFINEX:tTESTBTC:TESTUSD ts=1782953160000 outcome=no_intents intent_count=0 first_intent=none reason="existing long position blocks duplicate entry" denial=none queued=0 rejected=0 risk_checks=position_guard:failed(existing long position blocks duplicate entry)
+  omitted=1 reason=bounded_to_limit
+decision-history runtime_id=strategy-runtime-empty source=list_strategy_decisions rows=0 rendered_rows=0 limit=4
+  no recent decisions
+source-separation status_dashboard=runtime.recent_decisions full_history=list_strategy_decisions markers=get_strategy_chart_overlays direct_sidecar_reads=forbidden

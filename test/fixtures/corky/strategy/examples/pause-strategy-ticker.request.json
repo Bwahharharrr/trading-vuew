@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-pause-strategy-ticker-1",
+  "command": {
+    "type": "pause_strategy_ticker",
+    "runtime_id": "strategy-runtime-v8-test",
+    "ticker_id": "tTESTADA:TESTUSD",
+    "reason": "operator pause before test-live approval"
+  }
+}

@@ -143,6 +143,11 @@
             :strategy="strategy"
             @strategy-select-runtime="strategySelectRuntime"
             @strategy-refresh="strategyRefresh"
+            @strategy-cancel-ticker-orders="strategyCancelTickerOrders"
+            @strategy-pause-ticker="strategyPauseTicker"
+            @strategy-resume-ticker="strategyResumeTicker"
+            @strategy-unlock-ticker="strategyUnlockTicker"
+            @strategy-adopt-position="strategyAdoptPosition"
             @bt-refresh-strategies="btLoadStrategies"
             @bt-update-filter="btUpdateFilter"
             @bt-list-runs="btListRuns"
@@ -401,7 +406,7 @@ import { CorkyPositionsFeed } from '../src/helpers/feed/corky-positions-feed.js'
 import { CorkySearchFeed } from '../src/helpers/feed/corky-search-feed.js'
 import { CorkyBacktestsFeed } from '../src/helpers/feed/corky-backtests-feed.js'
 import { CorkyStrategyFeed } from '../src/helpers/feed/corky-strategy-feed.js'
-import { overlaysToMarkers } from '../src/helpers/feed/corky-strategy-transforms.js'
+import { overlaysToMarkers, classifyLineage, CAPITAL_CONTROL_METHODS } from '../src/helpers/feed/corky-strategy-transforms.js'
 import { buildSearchQuery, buildCondition, barrierTargetSpec } from '../src/helpers/feed/search-query.js'
 import { backtestSeriesOverlays, backtestTradeMarkers } from '../src/helpers/feed/backtest-overlays.js'
 import { detectRunShape } from '../src/helpers/feed/backtest-shape.js'
@@ -561,6 +566,10 @@ export default {
             strategy: {
                 runtimes: [], selectedRuntimeId: DEFAULT_STRATEGY_RUNTIME_ID,
                 decisions: [], overlays: {}, streaming: false, loading: false, error: null,
+                // Direct-control session state (see the control handlers below).
+                // `available` gates the panel's control surface entirely; a control
+                // send flips pending → awaiting and never mutates the runtime set.
+                control: { available: false, pending: false, awaiting: false, error: null },
             },
 
             // positionPlot (a position plotted on the chart: trades + detail panes)
@@ -2708,7 +2717,7 @@ export default {
         _strategyTickerIds(runtime) {
             const ids = []
             const seen = new Set()
-            for (const src of [runtime && runtime.ticker_allocations, runtime && runtime.ticker_orders]) {
+            for (const src of [runtime && runtime.ticker_allocations, runtime && runtime.ticker_orders, runtime && runtime.tickers]) {
                 for (const t of (Array.isArray(src) ? src : [])) {
                     const id = t && t.ticker_id
                     if (id && !seen.has(id)) { seen.add(id); ids.push(id) }
@@ -2798,6 +2807,62 @@ export default {
         // if running, keeps live-updating the set on top).
         strategyRefresh() { this.strategyOpen() },
 
+        // ── direct control (MUTATES a live runtime) ──────────────────────────────
+        // Each handler forwards a panel intent to the feed's control method. Gated on
+        // an active control session (strategy.control.available — the stateful
+        // streaming socket the direct-control route also requires) AND a runtime the
+        // discovery set actually knows (its runtime_id is the gateway's routing
+        // target — the runtime-targeting rule; strategy controls carry that id
+        // directly, so no separate target_runtime_id is threaded, unlike
+        // upsert_candle_state whose key is venue/symbol).
+        //
+        // CRITICAL: on ack we do NOT mutate the local strategy/order state — we flip
+        // pending → awaiting and rely on the subscribe_strategy_runtime
+        // full-replacement update to reconcile (see _strategyApplyUpdate). A send
+        // failure surfaces the gateway error; a control-unavailable rejection also
+        // drops the control surface until a fresh session advertises it.
+        async _strategyControl(method, opts) {
+            const ctl = this.strategy.control
+            if (!this.strategyFeed || !ctl || !ctl.available) {
+                if (ctl) ctl.error = 'No strategy control session.'
+                return
+            }
+            const rt = (this.strategy.runtimes || []).find((r) => r && r.runtime_id === opts.runtime_id)
+            if (!rt) { ctl.error = `Unknown runtime ${opts.runtime_id}.`; return }
+            // Defense-in-depth: never emit a capital/position-committing control
+            // (unlock/adopt) on an unverified (mismatched-lineage) runtime, even if
+            // the UI somehow surfaced the action. Halt controls stay allowed.
+            if (CAPITAL_CONTROL_METHODS.has(method) && classifyLineage(rt.lineage_status).tone === 'attention') {
+                ctl.error = `Runtime lineage ${rt.lineage_status || 'unknown'} not verified — capital controls blocked.`
+                return
+            }
+            ctl.pending = true
+            ctl.awaiting = null
+            ctl.error = null
+            try {
+                await this.strategyFeed[method](opts)
+                // Ack received. Do NOT touch strategy.runtimes/decisions/overlays —
+                // the next subscription full-replacement FOR THIS RUNTIME reconciles.
+                ctl.pending = false
+                ctl.awaiting = opts.runtime_id
+            } catch (err) {
+                ctl.pending = false
+                ctl.awaiting = null
+                ctl.error = this._strategyErr(err)
+                // A missing/stale control SESSION invalidates the whole surface until
+                // a fresh one is advertised; a per-command rejection just shows the
+                // error (canonical gateway code: control_session_required).
+                if (err && err.code === 'control_session_required') ctl.available = false
+            }
+        },
+
+        strategyCancelTickerOrders(p) { return this._strategyControl('cancelTickerOrders', p) },
+        strategyPauseTicker(p) { return this._strategyControl('pauseTicker', p) },
+        strategyResumeTicker(p) { return this._strategyControl('resumeTicker', p) },
+        strategyUnlockTicker(p) { return this._strategyControl('unlockTicker', p) },
+        strategyAdoptPosition(p) { return this._strategyControl('adoptPosition', p) },
+        strategyAdoptPositions(p) { return this._strategyControl('adoptPositions', p) },
+
         // Start the live runtime subscription (once). Scoped to the default live
         // runtime; each update is a FULL-REPLACEMENT snapshot applied by increasing
         // sequence (see _strategyApplyUpdate). No-op when streaming is unsupported.
@@ -2807,9 +2872,15 @@ export default {
             this._strategySub = this.strategyFeed.subscribeRuntime(
                 { subscription_id: 'strategy-runtime', runtime_id: this._strategyDefaultRuntimeId() }, {
                     onData: (runtimes) => this._strategyApplyUpdate(runtimes),
-                    onError: () => { this.strategy.streaming = false },   // keep last-good set
+                    // Lost stream ⇒ lost control session (controls need the stateful
+                    // socket). Keep the last-good set but hide the control surface.
+                    onError: () => { this.strategy.streaming = false; if (this.strategy.control) this.strategy.control.available = false },
                 })
             this.strategy.streaming = true
+            // A live subscription rides the same stateful socket the direct-control
+            // commands require, so it is the control session — controls become
+            // available (still gated per-action by the runtime the operator picks).
+            if (this.strategy.control) this.strategy.control.available = true
         },
 
         _strategyStopSubscribe() {
@@ -2817,7 +2888,10 @@ export default {
                 try { this.strategyFeed.unsubscribe(this._strategySub) } catch (_) { /* gone */ }
             }
             this._strategySub = null
-            if (this.strategy) this.strategy.streaming = false
+            if (this.strategy) {
+                this.strategy.streaming = false
+                if (this.strategy.control) this.strategy.control.available = false   // no session ⇒ no controls
+            }
         },
 
         // Apply a FULL-REPLACEMENT runtime update from the subscription. The feed
@@ -2830,6 +2904,13 @@ export default {
             if (!Array.isArray(runtimes) || !runtimes.length) return   // keep last-good
             this._strategyUpsertRuntimes(runtimes)
             this.strategy.streaming = true
+            // Clear the awaiting-reconciliation hint only when THIS snapshot actually
+            // covers the runtime a control was sent to (awaiting holds that
+            // runtime_id) — an unrelated runtime's update must not clear it.
+            const ctl = this.strategy.control
+            if (ctl && ctl.awaiting && runtimes.some((r) => r && r.runtime_id === ctl.awaiting)) {
+                ctl.awaiting = null
+            }
         },
 
         // Upsert runtimes into `strategy.runtimes` by runtime_id (replace in place,
@@ -3313,6 +3394,7 @@ export default {
             this.strategy = {
                 runtimes: [], selectedRuntimeId: DEFAULT_STRATEGY_RUNTIME_ID,
                 decisions: [], overlays: {}, streaming: false, loading: false, error: null,
+                control: { available: false, pending: false, awaiting: false, error: null },
             }
             this.searchTabs = []
             this.searchTabSeq = 0

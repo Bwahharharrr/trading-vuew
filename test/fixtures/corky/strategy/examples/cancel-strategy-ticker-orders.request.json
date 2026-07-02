@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-cancel-strategy-ticker-orders-1",
+  "command": {
+    "type": "cancel_strategy_ticker_orders",
+    "runtime_id": "strategy-runtime-v8-test",
+    "ticker_id": "tTESTADA:TESTUSD",
+    "reason": "operator cancels stale submitted TEST order"
+  }
+}

@@ -106,8 +106,14 @@
                         :streaming="!!strategy.streaming"
                         :loading="!!strategy.loading"
                         :error="strategy.error || null"
+                        :control="strategy.control || {}"
                         @select-runtime="$emit('strategy-select-runtime', $event)"
-                        @refresh="$emit('strategy-refresh')" />
+                        @refresh="$emit('strategy-refresh')"
+                        @cancel-ticker-orders="$emit('strategy-cancel-ticker-orders', $event)"
+                        @pause-ticker="$emit('strategy-pause-ticker', $event)"
+                        @resume-ticker="$emit('strategy-resume-ticker', $event)"
+                        @unlock-ticker="$emit('strategy-unlock-ticker', $event)"
+                        @adopt-position="$emit('strategy-adopt-position', $event)" />
 
         <!-- One reusable Run-Details tab body -->
         <corky-backtest-detail v-else-if="activeTab === 'bt-detail' && backtests.selectedRun"
@@ -228,6 +234,8 @@ export default {
         'bt-refresh-strategies', 'bt-update-filter', 'bt-set-metric-filters', 'bt-list-runs', 'bt-inspect-strategy',
         'bt-select-run', 'bt-plot-run', 'bt-select-trade', 'bt-select-candidate', 'bt-close-detail',
         'strategy-select-runtime', 'strategy-refresh',
+        'strategy-cancel-ticker-orders', 'strategy-pause-ticker', 'strategy-resume-ticker',
+        'strategy-unlock-ticker', 'strategy-adopt-position',
     ],
     computed: {
         rows() {

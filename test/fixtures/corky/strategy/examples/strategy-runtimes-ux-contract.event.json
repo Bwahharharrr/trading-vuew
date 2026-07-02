@@ -1,0 +1,564 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-strategy-runtime-ux-contract-1",
+  "event": {
+    "type": "strategy_runtimes",
+    "runtimes": [
+      {
+        "runtime_id": "v8-tail-repair-live-main",
+        "process_kind": "corky-strategy-runtime",
+        "state": "Ready",
+        "generated_at_ms": 1782953400000,
+        "mode": "live",
+        "strategy": "ema_regime_breakout_v8",
+        "strategy_id": "ema_regime_breakout_v8",
+        "strategy_instance_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z",
+        "strategy_config_path": "/tmp/corky/strategy-runtime/v8-tail-repair-testusd-1m.toml",
+        "strategy_config_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "strategy_params_sha256": "sha256:516d5fc6ae942048a26417ed7773030875541cddae75798b902ed059cd622c5b",
+        "strategy_params_canonical_json": "{\"fast_ema\":12,\"slow_ema\":26,\"tail_repair\":true}",
+        "strategy_descriptor_schema_version": 1,
+        "trade_timeframe": "1m",
+        "context_timeframes": [
+          "5m",
+          "1D"
+        ],
+        "lineage_status": "verified",
+        "lineage_reasons": [
+          "candidate artifact verified against runtime params hash"
+        ],
+        "universe_backtest_run_id": "universe-v8-tail-repair-20260630",
+        "candidate_rank": 1,
+        "candidate_run_index": 0,
+        "candidate_params_sha256": "sha256:516d5fc6ae942048a26417ed7773030875541cddae75798b902ed059cd622c5b",
+        "candidate_artifact_path": "/tmp/corky/backtests/runs/universe-v8-tail-repair-20260630.json",
+        "lineage_note": "selected v8 TESTUSD tail-repair candidate",
+        "candidate_metrics": {
+          "score": "12.50",
+          "institutional_score": "8.25",
+          "beat_buy_hold": 2,
+          "lower_tail_return": "-0.0300",
+          "max_drawdown_pct": "0.1200",
+          "avg_trades": "4.50"
+        },
+        "target_public_runtime_id": "public-market-main",
+        "dependencies": [
+          {
+            "kind": "public",
+            "dependency_runtime_id": "public-market-main"
+          },
+          {
+            "kind": "private",
+            "dependency_runtime_id": "private-account-main"
+          }
+        ],
+        "ledger_path": "/tmp/corky/strategy-runtime/v8-tail-repair-paper-ledger.jsonl",
+        "control_audit_path": "/tmp/corky/strategy-runtime/v8-tail-repair-controls.jsonl",
+        "public_snapshots_seen": 120,
+        "matching_public_snapshots_seen": 119,
+        "feature_requirements": 2,
+        "features_ready": 2,
+        "pending_control_requests": 0,
+        "pending_feature_reasons": [],
+        "last_public_snapshot_ms": 1782953400000,
+        "target_private_runtime_id": "private-account-main",
+        "live_operator_approval": {
+          "path": "/tmp/corky/approvals/v8-tail-repair-test-approval.json",
+          "approval_id": "approval-v8-tail-repair-test-1",
+          "approved_by": "operator-a",
+          "approved_at_ms": 1782950000000,
+          "expires_at_ms": 1782964400000,
+          "action": "guarded_test_order_mutation",
+          "statement": "APPROVE_GUARDED_TEST_ORDER_MUTATION",
+          "account_id": "primary-account",
+          "target_private_runtime_id": "private-account-main",
+          "strategy_id": "ema_regime_breakout_v8",
+          "strategy_instance_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z",
+          "trade_timeframe": "1m",
+          "context_timeframes": [
+            "5m",
+            "1D"
+          ],
+          "venue": "BITFINEX",
+          "quote_currency": "TESTUSD",
+          "symbols": [
+            "tTESTADA:TESTUSD",
+            "tTESTBTC:TESTUSD"
+          ],
+          "max_order_notional": "12",
+          "live_validation_proof": {
+            "kind": "non_mutating_test_live_validation",
+            "command": "CORKY_RUN_LIVE=1 scripts/validate.sh live",
+            "log_path": "/tmp/corky/live-validation.log",
+            "log_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "completed_at_ms": 1782949900000
+          },
+          "canary_review_path": "/tmp/corky/v8-tail-repair-canary-review.md",
+          "reason": "guarded TEST canary"
+        },
+        "auth_gate_configured": true,
+        "auth_snapshots_seen": 32,
+        "matching_auth_snapshots_seen": 31,
+        "auth_ready": true,
+        "pending_auth_reasons": [],
+        "auth_wallet_balances": [
+          {
+            "wallet_type": "exchange",
+            "currency": "TESTUSD",
+            "class": "exchange",
+            "balance": "9800",
+            "available": "9775"
+          },
+          {
+            "wallet_type": "funding",
+            "currency": "TESTUSD",
+            "class": "funding",
+            "balance": "100",
+            "available": "100"
+          },
+          {
+            "wallet_type": "margin",
+            "currency": "TESTUSD",
+            "class": "margin",
+            "balance": "0",
+            "available": "0"
+          },
+          {
+            "wallet_type": "derivative",
+            "currency": "TESTUSD",
+            "class": "derivative",
+            "balance": "0",
+            "available": "0"
+          }
+        ],
+        "last_auth_snapshot_ms": 1782953399000,
+        "allocation_ledger_path": "/tmp/corky/strategy-runtime/v8-tail-repair-allocation.jsonl",
+        "allocation_configured": true,
+        "allocation_ready": true,
+        "pending_allocation_reasons": [],
+        "allocation_events": 36,
+        "allocation_account_id": "primary-account",
+        "allocation_strategy_instance_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z",
+        "allocation_strategy_status": "long",
+        "allocation_quote_currency": "TESTUSD",
+        "allocation_wallet_type": "exchange",
+        "allocation_observed_balance": "9800",
+        "allocation_observed_available": "9775",
+        "allocation_unallocated_available": "0",
+        "wallet_allocations": [
+          {
+            "account_id": "primary-account",
+            "wallet_type": "exchange",
+            "currency": "TESTUSD",
+            "class": "exchange",
+            "observed_balance": "9800",
+            "observed_available": "9775",
+            "allocated_to_strategy": "9800",
+            "unallocated_available": "0",
+            "ticker_ids": [
+              "BITFINEX:tTESTADA:TESTUSD",
+              "BITFINEX:tTESTBTC:TESTUSD"
+            ],
+            "ticker_allocations": [
+              {
+                "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+                "status": "waiting",
+                "status_since_ms": 1782952140000,
+                "status_reason": "no entry signal",
+                "allocated_equity": "4900",
+                "available_cash": "4899",
+                "reserved_cash": "1",
+                "locked_margin": "0",
+                "position_quantity": "0",
+                "realized_pnl": "0",
+                "unrealized_pnl": "0",
+                "fees_paid": "0.01",
+                "last_decision_id": "decision-ada-wait-1",
+                "last_event": "claim_rebalanced"
+              },
+              {
+                "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+                "status": "long",
+                "status_since_ms": 1782952200000,
+                "position_opened_at_ms": 1782952260000,
+                "status_reason": "entry fill reconciled",
+                "allocated_equity": "4900",
+                "available_cash": "4780",
+                "reserved_cash": "0",
+                "locked_margin": "120",
+                "position_quantity": "0.002",
+                "position_avg_price": "60000",
+                "realized_pnl": "0",
+                "unrealized_pnl": "2.40",
+                "fees_paid": "0.02",
+                "last_decision_id": "decision-btc-long-1",
+                "last_event": "position_opened"
+              }
+            ]
+          }
+        ],
+        "ticker_allocations": [
+          {
+            "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+            "status": "waiting",
+            "status_since_ms": 1782952140000,
+            "status_reason": "no entry signal",
+            "allocated_equity": "4900",
+            "available_cash": "4899",
+            "reserved_cash": "1",
+            "locked_margin": "0",
+            "position_quantity": "0",
+            "realized_pnl": "0",
+            "unrealized_pnl": "0",
+            "fees_paid": "0.01",
+            "last_decision_id": "decision-ada-wait-1",
+            "last_event": "claim_rebalanced"
+          },
+          {
+            "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+            "status": "long",
+            "status_since_ms": 1782952200000,
+            "position_opened_at_ms": 1782952260000,
+            "status_reason": "entry fill reconciled",
+            "allocated_equity": "4900",
+            "available_cash": "4780",
+            "reserved_cash": "0",
+            "locked_margin": "120",
+            "position_quantity": "0.002",
+            "position_avg_price": "60000",
+            "realized_pnl": "0",
+            "unrealized_pnl": "2.40",
+            "fees_paid": "0.02",
+            "last_decision_id": "decision-btc-long-1",
+            "last_event": "position_opened"
+          }
+        ],
+        "tickers": [
+          {
+            "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+            "symbol": "tTESTADA:TESTUSD",
+            "status": "waiting",
+            "status_since_ms": 1782952140000,
+            "status_reason": "no entry signal",
+            "last_decision_ms": 1782953340000,
+            "last_decision_summary": "no_intents: no entry signal",
+            "recent_decisions": [
+              {
+                "decision_id": "decision-ada-wait-1",
+                "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+                "symbol": "tTESTADA:TESTUSD",
+                "timeframe": "1m",
+                "decision_ts_ms": 1782953340000,
+                "outcome": "no_intents",
+                "reason": "no entry signal",
+                "intent_count": 0,
+                "risk_checks": [
+                  {
+                    "name": "entry_signal",
+                    "status": "blocked",
+                    "symbol": "tTESTADA:TESTUSD",
+                    "detail": "EMA regime not aligned"
+                  }
+                ],
+                "queued_order_count": 0,
+                "ledger_event_count": 0,
+                "fill_count": 0,
+                "rejected_order_count": 0
+              }
+            ]
+          },
+          {
+            "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+            "symbol": "tTESTBTC:TESTUSD",
+            "status": "long",
+            "status_since_ms": 1782952200000,
+            "position_opened_at_ms": 1782952260000,
+            "status_reason": "entry fill reconciled",
+            "last_decision_ms": 1782953280000,
+            "last_decision_summary": "hold_position: trailing stop not reached",
+            "recent_decisions": [
+              {
+                "decision_id": "decision-btc-long-1",
+                "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+                "symbol": "tTESTBTC:TESTUSD",
+                "timeframe": "1m",
+                "decision_ts_ms": 1782953280000,
+                "outcome": "hold_position",
+                "reason": "trailing stop not reached",
+                "intent_count": 0,
+                "risk_checks": [
+                  {
+                    "name": "position_guard",
+                    "status": "passed",
+                    "symbol": "tTESTBTC:TESTUSD",
+                    "detail": "long position owned by strategy"
+                  }
+                ],
+                "queued_order_count": 0,
+                "ledger_event_count": 0,
+                "fill_count": 0,
+                "rejected_order_count": 0
+              }
+            ]
+          }
+        ],
+        "order_journal_path": "/tmp/corky/strategy-runtime/v8-tail-repair-orders.jsonl",
+        "order_events": 51,
+        "orders_total": 17,
+        "orders_active_or_pending": 1,
+        "orders_submitted_nonterminal": 1,
+        "oldest_submitted_order_ts_ms": 1782952200000,
+        "order_status_counts": {
+          "queued": 0,
+          "sent": 1,
+          "accepted": 0,
+          "open": 0,
+          "partially_filled": 0,
+          "filled": 12,
+          "canceled": 0,
+          "rejected": 4
+        },
+        "ticker_orders": [
+          {
+            "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+            "symbol": "tTESTADA:TESTUSD",
+            "orders_total": 6,
+            "orders_active_or_pending": 1,
+            "orders_submitted_nonterminal": 1,
+            "oldest_submitted_order_ts_ms": 1782952200000,
+            "order_status_counts": {
+              "sent": 1,
+              "filled": 4,
+              "rejected": 1
+            },
+            "last_event": "command_sent",
+            "last_event_ts_ms": 1782952200000
+          },
+          {
+            "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+            "symbol": "tTESTBTC:TESTUSD",
+            "orders_total": 11,
+            "orders_active_or_pending": 0,
+            "orders_submitted_nonterminal": 0,
+            "order_status_counts": {
+              "filled": 8,
+              "rejected": 3
+            },
+            "last_event": "order_filled",
+            "last_event_ts_ms": 1782952260000
+          }
+        ],
+        "market_data_audit_path": "/tmp/corky/strategy-runtime/v8-tail-repair-market-data.jsonl",
+        "decision_audit_path": "/tmp/corky/strategy-runtime/v8-tail-repair-decisions.jsonl",
+        "decision_events": 622,
+        "last_decision_ms": 1782953340000,
+        "recent_decisions": [
+          {
+            "decision_id": "decision-ada-wait-1",
+            "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+            "symbol": "tTESTADA:TESTUSD",
+            "timeframe": "1m",
+            "decision_ts_ms": 1782953340000,
+            "outcome": "no_intents",
+            "reason": "no entry signal",
+            "intent_count": 0,
+            "risk_checks": [
+              {
+                "name": "entry_signal",
+                "status": "blocked",
+                "symbol": "tTESTADA:TESTUSD",
+                "detail": "EMA regime not aligned"
+              }
+            ],
+            "queued_order_count": 0,
+            "ledger_event_count": 0,
+            "fill_count": 0,
+            "rejected_order_count": 0
+          },
+          {
+            "decision_id": "decision-btc-long-1",
+            "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+            "symbol": "tTESTBTC:TESTUSD",
+            "timeframe": "1m",
+            "decision_ts_ms": 1782953280000,
+            "outcome": "hold_position",
+            "reason": "trailing stop not reached",
+            "intent_count": 0,
+            "risk_checks": [
+              {
+                "name": "position_guard",
+                "status": "passed",
+                "symbol": "tTESTBTC:TESTUSD",
+                "detail": "long position owned by strategy"
+              }
+            ],
+            "queued_order_count": 0,
+            "ledger_event_count": 0,
+            "fill_count": 0,
+            "rejected_order_count": 0
+          }
+        ],
+        "ledger_events": 12,
+        "fills": 12
+      },
+      {
+        "runtime_id": "strategy-runtime-status-matrix",
+        "process_kind": "corky-strategy-runtime",
+        "state": "Degraded",
+        "generated_at_ms": 1782953400000,
+        "mode": "shadow_live",
+        "strategy": "ema_regime_breakout_v8",
+        "strategy_id": "ema_regime_breakout_v8",
+        "strategy_instance_id": "status-matrix-shadow-live",
+        "strategy_config_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "strategy_params_sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "strategy_params_canonical_json": "{\"fixture\":\"status-matrix\"}",
+        "strategy_descriptor_schema_version": 1,
+        "trade_timeframe": "5m",
+        "context_timeframes": [
+          "1h"
+        ],
+        "lineage_status": "mismatch",
+        "lineage_reasons": [
+          "candidate params hash does not match runtime params hash"
+        ],
+        "universe_backtest_run_id": "universe-v8-mismatch-fixture",
+        "candidate_rank": 4,
+        "candidate_run_index": 3,
+        "candidate_params_sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "target_public_runtime_id": "public-market-main",
+        "dependencies": [
+          {
+            "kind": "public",
+            "dependency_runtime_id": "public-market-main"
+          },
+          {
+            "kind": "private",
+            "dependency_runtime_id": "private-account-main"
+          }
+        ],
+        "public_snapshots_seen": 12,
+        "matching_public_snapshots_seen": 12,
+        "feature_requirements": 2,
+        "features_ready": 2,
+        "target_private_runtime_id": "private-account-main",
+        "auth_gate_configured": true,
+        "auth_snapshots_seen": 2,
+        "matching_auth_snapshots_seen": 2,
+        "auth_ready": false,
+        "pending_auth_reasons": [
+          "private account snapshot is stale"
+        ],
+        "allocation_configured": true,
+        "allocation_ready": false,
+        "pending_allocation_reasons": [
+          "manual approval required after bust lockout"
+        ],
+        "allocation_strategy_status": "degraded",
+        "allocation_quote_currency": "TESTUSD",
+        "allocation_wallet_type": "exchange",
+        "ticker_allocations": [
+          {
+            "ticker_id": "BITFINEX:tTESTXLM:TESTUSD",
+            "status": "short",
+            "status_since_ms": 1782950400000,
+            "position_opened_at_ms": 1782950400000,
+            "status_reason": "short exposure adopted for fixture",
+            "allocated_equity": "1000",
+            "available_cash": "950",
+            "reserved_cash": "0",
+            "locked_margin": "50",
+            "position_quantity": "-10",
+            "position_avg_price": "5",
+            "realized_pnl": "0",
+            "unrealized_pnl": "-1",
+            "fees_paid": "0"
+          },
+          {
+            "ticker_id": "BITFINEX:tTESTDOT:TESTUSD",
+            "status": "paused",
+            "status_since_ms": 1782951000000,
+            "status_reason": "operator paused before repair",
+            "allocated_equity": "1000",
+            "available_cash": "1000",
+            "reserved_cash": "0",
+            "locked_margin": "0",
+            "position_quantity": "0",
+            "realized_pnl": "0",
+            "unrealized_pnl": "0",
+            "fees_paid": "0"
+          },
+          {
+            "ticker_id": "BITFINEX:tTESTSOL:TESTUSD",
+            "status": "bust_locked",
+            "status_since_ms": 1782951600000,
+            "status_reason": "ticker claim exhausted",
+            "allocated_equity": "0",
+            "available_cash": "0",
+            "reserved_cash": "0",
+            "locked_margin": "0",
+            "position_quantity": "0",
+            "realized_pnl": "-1000",
+            "unrealized_pnl": "0",
+            "fees_paid": "0",
+            "lockout_reason": "requires manual reapproval"
+          },
+          {
+            "ticker_id": "BITFINEX:tTESTLTC:TESTUSD",
+            "status": "degraded",
+            "status_since_ms": 1782951900000,
+            "status_reason": "auth reconciliation stale",
+            "allocated_equity": "1000",
+            "available_cash": "1000",
+            "reserved_cash": "0",
+            "locked_margin": "0",
+            "position_quantity": "0",
+            "realized_pnl": "0",
+            "unrealized_pnl": "0",
+            "fees_paid": "0"
+          }
+        ],
+        "tickers": [
+          {
+            "ticker_id": "BITFINEX:tTESTXLM:TESTUSD",
+            "symbol": "tTESTXLM:TESTUSD",
+            "status": "short",
+            "status_since_ms": 1782950400000,
+            "position_opened_at_ms": 1782950400000,
+            "status_reason": "short exposure adopted for fixture"
+          },
+          {
+            "ticker_id": "BITFINEX:tTESTDOT:TESTUSD",
+            "symbol": "tTESTDOT:TESTUSD",
+            "status": "paused",
+            "status_since_ms": 1782951000000,
+            "status_reason": "operator paused before repair"
+          },
+          {
+            "ticker_id": "BITFINEX:tTESTSOL:TESTUSD",
+            "symbol": "tTESTSOL:TESTUSD",
+            "status": "bust_locked",
+            "status_since_ms": 1782951600000,
+            "status_reason": "ticker claim exhausted"
+          },
+          {
+            "ticker_id": "BITFINEX:tTESTLTC:TESTUSD",
+            "symbol": "tTESTLTC:TESTUSD",
+            "status": "degraded",
+            "status_since_ms": 1782951900000,
+            "status_reason": "auth reconciliation stale"
+          }
+        ],
+        "orders_total": 0,
+        "orders_active_or_pending": 0,
+        "orders_submitted_nonterminal": 0,
+        "order_status_counts": {},
+        "ticker_orders": [],
+        "decision_events": 0,
+        "ledger_events": 0,
+        "fills": 0,
+        "last_error": "private account snapshot is stale"
+      }
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-adopt-strategy-position-1",
+  "command": {
+    "type": "adopt_strategy_position",
+    "runtime_id": "strategy-runtime-v8-test",
+    "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+    "position_id": 77,
+    "reason": "operator adopts carryover TEST position"
+  }
+}

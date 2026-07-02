@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "request_id": "c",
+  "event": {
+    "type": "strategy_ticker",
+    "ticker": {
+      "runtime_id": "v8-tail-repair-live-main",
+      "state": "Degraded",
+      "generated_at_ms": 1783011258106,
+      "mode": "live",
+      "strategy": "ema_regime_breakout_v8",
+      "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+      "symbol": "tTESTADA:TESTUSD",
+      "allocation": {
+        "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+        "status": "entering",
+        "status_since_ms": 1783008300000,
+        "status_reason": "reservation_created",
+        "allocated_equity": "3999.7574515595762",
+        "available_cash": "3991.7619364139086071762000000",
+        "reserved_cash": "7.995515145667592823800000000",
+        "locked_margin": "0.0000000000000",
+        "position_quantity": "0.00000000",
+        "realized_pnl": "-0.2427137254238",
+        "unrealized_pnl": "0",
+        "fees_paid": "0",
+        "last_decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTADA:TESTUSD:1m:1783008480000",
+        "last_event": "reservation_created"
+      },
+      "orders": {
+        "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+        "symbol": "tTESTADA:TESTUSD",
+        "orders_total": 8,
+        "orders_active_or_pending": 2,
+        "orders_submitted_nonterminal": 0,
+        "order_status_counts": {
+          "accepted": 0,
+          "canceled": 0,
+          "filled": 4,
+          "open": 0,
+          "partially_filled": 0,
+          "queued": 2,
+          "rejected": 2,
+          "sent": 0
+        },
+        "last_event": "order_queued",
+        "last_event_ts_ms": 1783008480000
+      },
+      "last_decision_ms": 1783011257265,
+      "recent_decisions": [
+        {
+          "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTADA:TESTUSD:1m:1783008000000",
+          "ticker_id": "bitfinex:tTESTADA:TESTUSD",
+          "symbol": "tTESTADA:TESTUSD",
+          "timeframe": "1m",
+          "decision_ts_ms": 1783008000000,
+          "outcome": "no_intents",
+          "intent_count": 0,
+          "risk_checks": [
+            {
+              "name": "shadow_live_preflight",
+              "status": "not_applicable",
+              "detail": "no order intents were produced"
+            },
+            {
+              "name": "auth_order_control",
+              "status": "not_applicable",
+              "detail": "no queued orders required auth order control dispatch"
+            }
+          ],
+          "queued_order_count": 0,
+          "ledger_event_count": 0,
+          "fill_count": 0,
+          "rejected_order_count": 0
+        },
+        {
+          "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTADA:TESTUSD:1m:1783008060000",
+          "ticker_id": "bitfinex:tTESTADA:TESTUSD",
+          "symbol": "tTESTADA:TESTUSD",
+          "timeframe": "1m",
+          "decision_ts_ms": 1783008060000,
+          "outcome": "no_intents",
+          "intent_count": 0,
+          "risk_checks": [
+            {
+              "name": "shadow_live_preflight",
+              "status": "not_applicable",
+              "detail": "no order intents were produced"
+            },
+            {
+              "name": "auth_order_control",
+              "status": "not_applicable",
+              "detail": "no queued orders required auth order control dispatch"
+            }
+          ],
+          "queued_order_count": 0,
+          "ledger_event_count": 0,
+          "fill_count": 0,
+          "rejected_order_count": 0
+        },
+        {
+          "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTADA:TESTUSD:1m:1783008120000",
+          "ticker_id": "bitfinex:tTESTADA:TESTUSD",
+          "symbol": "tTESTADA:TESTUSD",
+          "timeframe": "1m",
+          "decision_ts_ms": 1783008120000,
+          "outcome": "no_intents",
+          "intent_count": 0,
+          "risk_checks": [
+            {
+              "name": "shadow_live_preflight",
+              "status": "not_applicable",
+              "detail": "no order intents were produced"
+            },
+            {
+              "name": "auth_order_control",
+              "status": "not_applicable",
+              "detail": "no queued orders required auth order control dispatch"
+            }
+          ],
+          "queued_order_count": 0,
+          "ledger_event_count": 0,
+          "fill_count": 0,
+          "rejected_order_count": 0
+        },
+        {
+          "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTADA:TESTUSD:1m:1783008180000",
+          "ticker_id": "bitfinex:tTESTADA:TESTUSD",
+          "symbol": "tTESTADA:TESTUSD",
+          "timeframe": "1m",
+          "decision_ts_ms": 1783008180000,
+          "outcome": "no_intents",
+          "intent_count": 0,
+          "risk_checks": [
+            {
+              "name": "shadow_live_preflight",
+              "status": "not_applicable",
+              "detail": "no order intents were produced"
+            },
+            {
+              "name": "auth_order_control",
+              "status": "not_applicable",
+              "detail": "no queued orders required auth order control dispatch"
+            }
+          ],
+          "queued_order_count": 0,
+          "ledger_event_count": 0,
+          "fill_count": 0,
+          "rejected_order_count": 0
+        },
+        {
+          "decision_id": "v8-tail-repair-testusd-1m-live-20260701T143936Z:bitfinex:tTESTADA:TESTUSD:1m:1783008240000",
+          "ticker_id": "bitfinex:tTESTADA:TESTUSD",
+          "symbol": "tTESTADA:TESTUSD",
+          "timeframe": "1m",
+          "decision_ts_ms": 1783008240000,
+          "outcome": "no_intents",
+          "intent_count": 0,
+          "risk_checks": [
+            {
+              "name": "shadow_live_preflight",
+              "status": "not_applicable",
+              "detail": "no order intents were produced"
+            },
+            {
+              "name": "auth_order_control",
+              "status": "not_applicable",
+              "detail": "no queued orders required auth order control dispatch"
+            }
+          ],
+          "queued_order_count": 0,
+          "ledger_event_count": 0,
+          "fill_count": 0,
+          "rejected_order_count": 0
+        }
+      ],
+      "auth_ready": true,
+      "allocation_ready": true,
+      "pending_auth_reasons": [],
+      "pending_allocation_reasons": []
+    }
+  }
+}

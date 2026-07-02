@@ -35,6 +35,7 @@ export const KNOWN_ERROR_CODES = {
     // the catalog but can't serve the stream. Transient: it recovers when the
     // runtime re-establishes its control channel, so retry (the chart self-heals).
     runtime_control_rejected:   { retryable: true },
+    control_session_required:   { retryable: false },   // no/stale control session → re-establish before retrying
     // auth-position flows. Audit/history unavailability is usually transient
     // (disk read, REST window, runtime still loading its snapshot) → retry and
     // keep the last good UI state. A non-stateful socket can't carry streams; the
@@ -92,6 +93,14 @@ const TERMINAL_EVENT = {
     get_strategy_ticker:         'strategy_ticker',
     list_strategy_decisions:     'strategy_decisions',
     get_strategy_chart_overlays: 'strategy_chart_overlays',
+    // strategy DIRECT-CONTROL mutations. Each resolves on the gateway control_ack;
+    // the runtime performs the real safety/cancel/ledger/auth reconciliation.
+    pause_strategy_ticker:         'control_ack',
+    resume_strategy_ticker:        'control_ack',
+    unlock_strategy_ticker:        'control_ack',
+    adopt_strategy_position:       'control_ack',
+    adopt_strategy_positions:      'control_ack',
+    cancel_strategy_ticker_orders: 'control_ack',
 }
 
 // Subscription-stream event types: carry a subscription_id and (usually) a null
@@ -604,6 +613,95 @@ export class CorkyClient {
         if (runtime_id != null) command.runtime_id = runtime_id
         if (strategy != null) command.strategy = strategy
         return this._request(command, { subscription_id, onEvent })
+    }
+
+    // ── strategy DIRECT-CONTROL senders (MUTATE a live runtime) ──────────────────
+    // These forward an audited operator action to an observed strategy runtime over
+    // direct control (control_session_required). Each REQUIRES a visible operator
+    // `reason` and resolves on the gateway `control_ack`. `target_runtime_id` echoes
+    // the discovered runtime id (the runtime-targeting rule) and is forwarded when
+    // provided. NOTHING is mutated locally on ack — the caller waits for the
+    // runtime/auth reconciliation (subscription full-replacement) to reflect it.
+
+    // Shared framing/guards for the per-ticker controls (pause/resume/cancel/unlock):
+    // all need runtime_id + ticker_id + reason, and optionally strategy_instance_id
+    // and target_runtime_id.
+    _strategyTickerControl(type, name, opts = {}) {
+        const { runtime_id, ticker_id, reason, strategy_instance_id, target_runtime_id } = opts
+        if (!runtime_id) throw new Error(`${name}: runtime_id is required`)
+        if (!ticker_id) throw new Error(`${name}: ticker_id is required`)
+        if (!reason) throw new Error(`${name}: reason is required`)
+        const command = { type, runtime_id, ticker_id, reason }
+        if (strategy_instance_id != null) command.strategy_instance_id = strategy_instance_id
+        if (target_runtime_id != null) command.target_runtime_id = target_runtime_id
+        return command
+    }
+
+    /** Pause one strategy ticker. Requires { runtime_id, ticker_id, reason }. */
+    pauseStrategyTicker(opts = {}) {
+        return this._request(this._strategyTickerControl('pause_strategy_ticker', 'pauseStrategyTicker', opts))
+    }
+
+    /** Resume one paused strategy ticker. Requires { runtime_id, ticker_id, reason }. */
+    resumeStrategyTicker(opts = {}) {
+        return this._request(this._strategyTickerControl('resume_strategy_ticker', 'resumeStrategyTicker', opts))
+    }
+
+    /** Cancel active/submitted strategy-owned orders on one ticker. Requires
+     *  { runtime_id, ticker_id, reason } — the reason is a visible operator input. */
+    cancelStrategyTickerOrders(opts = {}) {
+        return this._request(this._strategyTickerControl('cancel_strategy_ticker_orders', 'cancelStrategyTickerOrders', opts))
+    }
+
+    /** Unlock one bust/capital-shortfall-locked ticker with a positive new
+     *  allocation. Requires { runtime_id, ticker_id, reason, new_allocation:{
+     *  currency, amount } } — `amount` is a DECIMAL STRING forwarded verbatim. */
+    unlockStrategyTicker(opts = {}) {
+        const command = this._strategyTickerControl('unlock_strategy_ticker', 'unlockStrategyTicker', opts)
+        const na = opts.new_allocation
+        if (!na || na.currency == null || na.amount == null) {
+            throw new Error('unlockStrategyTicker: new_allocation.currency and new_allocation.amount are required')
+        }
+        command.new_allocation = { currency: na.currency, amount: na.amount }
+        return this._request(command)
+    }
+
+    /** Adopt one exact pre-existing auth position. Requires { runtime_id,
+     *  ticker_id, position_id, reason }. */
+    adoptStrategyPosition(opts = {}) {
+        const { runtime_id, ticker_id, position_id, reason, strategy_instance_id, target_runtime_id } = opts
+        if (!runtime_id) throw new Error('adoptStrategyPosition: runtime_id is required')
+        if (!ticker_id) throw new Error('adoptStrategyPosition: ticker_id is required')
+        if (position_id == null) throw new Error('adoptStrategyPosition: position_id is required')
+        if (!reason) throw new Error('adoptStrategyPosition: reason is required')
+        const command = { type: 'adopt_strategy_position', runtime_id, ticker_id, position_id, reason }
+        if (strategy_instance_id != null) command.strategy_instance_id = strategy_instance_id
+        if (target_runtime_id != null) command.target_runtime_id = target_runtime_id
+        return this._request(command)
+    }
+
+    /** Adopt an explicitly named batch of pre-existing auth positions. Requires
+     *  { runtime_id, positions:[{ ticker_id, position_id }], reason }. */
+    adoptStrategyPositions(opts = {}) {
+        const { runtime_id, positions, reason, strategy_instance_id, target_runtime_id } = opts
+        if (!runtime_id) throw new Error('adoptStrategyPositions: runtime_id is required')
+        if (!Array.isArray(positions) || positions.length === 0) {
+            throw new Error('adoptStrategyPositions: positions[] is required')
+        }
+        for (const p of positions) {
+            if (!p || !p.ticker_id || p.position_id == null) {
+                throw new Error('adoptStrategyPositions: each position requires ticker_id and position_id')
+            }
+        }
+        if (!reason) throw new Error('adoptStrategyPositions: reason is required')
+        const command = {
+            type: 'adopt_strategy_positions', runtime_id,
+            positions: positions.map((p) => ({ ticker_id: p.ticker_id, position_id: p.position_id })),
+            reason,
+        }
+        if (strategy_instance_id != null) command.strategy_instance_id = strategy_instance_id
+        if (target_runtime_id != null) command.target_runtime_id = target_runtime_id
+        return this._request(command)
     }
 
     // ── outbound plumbing ──────────────────────────────────────────────────────

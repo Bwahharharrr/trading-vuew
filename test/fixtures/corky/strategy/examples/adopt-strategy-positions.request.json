@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "request_id": "adopt-strategy-positions-example",
+  "command": {
+    "type": "adopt_strategy_positions",
+    "runtime_id": "strategy-runtime-main",
+    "strategy_instance_id": "v8-tail-repair-testusd-paper-a",
+    "positions": [
+      {
+        "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+        "position_id": 77
+      },
+      {
+        "ticker_id": "BITFINEX:tTESTBTC:TESTUSD",
+        "position_id": 88
+      }
+    ],
+    "reason": "operator approved adopting all observed carryover positions"
+  }
+}

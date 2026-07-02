@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "request_id": "chart-strategy-runtime-lineage-states-1",
+  "event": {
+    "type": "strategy_runtimes",
+    "runtimes": [
+      {
+        "runtime_id": "strategy-runtime-lineage-unknown",
+        "process_kind": "corky-strategy-runtime",
+        "state": "Ready",
+        "generated_at_ms": 1782953400000,
+        "mode": "paper",
+        "strategy": "ema_regime_breakout_v8",
+        "strategy_id": "ema_regime_breakout_v8",
+        "strategy_instance_id": "lineage-unknown-paper",
+        "strategy_config_sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "strategy_params_sha256": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "strategy_params_canonical_json": "{\"fixture\":\"lineage-unknown\"}",
+        "strategy_descriptor_schema_version": 1,
+        "trade_timeframe": "1m",
+        "context_timeframes": [
+          "5m"
+        ],
+        "lineage_status": "unknown",
+        "lineage_reasons": [],
+        "target_public_runtime_id": "public-market-main"
+      },
+      {
+        "runtime_id": "strategy-runtime-lineage-artifact-missing",
+        "process_kind": "corky-strategy-runtime",
+        "state": "Degraded",
+        "generated_at_ms": 1782953400000,
+        "mode": "shadow_live",
+        "strategy": "ema_regime_breakout_v8",
+        "strategy_id": "ema_regime_breakout_v8",
+        "strategy_instance_id": "lineage-artifact-missing-shadow-live",
+        "strategy_config_sha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "strategy_params_sha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "strategy_params_canonical_json": "{\"fixture\":\"artifact-missing\"}",
+        "strategy_descriptor_schema_version": 1,
+        "trade_timeframe": "5m",
+        "context_timeframes": [
+          "1h"
+        ],
+        "lineage_status": "artifact_missing",
+        "lineage_reasons": [
+          "candidate artifact is missing"
+        ],
+        "universe_backtest_run_id": "universe-v8-missing-artifact-fixture",
+        "candidate_rank": 2,
+        "candidate_run_index": 1,
+        "candidate_params_sha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "candidate_artifact_path": "/tmp/corky/backtests/runs/missing-universe.json",
+        "target_public_runtime_id": "public-market-main"
+      },
+      {
+        "runtime_id": "strategy-runtime-lineage-unsupported-artifact",
+        "process_kind": "corky-strategy-runtime",
+        "state": "Degraded",
+        "generated_at_ms": 1782953400000,
+        "mode": "shadow_live",
+        "strategy": "ema_regime_breakout_v8",
+        "strategy_id": "ema_regime_breakout_v8",
+        "strategy_instance_id": "lineage-unsupported-artifact-shadow-live",
+        "strategy_config_sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "strategy_params_sha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "strategy_params_canonical_json": "{\"fixture\":\"unsupported-artifact\"}",
+        "strategy_descriptor_schema_version": 1,
+        "trade_timeframe": "5m",
+        "context_timeframes": [
+          "1h"
+        ],
+        "lineage_status": "unsupported_artifact",
+        "lineage_reasons": [
+          "candidate artifact schema is unsupported"
+        ],
+        "universe_backtest_run_id": "universe-v8-unsupported-artifact-fixture",
+        "candidate_rank": 3,
+        "candidate_run_index": 2,
+        "candidate_params_sha256": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "candidate_artifact_path": "/tmp/corky/backtests/runs/unsupported-universe.json",
+        "target_public_runtime_id": "public-market-main"
+      }
+    ]
+  }
+}
