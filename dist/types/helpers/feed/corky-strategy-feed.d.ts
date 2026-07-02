@@ -17,6 +17,19 @@ export class CorkyStrategyFeed {
     listDecisions(runtime_id: any, opts?: {}): any;
     /** Chart overlays (decision/fill/order/allocation markers). Resolves `overlays`. */
     getChartOverlays(runtime_id: any, ticker_id: any, opts?: {}): any;
+    /** Pause one ticker. opts: { runtime_id, ticker_id, reason, strategy_instance_id?, target_runtime_id? }. */
+    pauseTicker(opts?: {}): any;
+    /** Resume one paused ticker. Same opts shape as pauseTicker. */
+    resumeTicker(opts?: {}): any;
+    /** Unlock one locked ticker with a positive new allocation. opts adds
+     *  { new_allocation: { currency, amount } } (amount is a decimal string). */
+    unlockTicker(opts?: {}): any;
+    /** Adopt one exact pre-existing auth position. opts: { runtime_id, ticker_id, position_id, reason, … }. */
+    adoptPosition(opts?: {}): any;
+    /** Adopt a named batch of pre-existing auth positions. opts: { runtime_id, positions:[{ticker_id,position_id}], reason, … }. */
+    adoptPositions(opts?: {}): any;
+    /** Cancel active/submitted orders on one ticker (reason is a visible operator input). */
+    cancelTickerOrders(opts?: {}): any;
     /**
      * Stream the runtime set. `handlers.onData(runtimes, { sequence })` fires on
      * every (in-order) FULL-REPLACEMENT update; `handlers.onError(err, { lastGood })`

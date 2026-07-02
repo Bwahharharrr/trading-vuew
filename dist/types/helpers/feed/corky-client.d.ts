@@ -35,45 +35,49 @@ export namespace KNOWN_ERROR_CODES {
         let retryable_8: boolean;
         export { retryable_8 as retryable };
     }
-    namespace auth_position_history_unavailable {
+    namespace control_session_required {
         let retryable_9: boolean;
         export { retryable_9 as retryable };
     }
-    namespace auth_position_audit_unavailable {
+    namespace auth_position_history_unavailable {
         let retryable_10: boolean;
         export { retryable_10 as retryable };
     }
-    namespace stateful_websocket_required {
+    namespace auth_position_audit_unavailable {
         let retryable_11: boolean;
         export { retryable_11 as retryable };
     }
-    namespace backtest_artifacts_disabled {
+    namespace stateful_websocket_required {
         let retryable_12: boolean;
         export { retryable_12 as retryable };
     }
-    namespace strategy_not_found {
+    namespace backtest_artifacts_disabled {
         let retryable_13: boolean;
         export { retryable_13 as retryable };
     }
-    namespace backtest_not_found {
+    namespace strategy_not_found {
         let retryable_14: boolean;
         export { retryable_14 as retryable };
     }
-    namespace backtest_artifact_not_ready {
+    namespace backtest_not_found {
         let retryable_15: boolean;
         export { retryable_15 as retryable };
     }
-    namespace invalid_backtest_request {
+    namespace backtest_artifact_not_ready {
         let retryable_16: boolean;
         export { retryable_16 as retryable };
     }
-    namespace backtest_artifact_invalid {
+    namespace invalid_backtest_request {
         let retryable_17: boolean;
         export { retryable_17 as retryable };
     }
-    namespace backtest_store_unavailable {
+    namespace backtest_artifact_invalid {
         let retryable_18: boolean;
         export { retryable_18 as retryable };
+    }
+    namespace backtest_store_unavailable {
+        let retryable_19: boolean;
+        export { retryable_19 as retryable };
     }
 }
 export class CorkyError extends Error {
@@ -177,6 +181,29 @@ export class CorkyClient {
      * stream by `runtime_id` OR `strategy` (at least one is required).
      */
     subscribeStrategyRuntime(opts?: {}): Promise<any>;
+    _strategyTickerControl(type: any, name: any, opts?: {}): {
+        type: any;
+        runtime_id: any;
+        ticker_id: any;
+        reason: any;
+    };
+    /** Pause one strategy ticker. Requires { runtime_id, ticker_id, reason }. */
+    pauseStrategyTicker(opts?: {}): Promise<any>;
+    /** Resume one paused strategy ticker. Requires { runtime_id, ticker_id, reason }. */
+    resumeStrategyTicker(opts?: {}): Promise<any>;
+    /** Cancel active/submitted strategy-owned orders on one ticker. Requires
+     *  { runtime_id, ticker_id, reason } — the reason is a visible operator input. */
+    cancelStrategyTickerOrders(opts?: {}): Promise<any>;
+    /** Unlock one bust/capital-shortfall-locked ticker with a positive new
+     *  allocation. Requires { runtime_id, ticker_id, reason, new_allocation:{
+     *  currency, amount } } — `amount` is a DECIMAL STRING forwarded verbatim. */
+    unlockStrategyTicker(opts?: {}): Promise<any>;
+    /** Adopt one exact pre-existing auth position. Requires { runtime_id,
+     *  ticker_id, position_id, reason }. */
+    adoptStrategyPosition(opts?: {}): Promise<any>;
+    /** Adopt an explicitly named batch of pre-existing auth positions. Requires
+     *  { runtime_id, positions:[{ ticker_id, position_id }], reason }. */
+    adoptStrategyPositions(opts?: {}): Promise<any>;
     _nextRequestId(): string;
     _request(command: any, meta?: {}): Promise<any>;
     _send(frame: any): void;
