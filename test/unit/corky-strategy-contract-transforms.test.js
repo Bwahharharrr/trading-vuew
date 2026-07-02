@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest'
 import {
   buildWalletAllocationTree,
   classifyTickerStatus, fmtDuration,
-  orderBlocker, classifyLineage,
+  orderBlocker, classifyLineage, lineageCandidateLink,
   groupRuntimesByProcess, normalizeDependencies,
   strategyTickerControlActions,
 } from '../../src/helpers/feed/corky-strategy-transforms.js'
@@ -237,6 +237,24 @@ describe('classifyLineage — only verified may read as running', () => {
     expect(classifyLineage('unknown')).toMatchObject({ status: 'unknown', tone: 'neutral', running: false, known: true })
     expect(classifyLineage('declared')).toMatchObject({ status: 'unknown', tone: 'pending', running: false })
     expect(classifyLineage(null)).toMatchObject({ status: 'unknown', tone: 'neutral', running: false, known: false })
+  })
+})
+
+describe('lineageCandidateLink — clickable backtest candidate (verified lineage only)', () => {
+  it('verified runtime → { runId, runIndex, rank } from universe_backtest_run_id', () => {
+    expect(lineageCandidateLink(NEW_LIVE)).toEqual({
+      runId: NEW_LIVE.universe_backtest_run_id,
+      runIndex: NEW_LIVE.candidate_run_index,
+      rank: NEW_LIVE.candidate_rank,
+    })
+  })
+  it('mismatched / unknown lineage → null (never link a non-verified runtime)', () => {
+    expect(lineageCandidateLink(NEW_MATRIX)).toBeNull()
+    expect(lineageCandidateLink({ lineage_status: 'unknown', universe_backtest_run_id: 'x' })).toBeNull()
+  })
+  it('verified but no run id → null', () => {
+    expect(lineageCandidateLink({ lineage_status: 'verified' })).toBeNull()
+    expect(lineageCandidateLink(null)).toBeNull()
   })
 
   it('no non-verified lineage is ever running (mismatch/unknown integrity)', () => {

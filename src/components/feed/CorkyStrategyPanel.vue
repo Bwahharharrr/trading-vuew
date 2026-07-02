@@ -162,11 +162,24 @@
                 <span class="lin-badge" :class="'lin-' + lineageInfo.tone">{{ lineageRawLabel }}</span>
                 <span v-if="lineageInfo.running" class="sr-run-tag">running</span>
                 <span v-else class="sr-norun-tag" title="lineage not verified — not presented as currently running">not verified</span>
+                <span class="sr-spacer"></span>
+                <!-- Verified lineage → jump to the exact universe backtest run + candidate. -->
+                <button v-if="lineageLink" class="sr-lin-open"
+                        :title="'Open backtest run ' + lineageLink.runId + (lineageLink.runIndex != null ? ' · candidate #' + lineageLink.runIndex : '') + ' in the Backtests dock'"
+                        @click="openLineage">↗ Open backtest candidate</button>
             </div>
             <div class="sr-grid">
-                <div class="sr-field"><span class="sr-k">run id</span><span class="sr-v">{{ dash(selectedRuntime.universe_backtest_run_id) }}</span></div>
+                <div class="sr-field"><span class="sr-k">run id</span>
+                    <button v-if="lineageLink" class="sr-lin-link sr-v" @click="openLineage"
+                            :title="'Open ' + lineageLink.runId + ' in the Backtests dock'">{{ selectedRuntime.universe_backtest_run_id }} ↗</button>
+                    <span v-else class="sr-v">{{ dash(selectedRuntime.universe_backtest_run_id) }}</span>
+                </div>
                 <div class="sr-field"><span class="sr-k">candidate rank</span><span class="sr-v">{{ dash(selectedRuntime.candidate_rank) }}</span></div>
-                <div class="sr-field"><span class="sr-k">candidate run index</span><span class="sr-v">{{ dash(selectedRuntime.candidate_run_index) }}</span></div>
+                <div class="sr-field"><span class="sr-k">candidate run index</span>
+                    <button v-if="lineageLink && lineageLink.runIndex != null" class="sr-lin-link sr-v" @click="openLineage"
+                            title="Open this candidate in the Backtests dock">{{ selectedRuntime.candidate_run_index }} ↗</button>
+                    <span v-else class="sr-v">{{ dash(selectedRuntime.candidate_run_index) }}</span>
+                </div>
                 <div class="sr-field"><span class="sr-k">params hash</span><span class="sr-v mono" :title="selectedRuntime.strategy_params_sha256">{{ shortSha(selectedRuntime.strategy_params_sha256) }}</span></div>
                 <div class="sr-field"><span class="sr-k">candidate params</span><span class="sr-v mono" :title="selectedRuntime.candidate_params_sha256">{{ shortSha(selectedRuntime.candidate_params_sha256) }}</span></div>
                 <div class="sr-field"><span class="sr-k">trade tf</span><span class="sr-v">{{ dash(selectedRuntime.trade_timeframe) }}</span></div>
@@ -419,6 +432,7 @@ import {
     classifyRuntimeStrategyRollup,
     classifyTickerStatus,
     classifyLineage,
+    lineageCandidateLink,
     buildWalletAllocationTree,
     groupWalletBalancesByClass,
     groupRuntimesByProcess,
@@ -463,6 +477,8 @@ export default {
         'select-runtime', 'refresh',
         // Direct-control intents (App echoes them to the feed's control methods).
         'cancel-ticker-orders', 'pause-ticker', 'resume-ticker', 'unlock-ticker', 'adopt-position',
+        // Jump to the runtime's verified universe backtest run + candidate.
+        'open-lineage-run',
     ],
     data() {
         return {
@@ -590,6 +606,8 @@ export default {
         readinessInfo() { return classifyRuntimeReadiness(this.selectedRuntime && this.selectedRuntime.state) },
         rollupInfo() { return classifyRuntimeStrategyRollup(this.selectedRuntime && this.selectedRuntime.allocation_strategy_status) },
         lineageInfo() { return classifyLineage(this.selectedRuntime && this.selectedRuntime.lineage_status) },
+        // The clickable backtest-candidate link (verified lineage only), or null.
+        lineageLink() { return lineageCandidateLink(this.selectedRuntime) },
         lineageRawLabel() {
             const s = this.selectedRuntime && this.selectedRuntime.lineage_status
             return s != null && s !== '' ? s : 'unknown'
@@ -691,6 +709,12 @@ export default {
         },
     },
     methods: {
+        // Jump to the runtime's verified universe backtest run + selected candidate
+        // (the App opens the Backtests dock and drills into that run_index).
+        openLineage() {
+            const l = this.lineageLink
+            if (l) this.$emit('open-lineage-run', { run_id: l.runId, run_index: l.runIndex })
+        },
         // ── selection ───────────────────────────────────────────────────────────
         selectRuntime(id) {
             this.selectedTicker = ''
@@ -905,6 +929,13 @@ export default {
 .sr-reasons { margin: 6px 0 0; padding: 0 0 0 18px; color: #f5c518; font-size: 11px; }
 .sr-lin-reasons { margin-top: 6px; }
 .sr-lin-reason { color: #808a9d; font-size: 11px; padding: 1px 0; }
+/* Verified-lineage → clickable link into the Backtests dock. */
+.sr-lin-open { background: rgba(88,166,255,0.12); color: #58a6ff; border: 1px solid rgba(88,166,255,0.4);
+               border-radius: 4px; padding: 2px 8px; font-size: 10px; cursor: pointer; white-space: nowrap; }
+.sr-lin-open:hover { background: rgba(88,166,255,0.22); }
+.sr-lin-link { background: none; border: none; padding: 0; color: #58a6ff; cursor: pointer; text-align: right;
+               font: inherit; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
+.sr-lin-link:hover { color: #79b8ff; }
 .sr-prov { margin-top: 4px; color: #5c6470; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sr-prov .mono { color: #6b7686; }
 

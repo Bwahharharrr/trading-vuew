@@ -293,3 +293,30 @@ describe('lineage states — unknown is neutral, missing/unsupported are attenti
         expect(w.findAll('.sr-run-tag')).toHaveLength(0)
     })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LINEAGE → BACKTEST CANDIDATE LINK (verified only)
+// ═══════════════════════════════════════════════════════════════════════════
+describe('CorkyStrategyPanel — lineage → backtest candidate link', () => {
+    const mk = (props = {}) => mount(CorkyStrategyPanel, { props: { runtimes: UX_RUNTIMES, now: AS_OF, ...props } })
+
+    test('a VERIFIED runtime shows a clickable link that emits open-lineage-run with the run + candidate', async () => {
+        const w = mk()   // Summary tab (default); UX_LIVE (verified) is default-selected
+        const open = w.find('.sr-lin-open')
+        expect(open.exists()).toBe(true)
+        await open.trigger('click')
+        expect(w.emitted('open-lineage-run')[0][0]).toEqual({
+            run_id: UX_LIVE.universe_backtest_run_id,
+            run_index: UX_LIVE.candidate_run_index,
+        })
+        // the run-id itself is also a clickable link
+        expect(w.find('.sr-lin-link').exists()).toBe(true)
+    })
+
+    test('a MISMATCHED-lineage runtime shows NO lineage link (never links a non-verified runtime)', () => {
+        const mismatch = UX_RUNTIMES.find((r) => r.lineage_status && r.lineage_status !== 'verified')
+        const w = mk({ selectedRuntimeId: mismatch.runtime_id })
+        expect(w.find('.sr-lin-open').exists()).toBe(false)
+        expect(w.find('.sr-lin-link').exists()).toBe(false)
+    })
+})

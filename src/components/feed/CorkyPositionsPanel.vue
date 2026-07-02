@@ -113,7 +113,8 @@
                         @pause-ticker="$emit('strategy-pause-ticker', $event)"
                         @resume-ticker="$emit('strategy-resume-ticker', $event)"
                         @unlock-ticker="$emit('strategy-unlock-ticker', $event)"
-                        @adopt-position="$emit('strategy-adopt-position', $event)" />
+                        @adopt-position="$emit('strategy-adopt-position', $event)"
+                        @open-lineage-run="$emit('strategy-open-lineage-run', $event)" />
 
         <!-- One reusable Run-Details tab body -->
         <corky-backtest-detail v-else-if="activeTab === 'bt-detail' && backtests.selectedRun"
@@ -235,7 +236,7 @@ export default {
         'bt-select-run', 'bt-plot-run', 'bt-select-trade', 'bt-select-candidate', 'bt-close-detail',
         'strategy-select-runtime', 'strategy-refresh',
         'strategy-cancel-ticker-orders', 'strategy-pause-ticker', 'strategy-resume-ticker',
-        'strategy-unlock-ticker', 'strategy-adopt-position',
+        'strategy-unlock-ticker', 'strategy-adopt-position', 'strategy-open-lineage-run',
     ],
     computed: {
         rows() {

@@ -148,6 +148,7 @@
             @strategy-resume-ticker="strategyResumeTicker"
             @strategy-unlock-ticker="strategyUnlockTicker"
             @strategy-adopt-position="strategyAdoptPosition"
+            @strategy-open-lineage-run="strategyOpenLineageRun"
             @bt-refresh-strategies="btLoadStrategies"
             @bt-update-filter="btUpdateFilter"
             @bt-list-runs="btListRuns"
@@ -2862,6 +2863,31 @@ export default {
         strategyUnlockTicker(p) { return this._strategyControl('unlockTicker', p) },
         strategyAdoptPosition(p) { return this._strategyControl('adoptPosition', p) },
         strategyAdoptPositions(p) { return this._strategyControl('adoptPositions', p) },
+
+        // A verified runtime's lineage → jump straight to its universe backtest run
+        // + selected candidate in the Backtests dock (field-map "Candidate link").
+        async strategyOpenLineageRun({ run_id, run_index } = {}) {
+            if (!run_id) return
+            this.setPositionsTab('backtests')   // switch the dock to the Backtests tab
+            // Resolve the run object btSelectRun needs: prefer the loaded list, then a
+            // by-id fetch, then a minimal stub (shape is detected from the run_id).
+            let run = (this.backtests.runs || []).find((r) => r && r.run_id === run_id)
+            if (!run && this.backtestsFeed) {
+                if (!(this.backtests.runs || []).length) {
+                    await this.btListRuns()
+                    run = (this.backtests.runs || []).find((r) => r && r.run_id === run_id)
+                }
+                if (!run && typeof this.backtestsFeed.getRun === 'function') {
+                    try { run = await this.backtestsFeed.getRun(run_id) } catch (_) { /* fall through */ }
+                }
+            }
+            if (!run) run = { run_id }
+            await this.btSelectRun(run)
+            // Drill into the exact candidate (universe/sweep run_index) when present.
+            if (run_index != null && typeof this.btSelectCandidate === 'function') {
+                await this.btSelectCandidate(run_index)
+            }
+        },
 
         // Start the live runtime subscription (once). Scoped to the default live
         // runtime; each update is a FULL-REPLACEMENT snapshot applied by increasing

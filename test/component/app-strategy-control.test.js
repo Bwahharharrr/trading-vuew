@@ -10,7 +10,7 @@
 //      (nothing is sent) and reports the missing session;
 //   3. a control send NEVER mutates local strategy/order state — the runtime set
 //      only changes on the next subscription full-replacement (reconciliation).
-import { test, expect, describe, beforeEach } from 'vitest'
+import { test, expect, describe, beforeEach, vi } from 'vitest'
 import App from '../../src/App.vue'
 import { CorkyStrategyFeed } from '../../src/helpers/feed/corky-strategy-feed.js'
 import { CorkyClient } from '../../src/helpers/feed/corky-client.js'
@@ -212,5 +212,52 @@ describe('a control send never mutates local strategy state (reconciliation only
     expect(ctx.strategy.runtimes[0].ticker_orders[0].orders_submitted_nonterminal).toBe(0)
     expect(ctx.strategy.runtimes[0].last_decision_ms).toBe(200)
     expect(ctx.strategy.control.awaiting).toBe(null)   // the update for THIS runtime cleared the hint
+  })
+})
+
+describe('strategyOpenLineageRun — jump to the verified universe backtest run + candidate', () => {
+  function navCtx(runs) {
+    const ctx = {
+      backtests: { runs: runs || [], filters: {}, loading: false, error: null, clickHistory: [], detail: {} },
+      backtestsFeed: {
+        listRuns: vi.fn(async () => runs || []),
+        getRun: vi.fn(async (id) => ({ run_id: id, status: 'completed' })),
+      },
+      setPositionsTab: vi.fn(),
+      btListRuns: vi.fn(async () => {}),
+      btSelectRun: vi.fn(async () => {}),
+      btSelectCandidate: vi.fn(async () => {}),
+    }
+    ctx.strategyOpenLineageRun = M.strategyOpenLineageRun
+    return ctx
+  }
+
+  test('switches to the Backtests tab, opens the run FROM THE LOADED LIST, and drills into the candidate', async () => {
+    const run = { run_id: 'universe-v8-tail-repair-20260630', status: 'completed' }
+    const ctx = navCtx([run])
+    await ctx.strategyOpenLineageRun({ run_id: run.run_id, run_index: 0 })
+    expect(ctx.setPositionsTab).toHaveBeenCalledWith('backtests')
+    expect(ctx.btSelectRun).toHaveBeenCalledWith(run)     // found in the list, not re-fetched
+    expect(ctx.backtestsFeed.getRun).not.toHaveBeenCalled()
+    expect(ctx.btSelectCandidate).toHaveBeenCalledWith(0)
+  })
+
+  test('fetches the run by id when it is not in the loaded list', async () => {
+    const ctx = navCtx([])   // empty list → btListRuns (still empty) → getRun fallback
+    await ctx.strategyOpenLineageRun({ run_id: 'universe-x', run_index: 3 })
+    expect(ctx.btListRuns).toHaveBeenCalled()
+    expect(ctx.backtestsFeed.getRun).toHaveBeenCalledWith('universe-x')
+    expect(ctx.btSelectRun).toHaveBeenCalledWith(expect.objectContaining({ run_id: 'universe-x' }))
+    expect(ctx.btSelectCandidate).toHaveBeenCalledWith(3)
+  })
+
+  test('no run_index → opens the run without selecting a candidate; no run_id → no-op', async () => {
+    const ctx = navCtx([{ run_id: 'r', status: 'completed' }])
+    await ctx.strategyOpenLineageRun({ run_id: 'r' })
+    expect(ctx.btSelectRun).toHaveBeenCalled()
+    expect(ctx.btSelectCandidate).not.toHaveBeenCalled()
+    const ctx2 = navCtx([])
+    await ctx2.strategyOpenLineageRun({})
+    expect(ctx2.setPositionsTab).not.toHaveBeenCalled()
   })
 })

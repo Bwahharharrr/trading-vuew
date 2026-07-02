@@ -511,6 +511,25 @@ export function classifyLineage(rawStatus) {
   return { status: 'unknown', raw: rawStatus, tone: 'neutral', running: false, known: knownUnknown }
 }
 
+/**
+ * The clickable backtest-candidate link for a runtime's lineage (field-map
+ * "Candidate link": link a runtime to its universe backtest run + selected
+ * candidate ONLY when lineage is verified). Returns { runId, runIndex, rank } —
+ * ready to open in the Backtests dock — or null when lineage isn't verified /
+ * carries no run id (mismatch/unknown never link).
+ */
+export function lineageCandidateLink(runtime) {
+  if (!runtime || !classifyLineage(runtime.lineage_status).running) return null
+  const runId = runtime.universe_backtest_run_id
+  if (!runId) return null
+  const ri = runtime.candidate_run_index
+  return {
+    runId,
+    runIndex: (ri == null || ri === '') ? null : ri,
+    rank: runtime.candidate_rank != null ? runtime.candidate_rank : null,
+  }
+}
+
 // ── process grouping + dependency normalization ──────────────────────────────
 // Strategy runtimes render under a `process_kind` group (defaulting to
 // `corky-strategy-runtime`), NOT under a raw runtime_id. Dependencies come from
