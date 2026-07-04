@@ -6,30 +6,23 @@
     <!-- Header / tab bar — always visible so the dock can be (re)opened. -->
     <div class="pd-header">
         <div class="pd-tabs" role="tablist" aria-label="Positions">
-            <button class="pd-tab" role="tab" :aria-selected="activeTab === 'open'"
-                    :class="{ active: activeTab === 'open' }"
-                    @click="selectTab('open')">
-                Open Positions<span v-if="openPositions.length" class="pd-count">{{ openPositions.length }}</span>
-            </button>
-            <button class="pd-tab" role="tab" :aria-selected="activeTab === 'historical'"
-                    :class="{ active: activeTab === 'historical' }"
-                    @click="selectTab('historical')">
-                Historical<span v-if="historyTotal" class="pd-count">{{ historyTotal }}</span>
-            </button>
-            <button class="pd-tab" role="tab" :aria-selected="activeTab === 'search'"
-                    :class="{ active: activeTab === 'search' }"
-                    @click="selectTab('search')">
-                Search Signals
-            </button>
-            <button class="pd-tab" role="tab" :aria-selected="activeTab === 'backtests'"
-                    :class="{ active: activeTab === 'backtests' }"
-                    @click="selectTab('backtests')">
-                Backtests
-            </button>
-            <button class="pd-tab" role="tab" :aria-selected="activeTab === 'strategy'"
-                    :class="{ active: activeTab === 'strategy' }"
-                    @click="selectTab('strategy')">
-                Strategy<span v-if="(strategy.runtimes||[]).length" class="pd-count">{{ strategy.runtimes.length }}</span>
+            <!-- Base tabs — user-reorderable via drag-and-drop; the order is owned
+                 and persisted by App (`tab-order` prop / `update:tab-order` intent).
+                 Transient tabs (run details, search results) render after and are
+                 NOT draggable. -->
+            <button v-for="t in orderedBaseTabs" :key="t.id"
+                    class="pd-tab" role="tab"
+                    :aria-selected="activeTab === t.id"
+                    :class="{ active: activeTab === t.id, 'pd-drag': dragId === t.id, 'pd-drag-over': dragOverId === t.id }"
+                    draggable="true"
+                    :title="'Drag to reorder · ' + t.label"
+                    @click="selectTab(t.id)"
+                    @dragstart="onTabDragStart(t.id, $event)"
+                    @dragover.prevent="onTabDragOver(t.id)"
+                    @dragleave="onTabDragLeave(t.id)"
+                    @drop.prevent="onTabDrop(t.id)"
+                    @dragend="onTabDragEnd">
+                {{ t.label }}<span v-if="t.count" class="pd-count">{{ t.count }}</span>
             </button>
             <!-- Reusable single Run-Details tab: appears once a run is selected,
                  re-targets to whichever run is clicked, closable. -->
@@ -195,6 +188,18 @@ import CorkyBacktestsPanel from './CorkyBacktestsPanel.vue'
 import CorkyBacktestDetail from './CorkyBacktestDetail.vue'
 import CorkyStrategyPanel from './CorkyStrategyPanel.vue'
 
+// Canonical base-tab set + labels. The persisted order is reconciled against
+// this: unknown ids are dropped, and any canonical id missing from the saved
+// order is appended (so a newly-added tab always shows up after an upgrade).
+const BASE_TAB_IDS = ['open', 'historical', 'search', 'backtests', 'strategy']
+const BASE_TAB_LABELS = {
+    open: 'Open Positions',
+    historical: 'Historical',
+    search: 'Search Signals',
+    backtests: 'Backtests',
+    strategy: 'Strategy',
+}
+
 export default {
     name: 'CorkyPositionsPanel',
     components: { SearchSignalsForm, SearchResults, CorkyBacktestsPanel, CorkyBacktestDetail, CorkyStrategyPanel },
@@ -205,6 +210,10 @@ export default {
         maximized: { type: Boolean, default: false },
         // 'open' | 'historical' | 'search' | a Search Results tab id.
         activeTab: { type: String, default: 'open' },
+        // Persisted display order of the base tabs (subset/superset of
+        // BASE_TAB_IDS). Empty/absent → canonical order. Reconciled in
+        // `orderedBaseTabs` so it survives added/removed tabs across versions.
+        tabOrder: { type: Array, default: () => [] },
         openPositions: { type: Array, default: () => [] },
         historicalPositions: { type: Array, default: () => [] },
         accounts: { type: Array, default: () => [] },
@@ -228,8 +237,15 @@ export default {
         // streaming, loading, error }.
         strategy: { type: Object, default: () => ({}) },
     },
+    data() {
+        return {
+            // Transient drag state for base-tab reordering (never persisted).
+            dragId: null,      // id of the tab being dragged
+            dragOverId: null,  // id of the tab currently hovered as a drop target
+        }
+    },
     emits: [
-        'update:open', 'update:maximized', 'update:active-tab', 'update:active-account',
+        'update:open', 'update:maximized', 'update:active-tab', 'update:active-account', 'update:tab-order',
         'select-position', 'audit-position', 'load-more', 'refresh', 'resize-start',
         'run-search', 'cancel-search', 'close-search-tab', 'select-result',
         'bt-refresh-strategies', 'bt-update-filter', 'bt-set-metric-filters', 'bt-list-runs', 'bt-inspect-strategy',
@@ -239,6 +255,21 @@ export default {
         'strategy-unlock-ticker', 'strategy-adopt-position', 'strategy-open-lineage-run',
     ],
     computed: {
+        // Base tabs in the persisted order, each with its live count. Reconciles
+        // the saved `tabOrder` against the canonical set: keep known ids in the
+        // saved order (de-duped), then append any canonical id not yet present.
+        orderedBaseTabs() {
+            const saved = Array.isArray(this.tabOrder) ? this.tabOrder : []
+            const seen = new Set()
+            const order = []
+            for (const id of saved) {
+                if (BASE_TAB_IDS.includes(id) && !seen.has(id)) { seen.add(id); order.push(id) }
+            }
+            for (const id of BASE_TAB_IDS) {
+                if (!seen.has(id)) { seen.add(id); order.push(id) }
+            }
+            return order.map((id) => ({ id, label: BASE_TAB_LABELS[id], count: this.tabCount(id) }))
+        },
         rows() {
             if (this.activeTab === 'open') return this.openPositions
             if (this.activeTab === 'historical') return this.historicalPositions
@@ -262,6 +293,48 @@ export default {
         newTabIntent,   // ⌘/Ctrl/middle-click → open in a new chart tab
         selectTab(tab) {
             if (tab !== this.activeTab) this.$emit('update:active-tab', tab)
+        },
+
+        // ── Base-tab drag-to-reorder ────────────────────────────────────────
+        // The panel is controlled: it emits the new order and lets App persist
+        // it; the reordered `tabOrder` prop flows back and re-renders the tabs.
+        tabCount(id) {
+            if (id === 'open') return this.openPositions.length
+            if (id === 'historical') return this.historyTotal
+            if (id === 'strategy') return (this.strategy.runtimes || []).length
+            return 0
+        },
+        onTabDragStart(id, ev) {
+            this.dragId = id
+            if (ev && ev.dataTransfer) {
+                ev.dataTransfer.effectAllowed = 'move'
+                // Some browsers refuse to start a drag without a payload.
+                try { ev.dataTransfer.setData('text/plain', id) } catch (e) { /* jsdom / locked dt */ }
+            }
+        },
+        onTabDragOver(id) {
+            if (this.dragId && id !== this.dragId) this.dragOverId = id
+        },
+        onTabDragLeave(id) {
+            if (this.dragOverId === id) this.dragOverId = null
+        },
+        onTabDrop(targetId) {
+            const from = this.dragId
+            this.dragId = null
+            this.dragOverId = null
+            if (!from || from === targetId) return
+            const order = this.orderedBaseTabs.map((t) => t.id)
+            const fromIdx = order.indexOf(from)
+            if (fromIdx < 0) return
+            order.splice(fromIdx, 1)                 // pull the dragged tab out
+            const toIdx = order.indexOf(targetId)    // …then insert it before the target
+            if (toIdx < 0) return
+            order.splice(toIdx, 0, from)
+            this.$emit('update:tab-order', order)
+        },
+        onTabDragEnd() {
+            this.dragId = null
+            this.dragOverId = null
         },
         accountKey(a) {
             return a ? `${String(a.venue).toLowerCase()}|${a.account_id}` : ''
@@ -354,6 +427,11 @@ export default {
     transition: color 0.15s ease, border-color 0.15s ease;
 }
 .pd-tab:hover { color: #d1d4dc; }
+/* Drag-to-reorder feedback: the lifted tab fades; the drop target shows a
+   green insertion bar on its leading edge (tabs insert BEFORE the target). */
+.pd-tab.pd-drag { opacity: 0.45; }
+.pd-tab.pd-drag-over { box-shadow: inset 2px 0 0 #35a776; }
+.pd-tab[draggable="true"] { -webkit-user-drag: element; }
 .pd-tab.active { color: #35a776; border-bottom-color: #35a776; }
 .pd-count {
     display: inline-block;

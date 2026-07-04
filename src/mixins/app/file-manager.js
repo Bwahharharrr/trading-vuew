@@ -208,6 +208,8 @@ export default {
                 positionsDockHeight: this.positionsDockHeight,
                 positionsDockMaximized: this.positionsDockMaximized,
                 positionsActiveTab: this.positionsActiveTab,
+                // Drag-reordered base dock-tab order (forever, across reloads).
+                positionsTabOrder: this.positionsTabOrder,
             }
             try {
                 sessionStorage.setItem(SESSION_STATE_KEY, JSON.stringify(tabState))

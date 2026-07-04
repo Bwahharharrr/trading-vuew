@@ -127,6 +127,7 @@
             :open="positionsDockOpen"
             :maximized="positionsDockMaximized"
             :active-tab="positionsActiveTab"
+            :tab-order="positionsTabOrder"
             :open-positions="openPositions"
             :historical-positions="historicalPositions"
             :accounts="positionsAccounts"
@@ -162,6 +163,7 @@
             @update:open="togglePositionsDock"
             @update:maximized="toggleDockMaximize"
             @update:active-tab="setPositionsTab"
+            @update:tab-order="setPositionsTabOrder"
             @update:active-account="setPositionsAccount"
             @select-position="onPositionSelect"
             @audit-position="openAudit"
@@ -530,6 +532,10 @@ export default {
             positionsAccounts: [],         // [{ venue, account_id }] derived from rows
             positionsActiveAccount: null,  // { venue, account_id } for history/audit
             positionsActiveTab: 'open',    // 'open' | 'historical' | 'search' | a search-tab id
+            // User-chosen order of the base dock tabs; drag-to-reorder in the
+            // dock, persisted to localStorage so it survives reload. Empty =
+            // canonical order (the panel reconciles against its known set).
+            positionsTabOrder: [],
             positionsLoading: false,
             positionsError: null,
             positionsHistoryCursor: null,  // opaque next_cursor (null = exhausted)
@@ -785,6 +791,11 @@ export default {
             }
             if (savedState.positionsActiveTab === 'open' || savedState.positionsActiveTab === 'historical') {
                 this.positionsActiveTab = savedState.positionsActiveTab
+            }
+            // Drag-reordered dock-tab order (the panel reconciles against its
+            // canonical set, so we only need it to be an array of ids).
+            if (Array.isArray(savedState.positionsTabOrder)) {
+                this.positionsTabOrder = savedState.positionsTabOrder.filter((id) => typeof id === 'string')
             }
         }
 
@@ -2119,6 +2130,15 @@ export default {
             }
             this._positionsSyncStreams()
             this._strategySyncStreams()
+            this.saveStateToStorage()
+        },
+
+        // Persist a drag-reordered dock-tab order. The panel emits the full base
+        // order (already reconciled against its known set); we store the array of
+        // ids verbatim and save so it survives reload permanently.
+        setPositionsTabOrder(order) {
+            if (!Array.isArray(order)) return
+            this.positionsTabOrder = order.filter((id) => typeof id === 'string')
             this.saveStateToStorage()
         },
 
