@@ -13,6 +13,7 @@ import { mount } from '@vue/test-utils'
 import CorkyPositionsPanel from '../../src/components/feed/CorkyPositionsPanel.vue'
 import { authPositionsEvent } from '../fixtures/corky/index.js'
 import { pickTimeframe } from '../../src/helpers/feed/pick-timeframe.js'
+import fileManager from '../../src/mixins/app/file-manager.js'
 
 const rows = authPositionsEvent.event.positions
 const openRows = rows.filter((r) => r.source === 'current')
@@ -402,5 +403,149 @@ describe('CorkyPositionsPanel — search tabs', () => {
         // analytics ride along as the hover title
         expect(cells[0].attributes('title')).toMatch(/n=1840/)
         expect(cells[0].attributes('title')).toMatch(/bull 56\.3%/)
+    })
+})
+
+// ── Drag-to-reorder the base dock tabs (persisted forever by App) ─────────────
+// The panel is controlled: it renders the base tabs in the App-owned `tabOrder`,
+// reconciles that order against its canonical set, and EMITS `update:tab-order`
+// on drop. Transient tabs (run details, search results) are appended and are NOT
+// draggable.
+describe('CorkyPositionsPanel — base-tab reordering', () => {
+    const baseTabs = (w) => w.findAll('.pd-tab:not(.pd-tab-search)')
+    const ids = (w) => baseTabs(w).map((b) => b.text().replace(/\d+$/, '').trim())
+
+    test('with no saved order the tabs render in the canonical order', () => {
+        const w = mountPanel()   // tabOrder defaults to []
+        expect(ids(w)).toEqual(['Open Positions', 'Historical', 'Search Signals', 'Backtests', 'Strategy'])
+    })
+
+    test('renders the base tabs in the persisted order', () => {
+        const w = mountPanel({ tabOrder: ['backtests', 'strategy', 'open', 'historical', 'search'] })
+        expect(ids(w)).toEqual(['Backtests', 'Strategy', 'Open Positions', 'Historical', 'Search Signals'])
+    })
+
+    test('reconciles a partial saved order — missing canonical tabs are appended', () => {
+        const w = mountPanel({ tabOrder: ['strategy', 'backtests'] })
+        expect(ids(w)).toEqual(['Strategy', 'Backtests', 'Open Positions', 'Historical', 'Search Signals'])
+    })
+
+    test('reconciles a dirty saved order — unknown ids dropped, duplicates collapsed', () => {
+        const w = mountPanel({ tabOrder: ['zzz', 'strategy', 'strategy', 'open'] })
+        expect(ids(w)).toEqual(['Strategy', 'Open Positions', 'Historical', 'Search Signals', 'Backtests'])
+    })
+
+    test('all base tabs are draggable', () => {
+        const w = mountPanel()
+        expect(baseTabs(w).every((b) => b.attributes('draggable') === 'true')).toBe(true)
+    })
+
+    test('dragging a tab onto another emits update:tab-order with the new (insert-before) order', async () => {
+        const w = mountPanel()
+        const tabs = baseTabs(w)                 // [open, historical, search, backtests, strategy]
+        await tabs[4].trigger('dragstart')       // grab Strategy
+        await tabs[0].trigger('dragover')        // over Open Positions
+        await tabs[0].trigger('drop')            // drop → insert Strategy before Open
+        expect(w.emitted('update:tab-order')[0][0]).toEqual(['strategy', 'open', 'historical', 'search', 'backtests'])
+    })
+
+    test('dragging left→right inserts before the target', async () => {
+        const w = mountPanel()
+        const tabs = baseTabs(w)
+        await tabs[0].trigger('dragstart')       // grab Open (idx 0)
+        await tabs[3].trigger('drop')            // drop on Backtests (idx 3)
+        // remove open → [historical,search,backtests,strategy]; insert before backtests
+        expect(w.emitted('update:tab-order')[0][0]).toEqual(['historical', 'search', 'open', 'backtests', 'strategy'])
+    })
+
+    test('dropping a tab on itself emits nothing', async () => {
+        const w = mountPanel()
+        const tabs = baseTabs(w)
+        await tabs[2].trigger('dragstart')
+        await tabs[2].trigger('drop')
+        expect(w.emitted('update:tab-order')).toBeFalsy()
+    })
+
+    test('drag visual state clears on dragend', async () => {
+        const w = mountPanel()
+        const tabs = baseTabs(w)
+        await tabs[1].trigger('dragstart')
+        expect(w.vm.dragId).toBe('historical')
+        await tabs[1].trigger('dragend')
+        expect(w.vm.dragId).toBe(null)
+        expect(w.vm.dragOverId).toBe(null)
+    })
+
+    test('transient tabs (search results) are appended and NOT draggable', () => {
+        const searchTab = { id: 'search-1', title: 'Search Results 1', status: 'running', matches: [], running: true }
+        const w = mountPanel({ tabOrder: ['strategy', 'open', 'historical', 'search', 'backtests'], searchTabs: [searchTab] })
+        // base tabs keep the persisted order…
+        expect(ids(w)[0]).toBe('Strategy')
+        // …and the transient tab is appended after all base tabs, not draggable
+        const search = w.find('.pd-tab-search')
+        expect(search.exists()).toBe(true)
+        expect(search.attributes('draggable')).toBeUndefined()
+        // it comes after the last base tab in DOM order
+        const all = w.findAll('.pd-tab')
+        expect(all[all.length - 1].classes()).toContain('pd-tab-search')
+    })
+})
+
+// ── Persistence round-trip (the "forever, across reload" guarantee) ───────────
+// Exercises the REAL file-manager mixin methods against a controllable `this`
+// with a live (jsdom) localStorage — the same seam App boots from.
+describe('positionsTabOrder persistence (real file-manager mixin)', () => {
+    const { saveStateToStorage, loadStateFromStorage } = fileManager.methods
+
+    // Minimal host carrying every field saveStateToStorage reads.
+    function fakeHost(over = {}) {
+        return {
+            getIndicatorSettings: () => ({}),
+            selectedDataFile: '', selectedView: null, log_scale: false,
+            indicatorVisibility: {}, persistentIndicatorVisibility: {}, accordionExpandedViews: {},
+            corkyEnabled: {}, corkyLast: null, panelWidth: 300, rightPanelCollapsed: false,
+            positionsDockOpen: true, positionsDockHeight: 240, positionsDockMaximized: false,
+            positionsActiveTab: 'open', positionsTabOrder: [],
+            saveStateToStorage, loadStateFromStorage,
+            ...over,
+        }
+    }
+
+    test('a reordered tab order survives a save → load cycle', () => {
+        localStorage.clear()
+        const order = ['backtests', 'strategy', 'open', 'historical', 'search']
+        fakeHost({ positionsTabOrder: order }).saveStateToStorage()
+        // A fresh host (simulating a page reload) reads it straight back.
+        const restored = loadStateFromStorage.call(fakeHost())
+        expect(restored.positionsTabOrder).toEqual(order)
+    })
+
+    test('the App restore rule accepts an array of string ids and drops the rest', () => {
+        // Mirror of App.methods.loadState's restore snippet (kept in lockstep).
+        const applyRestore = (host, saved) => {
+            if (Array.isArray(saved.positionsTabOrder)) {
+                host.positionsTabOrder = saved.positionsTabOrder.filter((id) => typeof id === 'string')
+            }
+        }
+        const host = { positionsTabOrder: [] }
+        applyRestore(host, { positionsTabOrder: ['strategy', 3, 'open', null] })
+        expect(host.positionsTabOrder).toEqual(['strategy', 'open'])
+        // A non-array saved value leaves the default untouched.
+        applyRestore(host, { positionsTabOrder: 'nope' })
+        expect(host.positionsTabOrder).toEqual(['strategy', 'open'])
+    })
+
+    test('setPositionsTabOrder stores the ids and persists (mirror of App.methods)', () => {
+        localStorage.clear()
+        // Mirror of App.methods.setPositionsTabOrder.
+        const host = fakeHost()
+        host.setPositionsTabOrder = function (o) {
+            if (!Array.isArray(o)) return
+            this.positionsTabOrder = o.filter((id) => typeof id === 'string')
+            this.saveStateToStorage()
+        }
+        host.setPositionsTabOrder(['strategy', 'open', 42])
+        expect(host.positionsTabOrder).toEqual(['strategy', 'open'])
+        expect(JSON.parse(localStorage.getItem('trading-vue-state')).positionsTabOrder).toEqual(['strategy', 'open'])
     })
 })

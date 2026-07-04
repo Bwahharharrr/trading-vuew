@@ -258,6 +258,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     positionsAccounts: never[];
     positionsActiveAccount: null;
     positionsActiveTab: string;
+    positionsTabOrder: never[];
     positionsLoading: boolean;
     positionsError: null;
     positionsHistoryCursor: null;
@@ -448,6 +449,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     togglePositionsDock(open: any): void;
     toggleDockMaximize(max: any): void;
     setPositionsTab(tab: any): void;
+    setPositionsTabOrder(order: any): void;
     _indicatorOptions(state: any): {
         label: any;
         fields: any[];
@@ -2349,6 +2351,10 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             type: StringConstructor;
             default: string;
         };
+        tabOrder: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
         openPositions: {
             type: ArrayConstructor;
             default: () => never[];
@@ -2405,7 +2411,15 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             type: ObjectConstructor;
             default: () => {};
         };
-    }>, {}, {}, {
+    }>, {}, {
+        dragId: null;
+        dragOverId: null;
+    }, {
+        orderedBaseTabs(): {
+            id: unknown;
+            label: any;
+            count: any;
+        }[];
         rows(): unknown[];
         activeSearchTab(): {} | null;
         runDetailTitle(): string;
@@ -2413,6 +2427,12 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     }, {
         newTabIntent: typeof import("./helpers/open-intent.js").newTabIntent;
         selectTab(tab: any): void;
+        tabCount(id: any): any;
+        onTabDragStart(id: any, ev: any): void;
+        onTabDragOver(id: any): void;
+        onTabDragLeave(id: any): void;
+        onTabDrop(targetId: any): void;
+        onTabDragEnd(): void;
         accountKey(a: any): string;
         onAccountChange(ev: any): void;
         rowKey(p: any): string;
@@ -2421,7 +2441,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         signClass(dec: any): "" | "pos" | "neg";
         pctText(dec: any): string;
         fmtTime(ms: any): string;
-    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("refresh" | "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail" | "strategy-select-runtime" | "strategy-refresh" | "strategy-cancel-ticker-orders" | "strategy-pause-ticker" | "strategy-resume-ticker" | "strategy-unlock-ticker" | "strategy-adopt-position" | "strategy-open-lineage-run")[], "refresh" | "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "select-position" | "audit-position" | "load-more" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail" | "strategy-select-runtime" | "strategy-refresh" | "strategy-cancel-ticker-orders" | "strategy-pause-ticker" | "strategy-resume-ticker" | "strategy-unlock-ticker" | "strategy-adopt-position" | "strategy-open-lineage-run", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("refresh" | "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "update:tab-order" | "select-position" | "audit-position" | "load-more" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail" | "strategy-select-runtime" | "strategy-refresh" | "strategy-cancel-ticker-orders" | "strategy-pause-ticker" | "strategy-resume-ticker" | "strategy-unlock-ticker" | "strategy-adopt-position" | "strategy-open-lineage-run")[], "refresh" | "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "update:tab-order" | "select-position" | "audit-position" | "load-more" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail" | "strategy-select-runtime" | "strategy-refresh" | "strategy-cancel-ticker-orders" | "strategy-pause-ticker" | "strategy-resume-ticker" | "strategy-unlock-ticker" | "strategy-adopt-position" | "strategy-open-lineage-run", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
         height: {
             type: NumberConstructor;
             default: number;
@@ -2437,6 +2457,10 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         activeTab: {
             type: StringConstructor;
             default: string;
+        };
+        tabOrder: {
+            type: ArrayConstructor;
+            default: () => never[];
         };
         openPositions: {
             type: ArrayConstructor;
@@ -2500,6 +2524,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         "onUpdate:maximized"?: ((...args: any[]) => any) | undefined;
         "onUpdate:active-tab"?: ((...args: any[]) => any) | undefined;
         "onUpdate:active-account"?: ((...args: any[]) => any) | undefined;
+        "onUpdate:tab-order"?: ((...args: any[]) => any) | undefined;
         "onSelect-position"?: ((...args: any[]) => any) | undefined;
         "onAudit-position"?: ((...args: any[]) => any) | undefined;
         "onLoad-more"?: ((...args: any[]) => any) | undefined;
@@ -2534,6 +2559,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         open: boolean;
         activeTab: string;
         maximized: boolean;
+        tabOrder: unknown[];
         openPositions: unknown[];
         historicalPositions: unknown[];
         accounts: unknown[];
