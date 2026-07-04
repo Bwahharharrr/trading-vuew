@@ -228,4 +228,28 @@ describe('CorkyStrategyPanel — empty / loading / error', () => {
     test('surfaces an error string', () => {
         expect(mountPanel({ error: 'gateway down' }).find('.sr-error').text()).toBe('gateway down')
     })
+
+    // Socket down + nothing loaded → ONE centered message, not the redundant
+    // error banner + "No strategy runtimes available." + "No strategy runtime
+    // loaded." stack.
+    test('socket down with no runtimes shows a single centered error, not the stacked messages', () => {
+        const msg = 'socket is closing/closed and no reconnect is pending'
+        const w = mountPanel({ runtimes: [], decisions: [], error: msg })
+        const empty = w.find('.sr-empty-inner')
+        expect(empty.exists()).toBe(true)
+        expect(empty.classes()).toContain('error')     // rendered red
+        expect(empty.text()).toBe(msg)
+        // the redundant duplicate states are gone
+        expect(w.text()).not.toContain('No strategy runtimes available.')
+        expect(w.text()).not.toContain('No strategy runtime loaded.')
+        expect(w.find('.sr-error').exists()).toBe(false)   // no separate top banner
+        // the message appears exactly once
+        expect(w.text().split(msg).length - 1).toBe(1)
+    })
+
+    test('loading takes priority over a stale error in the centered state', () => {
+        const w = mountPanel({ runtimes: [], decisions: [], loading: true, error: 'x' })
+        expect(w.find('.sr-empty-inner').text()).toBe('Loading runtimes…')
+        expect(w.find('.sr-empty-inner').classes()).not.toContain('error')
+    })
 })

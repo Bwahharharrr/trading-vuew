@@ -10,14 +10,27 @@
         <button class="sr-icon" title="Refresh runtimes" @click="$emit('refresh')">⟳</button>
     </div>
 
+    <!-- Nothing loaded → ONE centered state (vertically + horizontally). A downed
+         socket therefore shows a single message instead of the redundant error +
+         "No strategy runtimes available." + "No strategy runtime loaded." stack.
+         Priority: loading → error (e.g. socket down) → empty. -->
+    <div v-if="!runtimes.length" class="sr-empty">
+        <div class="sr-empty-inner" :class="{ error: !loading && !!error }">
+            <template v-if="loading">Loading runtimes…</template>
+            <template v-else-if="error">{{ error }}</template>
+            <template v-else>No strategy runtimes available.</template>
+        </div>
+    </div>
+
+    <!-- Runtimes loaded → the full hierarchy / controls / drilldown. -->
+    <template v-else>
+    <!-- A transient error while runtimes ARE loaded still shows the top banner. -->
     <div v-if="error" class="sr-error">{{ error }}</div>
 
     <!-- ═══ HIERARCHY ═══ process group → runtime rows (selectable, open the
          drilldown) → child TICKER rows (status + reason) + DEPENDENCY rows. -->
     <div class="sr-hier" role="tree" aria-label="Strategy runtime hierarchy">
-        <div v-if="loading && !runtimes.length" class="sr-msg">Loading runtimes…</div>
-        <div v-else-if="!runtimes.length" class="sr-msg">No strategy runtimes available.</div>
-        <div v-else v-for="pg in processGroups" :key="pg.process_kind" class="sr-proc" role="group">
+        <div v-for="pg in processGroups" :key="pg.process_kind" class="sr-proc" role="group">
             <div class="sr-proc-head">
                 <span class="sr-proc-kind">{{ pg.process_kind }}</span>
                 <span class="sr-proc-stat">runtimes={{ pg.total }} ready={{ pg.ready }} degraded={{ pg.degraded }}</span>
@@ -408,6 +421,7 @@
             </div>
         </section>
     </div>
+    </template>
 </div>
 </template>
 
@@ -876,6 +890,11 @@ export default {
 .sr-error { padding: 8px 12px; color: #e54150; }
 .sr-msg { padding: 14px; color: #808a9d; text-align: center; }
 .sr-msg-sm { padding: 8px; text-align: left; font-size: 11px; }
+/* Single centered state that fills the pane when nothing is loaded (empty /
+   loading / socket-down error) — one message, centered both axes. */
+.sr-empty { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.sr-empty-inner { color: #808a9d; text-align: center; max-width: 90%; line-height: 1.5; }
+.sr-empty-inner.error { color: #e54150; }
 
 /* ── Hierarchy ─────────────────────────────────────────────────────────────── */
 .sr-hier { flex: 0 0 auto; max-height: 44%; overflow: auto; padding: 6px 12px 8px; border-bottom: 1px solid #1c212e; }
