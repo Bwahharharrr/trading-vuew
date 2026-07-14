@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "scenarios": [
+    {
+      "id": "ready_observer",
+      "runtime": {
+        "runtime_id": "observer-main",
+        "process_kind": "corky-strategy-runtime",
+        "state": "Ready",
+        "generated_at_ms": 1784000000000,
+        "mode": "origin_observer",
+        "state_origin": "sealed_state_origin",
+        "strategy": "ema_regime_breakout_v8",
+        "strategy_id": "ema_regime_breakout_v8",
+        "auth_gate_configured": false,
+        "auth_ready": true,
+        "allocation_configured": false,
+        "allocation_ready": true,
+        "auth_order_control_configured": false,
+        "mutations_halted_reason": "origin_observer_money_mutations_fenced",
+        "recent_decisions": [
+          {
+            "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+            "decision_ts_ms": 1783999999000,
+            "outcome": "intent_denied",
+            "reason": "origin_observer_money_mutations_fenced"
+          }
+        ],
+        "tickers": [
+          {
+            "ticker_id": "BITFINEX:tTESTADA:TESTUSD",
+            "symbol": "tTESTADA:TESTUSD",
+            "status": "unknown",
+            "last_decision_summary": {
+              "outcome": "intent_denied",
+              "reason": "origin_observer_money_mutations_fenced"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "health": "Ready",
+        "authority": "read_only",
+        "auth": "not_applicable",
+        "allocation": "not_applicable",
+        "actions": []
+      }
+    },
+    {
+      "id": "ready_executable",
+      "runtime": {
+        "runtime_id": "paper-main",
+        "process_kind": "corky-strategy-runtime",
+        "state": "Ready",
+        "generated_at_ms": 1784000000000,
+        "mode": "paper",
+        "strategy": "ema_regime_breakout_v8",
+        "auth_gate_configured": true,
+        "auth_ready": true,
+        "allocation_configured": true,
+        "allocation_ready": true,
+        "auth_order_control_configured": true,
+        "auth_order_control_status": "ready",
+        "allocation_unallocated_available": "125.50000000"
+      },
+      "expected": {
+        "health": "Ready",
+        "authority": "capability_gated",
+        "auth": "ready",
+        "allocation": "ready"
+      }
+    },
+    {
+      "id": "degraded",
+      "runtime": {
+        "runtime_id": "degraded-main",
+        "state": "Degraded",
+        "generated_at_ms": 1784000000000,
+        "mode": "shadow_live",
+        "strategy": "ema_regime_breakout_v8",
+        "last_error": "continuity gap before current bar",
+        "mutations_halted_reason": "market_data_continuity_gap"
+      },
+      "expected": {
+        "health": "Degraded",
+        "primary_reason": "market_data_continuity_gap"
+      }
+    },
+    {
+      "id": "stale_disconnected",
+      "runtime": {
+        "runtime_id": "stale-main",
+        "state": "Ready",
+        "generated_at_ms": 1783990000000,
+        "mode": "paper",
+        "strategy": "ema_regime_breakout_v8"
+      },
+      "client": {
+        "streaming": false,
+        "now_ms": 1784000000000
+      },
+      "expected": {
+        "freshness": "stale",
+        "health_label_must_not_be": "Live"
+      }
+    },
+    {
+      "id": "allocation_blocked",
+      "runtime": {
+        "runtime_id": "allocation-blocked-main",
+        "state": "Running",
+        "generated_at_ms": 1784000000000,
+        "mode": "live",
+        "strategy": "ema_regime_breakout_v8",
+        "allocation_configured": true,
+        "allocation_ready": false,
+        "pending_allocation_reasons": [
+          "allocation ledger revision mismatch"
+        ],
+        "allocation_unallocated_available": "50.00000000"
+      },
+      "expected": {
+        "allocation": "blocked",
+        "primary_reason": "allocation ledger revision mismatch"
+      }
+    },
+    {
+      "id": "automatic_allocation",
+      "runtime": {
+        "runtime_id": "automatic-main",
+        "state": "Ready",
+        "generated_at_ms": 1784000000000,
+        "mode": "paper",
+        "strategy": "ema_regime_breakout_v8",
+        "allocation_configured": true,
+        "allocation_ready": true,
+        "automatic_allocation": {
+          "policy_id": "equal-qualified-v1",
+          "policy_version": 1,
+          "policy_hash": "sha256:automatic-policy",
+          "global_enabled": true,
+          "wallet_enabled": true,
+          "strategy_enabled": true,
+          "last_decision_status": "no_eligible_deposits",
+          "remaining_unallocated": "0.00000000"
+        }
+      },
+      "expected": {
+        "administration": "read_only_visible",
+        "money_values_are_strings": true
+      }
+    }
+  ]
+}
+
