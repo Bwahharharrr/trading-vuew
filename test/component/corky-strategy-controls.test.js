@@ -35,6 +35,7 @@ function mkRuntime(over = {}) {
     process_kind: 'corky-strategy-runtime', state: 'Ready', mode: 'live',
     strategy: 'ema_regime_breakout_v8', strategy_id: 'ema_regime_breakout_v8',
     lineage_status: 'verified',
+    runtime_control_available: true,
     tickers: [{ ticker_id: 'tTESTADA:TESTUSD', symbol: 'tTESTADA:TESTUSD', status: 'waiting' }],
     ticker_orders: [],
     ...over,
@@ -80,6 +81,18 @@ describe('control surface gating — hidden without a session', () => {
     await selectTicker(w, 'tTESTADA:TESTUSD')
     expect(w.find('.sr-controls').exists()).toBe(true)
     expect(btn(w, 'Pause').exists()).toBe(true)
+  })
+
+  test('a connected client cannot create controls for a capability-fenced runtime', async () => {
+    const runtime = mkRuntime({
+      mode: 'origin_observer',
+      runtime_control_available: false,
+      runtime_control_reason: 'origin observer is capability-fenced',
+    })
+    const w = mountPanel(runtime, AVAILABLE)
+    await selectTicker(w, 'tTESTADA:TESTUSD')
+    expect(w.findAll('.sr-ctl-btn')).toHaveLength(0)
+    expect(w.find('.sr-ctl-unavailable').text()).toContain('origin observer is capability-fenced')
   })
 })
 

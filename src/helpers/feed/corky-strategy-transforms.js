@@ -126,6 +126,91 @@ export function classifyRuntimeReadiness(state) {
   return { state: s || 'unknown', ready, tone: ready ? 'ready' : (s ? 'pending' : 'unknown') }
 }
 
+const OBSERVER_MODES = new Set(['origin_observer'])
+
+function configuredGate(configured, ready, reasons, unavailableLabel) {
+  if (!configured) {
+    return { configured: false, ready: false, status: 'not_applicable', tone: 'neutral', label: unavailableLabel }
+  }
+  if (ready) return { configured: true, ready: true, status: 'ready', tone: 'ready', label: 'Ready' }
+  const reason = (Array.isArray(reasons) ? reasons : []).find(Boolean)
+  return { configured: true, ready: false, status: 'blocked', tone: 'attention', label: reason || 'Blocked' }
+}
+
+/**
+ * Build the operator-facing runtime semantics without conflating health, mode,
+ * mutation authority, freshness, or dependency gates. This is intentionally a
+ * read-only view model: it never grants authority from a connected socket.
+ */
+export function strategyRuntimeSemantics(runtime, opts = {}) {
+  const rt = runtime || {}
+  const mode = String(rt.mode || 'unknown').trim().toLowerCase()
+  const observer = OBSERVER_MODES.has(mode)
+  const nowMs = Number.isFinite(opts.nowMs) ? opts.nowMs : Date.now()
+  const generatedAtMs = Number(rt.generated_at_ms) || 0
+  const ageMs = generatedAtMs > 0 ? Math.max(0, nowMs - generatedAtMs) : null
+  const staleAfterMs = Number.isFinite(opts.staleAfterMs) ? opts.staleAfterMs : 15_000
+  const streaming = opts.streaming !== false
+  const freshness = !streaming
+    ? { status: 'disconnected', tone: 'attention', label: 'Disconnected', ageMs }
+    : ageMs == null
+      ? { status: 'unknown', tone: 'neutral', label: 'Freshness unknown', ageMs: null }
+      : ageMs > staleAfterMs
+        ? { status: 'stale', tone: 'attention', label: 'Stale', ageMs }
+        : { status: 'current', tone: 'ready', label: 'Current', ageMs }
+
+  const auth = configuredGate(
+    rt.auth_gate_configured === true,
+    rt.auth_ready === true,
+    rt.pending_auth_reasons,
+    'N/A — not configured',
+  )
+  const allocation = configuredGate(
+    rt.allocation_configured === true,
+    rt.allocation_ready === true,
+    rt.pending_allocation_reasons,
+    'N/A — not configured',
+  )
+
+  const featureReason = (Array.isArray(rt.pending_feature_reasons) ? rt.pending_feature_reasons : []).find(Boolean)
+  const authReason = auth.status === 'blocked' ? auth.label : null
+  const allocationReason = allocation.status === 'blocked' ? allocation.label : null
+  const primaryReason = rt.mutations_halted_reason || rt.last_error || featureReason || authReason
+    || allocationReason || rt.auth_order_control_reason || null
+
+  let authority
+  if (observer) {
+    authority = {
+      status: 'read_only', tone: 'neutral', label: 'Money mutations fenced',
+      reason: rt.mutations_halted_reason || 'origin observer is capability-fenced',
+    }
+  } else if (rt.mutations_halted_reason) {
+    authority = { status: 'halted', tone: 'attention', label: 'Mutations halted', reason: rt.mutations_halted_reason }
+  } else if (rt.auth_order_control_configured === true && String(rt.auth_order_control_status || '').toLowerCase() === 'ready') {
+    authority = { status: 'order_capable', tone: 'ready', label: 'Order capable', reason: null }
+  } else {
+    authority = { status: 'capability_gated', tone: 'neutral', label: 'Capability gated', reason: rt.auth_order_control_reason || null }
+  }
+
+  const runtimeControl = observer
+    ? { available: false, reason: 'origin observer is capability-fenced' }
+    : rt.runtime_control_available === true
+      ? { available: true, reason: null }
+      : { available: false, reason: rt.runtime_control_reason || 'runtime does not advertise direct control' }
+
+  return {
+    health: classifyRuntimeReadiness(rt.state),
+    mode: { raw: mode, label: mode.split('_').filter(Boolean).map((part) => part[0].toUpperCase() + part.slice(1)).join(' ') || 'Unknown' },
+    observer,
+    authority,
+    freshness,
+    auth,
+    allocation,
+    runtimeControl,
+    primaryReason,
+  }
+}
+
 /**
  * Classify the RUNTIME-level allocation_strategy_status ROLLUP (e.g. 'active' /
  * 'inactive') — a coarse per-runtime health axis, DISTINCT from the per-ticker

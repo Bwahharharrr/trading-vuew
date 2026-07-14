@@ -46,7 +46,10 @@ function mkCtx(feed, runtimeId) {
   const ctx = {
     strategyFeed: feed,
     strategy: {
-      runtimes: [{ runtime_id: runtimeId, strategy: 'ema_regime_breakout_v8', state: 'Ready', ticker_allocations: [], ticker_orders: [] }],
+      runtimes: [{
+        runtime_id: runtimeId, strategy: 'ema_regime_breakout_v8', state: 'Ready',
+        runtime_control_available: true, ticker_allocations: [], ticker_orders: [],
+      }],
       selectedRuntimeId: runtimeId, decisions: [], overlays: {}, streaming: true, loading: false, error: null,
       control: { available: true, pending: false, awaiting: false, error: null },
     },
@@ -135,6 +138,19 @@ describe('control handlers delegate to the matching feed control method', () => 
   })
 })
 
+describe('runtime capability gate', () => {
+  test('does not send merely because the client socket is connected', async () => {
+    const feed = mkRealFeed()
+    const ctx = mkCtx(feed, pauseReq.command.runtime_id)
+    ctx.strategy.runtimes[0].runtime_control_available = false
+    ctx.strategy.runtimes[0].runtime_control_reason = 'origin observer is capability-fenced'
+    const { runtime_id, ticker_id, reason } = pauseReq.command
+    await ctx.strategyPauseTicker({ runtime_id, ticker_id, reason })
+    expect(sock().sent).toHaveLength(0)
+    expect(ctx.strategy.control.error).toContain('origin observer is capability-fenced')
+  })
+})
+
 // ── gated on a control session ────────────────────────────────────────────────
 describe('controls are gated on an available control session', () => {
   test('with no session the handler sends NOTHING and reports the missing session', async () => {
@@ -197,6 +213,7 @@ describe('a control send never mutates local strategy state (reconciliation only
     const ctx = mkCtx(feed, cancelReq.command.runtime_id)
     ctx.strategy.runtimes = [{
       runtime_id: cancelReq.command.runtime_id, state: 'Ready', last_decision_ms: 100,
+      runtime_control_available: true,
       ticker_orders: [{ ticker_id: cancelReq.command.ticker_id, orders_submitted_nonterminal: 1 }],
     }]
     const snapshot = JSON.parse(JSON.stringify(ctx.strategy.runtimes))

@@ -9,7 +9,18 @@
         "state": "Ready",
         "generated_at_ms": 1784000000000,
         "mode": "origin_observer",
-        "state_origin": "sealed_state_origin",
+        "state_origin": {
+          "artifact_path": "/fixtures/state-origin.json",
+          "artifact_sha256": "sha256:origin",
+          "checkpoint_sha256": "sha256:checkpoint",
+          "strategy_instance_id": "observer-instance",
+          "auth_account_id": "primary-account",
+          "replay_event_count": 12,
+          "replay_end_ms": 1783999998000,
+          "allocation_position_count": 1,
+          "restore_verified": true,
+          "money_mutations_fenced": true
+        },
         "strategy": "ema_regime_breakout_v8",
         "strategy_id": "ema_regime_breakout_v8",
         "auth_gate_configured": false,
@@ -152,4 +163,3 @@
     }
   ]
 }
-

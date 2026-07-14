@@ -20,6 +20,7 @@ const BTC_TID = 'BITFINEX:tTESTBTC:TESTUSD'
 const mkRuntime = (id, over = {}) => ({
   runtime_id: id, strategy: 'ema_regime_breakout_v8', mode: id === DEFAULT_ID ? 'live' : 'shadow_live',
   state: 'Ready', allocation_strategy_status: 'active',
+  runtime_control_available: true,
   ticker_allocations: [{ ticker_id: ADA_TID }, { ticker_id: BTC_TID }],
   ticker_orders: [{ ticker_id: ADA_TID }, { ticker_id: BTC_TID }],
   ...over,

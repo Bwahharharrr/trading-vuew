@@ -409,7 +409,9 @@ import { CorkyPositionsFeed } from '../src/helpers/feed/corky-positions-feed.js'
 import { CorkySearchFeed } from '../src/helpers/feed/corky-search-feed.js'
 import { CorkyBacktestsFeed } from '../src/helpers/feed/corky-backtests-feed.js'
 import { CorkyStrategyFeed } from '../src/helpers/feed/corky-strategy-feed.js'
-import { overlaysToMarkers, classifyLineage, CAPITAL_CONTROL_METHODS } from '../src/helpers/feed/corky-strategy-transforms.js'
+import {
+    overlaysToMarkers, classifyLineage, strategyRuntimeSemantics, CAPITAL_CONTROL_METHODS,
+} from '../src/helpers/feed/corky-strategy-transforms.js'
 import { buildSearchQuery, buildCondition, barrierTargetSpec } from '../src/helpers/feed/search-query.js'
 import { backtestSeriesOverlays, backtestTradeMarkers } from '../src/helpers/feed/backtest-overlays.js'
 import { detectRunShape } from '../src/helpers/feed/backtest-shape.js'
@@ -2850,6 +2852,11 @@ export default {
             }
             const rt = (this.strategy.runtimes || []).find((r) => r && r.runtime_id === opts.runtime_id)
             if (!rt) { ctl.error = `Unknown runtime ${opts.runtime_id}.`; return }
+            const runtimeControl = strategyRuntimeSemantics(rt).runtimeControl
+            if (!runtimeControl.available) {
+                ctl.error = `Strategy control unavailable: ${runtimeControl.reason}.`
+                return
+            }
             // Defense-in-depth: never emit a capital/position-committing control
             // (unlock/adopt) on an unverified (mismatched-lineage) runtime, even if
             // the UI somehow surfaced the action. Halt controls stay allowed.

@@ -27,6 +27,21 @@
     <!-- A transient error while runtimes ARE loaded still shows the top banner. -->
     <div v-if="error" class="sr-error">{{ error }}</div>
 
+    <!-- Persistent selected-runtime truth surface. Health, execution mode,
+         mutation authority, and freshness are deliberately separate axes. -->
+    <div v-if="selectedRuntime" class="sr-status-banner" :class="'health-' + runtimeSemantics.health.tone">
+        <span class="rt-badge" :class="'tone-' + runtimeSemantics.health.tone">{{ runtimeSemantics.health.state }}</span>
+        <span class="sr-status-mode">{{ runtimeSemantics.mode.label }}</span>
+        <span class="sr-status-authority" :class="'tone-' + runtimeSemantics.authority.tone">{{ runtimeSemantics.authority.label }}</span>
+        <span class="sr-status-fresh" :class="'tone-' + runtimeSemantics.freshness.tone">
+            {{ runtimeSemantics.freshness.label }}
+            <template v-if="runtimeSemantics.freshness.ageMs != null">· {{ fmtDur(runtimeSemantics.freshness.ageMs) }} ago</template>
+        </span>
+        <span v-if="runtimeSemantics.primaryReason" class="sr-status-reason" :title="runtimeSemantics.primaryReason">
+            {{ runtimeSemantics.primaryReason }}
+        </span>
+    </div>
+
     <!-- ═══ HIERARCHY ═══ process group → runtime rows (selectable, open the
          drilldown) → child TICKER rows (status + reason) + DEPENDENCY rows. -->
     <div class="sr-hier" role="tree" aria-label="Strategy runtime hierarchy">
@@ -62,6 +77,7 @@
                             <span class="st-badge" :class="tickerBadge(tk.status)">{{ tk.status.status }}</span>
                             <span v-if="tk.status.durationMs != null" class="sr-tk-dur">for {{ fmtDur(tk.status.durationMs) }}</span>
                             <span v-if="tk.status.reason" class="sr-tk-reason">{{ tk.status.reason }}</span>
+                            <span v-if="tk.lastDecision" class="sr-tk-decision" :title="tk.lastDecision">decision: {{ tk.lastDecision }}</span>
                             <span v-if="tk.blocker.blocked" class="sr-blocker" :title="blockerTitle(tk.blocker)">⚠ submitted order</span>
                         </button>
                     </div>
@@ -127,8 +143,7 @@
          explicit rather than silently dropping the affordance. -->
     <div v-else-if="selectedTickerId" class="sr-controls sr-controls-off">
         <span class="sr-ctl-title">Controls</span>
-        <span class="sr-ctl-unavailable"
-              title="Manual strategy controls require an active control session and a runtime that advertises direct control">unavailable — no control session</span>
+        <span class="sr-ctl-unavailable" :title="controlUnavailableReason">unavailable — {{ controlUnavailableReason }}</span>
     </div>
 
     <!-- ═══ DRILLDOWN ═══ (selected runtime) -->
@@ -158,14 +173,25 @@
                         {{ dash(selectedRuntime.features_ready) }} / {{ dash(selectedRuntime.feature_requirements) }} ready
                     </span>
                 </div>
-                <div class="sr-field"><span class="sr-k">auth ready</span><span class="sr-v" :class="gateClass(selectedRuntime.auth_ready)">{{ boolText(selectedRuntime.auth_ready) }}</span></div>
-                <div class="sr-field"><span class="sr-k">allocation ready</span><span class="sr-v" :class="gateClass(selectedRuntime.allocation_ready)">{{ boolText(selectedRuntime.allocation_ready) }}</span></div>
+                <div class="sr-field"><span class="sr-k">Auth dependency</span><span class="sr-v" :class="'tone-' + runtimeSemantics.auth.tone">{{ runtimeSemantics.auth.label }}</span></div>
+                <div class="sr-field"><span class="sr-k">allocation authority</span><span class="sr-v" :class="'tone-' + runtimeSemantics.allocation.tone">{{ runtimeSemantics.allocation.label }}</span></div>
                 <div class="sr-field"><span class="sr-k">last decision</span><span class="sr-v time">{{ fmtTime(selectedRuntime.last_decision_ms) }}</span></div>
                 <div class="sr-field"><span class="sr-k">ledger / fills</span><span class="sr-v">{{ dash(selectedRuntime.ledger_events) }} / {{ dash(selectedRuntime.fills) }}</span></div>
             </div>
 
             <div v-if="selectedRuntime.last_error" class="sr-lasterr">
                 <span class="sr-k">last error</span> {{ selectedRuntime.last_error }}
+            </div>
+        </section>
+
+        <section class="sr-sec">
+            <div class="sr-sec-head">Current activity <span class="sr-dim">recent runtime evidence</span></div>
+            <div v-if="!recentDecisionRows.length" class="sr-msg sr-msg-sm">No recent decision evidence published.</div>
+            <div v-for="d in recentDecisionRows" :key="d.decision_id || (d.decision_ts_ms + ':' + d.ticker_id)" class="sr-recent-decision">
+                <span class="time">{{ fmtTime(d.decision_ts_ms) }}</span>
+                <span class="sym">{{ d.symbol || symbolOf(d.ticker_id) }}</span>
+                <span class="sr-outcome" :class="outcomeClass(d.outcome)">{{ dash(d.outcome) }}</span>
+                <span class="sr-decision-reason">{{ decisionReason(d) }}</span>
             </div>
         </section>
 
@@ -230,12 +256,13 @@
         <!-- AUTH READINESS — pending reasons are operator blockers. -->
         <section class="sr-sec">
             <div class="sr-sec-head">Auth readiness
-                <span class="sr-v" :class="gateClass(selectedRuntime.auth_ready)">{{ boolText(selectedRuntime.auth_ready) }}</span>
+                <span class="sr-v" :class="'tone-' + runtimeSemantics.auth.tone">{{ runtimeSemantics.auth.label }}</span>
             </div>
-            <div class="sr-grid">
+            <div v-if="runtimeSemantics.auth.configured" class="sr-grid">
                 <div class="sr-field"><span class="sr-k">snapshots</span><span class="sr-v">{{ dash(selectedRuntime.matching_auth_snapshots_seen) }} / {{ dash(selectedRuntime.auth_snapshots_seen) }}</span></div>
                 <div class="sr-field"><span class="sr-k">last snapshot</span><span class="sr-v time">{{ fmtTime(selectedRuntime.last_auth_snapshot_ms) }}</span></div>
             </div>
+            <div v-else class="sr-msg sr-msg-sm">This runtime does not depend on private Auth state.</div>
             <ul v-if="pendingAuthReasons.length" class="sr-reasons">
                 <li v-for="(r, i) in pendingAuthReasons" :key="i">{{ r }}</li>
             </ul>
@@ -244,9 +271,9 @@
         <!-- ALLOCATION POOL — account / quote / wallet type / observed / unallocated. -->
         <section class="sr-sec">
             <div class="sr-sec-head">Allocation pool
-                <span class="sr-v" :class="gateClass(selectedRuntime.allocation_ready)">{{ boolText(selectedRuntime.allocation_ready) }}</span>
+                <span class="sr-v" :class="'tone-' + runtimeSemantics.allocation.tone">{{ runtimeSemantics.allocation.label }}</span>
             </div>
-            <div class="sr-grid">
+            <div v-if="runtimeSemantics.allocation.configured" class="sr-grid">
                 <div class="sr-field"><span class="sr-k">account</span><span class="sr-v">{{ dash(selectedRuntime.allocation_account_id) }}</span></div>
                 <div class="sr-field"><span class="sr-k">quote</span><span class="sr-v">{{ dash(selectedRuntime.allocation_quote_currency) }}</span></div>
                 <div class="sr-field"><span class="sr-k">wallet type</span><span class="sr-v">{{ dash(selectedRuntime.allocation_wallet_type) }}</span></div>
@@ -254,6 +281,7 @@
                 <div class="sr-field"><span class="sr-k">observed available</span><span class="sr-v mono">{{ fmt(selectedRuntime.allocation_observed_available) }}</span></div>
                 <div class="sr-field"><span class="sr-k">unallocated available</span><span class="sr-v mono">{{ fmt(selectedRuntime.allocation_unallocated_available) }}</span></div>
             </div>
+            <div v-else class="sr-msg sr-msg-sm">This runtime has no financial allocation authority.</div>
             <ul v-if="pendingAllocationReasons.length" class="sr-reasons">
                 <li v-for="(r, i) in pendingAllocationReasons" :key="i">{{ r }}</li>
             </ul>
@@ -396,7 +424,7 @@
                     <table v-if="auditDecisions.length" class="sr-table sr-decisions">
                         <thead>
                             <tr>
-                                <th>Time</th><th>TF</th><th>Outcome</th>
+                                <th>Time</th><th>TF</th><th>Outcome</th><th>Reason</th>
                                 <th class="num">Intents</th><th class="num">Queued</th><th class="num">Rejected</th>
                                 <th>Risk checks</th><th>Ledger Δ</th><th>Claims</th><th>Fingerprint</th>
                             </tr>
@@ -406,6 +434,7 @@
                                 <td class="time">{{ fmtTime(d.decision_ts_ms) }}</td>
                                 <td>{{ dash(d.timeframe) }}</td>
                                 <td><span class="sr-outcome" :class="outcomeClass(d.outcome)">{{ dash(d.outcome) }}</span></td>
+                                <td class="sr-decision-reason" :title="decisionReason(d)">{{ decisionReason(d) }}</td>
                                 <td class="num" :title="intentsTitle(d.intents)">{{ (d.intents || []).length }}</td>
                                 <td class="num" title="Queued order intents (local journal only — NOT sent to the exchange)">{{ dash0(d.queued_order_count) }}</td>
                                 <td class="num" :class="{ neg: numOr0(d.rejected_order_count) > 0 }">{{ dash0(d.rejected_order_count) }}</td>
@@ -455,6 +484,7 @@ import {
     strategyTickerControlActions,
     splitOrderStatusCounts,
     approvalStatus,
+    strategyRuntimeSemantics,
     fmtDecimal,
     fmtDuration,
     DISPATCHED_STATUS_KEYS,
@@ -537,6 +567,9 @@ export default {
                         ticker_id: t.ticker_id,
                         symbol: t.symbol || this.symbolOf(t.ticker_id),
                         status: classifyTickerStatus(t.status, t, now),
+                        lastDecision: typeof t.last_decision_summary === 'string'
+                            ? t.last_decision_summary
+                            : (t.last_decision_summary && (t.last_decision_summary.reason || t.last_decision_summary.outcome)),
                         blocker: orderBlocker(ordersById.get(t.ticker_id) || t),
                     }))
                     return {
@@ -571,7 +604,14 @@ export default {
         // The whole control surface is gated on `control.available` — a valid
         // control session that offers direct strategy control. When false, NOTHING
         // controllable renders (the operator cannot mutate a session-less runtime).
-        controlEnabled() { return !!(this.control && this.control.available) },
+        controlEnabled() {
+            return !!(this.control && this.control.available && this.runtimeSemantics.runtimeControl.available)
+        },
+        controlUnavailableReason() {
+            if (!this.runtimeSemantics.runtimeControl.available) return this.runtimeSemantics.runtimeControl.reason
+            if (!(this.control && this.control.available)) return 'no control session'
+            return 'control capability unavailable'
+        },
         controlPending() { return !!(this.control && this.control.pending) },
         // awaiting is the runtime_id a control was sent to → show the hint only for
         // that runtime (the operator's selected/active runtime).
@@ -618,6 +658,9 @@ export default {
         },
 
         readinessInfo() { return classifyRuntimeReadiness(this.selectedRuntime && this.selectedRuntime.state) },
+        runtimeSemantics() {
+            return strategyRuntimeSemantics(this.selectedRuntime, { nowMs: this.nowMs, streaming: this.streaming })
+        },
         rollupInfo() { return classifyRuntimeStrategyRollup(this.selectedRuntime && this.selectedRuntime.allocation_strategy_status) },
         lineageInfo() { return classifyLineage(this.selectedRuntime && this.selectedRuntime.lineage_status) },
         // The clickable backtest-candidate link (verified lineage only), or null.
@@ -637,6 +680,10 @@ export default {
         pendingAllocationReasons() {
             const r = this.selectedRuntime && this.selectedRuntime.pending_allocation_reasons
             return Array.isArray(r) ? r : []
+        },
+        recentDecisionRows() {
+            const rows = this.selectedRuntime && this.selectedRuntime.recent_decisions
+            return Array.isArray(rows) ? rows.slice(0, 8) : []
         },
 
         approvalRaw() { return (this.selectedRuntime && this.selectedRuntime.live_operator_approval) || {} },
@@ -837,6 +884,17 @@ export default {
             return (Array.isArray(claims) ? claims : [])
                 .map((c) => `${c.ticker_id || ''}: ${c.status}`).join('\n') || 'no claim states'
         },
+        decisionReason(decision) {
+            const d = decision || {}
+            if (d.reason) return d.reason
+            const firstIntent = Array.isArray(d.intents) ? d.intents.find(Boolean) : null
+            if (firstIntent && firstIntent.reason) return firstIntent.reason
+            if (d.first_intent_reason) return d.first_intent_reason
+            const check = Array.isArray(d.risk_checks)
+                ? d.risk_checks.find((row) => row && row.detail && ['failed', 'rejected', 'blocked', 'denied'].includes(String(row.status || '').toLowerCase()))
+                : null
+            return (check && check.detail) || '—'
+        },
         outcomeClass(outcome) {
             const s = String(outcome || '').toLowerCase()
             if (s.includes('reject') || s.includes('error') || s.includes('fail')) return 'neg'
@@ -896,6 +954,17 @@ export default {
 .sr-empty-inner { color: #808a9d; text-align: center; max-width: 90%; line-height: 1.5; }
 .sr-empty-inner.error { color: #e54150; }
 
+/* Selected-runtime truth surface: independent health/mode/authority/freshness. */
+.sr-status-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 7px 12px;
+                    border-bottom: 1px solid #1c212e; background: #0f1521; }
+.sr-status-mode { color: #b0b6c0; font-weight: 600; }
+.sr-status-authority, .sr-status-fresh { font-size: 11px; padding: 1px 7px; border-radius: 9px; background: #202735; }
+.sr-status-reason { flex: 1 1 260px; min-width: 0; color: #ff9f40; font-size: 11px;
+                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tone-ready { color: #35a776; }
+.tone-attention { color: #ff9f40; }
+.tone-neutral { color: #9aa4b2; }
+
 /* ── Hierarchy ─────────────────────────────────────────────────────────────── */
 .sr-hier { flex: 0 0 auto; max-height: 44%; overflow: auto; padding: 6px 12px 8px; border-bottom: 1px solid #1c212e; }
 .sr-proc { margin-top: 6px; }
@@ -925,6 +994,7 @@ export default {
 .sr-tk-sym { color: #fff; font-weight: 600; }
 .sr-tk-dur { color: #808a9d; font-size: 11px; }
 .sr-tk-reason { color: #808a9d; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-tk-decision { color: #58a6ff; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sr-deps { padding-top: 2px; }
 .sr-deps-label { color: #5c6470; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
 .sr-dep { display: flex; align-items: baseline; gap: 8px; padding: 1px 8px; border-left: 2px solid #1c212e; }
@@ -948,6 +1018,9 @@ export default {
 .sr-reasons { margin: 6px 0 0; padding: 0 0 0 18px; color: #f5c518; font-size: 11px; }
 .sr-lin-reasons { margin-top: 6px; }
 .sr-lin-reason { color: #808a9d; font-size: 11px; padding: 1px 0; }
+.sr-recent-decision { display: grid; grid-template-columns: 120px minmax(120px, 180px) minmax(90px, auto) 1fr;
+                      gap: 10px; align-items: baseline; padding: 5px 0; border-bottom: 1px solid #1c212e; }
+.sr-decision-reason { color: #ff9f40; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Verified-lineage → clickable link into the Backtests dock. */
 .sr-lin-open { background: rgba(88,166,255,0.12); color: #58a6ff; border: 1px solid rgba(88,166,255,0.4);
                border-radius: 4px; padding: 2px 8px; font-size: 10px; cursor: pointer; white-space: nowrap; }
