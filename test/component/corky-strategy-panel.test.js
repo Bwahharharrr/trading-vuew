@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // CorkyStrategyPanel — presentational Strategy-runtime view (bottom dock), now a
-// TABBED interface: Summary / Balances / Decision Audit. App owns the feed +
+// TABBED interface: Overview / Tickers / Activity / Capital / Orders / Configuration / Administration. App owns the feed +
 // selection; this renders props + emits intents (select-runtime / refresh).
 //
 // Pins: the runtime selector, the tab switching, the readiness-vs-strategy-status
@@ -9,7 +9,7 @@
 // wallet→allocation→ticker tree (Balances), the decision-audit ticker drill-down,
 // the stale-approval flag — and that fmt() cleans decimals (drops trailing zeros,
 // groups thousands) WITHOUT losing precision.
-import { test, expect, describe } from 'vitest'
+import { beforeEach, test, expect, describe } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CorkyStrategyPanel from '../../src/components/feed/CorkyStrategyPanel.vue'
 
@@ -26,6 +26,7 @@ const NOW_STALE = 1782950129878 + 1
 function mountPanel(props = {}) {
     return mount(CorkyStrategyPanel, { props: { runtimes, decisions, now: NOW_FRESH, ...props } })
 }
+beforeEach(() => window.localStorage.clear())
 // Activate a tab by its label.
 async function tab(w, label) {
     const btn = w.findAll('.sr-tab').find((b) => b.text() === label)
@@ -34,10 +35,12 @@ async function tab(w, label) {
 }
 
 describe('CorkyStrategyPanel — tabs + runtime selector', () => {
-    test('renders the three tabs; Summary is active by default', () => {
+    test('renders the seven task tabs; Overview is active by default', () => {
         const w = mountPanel()
-        expect(w.findAll('.sr-tab').map((t) => t.text())).toEqual(['Summary', 'Balances', 'Decision Audit'])
-        expect(w.find('.sr-tab.active').text()).toBe('Summary')
+        expect(w.findAll('.sr-tab').map((t) => t.text())).toEqual([
+            'Overview', 'Tickers', 'Activity', 'Capital', 'Orders', 'Configuration', 'Administration',
+        ])
+        expect(w.find('.sr-tab.active').text()).toBe('Overview')
     })
 
     test('lists every runtime as a selectable row; default-selects the live runtime', () => {
@@ -64,35 +67,39 @@ describe('CorkyStrategyPanel — tabs + runtime selector', () => {
     })
 })
 
-describe('CorkyStrategyPanel — Summary tab', () => {
+describe('CorkyStrategyPanel — Overview tab', () => {
     test('readiness state (Ready) is its own badge, distinct from strategy status', () => {
         const rt = mountPanel().find('.sr-sec-head .rt-badge')
         expect(rt.text()).toBe('Ready')
         expect(rt.classes()).toContain('tone-ready')
     })
 
-    test('shows strategy, public/private runtimes, gate readiness, and formatted observed balances', () => {
-        const body = mountPanel().find('.sr-body').text()
+    test('shows strategy, public/private runtimes, gate readiness, and formatted observed balances', async () => {
+        const w = mountPanel()
+        const body = w.find('.sr-body').text()
         expect(body).toContain('ema_regime_breakout_v8')
         expect(body).toContain('public-market-main')
         expect(body).toContain('private-account-main')
         expect(body).toContain('2 / 2 ready')
+        await tab(w, 'Capital')
+        const capital = w.find('.sr-body').text()
         // fmt(): trailing zeros dropped + thousands grouped, precision PRESERVED.
-        expect(body).toContain('8,000.0003305718272')   // was 8000.000330571827200000000000
-        expect(body).toContain('0.0000000018272')        // was 0.000000001827200000000000
+        expect(capital).toContain('8,000.0003305718272')
+        expect(capital).toContain('0.0000000018272')
     })
 
-    test('approval: max notional + expiry; stale flag flips after expiry', () => {
-        const appr = mountPanel({ now: NOW_FRESH }).find('.sr-approval')
+    test('approval: max notional + expiry; stale flag flips after expiry', async () => {
+        const fresh = await tab(mountPanel({ now: NOW_FRESH }), 'Administration')
+        const appr = fresh.find('.sr-approval')
         expect(appr.text()).toContain('12')
         expect(appr.classes()).not.toContain('stale')
-        const stale = mountPanel({ now: NOW_STALE })
+        const stale = await tab(mountPanel({ now: NOW_STALE }), 'Administration')
         expect(stale.find('.sr-approval').classes()).toContain('stale')
         expect(stale.find('.sr-stale').text()).toContain('STALE')
     })
 
-    test('orders keep the local journal (queued) VISUALLY DISTINCT from dispatched', () => {
-        const w = mountPanel()
+    test('orders keep the local journal (queued) VISUALLY DISTINCT from dispatched', async () => {
+        const w = await tab(mountPanel(), 'Orders')
         const local = w.find('.sr-order-local')
         const dispatched = w.find('.sr-order-dispatched')
         expect(local.text().toLowerCase()).toContain('local journal')
@@ -103,9 +110,9 @@ describe('CorkyStrategyPanel — Summary tab', () => {
     })
 })
 
-describe('CorkyStrategyPanel — Balances tab (auth wallets + wallet allocation tree)', () => {
+describe('CorkyStrategyPanel — Capital tab (auth wallets + wallet allocation tree)', () => {
     test('lists auth wallets grouped by class; the legacy allocation tree is a single TESTUSD card', async () => {
-        const w = await tab(mountPanel(), 'Balances')
+        const w = await tab(mountPanel(), 'Capital')
         // auth wallets grouped by class (exchange / margin / funding) — every wallet row shows.
         const rows = w.findAll('.sr-wtable tbody tr')
         expect(rows).toHaveLength(liveRuntime.auth_wallet_balances.length)   // 8 balances across classes
@@ -121,7 +128,7 @@ describe('CorkyStrategyPanel — Balances tab (auth wallets + wallet allocation 
     })
 
     test('the allocation card nests the ticker claim rows, decimals formatted + precision preserved', async () => {
-        const w = await tab(mountPanel(), 'Balances')
+        const w = await tab(mountPanel(), 'Capital')
         const rows = w.findAll('.sr-wallet.alloc .sr-alloc tbody tr')
         expect(rows).toHaveLength(liveRuntime.ticker_allocations.length)   // 2
         const btc = rows.find((r) => r.text().includes('tTESTBTC'))
@@ -130,7 +137,7 @@ describe('CorkyStrategyPanel — Balances tab (auth wallets + wallet allocation 
     })
 
     test('waiting vs long claims get DISTINCT ticker-status style badges', async () => {
-        const w = await tab(mountPanel(), 'Balances')
+        const w = await tab(mountPanel(), 'Capital')
         const badges = w.findAll('.sr-wallet.alloc .st-badge')
         const waiting = badges.find((b) => b.text() === 'waiting')
         const long = badges.find((b) => b.text() === 'long')
@@ -147,7 +154,7 @@ describe('CorkyStrategyPanel — Balances tab (auth wallets + wallet allocation 
             unrealized_pnl: '0', fees_paid: '0', last_event: 'x',
         }))
         const rt = { ...liveRuntime, wallet_allocations: undefined, ticker_allocations, ticker_orders: [] }
-        const w = await tab(mountPanel({ runtimes: [rt], selectedRuntimeId: rt.runtime_id }), 'Balances')
+        const w = await tab(mountPanel({ runtimes: [rt], selectedRuntimeId: rt.runtime_id }), 'Capital')
         const badges = w.findAll('.sr-wallet.alloc .st-badge')
         expect(badges).toHaveLength(statuses.length)
         // badge TEXT distinguishes every status.
@@ -165,7 +172,7 @@ describe('CorkyStrategyPanel — Balances tab (auth wallets + wallet allocation 
     })
 
     test('colours realized P/L by textual sign; pure-zero stays neutral', async () => {
-        const w = await tab(mountPanel(), 'Balances')
+        const w = await tab(mountPanel(), 'Capital')
         const rows = w.findAll('.sr-wallet.alloc .sr-alloc tbody tr')
         const ada = rows.find((r) => r.text().includes('tTESTADA'))
         const negCell = ada.findAll('td').find((c) => c.text().startsWith('-0.2211'))
@@ -175,9 +182,9 @@ describe('CorkyStrategyPanel — Balances tab (auth wallets + wallet allocation 
     })
 })
 
-describe('CorkyStrategyPanel — Decision Audit tab (ticker drill-down)', () => {
+describe('CorkyStrategyPanel — Activity tab (ticker drill-down)', () => {
     test('lists tickers; the first ticker\'s decisions show by default, most-recent-first', async () => {
-        const w = await tab(mountPanel(), 'Decision Audit')
+        const w = await tab(mountPanel(), 'Activity')
         const tks = w.findAll('.sr-audit-tk')
         expect(tks.length).toBeGreaterThanOrEqual(1)
         expect(w.find('.sr-audit-tk.active').exists()).toBe(true)
@@ -192,7 +199,7 @@ describe('CorkyStrategyPanel — Decision Audit tab (ticker drill-down)', () => 
             { ticker_id: 'V:tADA:USD', symbol: 'tADA:USD', decision_ts_ms: 2, timeframe: '1m', outcome: 'a', intents: [], risk_checks: [], ledger_deltas: [], claim_states: [] },
             { ticker_id: 'V:tBTC:USD', symbol: 'tBTC:USD', decision_ts_ms: 3, timeframe: '5m', outcome: 'b', intents: [], risk_checks: [], ledger_deltas: [], claim_states: [] },
         ]
-        const w = await tab(mountPanel({ decisions: ds }), 'Decision Audit')
+        const w = await tab(mountPanel({ decisions: ds }), 'Activity')
         expect(w.findAll('.sr-audit-tk')).toHaveLength(2)
         // default → first ticker (tADA)
         expect(w.find('.sr-decisions').text()).toContain('1m')
@@ -203,7 +210,7 @@ describe('CorkyStrategyPanel — Decision Audit tab (ticker drill-down)', () => 
     })
 
     test('truncates the feature fingerprint (full value on hover)', async () => {
-        const w = await tab(mountPanel(), 'Decision Audit')
+        const w = await tab(mountPanel(), 'Activity')
         const fp = w.find('.sr-decisions .sr-fp')
         expect(fp.text()).toMatch(/…$/)
         // rows are most-recent-first, so the first row is the newest decision.
@@ -212,7 +219,7 @@ describe('CorkyStrategyPanel — Decision Audit tab (ticker drill-down)', () => 
     })
 
     test('empty note when there are no decisions', async () => {
-        const w = await tab(mountPanel({ decisions: [] }), 'Decision Audit')
+        const w = await tab(mountPanel({ decisions: [] }), 'Activity')
         expect(w.find('.sr-decisions').exists()).toBe(false)
         expect(w.text()).toContain('No decisions loaded')
     })

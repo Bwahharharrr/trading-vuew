@@ -99,13 +99,14 @@ describe('CorkyPositionsPanel — rendering', () => {
     test('dock forwards the strategy bundle down and bubbles intents up as strategy-*', () => {
         const runtimes = [{ runtime_id: 'v8-tail-repair-live-main', state: 'Ready', mode: 'live', strategy: 'ema_v8', ticker_allocations: [], ticker_orders: [], order_status_counts: {}, auth_wallet_balances: [] }]
         const decisions = [{ decision_id: 'd1', ticker_id: 'x', symbol: 'tX', timeframe: '1m', outcome: 'no_intents' }]
-        const w = mountPanel({ activeTab: 'strategy', strategy: { runtimes, selectedRuntimeId: 'v8-tail-repair-live-main', decisions, streaming: true } })
+        const w = mountPanel({ activeTab: 'strategy', maximized: true, strategy: { runtimes, selectedRuntimeId: 'v8-tail-repair-live-main', decisions, streaming: true } })
         const child = w.findComponent({ name: 'CorkyStrategyPanel' })
         // Down: bundle spreads into the child's individual props.
         expect(child.props('runtimes')).toEqual(runtimes)
         expect(child.props('selectedRuntimeId')).toBe('v8-tail-repair-live-main')
         expect(child.props('decisions')).toEqual(decisions)
         expect(child.props('streaming')).toBe(true)
+        expect(child.props('maximized')).toBe(true)
         // Up: select-runtime → strategy-select-runtime, refresh → strategy-refresh.
         child.vm.$emit('select-runtime', 'v8-tail-repair-status-main')
         expect(w.emitted('strategy-select-runtime').pop()[0]).toBe('v8-tail-repair-status-main')

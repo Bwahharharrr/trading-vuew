@@ -11,7 +11,7 @@
 // intent payloads match the *.request.json command shapes (minus the wire `type`,
 // which the client adds); (4) reason is mandatory; (5) unlock keeps a DECIMAL
 // STRING amount and adopt coerces a numeric position_id.
-import { test, expect, describe } from 'vitest'
+import { beforeEach, test, expect, describe } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CorkyStrategyPanel from '../../src/components/feed/CorkyStrategyPanel.vue'
 
@@ -21,6 +21,8 @@ import adoptOneReq from '../fixtures/corky/strategy/examples/adopt-strategy-posi
 
 const AVAILABLE = { available: true, pending: false, awaiting: false, error: null }
 const OFF = { available: false, pending: false, awaiting: false, error: null }
+
+beforeEach(() => window.localStorage.setItem('corky.strategy.active-task.v1', 'administration'))
 
 // The panel emits the command fields MINUS the wire `type` (the client adds it),
 // so compare an intent payload against the fixture command with `type` stripped.

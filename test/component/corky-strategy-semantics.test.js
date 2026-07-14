@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
-import { describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CorkyStrategyPanel from '../../src/components/feed/CorkyStrategyPanel.vue'
 import fixture from '../fixtures/corky/strategy/strategy-ux-scenarios.json'
 
 const scenario = (id) => fixture.scenarios.find((row) => row.id === id)
 
+beforeEach(() => window.localStorage.clear())
+
 describe('strategy runtime semantic rendering', () => {
-    test('renders a Ready observer as read-only with N/A financial dependencies', () => {
+    test('renders a Ready observer as read-only with N/A financial dependencies', async () => {
         const row = scenario('ready_observer')
         const wrapper = mount(CorkyStrategyPanel, {
             props: {
@@ -24,6 +26,8 @@ describe('strategy runtime semantic rendering', () => {
         expect(banner.text()).toContain('Money mutations fenced')
         expect(banner.text()).toContain('origin_observer_money_mutations_fenced')
         expect(wrapper.text()).toContain('N/A — not configured')
+        const capital = wrapper.findAll('.sr-tab').find((button) => button.text() === 'Capital')
+        await capital.trigger('click')
         expect(wrapper.text()).toContain('This runtime has no financial allocation authority.')
     })
 
@@ -41,7 +45,7 @@ describe('strategy runtime semantic rendering', () => {
         const wrapper = mount(CorkyStrategyPanel, {
             props: { runtimes: [row.runtime], decisions, streaming: true, now: row.runtime.generated_at_ms },
         })
-        const audit = wrapper.findAll('.sr-tab').find((button) => button.text() === 'Decision Audit')
+        const audit = wrapper.findAll('.sr-tab').find((button) => button.text() === 'Activity')
         await audit.trigger('click')
         expect(wrapper.find('.sr-decision-reason').text()).toBe('origin_observer_money_mutations_fenced')
     })

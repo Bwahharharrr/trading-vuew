@@ -97,6 +97,7 @@
                         :selected-runtime-id="strategy.selectedRuntimeId || ''"
                         :decisions="strategy.decisions || []"
                         :streaming="!!strategy.streaming"
+                        :maximized="maximized"
                         :loading="!!strategy.loading"
                         :error="strategy.error || null"
                         :control="strategy.control || {}"

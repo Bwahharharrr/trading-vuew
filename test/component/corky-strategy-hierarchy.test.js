@@ -14,7 +14,7 @@
 // rows, lineage distinctness (verified may read running; mismatch/unknown must
 // NOT), the wallet→strategy→ticker allocation tree from buildWalletAllocationTree
 // (server-computed vs legacy), and decimal-string precision preserved throughout.
-import { test, expect, describe } from 'vitest'
+import { beforeEach, test, expect, describe } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CorkyStrategyPanel from '../../src/components/feed/CorkyStrategyPanel.vue'
 
@@ -28,6 +28,8 @@ const UX_MATRIX = UX_RUNTIMES[1]      // mismatch / Degraded / no wallet_allocat
 const AS_OF = UX_LIVE.generated_at_ms // 1782953400000 — the transcript's as_of clock
 
 const LIVE_RUNTIME = liveRuntimeFx.event.runtime   // single runtime, no wallet_allocations
+
+beforeEach(() => window.localStorage.clear())
 
 async function tab(w, label) {
     const btn = w.findAll('.sr-tab').find((b) => b.text() === label)
@@ -140,22 +142,23 @@ describe('new-contract (strategy-runtimes-ux-contract) — process → runtime h
     })
 })
 
-describe('new-contract — Summary drilldown (selected runtime)', () => {
+describe('new-contract — Configuration drilldown (selected runtime)', () => {
     const mountUx = (props = {}) =>
         mount(CorkyStrategyPanel, { props: { runtimes: UX_RUNTIMES, now: AS_OF, ...props } })
 
-    test('verified lineage section shows run_id / candidate rank+index / params hash and reads running', () => {
-        const body = mountUx().find('.sr-body').text()
+    test('verified lineage section shows run_id / candidate rank+index / params hash and reads running', async () => {
+        const w = await tab(mountUx(), 'Configuration')
+        const body = w.find('.sr-body').text()
         expect(body).toContain('universe-v8-tail-repair-20260630')   // run_id
         expect(body).toContain('516d5fc6ae94')                       // params hash (truncated)
         expect(body).toContain('running')
         // rank / run_index rendered
-        const heads = mountUx().findAll('.sr-sec-head').map((h) => h.text())
+        const heads = w.findAll('.sr-sec-head').map((h) => h.text())
         expect(heads.some((h) => h.startsWith('Lineage'))).toBe(true)
     })
 
-    test('mismatch lineage is an attention state — shows "not verified", never "running"', () => {
-        const w = mountUx({ selectedRuntimeId: 'strategy-runtime-status-matrix' })
+    test('mismatch lineage is an attention state — shows "not verified", never "running"', async () => {
+        const w = await tab(mountUx({ selectedRuntimeId: 'strategy-runtime-status-matrix' }), 'Configuration')
         const lineageHead = w.findAll('.sr-sec-head').find((h) => h.text().startsWith('Lineage'))
         expect(lineageHead.text()).toContain('mismatch')
         expect(lineageHead.text()).toContain('not verified')
@@ -163,31 +166,35 @@ describe('new-contract — Summary drilldown (selected runtime)', () => {
         expect(lineageHead.find('.lin-badge').classes()).toContain('lin-attention')
     })
 
-    test('approval, auth readiness, allocation pool, and audit provenance all render', () => {
+    test('approval, auth readiness, allocation pool, and audit provenance are assigned to their task tabs', async () => {
         const w = mountUx()
-        const body = w.find('.sr-body').text()
-        expect(w.find('.sr-approval').text()).toContain('12')        // max_order_notional (verbatim)
+        await tab(w, 'Administration')
+        expect(w.find('.sr-approval').text()).toContain('12')
+        await tab(w, 'Configuration')
+        let body = w.find('.sr-body').text()
         expect(body).toContain('Auth readiness')
-        expect(body).toContain('Allocation pool')
-        expect(body).toContain('primary-account')                    // allocation account
-        // audit pointers are provenance-only text (paths shown, not fetched)
         expect(body).toContain('Audit provenance')
         expect(body).toContain('v8-tail-repair-decisions.jsonl')
+        await tab(w, 'Capital')
+        body = w.find('.sr-body').text()
+        expect(body).toContain('Allocation pool')
+        expect(body).toContain('primary-account')
     })
 
-    test('orders section surfaces the runtime submitted-nonterminal blocker', () => {
-        const orders = mountUx().findAll('.sr-sec-head').find((h) => h.text().startsWith('Orders'))
+    test('orders section surfaces the runtime submitted-nonterminal blocker', async () => {
+        const w = await tab(mountUx(), 'Orders')
+        const orders = w.findAll('.sr-sec-head').find((h) => h.text().startsWith('Orders'))
         expect(orders.find('.sr-blocker').exists()).toBe(true)
         expect(orders.text()).toContain('submitted')
     })
 })
 
-describe('new-contract — Balances drilldown (server-computed wallet_allocations tree)', () => {
+describe('new-contract — Capital drilldown (server-computed wallet_allocations tree)', () => {
     const mountUx = (props = {}) =>
         mount(CorkyStrategyPanel, { props: { runtimes: UX_RUNTIMES, now: AS_OF, ...props } })
 
     test('renders the wallet allocation tree from wallet_allocations[] — NOT marked legacy', async () => {
-        const w = await tab(mountUx(), 'Balances')
+        const w = await tab(mountUx(), 'Capital')
         // server-computed path → no legacy/inferred marker in the tree
         expect(w.find('.sr-body .sr-legacy-tag').exists()).toBe(false)
         const wallet = w.find('.sr-wallet.alloc')
@@ -201,7 +208,7 @@ describe('new-contract — Balances drilldown (server-computed wallet_allocation
     })
 
     test('mismatch runtime (no wallet_allocations) falls back to the LEGACY / INFERRED tree', async () => {
-        const w = await tab(mountUx({ selectedRuntimeId: 'strategy-runtime-status-matrix' }), 'Balances')
+        const w = await tab(mountUx({ selectedRuntimeId: 'strategy-runtime-status-matrix' }), 'Capital')
         expect(w.find('.sr-body .sr-legacy-tag').text().toLowerCase()).toContain('legacy')
         // four ticker_allocations become the legacy claim rows
         const rows = w.findAll('.sr-wallet.alloc .sr-alloc tbody tr')
@@ -237,7 +244,7 @@ describe('live gateway (live_get_strategy_runtime) — fallback path renders + i
     })
 
     test('Balances allocation tree is the LEGACY / INFERRED fallback (wallet_allocations absent)', async () => {
-        const w = await tab(mountLive(), 'Balances')
+        const w = await tab(mountLive(), 'Capital')
         expect(w.find('.sr-body .sr-legacy-tag').text().toLowerCase()).toContain('inferred')
         // ticker_allocations become the claim rows; allocated shown as — (not inferred)
         const rows = w.findAll('.sr-wallet.alloc .sr-alloc tbody tr')
@@ -247,7 +254,7 @@ describe('live gateway (live_get_strategy_runtime) — fallback path renders + i
     })
 
     test('auth wallets render grouped by class (exchange / funding / margin)', async () => {
-        const w = await tab(mountLive(), 'Balances')
+        const w = await tab(mountLive(), 'Capital')
         const authRows = w.findAll('.sr-wtable tbody tr')
         expect(authRows).toHaveLength(LIVE_RUNTIME.auth_wallet_balances.length)  // 7
         expect(w.findAll('.sr-wclass-grp').length).toBeGreaterThanOrEqual(3)
@@ -301,7 +308,7 @@ describe('CorkyStrategyPanel — lineage → backtest candidate link', () => {
     const mk = (props = {}) => mount(CorkyStrategyPanel, { props: { runtimes: UX_RUNTIMES, now: AS_OF, ...props } })
 
     test('a VERIFIED runtime shows a clickable link that emits open-lineage-run with the run + candidate', async () => {
-        const w = mk()   // Summary tab (default); UX_LIVE (verified) is default-selected
+        const w = await tab(mk(), 'Configuration')
         const open = w.find('.sr-lin-open')
         expect(open.exists()).toBe(true)
         await open.trigger('click')
@@ -313,9 +320,9 @@ describe('CorkyStrategyPanel — lineage → backtest candidate link', () => {
         expect(w.find('.sr-lin-link').exists()).toBe(true)
     })
 
-    test('a MISMATCHED-lineage runtime shows NO lineage link (never links a non-verified runtime)', () => {
+    test('a MISMATCHED-lineage runtime shows NO lineage link (never links a non-verified runtime)', async () => {
         const mismatch = UX_RUNTIMES.find((r) => r.lineage_status && r.lineage_status !== 'verified')
-        const w = mk({ selectedRuntimeId: mismatch.runtime_id })
+        const w = await tab(mk({ selectedRuntimeId: mismatch.runtime_id }), 'Configuration')
         expect(w.find('.sr-lin-open').exists()).toBe(false)
         expect(w.find('.sr-lin-link').exists()).toBe(false)
     })

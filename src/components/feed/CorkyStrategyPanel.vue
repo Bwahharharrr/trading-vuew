@@ -1,10 +1,12 @@
 <template>
-<div class="sr">
-    <!-- Drilldown view tabs (Summary / Balances / Decision Audit) for the SELECTED
+<div class="sr" :class="{ maximized }">
+    <!-- Task-oriented views for the selected runtime. The active task is kept
+         across panel remounts so changing dock size does not reset the operator. -->
+    <!-- Drilldown view tabs for the SELECTED
          runtime. App owns the feed/subscription; this only renders + emits intents. -->
     <div class="sr-tabs" role="tablist" aria-label="Strategy views">
         <button v-for="t in TABS" :key="t.id" class="sr-tab" :class="{ active: activeTab === t.id }"
-                role="tab" :aria-selected="activeTab === t.id" @click="activeTab = t.id">{{ t.label }}</button>
+                role="tab" :aria-selected="activeTab === t.id" @click="setActiveTab(t.id)">{{ t.label }}</button>
         <span class="sr-spacer"></span>
         <span v-if="streaming" class="sr-live" title="Live runtime subscription (full-replacement updates)">● live</span>
         <button class="sr-icon" title="Refresh runtimes" @click="$emit('refresh')">⟳</button>
@@ -102,7 +104,7 @@
          visible operator reason; unlock/adopt add allocation/position inputs. On
          click the panel EMITS an intent and never mutates local state — App awaits
          the subscription full-replacement to reconcile. -->
-    <div v-if="controlEnabled && controlTarget" class="sr-controls" role="group" aria-label="Ticker controls">
+    <div v-if="activeTab === 'administration' && controlEnabled && controlTarget" class="sr-controls" role="group" aria-label="Ticker controls">
         <div class="sr-controls-head">
             <span class="sr-ctl-title">Controls</span>
             <span class="sr-ctl-sym sym">{{ controlTarget.symbol }}</span>
@@ -141,7 +143,7 @@
     </div>
     <!-- Control surface OFF (no session) but a ticker is selected: make the gap
          explicit rather than silently dropping the affordance. -->
-    <div v-else-if="selectedTickerId" class="sr-controls sr-controls-off">
+    <div v-else-if="activeTab === 'administration' && selectedTickerId" class="sr-controls sr-controls-off">
         <span class="sr-ctl-title">Controls</span>
         <span class="sr-ctl-unavailable" :title="controlUnavailableReason">unavailable — {{ controlUnavailableReason }}</span>
     </div>
@@ -151,9 +153,17 @@
         <div v-if="!loading" class="sr-msg">No strategy runtime loaded.</div>
     </div>
 
-    <!-- ─── SUMMARY ─── identity + lineage + approval + auth + allocation + orders + provenance -->
-    <div v-else-if="activeTab === 'summary'" class="sr-body">
-        <section class="sr-sec">
+    <!-- OVERVIEW / ORDERS / CONFIGURATION / ADMINISTRATION share one detail
+         scroll owner; sections are assigned to exactly one task. -->
+    <div v-else-if="['overview', 'orders', 'configuration', 'administration'].includes(activeTab)" class="sr-body">
+        <section v-if="activeTab === 'administration'" class="sr-sec">
+            <div class="sr-sec-head">Runtime administration</div>
+            <div class="sr-grid">
+                <div class="sr-field"><span class="sr-k">manual control</span><span class="sr-v" :class="controlEnabled ? 'pos' : 'tone-neutral'">{{ controlEnabled ? 'Available' : controlUnavailableReason }}</span></div>
+                <div class="sr-field"><span class="sr-k">target ticker</span><span class="sr-v">{{ selectedTickerId || 'Select a ticker from the fleet or Tickers tab' }}</span></div>
+            </div>
+        </section>
+        <section v-if="activeTab === 'overview'" class="sr-sec">
             <div class="sr-sec-head">
                 Runtime <span class="sr-rt-name">{{ selectedRuntime.runtime_id }}</span>
                 <span class="rt-badge" :class="'tone-' + readinessInfo.tone">{{ readinessInfo.state }}</span>
@@ -184,7 +194,7 @@
             </div>
         </section>
 
-        <section class="sr-sec">
+        <section v-if="activeTab === 'overview'" class="sr-sec">
             <div class="sr-sec-head">Current activity <span class="sr-dim">recent runtime evidence</span></div>
             <div v-if="!recentDecisionRows.length" class="sr-msg sr-msg-sm">No recent decision evidence published.</div>
             <div v-for="d in recentDecisionRows" :key="d.decision_id || (d.decision_ts_ms + ':' + d.ticker_id)" class="sr-recent-decision">
@@ -196,7 +206,7 @@
         </section>
 
         <!-- LINEAGE — verified may present as running; mismatch/unknown must NOT. -->
-        <section class="sr-sec">
+        <section v-if="activeTab === 'configuration'" class="sr-sec">
             <div class="sr-sec-head">Lineage
                 <span class="lin-badge" :class="'lin-' + lineageInfo.tone">{{ lineageRawLabel }}</span>
                 <span v-if="lineageInfo.running" class="sr-run-tag">running</span>
@@ -234,7 +244,7 @@
         </section>
 
         <!-- APPROVAL — expiry + max notional + STALE flag (expired ⇒ not mutation-ready). -->
-        <section v-if="approval.present" class="sr-sec">
+        <section v-if="activeTab === 'administration' && approval.present" class="sr-sec">
             <div class="sr-sec-head">Approval</div>
             <div class="sr-approval" :class="{ stale: approval.stale }">
                 <span class="sr-appr-tag">APPROVAL</span>
@@ -254,7 +264,7 @@
         </section>
 
         <!-- AUTH READINESS — pending reasons are operator blockers. -->
-        <section class="sr-sec">
+        <section v-if="activeTab === 'configuration'" class="sr-sec">
             <div class="sr-sec-head">Auth readiness
                 <span class="sr-v" :class="'tone-' + runtimeSemantics.auth.tone">{{ runtimeSemantics.auth.label }}</span>
             </div>
@@ -268,27 +278,8 @@
             </ul>
         </section>
 
-        <!-- ALLOCATION POOL — account / quote / wallet type / observed / unallocated. -->
-        <section class="sr-sec">
-            <div class="sr-sec-head">Allocation pool
-                <span class="sr-v" :class="'tone-' + runtimeSemantics.allocation.tone">{{ runtimeSemantics.allocation.label }}</span>
-            </div>
-            <div v-if="runtimeSemantics.allocation.configured" class="sr-grid">
-                <div class="sr-field"><span class="sr-k">account</span><span class="sr-v">{{ dash(selectedRuntime.allocation_account_id) }}</span></div>
-                <div class="sr-field"><span class="sr-k">quote</span><span class="sr-v">{{ dash(selectedRuntime.allocation_quote_currency) }}</span></div>
-                <div class="sr-field"><span class="sr-k">wallet type</span><span class="sr-v">{{ dash(selectedRuntime.allocation_wallet_type) }}</span></div>
-                <div class="sr-field"><span class="sr-k">observed balance</span><span class="sr-v mono">{{ fmt(selectedRuntime.allocation_observed_balance) }}</span></div>
-                <div class="sr-field"><span class="sr-k">observed available</span><span class="sr-v mono">{{ fmt(selectedRuntime.allocation_observed_available) }}</span></div>
-                <div class="sr-field"><span class="sr-k">unallocated available</span><span class="sr-v mono">{{ fmt(selectedRuntime.allocation_unallocated_available) }}</span></div>
-            </div>
-            <div v-else class="sr-msg sr-msg-sm">This runtime has no financial allocation authority.</div>
-            <ul v-if="pendingAllocationReasons.length" class="sr-reasons">
-                <li v-for="(r, i) in pendingAllocationReasons" :key="i">{{ r }}</li>
-            </ul>
-        </section>
-
         <!-- ORDERS — local journal (queued) DISTINCT from dispatched; submitted-nonterminal blocker. -->
-        <section class="sr-sec">
+        <section v-if="activeTab === 'orders'" class="sr-sec">
             <div class="sr-sec-head">Orders
                 <span class="sr-dim">total {{ dash(selectedRuntime.orders_total) }} · active/pending {{ dash(selectedRuntime.orders_active_or_pending) }}</span>
                 <span v-if="runtimeBlocker.blocked" class="sr-blocker" :title="blockerTitle(runtimeBlocker)">⚠ {{ runtimeBlocker.submittedNonterminal }} submitted</span>
@@ -313,7 +304,7 @@
         </section>
 
         <!-- AUDIT PROVENANCE — display-only pointers; chart clients must NOT fetch these. -->
-        <section v-if="auditPointers.length" class="sr-sec">
+        <section v-if="activeTab === 'configuration' && auditPointers.length" class="sr-sec">
             <div class="sr-sec-head">Audit provenance <span class="sr-dim">display only — not fetched</span></div>
             <div v-for="p in auditPointers" :key="p.k" class="sr-prov" :title="p.v">
                 <span class="sr-k">{{ p.k }}</span> <span class="mono">{{ p.v }}</span>
@@ -321,8 +312,42 @@
         </section>
     </div>
 
-    <!-- ─── BALANCES ─── auth wallets by class + wallet allocation tree. -->
-    <div v-else-if="activeTab === 'balances'" class="sr-body">
+    <!-- ─── TICKERS ─── selected runtime ticker status and exact reason. -->
+    <div v-else-if="activeTab === 'tickers'" class="sr-body">
+        <section class="sr-sec">
+            <div class="sr-sec-head">Ticker state <span class="sr-dim">{{ selectedNodeTickers.length }}</span></div>
+            <div v-if="!selectedNodeTickers.length" class="sr-msg sr-msg-sm">No ticker state published for this runtime.</div>
+            <button v-for="tk in selectedNodeTickers" :key="tk.ticker_id" class="sr-ticker-card"
+                    :class="{ active: tk.ticker_id === selectedTickerId }"
+                    @click="selectTicker(activeRuntimeId, tk.ticker_id)">
+                <span class="sym">{{ tk.symbol }}</span>
+                <span class="st-badge" :class="tickerBadge(tk.status)">{{ tk.status.status }}</span>
+                <span v-if="tk.status.durationMs != null" class="time">for {{ fmtDur(tk.status.durationMs) }}</span>
+                <span class="sr-ticker-card-reason">{{ tk.status.reason || 'No status reason published.' }}</span>
+                <span v-if="tk.blocker.blocked" class="sr-blocker" :title="blockerTitle(tk.blocker)">⚠ submitted order</span>
+            </button>
+        </section>
+    </div>
+
+    <!-- ─── CAPITAL ─── auth wallets by class + wallet allocation tree. -->
+    <div v-else-if="activeTab === 'capital'" class="sr-body">
+        <section class="sr-sec">
+            <div class="sr-sec-head">Allocation pool
+                <span class="sr-v" :class="'tone-' + runtimeSemantics.allocation.tone">{{ runtimeSemantics.allocation.label }}</span>
+            </div>
+            <div v-if="runtimeSemantics.allocation.configured" class="sr-grid">
+                <div class="sr-field"><span class="sr-k">account</span><span class="sr-v">{{ dash(selectedRuntime.allocation_account_id) }}</span></div>
+                <div class="sr-field"><span class="sr-k">quote</span><span class="sr-v">{{ dash(selectedRuntime.allocation_quote_currency) }}</span></div>
+                <div class="sr-field"><span class="sr-k">wallet type</span><span class="sr-v">{{ dash(selectedRuntime.allocation_wallet_type) }}</span></div>
+                <div class="sr-field"><span class="sr-k">observed balance</span><span class="sr-v mono">{{ fmt(selectedRuntime.allocation_observed_balance) }}</span></div>
+                <div class="sr-field"><span class="sr-k">observed available</span><span class="sr-v mono">{{ fmt(selectedRuntime.allocation_observed_available) }}</span></div>
+                <div class="sr-field"><span class="sr-k">unallocated available</span><span class="sr-v mono">{{ fmt(selectedRuntime.allocation_unallocated_available) }}</span></div>
+            </div>
+            <div v-else class="sr-msg sr-msg-sm">This runtime has no financial allocation authority.</div>
+            <ul v-if="pendingAllocationReasons.length" class="sr-reasons">
+                <li v-for="(r, i) in pendingAllocationReasons" :key="i">{{ r }}</li>
+            </ul>
+        </section>
         <section class="sr-sec">
             <div class="sr-sec-head">Auth wallets<span class="sr-dim">{{ totalAuthWallets }}</span></div>
             <div v-if="!walletBalanceGroups.length" class="sr-msg sr-msg-sm">No auth wallet balances for this runtime.</div>
@@ -405,8 +430,8 @@
         </section>
     </div>
 
-    <!-- ─── DECISION AUDIT ─── ticker drill-down. -->
-    <div v-else-if="activeTab === 'audit'" class="sr-body">
+    <!-- ─── ACTIVITY ─── decision evidence; operations join this task in SUX-3. -->
+    <div v-else-if="activeTab === 'activity'" class="sr-body">
         <section class="sr-sec">
             <div class="sr-sec-head">Decision audit<span class="sr-dim">{{ decisions.length }}</span></div>
             <div v-if="!auditTickers.length" class="sr-msg sr-msg-sm">No decisions loaded for this runtime.</div>
@@ -456,8 +481,7 @@
 
 <script>
 // CorkyStrategyPanel — presentational Strategy-runtime view (bottom dock): a
-// process→runtime→ticker+dependency HIERARCHY plus a per-runtime DRILLDOWN
-// (Summary / Balances / Decision Audit). App owns the CorkyStrategyFeed +
+// process→runtime→ticker+dependency fleet plus a per-runtime task workspace.
 // selection/streaming; this renders props + emits intents (select-runtime /
 // refresh). Ticker selection (for command routing) is LOCAL UI state.
 //
@@ -492,11 +516,25 @@ import {
 import { isNeg } from '../../helpers/feed/corky-positions.js'
 
 const DEFAULT_RUNTIME_ID = 'v8-tail-repair-live-main'
+const ACTIVE_TAB_STORAGE_KEY = 'corky.strategy.active-task.v1'
 const TABS = [
-    { id: 'summary', label: 'Summary' },
-    { id: 'balances', label: 'Balances' },
-    { id: 'audit', label: 'Decision Audit' },
+    { id: 'overview', label: 'Overview' },
+    { id: 'tickers', label: 'Tickers' },
+    { id: 'activity', label: 'Activity' },
+    { id: 'capital', label: 'Capital' },
+    { id: 'orders', label: 'Orders' },
+    { id: 'configuration', label: 'Configuration' },
+    { id: 'administration', label: 'Administration' },
 ]
+
+function storedActiveTab() {
+    try {
+        const value = window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY)
+        return TABS.some(({ id }) => id === value) ? value : 'overview'
+    } catch (_error) {
+        return 'overview'
+    }
+}
 
 export default {
     name: 'CorkyStrategyPanel',
@@ -507,6 +545,7 @@ export default {
         loading: { type: Boolean, default: false },
         error: { type: String, default: null },
         streaming: { type: Boolean, default: false },
+        maximized: { type: Boolean, default: false },
         now: { type: Number, default: 0 },
         // Direct-control session state (App-owned): { available, pending, awaiting,
         // error }. `available` gates the WHOLE control surface — when false, NO
@@ -527,7 +566,7 @@ export default {
     data() {
         return {
             TABS,
-            activeTab: 'summary',
+            activeTab: storedActiveTab(),
             // Which ticker is highlighted (kept for command routing / drilldown focus).
             selectedTicker: '',
             // Decision-audit: which ticker's decisions are shown (local UI state).
@@ -593,6 +632,13 @@ export default {
         },
         selectedRuntime() {
             return this.runtimes.find((r) => r && r.runtime_id === this.activeRuntimeId) || null
+        },
+        selectedNodeTickers() {
+            for (const group of this.processGroups) {
+                const node = group.runtimes.find(({ rt }) => rt.runtime_id === this.activeRuntimeId)
+                if (node) return node.tickers
+            }
+            return []
         },
         selectedTickerId() {
             const rt = this.selectedRuntime
@@ -770,6 +816,11 @@ export default {
         },
     },
     methods: {
+        setActiveTab(id) {
+            if (!TABS.some((tab) => tab.id === id)) return
+            this.activeTab = id
+            try { window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, id) } catch (_error) { /* no storage */ }
+        },
         // Jump to the runtime's verified universe backtest run + selected candidate
         // (the App opens the Backtests dock and drills into that run_index).
         openLineage() {
@@ -933,12 +984,30 @@ export default {
 </script>
 
 <style scoped>
-.sr { display: flex; flex-direction: column; height: 100%; color: #d1d4dc; font-size: 12px; }
+.sr { display: flex; flex-direction: column; height: 100%; min-height: 0; color: #d1d4dc; font-size: 12px; }
+
+/* Maximized = fleet pane + task detail pane. Each pane owns its own scroll;
+   compact mode keeps the fleet to one glanceable row above the detail. */
+.sr.maximized { display: grid; grid-template-columns: minmax(260px, 30%) minmax(0, 1fr);
+                grid-template-rows: auto auto auto auto minmax(0, 1fr);
+                grid-template-areas: "fleet tabs" "fleet error" "fleet status" "fleet controls" "fleet body"; }
+.sr.maximized .sr-tabs { grid-area: tabs; min-width: 0; }
+.sr.maximized .sr-error { grid-area: error; }
+.sr.maximized .sr-status-banner { grid-area: status; min-width: 0; }
+.sr.maximized .sr-hier { grid-area: fleet; min-height: 0; max-height: none; overflow: auto;
+                         border-right: 1px solid #1c212e; border-bottom: 0; }
+.sr.maximized .sr-controls { grid-area: controls; min-width: 0; }
+.sr.maximized .sr-body { grid-area: body; min-width: 0; }
+.sr.maximized .sr-empty { grid-column: 1 / -1; grid-row: 2 / -1; }
+.sr:not(.maximized) .sr-hier { max-height: 88px; }
+.sr:not(.maximized) .sr-rt-children { display: none; }
+.sr:not(.maximized) .sr-proc-head { padding-top: 0; }
 
 /* Tab bar */
-.sr-tabs { display: flex; align-items: stretch; gap: 2px; padding: 0 8px; border-bottom: 1px solid #1c212e; background: #121827; }
+.sr-tabs { display: flex; align-items: stretch; gap: 2px; padding: 0 8px; overflow-x: auto;
+           border-bottom: 1px solid #1c212e; background: #121827; }
 .sr-tab { background: none; border: none; border-bottom: 2px solid transparent; color: #808a9d; font-size: 12px;
-          padding: 9px 12px; cursor: pointer; }
+          padding: 9px 10px; cursor: pointer; white-space: nowrap; }
 .sr-tab:hover { color: #d1d4dc; }
 .sr-tab.active { color: #35a776; border-bottom-color: #35a776; font-weight: 600; }
 .sr-spacer { flex: 1 1 auto; }
@@ -1021,6 +1090,12 @@ export default {
 .sr-recent-decision { display: grid; grid-template-columns: 120px minmax(120px, 180px) minmax(90px, auto) 1fr;
                       gap: 10px; align-items: baseline; padding: 5px 0; border-bottom: 1px solid #1c212e; }
 .sr-decision-reason { color: #ff9f40; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-ticker-card { display: grid; grid-template-columns: minmax(140px, 220px) auto auto minmax(180px, 1fr) auto;
+                  align-items: center; gap: 10px; width: 100%; margin-top: 6px; padding: 8px 10px;
+                  color: #d1d4dc; text-align: left; background: #0e1320; border: 1px solid #2a2e39;
+                  border-radius: 4px; cursor: pointer; }
+.sr-ticker-card:hover, .sr-ticker-card.active { border-color: #35a776; }
+.sr-ticker-card-reason { color: #808a9d; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Verified-lineage → clickable link into the Backtests dock. */
 .sr-lin-open { background: rgba(88,166,255,0.12); color: #58a6ff; border: 1px solid rgba(88,166,255,0.4);
                border-radius: 4px; padding: 2px 8px; font-size: 10px; cursor: pointer; white-space: nowrap; }
@@ -1030,6 +1105,15 @@ export default {
 .sr-lin-link:hover { color: #79b8ff; }
 .sr-prov { margin-top: 4px; color: #5c6470; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sr-prov .mono { color: #6b7686; }
+
+@media (max-width: 760px) {
+    .sr.maximized { display: flex; flex-direction: column; }
+    .sr.maximized .sr-hier { max-height: 110px; border-right: 0; border-bottom: 1px solid #1c212e; }
+    .sr-ticker-card { grid-template-columns: minmax(120px, 1fr) auto auto; }
+    .sr-ticker-card-reason { grid-column: 1 / -1; }
+    .sr-recent-decision { grid-template-columns: 100px minmax(100px, 1fr) auto; }
+    .sr-recent-decision .sr-decision-reason { grid-column: 1 / -1; }
+}
 
 /* Readiness badge (delivery axis) */
 .rt-badge { font-size: 10px; text-transform: uppercase; padding: 1px 7px; border-radius: 9px; background: #2a2e39; color: #b0b6c0; }
