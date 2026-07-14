@@ -156,6 +156,11 @@ describe('overlaysToMarkers', () => {
     expect(fill0.status).toBe('filled')
     expect(fill0.label).toBe('filled buy 64.84881728 @ 0.15624 trade 1943320037; fee 0 USD')
     expect(fill0.decision_id).toMatch(/target-state-catch-up/)
+    expect(fill0.provenance).toMatchObject({
+      source: overlays.find((row) => row.timestamp_ms === fill0.timestamp_ms).source,
+      decision_id: fill0.decision_id,
+    })
+    expect(fill0.raw).toEqual(overlays.find((row) => row.timestamp_ms === fill0.timestamp_ms))
 
     // allocation marker carries the strategy status verbatim
     expect(g.allocation[0]).toMatchObject({ kind: 'allocation', status: 'waiting', label: 'waiting: fill_attributed' })

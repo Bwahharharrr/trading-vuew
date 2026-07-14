@@ -97,6 +97,7 @@
                         :selected-runtime-id="strategy.selectedRuntimeId || ''"
                         :decisions="strategy.decisions || []"
                         :operations="strategy.operations || {}"
+                        :overlay-visibility="strategy.overlayVisibility || {}"
                         :streaming="!!strategy.streaming"
                         :maximized="maximized"
                         :loading="!!strategy.loading"
@@ -105,6 +106,7 @@
                         @select-runtime="$emit('strategy-select-runtime', $event)"
                         @refresh="$emit('strategy-refresh')"
                         @load-more-operations="$emit('strategy-load-more-operations')"
+                        @toggle-overlay="$emit('strategy-toggle-overlay', $event)"
                         @cancel-ticker-orders="$emit('strategy-cancel-ticker-orders', $event)"
                         @pause-ticker="$emit('strategy-pause-ticker', $event)"
                         @resume-ticker="$emit('strategy-resume-ticker', $event)"
@@ -255,6 +257,7 @@ export default {
         'bt-select-run', 'bt-plot-run', 'bt-select-trade', 'bt-select-candidate', 'bt-close-detail',
         'strategy-select-runtime', 'strategy-refresh',
         'strategy-load-more-operations',
+        'strategy-toggle-overlay',
         'strategy-cancel-ticker-orders', 'strategy-pause-ticker', 'strategy-resume-ticker',
         'strategy-unlock-ticker', 'strategy-adopt-position', 'strategy-open-lineage-run',
     ],

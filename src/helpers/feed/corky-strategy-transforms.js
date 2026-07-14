@@ -240,8 +240,10 @@ export const OVERLAY_KINDS = ['decision', 'fill', 'order', 'allocation', 'contro
 /**
  * Group `overlays[]` into `{ decision, fill, order, allocation, control, other }`,
  * each a list of normalized markers `{ timestamp_ms, kind, label, status, source,
- * decision_id, symbol, ticker_id, timeframe, order_status_counts }` in input
- * order. Rows without a `timestamp_ms` are skipped; unknown kinds fold to `other`.
+ * decision_id, symbol, ticker_id, timeframe, order_status_counts, provenance,
+ * raw }` in input order. `raw` retains every gateway field for chart-to-activity
+ * inspection; rows without a timestamp are skipped and unknown kinds fold to
+ * `other`.
  */
 export function overlaysToMarkers(overlays) {
   const groups = { decision: [], fill: [], order: [], allocation: [], control: [], other: [] }
@@ -259,6 +261,13 @@ export function overlaysToMarkers(overlays) {
       ticker_id: o.ticker_id,
       timeframe: o.timeframe,
       order_status_counts: o.order_status_counts || {},
+      provenance: {
+        source: o.source,
+        decision_id: o.decision_id,
+        ticker_id: o.ticker_id,
+        timeframe: o.timeframe,
+      },
+      raw: { ...o },
     })
   }
   return groups

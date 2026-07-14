@@ -449,6 +449,13 @@
                     <select v-model="activityTicker"><option value="">all</option><option v-for="value in activityTickers" :key="value">{{ value }}</option></select>
                 </label>
             </div>
+            <div class="sr-layer-toggles" role="group" aria-label="Chart strategy layers">
+                <span>chart layers</span>
+                <label v-for="kind in overlayKinds" :key="kind">
+                    <input type="checkbox" :checked="overlayEnabled(kind)"
+                           @change="$emit('toggle-overlay', { kind, enabled: $event.target.checked })" />{{ kind }}
+                </label>
+            </div>
             <div v-if="lifecycleIntervals.length" class="sr-lifecycle-list" aria-label="Runtime lifecycle intervals">
                 <div v-for="interval in lifecycleIntervals" :key="lifecycleKey(interval)" class="sr-lifecycle">
                     <span class="st-badge" :class="lifecycleClass(interval.state)">{{ interval.state }}</span>
@@ -586,6 +593,7 @@ export default {
         selectedRuntimeId: { type: String, default: '' },
         decisions: { type: Array, default: () => [] },
         operations: { type: Object, default: () => ({}) },
+        overlayVisibility: { type: Object, default: () => ({}) },
         loading: { type: Boolean, default: false },
         error: { type: String, default: null },
         streaming: { type: Boolean, default: false },
@@ -601,7 +609,7 @@ export default {
         control: { type: Object, default: () => ({ available: false, pending: false, awaiting: false, error: null }) },
     },
     emits: [
-        'select-runtime', 'refresh', 'load-more-operations',
+        'select-runtime', 'refresh', 'load-more-operations', 'toggle-overlay',
         // Direct-control intents (App echoes them to the feed's control methods).
         'cancel-ticker-orders', 'pause-ticker', 'resume-ticker', 'unlock-ticker', 'adopt-position',
         // Jump to the runtime's verified universe backtest run + candidate.
@@ -618,6 +626,7 @@ export default {
             activitySource: '',
             activityKind: '',
             activityTicker: '',
+            overlayKinds: ['decision', 'fill', 'order', 'allocation', 'control', 'lifecycle'],
             // Control inputs (local UI state). `reason` is the MANDATORY visible
             // operator reason; unlock/adopt add their allocation/position inputs.
             reason: '',
@@ -928,6 +937,7 @@ export default {
             this.activeTab = id
             try { window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, id) } catch (_error) { /* no storage */ }
         },
+        overlayEnabled(kind) { return this.overlayVisibility[kind] !== false },
         // Jump to the runtime's verified universe backtest run + selected candidate
         // (the App opens the Backtests dock and drills into that run_index).
         openLineage() {
@@ -1224,6 +1234,9 @@ export default {
 .sr-activity-filters label { display: flex; align-items: center; gap: 5px; color: #808a9d; font-size: 11px; }
 .sr-activity-filters select { min-width: 120px; color: #d1d4dc; background: #131722; border: 1px solid #2a2e39;
                               border-radius: 3px; padding: 3px 6px; }
+.sr-layer-toggles { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding: 5px 0 9px;
+                    color: #808a9d; font-size: 11px; }
+.sr-layer-toggles label { display: inline-flex; align-items: center; gap: 3px; color: #b0b6c0; cursor: pointer; }
 .sr-lifecycle-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; padding: 7px;
                      border-left: 2px solid #58a6ff; background: rgba(88,166,255,0.05); }
 .sr-lifecycle { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 11px; }

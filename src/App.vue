@@ -145,6 +145,7 @@
             @strategy-select-runtime="strategySelectRuntime"
             @strategy-refresh="strategyRefresh"
             @strategy-load-more-operations="strategyLoadMoreOperations"
+            @strategy-toggle-overlay="strategyToggleOverlay"
             @strategy-cancel-ticker-orders="strategyCancelTickerOrders"
             @strategy-pause-ticker="strategyPauseTicker"
             @strategy-resume-ticker="strategyResumeTicker"
@@ -579,6 +580,10 @@ export default {
                 operations: {
                     events: [], lifecycleIntervals: [], projectionRevision: null,
                     nextCursor: null, resumeCursor: null, loading: false, error: null, live: false,
+                },
+                overlayVisibility: {
+                    decision: true, fill: true, order: true, allocation: true,
+                    control: true, lifecycle: true,
                 },
                 // Direct-control session state (see the control handlers below).
                 // `available` gates the panel's control surface entirely; a control
@@ -1400,6 +1405,9 @@ export default {
             this.syncBarrierOverlay()
             this.syncBacktestOverlays()
             this.syncStrategyOverlays()
+            if (this.strategyFeed && this.strategy && this.strategy.selectedRuntimeId) {
+                this._strategyLoadChartOverlays(this.strategy.selectedRuntimeId)
+            }
         },
 
         // Panel: add a timeframe → patch the candle-state, re-discover, then
@@ -2812,18 +2820,15 @@ export default {
                 Promise.all(tickerIds.map((tid) => Promise.all([
                     this.strategyFeed.getTicker(runtime_id, tid).catch(() => null),
                     this.strategyFeed.listDecisions(runtime_id, { ticker_id: tid, limit: 50 }).catch(() => []),
-                    this.strategyFeed.getChartOverlays(runtime_id, tid, { timeframe: '1m' }).catch(() => []),
                 ]))),
                 operationRequest,
             ])
             if (this.strategy.selectedRuntimeId !== runtime_id) return   // superseded mid-fetch
             const decisions = []
-            const overlays = {}
             const avgByTid = {}
             tickerIds.forEach((tid, i) => {
-                const [tk, ds, ov] = results[i]
+                const [tk, ds] = results[i]
                 if (Array.isArray(ds)) decisions.push(...ds)
-                overlays[tid] = Array.isArray(ov) ? ov : []
                 // Consume the per-ticker read: position_avg_price is present on the
                 // get_strategy_ticker allocation but absent from the runtime
                 // snapshot's ticker_allocations, so carry it across.
@@ -2839,7 +2844,6 @@ export default {
                 }])
             }
             this.strategy.decisions = decisions
-            this.strategy.overlays = overlays
             if (operationsPage && operationsPage._loadError) {
                 if (this.strategy.operations) {
                     this.strategy.operations.loading = false
@@ -2850,6 +2854,43 @@ export default {
             } else if (this.strategy.operations) {
                 this.strategy.operations.loading = false
             }
+            await this._strategyLoadChartOverlays(runtime_id)
+        },
+
+        // Load overlays only for the ticker actually charted, using the chart's
+        // real timeframe and loaded candle window. A context change during the
+        // request discards the stale response.
+        async _strategyLoadChartOverlays(runtime_id = this.strategy.selectedRuntimeId) {
+            if (!this.strategyFeed || !runtime_id ||
+                typeof this.strategyFeed.getChartOverlays !== 'function') return
+            const runtime = (this.strategy.runtimes || []).find((row) => row && row.runtime_id === runtime_id)
+            const cur = this.corkyCurrent
+            if (!runtime || !cur || !cur.symbol || !cur.timeframe) {
+                this.strategy.overlays = {}
+                this.syncStrategyOverlays()
+                return
+            }
+            const tickerId = this._strategyTickerIds(runtime).find((id) => {
+                const published = (runtime.tickers || []).find((ticker) => ticker && ticker.ticker_id === id)
+                const symbol = published && published.symbol
+                    ? published.symbol : String(id).split(':').slice(1).join(':')
+                return symbol === cur.symbol
+            })
+            if (!tickerId) {
+                this.strategy.overlays = {}
+                this.syncStrategyOverlays()
+                return
+            }
+            const loaded = this._loadedCandleRange()
+            const opts = { timeframe: cur.timeframe }
+            if (loaded) { opts.start_ms = loaded[0]; opts.end_ms = loaded[1] }
+            const contextKey = `${runtime_id}|${tickerId}|${cur.timeframe}|${opts.start_ms || ''}|${opts.end_ms || ''}`
+            const overlays = await this.strategyFeed.getChartOverlays(runtime_id, tickerId, opts).catch(() => [])
+            const latest = this.corkyCurrent
+            const latestRange = this._loadedCandleRange()
+            const latestKey = `${this.strategy.selectedRuntimeId}|${tickerId}|${latest && latest.timeframe || ''}|${latestRange ? latestRange[0] : ''}|${latestRange ? latestRange[1] : ''}`
+            if (contextKey !== latestKey) return
+            this.strategy.overlays = { [tickerId]: Array.isArray(overlays) ? overlays : [] }
             this.syncStrategyOverlays()
         },
 
@@ -3149,11 +3190,12 @@ export default {
                     if (o && o.symbol === cur.symbol) all.push(o)
                 }
             }
-            if (!all.length) return
             const candles = dc.data.chart && dc.data.chart.data
+            if (!Array.isArray(candles) || !candles.length) return
             const loaded = this._loadedCandleRange()
             const lo = loaded ? loaded[0] : -Infinity
             const hi = loaded ? loaded[1] : Infinity
+            const visibility = this.strategy.overlayVisibility || {}
             // Group by display class. A manual control marker plots on its own
             // `control` layer — recognized EITHER by kind:'control' (the gateway's
             // shape) OR by source strategy_control_audit on any base kind. Reuses
@@ -3167,24 +3209,70 @@ export default {
                 }
             }
             for (const kind of Object.keys(buckets)) {
+                if (visibility[kind] === false) continue
                 const st = STRATEGY_MARKER_STYLES[kind]
                 const rows = []
+                const provenance = []
                 for (const m of buckets[kind]) {
                     const ts = m.timestamp_ms
                     if (!(ts >= lo && ts <= hi)) continue   // clip to the loaded window
                     const y = this._strategyCandlePriceAt(candles, ts, st.anchor)
                     if (y == null) continue
                     rows.push([ts, y, m.label])
+                    provenance.push(m.raw)
                 }
                 if (!rows.length) continue
                 dc.add('onchart', {
                     name: 'Strategy ' + kind, type: 'Markers', grid: { id: 0 }, data: rows,
                     settings: {
                         $strategyOverlay: true, $uuid: 'strategy-' + kind, 'z-index': st.z,
+                        $strategyProvenance: provenance,
                         legend: false, color: st.color, shape: st.shape, markerSize: 7, showLabel: false,
                     },
                 })
             }
+            if (visibility.lifecycle !== false) {
+                let yMin = null; let yMax = null
+                for (const candle of candles) {
+                    for (const value of [Number(candle[2]), Number(candle[3])]) {
+                        if (!Number.isFinite(value)) continue
+                        yMin = yMin == null ? value : Math.min(yMin, value)
+                        yMax = yMax == null ? value : Math.max(yMax, value)
+                    }
+                }
+                const bands = []
+                const provenance = []
+                for (const interval of ((this.strategy.operations && this.strategy.operations.lifecycleIntervals) || [])) {
+                    if (!interval || (interval.ticker_id &&
+                        !String(interval.ticker_id).endsWith(`:${cur.symbol}`))) continue
+                    const start = Math.max(lo, Number(interval.start_ms) || lo)
+                    const end = Math.min(hi, interval.end_ms == null ? hi : Number(interval.end_ms))
+                    if (!(start <= end) || yMin == null || yMax == null) continue
+                    const state = String(interval.state || '').toLowerCase()
+                    const color = state.includes('degrad') || state.includes('halt') || state.includes('error')
+                        ? 'rgba(229,65,80,0.10)' : 'rgba(88,166,255,0.07)'
+                    bands.push([start, yMin, yMax, end, color])
+                    provenance.push({ ...interval })
+                }
+                if (bands.length) {
+                    dc.add('onchart', {
+                        name: 'Strategy lifecycle', type: 'Zones', grid: { id: 0 }, data: bands,
+                        settings: {
+                            $strategyOverlay: true, $uuid: 'strategy-lifecycle', 'z-index': 2,
+                            $strategyProvenance: provenance, legend: false,
+                        },
+                    })
+                }
+            }
+        },
+
+        strategyToggleOverlay({ kind, enabled } = {}) {
+            const known = ['decision', 'fill', 'order', 'allocation', 'control', 'lifecycle']
+            if (!known.includes(kind)) return
+            this.strategy.overlayVisibility = {
+                ...(this.strategy.overlayVisibility || {}), [kind]: enabled !== false,
+            }
+            this.syncStrategyOverlays()
         },
 
         setPositionsAccount(acct) {
@@ -3573,6 +3661,10 @@ export default {
                 operations: {
                     events: [], lifecycleIntervals: [], projectionRevision: null,
                     nextCursor: null, resumeCursor: null, loading: false, error: null, live: false,
+                },
+                overlayVisibility: {
+                    decision: true, fill: true, order: true, allocation: true,
+                    control: true, lifecycle: true,
                 },
                 control: { available: false, pending: false, awaiting: false, error: null },
             }

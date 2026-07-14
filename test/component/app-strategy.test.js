@@ -47,6 +47,9 @@ function mkCtx() {
         events: [], lifecycleIntervals: [], projectionRevision: null,
         nextCursor: null, resumeCursor: null, loading: false, error: null, live: false,
       },
+      overlayVisibility: {
+        decision: true, fill: true, order: true, allocation: true, control: true, lifecycle: true,
+      },
     },
     _strategySub: null,
     _strategyOperationsSub: null,
@@ -82,6 +85,7 @@ function mkCtx() {
   for (const m of ['strategyOpen', '_strategyLoadRuntime', 'strategySelectRuntime', 'strategyRefresh',
     '_strategySubscribe', '_strategyStopSubscribe', '_strategyApplyUpdate', '_strategyUpsertRuntimes',
     '_strategyResetOperations', '_strategyApplyOperationsPage', 'strategyLoadMoreOperations',
+    '_strategyLoadChartOverlays', 'strategyToggleOverlay',
     '_removeStrategyOverlays', '_strategyCandlePriceAt', 'syncStrategyOverlays', '_strategyErr',
     '_strategyDefaultRuntimeId', '_strategyTickerIds', '_loadedCandleRange']) {
     ctx[m] = M[m]
@@ -101,9 +105,11 @@ describe('strategyOpen', () => {
     await ctx.strategyOpen()
     expect(ctx.strategy.runtimes.map((r) => r.runtime_id)).toEqual([DEFAULT_ID, OTHER_ID])
     expect(ctx.strategy.selectedRuntimeId).toBe(DEFAULT_ID)
-    // Per-ticker reads issued for BOTH tickers of the selected runtime.
-    expect(ctx.strategyFeed.getChartOverlays).toHaveBeenCalledWith(DEFAULT_ID, ADA_TID, { timeframe: '1m' })
-    expect(ctx.strategyFeed.getChartOverlays).toHaveBeenCalledWith(DEFAULT_ID, BTC_TID, { timeframe: '1m' })
+    // Overlay read is scoped to the ACTUAL chart ticker/timeframe/loaded window.
+    expect(ctx.strategyFeed.getChartOverlays).toHaveBeenCalledWith(DEFAULT_ID, ADA_TID, {
+      timeframe: '1m', start_ms: 1000, end_ms: 5000,
+    })
+    expect(ctx.strategyFeed.getChartOverlays).toHaveBeenCalledTimes(1)
     // Decisions from both tickers merged.
     expect(ctx.strategy.decisions).toHaveLength(2)
     expect(ctx.strategy.overlays[ADA_TID]).toHaveLength(5)
@@ -273,6 +279,9 @@ describe('syncStrategyOverlays (on-chart markers)', () => {
     // The control-audit row plots as its own distinct layer (source, not kind).
     expect(byName(ctx, 'Strategy control').data).toEqual([[5000, 12, 'ctrl']])
     expect(byName(ctx, 'Strategy control').settings.color).toBe('#f5c518')
+    expect(byName(ctx, 'Strategy control').settings.$strategyProvenance[0]).toMatchObject({
+      source: 'strategy_control_audit', label: 'ctrl',
+    })
   })
 
   test('re-sync replaces (no duplication)', () => {
@@ -302,6 +311,23 @@ describe('syncStrategyOverlays (on-chart markers)', () => {
     // order@3000 rides the sole candle; 4000/5000 are past the loaded window.
     const names = stratOv(ctx).map((o) => o.name)
     expect(names).toEqual(['Strategy order'])
+  })
+
+  test('renders published lifecycle intervals as background Zones and can hide each layer', () => {
+    ctx.strategy.operations.lifecycleIntervals = [{
+      state: 'degraded', start_ms: 1500, end_ms: 4500,
+      source: 'gateway', reason: 'auth reconciliation stale',
+    }]
+    ctx.syncStrategyOverlays()
+    const lifecycle = byName(ctx, 'Strategy lifecycle')
+    expect(lifecycle.type).toBe('Zones')
+    expect(lifecycle.data).toEqual([[1500, 8, 12, 4500, 'rgba(229,65,80,0.10)']])
+    expect(lifecycle.settings.$strategyProvenance[0].reason).toBe('auth reconciliation stale')
+    ctx.strategyToggleOverlay({ kind: 'fill', enabled: false })
+    expect(byName(ctx, 'Strategy fill')).toBeUndefined()
+    expect(byName(ctx, 'Strategy lifecycle')).toBeTruthy()
+    ctx.strategyToggleOverlay({ kind: 'lifecycle', enabled: false })
+    expect(byName(ctx, 'Strategy lifecycle')).toBeUndefined()
   })
 })
 
