@@ -55,6 +55,9 @@ export class CorkyStrategyFeed {
   /** Cursor-bound immutable operations page for a runtime. */
   listOperations(runtime_id, opts = {}) { return this.client.listStrategyOperations(runtime_id, opts) }
 
+  /** Server-computed money/valuation projection; decimal strings stay intact. */
+  getMoney(runtime_id) { return this.client.getStrategyMoney(runtime_id) }
+
   /** Chart overlays (decision/fill/order/allocation markers). Resolves `overlays`. */
   getChartOverlays(runtime_id, ticker_id, opts = {}) {
     return this.client.getStrategyChartOverlays(runtime_id, ticker_id, opts)

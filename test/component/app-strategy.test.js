@@ -50,6 +50,7 @@ function mkCtx() {
       overlayVisibility: {
         decision: true, fill: true, order: true, allocation: true, control: true, lifecycle: true,
       },
+      money: { data: null, loading: false, error: null },
     },
     _strategySub: null,
     _strategyOperationsSub: null,
@@ -68,6 +69,11 @@ function mkCtx() {
       listOperations: vi.fn(async (id, opts) => ({
         runtime_id: id, projection_revision: 'rev-1', events: [], lifecycle_intervals: [],
         next_cursor: null, resume_cursor: 'resume-1', opts,
+      })),
+      getMoney: vi.fn(async (id) => ({
+        runtime_id: id, generated_at_ms: 5000, projection_revision: 'money-rev',
+        authority_scope: 'wallet_local', totals: { observed_balance: '10000.0000000000000000001' },
+        wallets: [], ticker_allocations: [], funding: [],
       })),
       getChartOverlays: vi.fn(async (id, tid) => (tid === ADA_TID ? OV_ADA.slice() : [])),
       subscribeRuntime: vi.fn((opts, handlers) => {
@@ -115,6 +121,8 @@ describe('strategyOpen', () => {
     expect(ctx.strategy.overlays[ADA_TID]).toHaveLength(5)
     expect(ctx.strategyFeed.listOperations).toHaveBeenCalledWith(DEFAULT_ID, { limit: 100 })
     expect(ctx.strategy.operations.resumeCursor).toBe('resume-1')
+    expect(ctx.strategyFeed.getMoney).toHaveBeenCalledWith(DEFAULT_ID)
+    expect(ctx.strategy.money.data.totals.observed_balance).toBe('10000.0000000000000000001')
     // Live subscription started, scoped to the default live runtime.
     expect(ctx.strategyFeed.subscribeRuntime).toHaveBeenCalled()
     expect(ctx._subArgs).toMatchObject({ subscription_id: 'strategy-runtime', runtime_id: DEFAULT_ID })

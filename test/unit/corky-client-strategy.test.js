@@ -137,6 +137,26 @@ describe('strategy one-shot reads: command framing + terminal FIELD extraction',
       runtime_id: 'rt-main', next_cursor: 'opaque.page.3', resume_cursor: 'opaque.resume.2',
     })
   })
+
+  it('getStrategyMoney returns the authoritative projection with decimal strings intact', async () => {
+    const { client, sock } = makeClient()
+    const p = client.getStrategyMoney('rt-main')
+    expect(sock().sent[0].command).toEqual({ type: 'get_strategy_money', runtime_id: 'rt-main' })
+    sock().push({
+      schema_version: 1,
+      request_id: sock().sent[0].request_id,
+      event: {
+        type: 'strategy_money',
+        money: {
+          runtime_id: 'rt-main', projection_revision: 'money-rev', authority_scope: 'wallet_local',
+          generated_at_ms: 1, totals: { observed_balance: '10000.0000000000000000001' },
+          wallets: [], ticker_allocations: [], funding: [],
+        },
+      },
+    })
+    const money = await p
+    expect(money.totals.observed_balance).toBe('10000.0000000000000000001')
+  })
 })
 
 // ── input guards ──────────────────────────────────────────────────────────────
@@ -148,6 +168,7 @@ describe('strategy sender input guards (throw + send nothing)', () => {
     expect(() => client.getStrategyChartOverlays('rt')).toThrow(/runtime_id and ticker_id are required/)
     expect(() => client.listStrategyDecisions()).toThrow(/runtime_id is required/)
     expect(() => client.listStrategyOperations()).toThrow(/runtime_id is required/)
+    expect(() => client.getStrategyMoney()).toThrow(/runtime_id is required/)
     expect(sock().sent).toHaveLength(0)
   })
 

@@ -585,6 +585,7 @@ export default {
                     decision: true, fill: true, order: true, allocation: true,
                     control: true, lifecycle: true,
                 },
+                money: { data: null, loading: false, error: null },
                 // Direct-control session state (see the control handlers below).
                 // `available` gates the panel's control surface entirely; a control
                 // send flips pending → awaiting and never mutates the runtime set.
@@ -2798,6 +2799,8 @@ export default {
             if (!this.strategyFeed || !runtime_id) return
             const operationsState = this.strategy.operations
             if (operationsState) { operationsState.loading = true; operationsState.error = null }
+            const moneyState = this.strategy.money
+            if (moneyState) { moneyState.loading = true; moneyState.error = null }
             let runtime
             try {
                 runtime = await this.strategyFeed.getRuntime(runtime_id)
@@ -2806,6 +2809,10 @@ export default {
                 if (operationsState) {
                     operationsState.loading = false
                     operationsState.error = this._strategyErr(err)
+                }
+                if (moneyState) {
+                    moneyState.loading = false
+                    moneyState.error = this._strategyErr(err)
                 }
                 return
             }
@@ -2816,12 +2823,16 @@ export default {
                 ? this.strategyFeed.listOperations(runtime_id, { limit: 100 })
                     .catch((error) => ({ _loadError: error }))
                 : Promise.resolve(null)
-            const [results, operationsPage] = await Promise.all([
+            const moneyRequest = typeof this.strategyFeed.getMoney === 'function'
+                ? this.strategyFeed.getMoney(runtime_id).catch((error) => ({ _loadError: error }))
+                : Promise.resolve(null)
+            const [results, operationsPage, money] = await Promise.all([
                 Promise.all(tickerIds.map((tid) => Promise.all([
                     this.strategyFeed.getTicker(runtime_id, tid).catch(() => null),
                     this.strategyFeed.listDecisions(runtime_id, { ticker_id: tid, limit: 50 }).catch(() => []),
                 ]))),
                 operationRequest,
+                moneyRequest,
             ])
             if (this.strategy.selectedRuntimeId !== runtime_id) return   // superseded mid-fetch
             const decisions = []
@@ -2853,6 +2864,16 @@ export default {
                 this._strategyApplyOperationsPage(operationsPage, { replace: true })
             } else if (this.strategy.operations) {
                 this.strategy.operations.loading = false
+            }
+            if (money && money._loadError) {
+                if (this.strategy.money) {
+                    this.strategy.money.loading = false
+                    this.strategy.money.error = this._strategyErr(money._loadError)
+                }
+            } else if (this.strategy.money) {
+                this.strategy.money.data = money || null
+                this.strategy.money.loading = false
+                this.strategy.money.error = null
             }
             await this._strategyLoadChartOverlays(runtime_id)
         },
@@ -2914,6 +2935,7 @@ export default {
                 events: [], lifecycleIntervals: [], projectionRevision: null,
                 nextCursor: null, resumeCursor: null, loading: false, error: null, live: false,
             }
+            this.strategy.money = { data: null, loading: false, error: null }
         },
 
         // Merge immutable operation rows by event_id. The gateway owns cursor and
@@ -3666,6 +3688,7 @@ export default {
                     decision: true, fill: true, order: true, allocation: true,
                     control: true, lifecycle: true,
                 },
+                money: { data: null, loading: false, error: null },
                 control: { available: false, pending: false, awaiting: false, error: null },
             }
             this.searchTabs = []

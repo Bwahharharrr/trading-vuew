@@ -243,6 +243,39 @@
             </div>
         </section>
 
+        <section v-if="activeTab === 'configuration'" class="sr-sec">
+            <div class="sr-sec-head">Canonical parameters
+                <span class="sr-dim">descriptor schema {{ dash(selectedRuntime.strategy_descriptor_schema_version) }}</span>
+            </div>
+            <pre v-if="canonicalParamsDisplay" class="sr-json">{{ canonicalParamsDisplay }}</pre>
+            <div v-else class="sr-msg sr-msg-sm">No canonical parameter JSON published.</div>
+            <div v-if="candidateMetricRows.length" class="sr-money-totals sr-candidate-metrics">
+                <div v-for="row in candidateMetricRows" :key="row.key" class="sr-money-total">
+                    <span class="sr-k">{{ row.key }}</span><span class="mono">{{ row.value }}</span>
+                </div>
+            </div>
+            <div v-if="selectedRuntime.lineage_note" class="sr-prov"><span class="sr-k">lineage note</span> {{ selectedRuntime.lineage_note }}</div>
+            <div v-if="selectedRuntime.candidate_artifact_path" class="sr-prov" :title="selectedRuntime.candidate_artifact_path"><span class="sr-k">candidate artifact</span> {{ selectedRuntime.candidate_artifact_path }}</div>
+        </section>
+
+        <section v-if="activeTab === 'configuration'" class="sr-sec">
+            <div class="sr-sec-head">Runtime dependencies and control readiness</div>
+            <div class="sr-grid">
+                <div class="sr-field"><span class="sr-k">public snapshots matched</span><span class="sr-v">{{ dash0(selectedRuntime.matching_public_snapshots_seen) }} / {{ dash0(selectedRuntime.public_snapshots_seen) }}</span></div>
+                <div class="sr-field"><span class="sr-k">last public snapshot</span><span class="sr-v time">{{ fmtTime(selectedRuntime.last_public_snapshot_ms) }}</span></div>
+                <div class="sr-field"><span class="sr-k">features ready</span><span class="sr-v">{{ dash0(selectedRuntime.features_ready) }} / {{ dash0(selectedRuntime.feature_requirements) }}</span></div>
+                <div class="sr-field"><span class="sr-k">pending controls</span><span class="sr-v">{{ dash0(selectedRuntime.pending_control_requests) }}</span></div>
+                <div class="sr-field"><span class="sr-k">Auth order control</span><span class="sr-v">{{ selectedRuntime.auth_order_control_configured ? dash(selectedRuntime.auth_order_control_status) : 'N/A — not configured' }}</span></div>
+                <div class="sr-field"><span class="sr-k">Auth target</span><span class="sr-v">{{ dash(selectedRuntime.auth_order_control_target_runtime_id) }}</span></div>
+                <div class="sr-field"><span class="sr-k">registry</span><span class="sr-v">{{ dash(selectedRuntime.auth_order_control_registry_status) }}</span></div>
+                <div class="sr-field"><span class="sr-k">session</span><span class="sr-v mono">{{ dash(selectedRuntime.auth_order_control_session_fingerprint) }}</span></div>
+            </div>
+            <ul v-if="(selectedRuntime.pending_feature_reasons || []).length" class="sr-reasons">
+                <li v-for="(reason, index) in selectedRuntime.pending_feature_reasons" :key="index">{{ reason }}</li>
+            </ul>
+            <div v-if="selectedRuntime.auth_order_control_reason" class="sr-lasterr">{{ selectedRuntime.auth_order_control_reason }}</div>
+        </section>
+
         <!-- APPROVAL — expiry + max notional + STALE flag (expired ⇒ not mutation-ready). -->
         <section v-if="activeTab === 'administration' && approval.present" class="sr-sec">
             <div class="sr-sec-head">Approval</div>
@@ -303,6 +336,62 @@
             </div>
         </section>
 
+        <section v-if="activeTab === 'orders'" class="sr-sec">
+            <div class="sr-sec-head">Ticker order state <span class="sr-dim">{{ tickerOrderRows.length }}</span></div>
+            <div v-if="!tickerOrderRows.length" class="sr-msg sr-msg-sm">No per-ticker order state published.</div>
+            <div v-for="row in tickerOrderRows" :key="row.ticker_id" class="sr-order-card">
+                <div class="sr-order-card-head">
+                    <span class="sym">{{ row.symbol || symbolOf(row.ticker_id) }}</span>
+                    <span>total {{ dash0(row.orders_total) }}</span>
+                    <span>active/pending {{ dash0(row.orders_active_or_pending) }}</span>
+                    <span v-if="row.orders_submitted_nonterminal" class="sr-blocker">⚠ {{ row.orders_submitted_nonterminal }} submitted</span>
+                    <span class="time">last {{ dash(row.last_event) }} · {{ fmtTime(row.last_event_ts_ms) }}</span>
+                </div>
+                <div class="sr-order-counts">
+                    <span v-for="(value, key) in row.order_status_counts || {}" :key="key" class="sr-chip">{{ key }} {{ value }}</span>
+                </div>
+                <div v-for="blocker in row.submitted_order_blockers || []" :key="blocker.order_key" class="sr-order-forensic">
+                    <span class="mono">{{ blocker.order_key }}</span>
+                    <span>{{ blocker.side }} {{ blocker.kind }}</span>
+                    <span class="mono">qty {{ fmt(blocker.quantity) }} · remaining {{ fmt(blocker.remaining_quantity) }}</span>
+                    <span>auth {{ dash(blocker.auth_order_boundary) }}</span>
+                    <span>exchange {{ dash(blocker.exchange_boundary) }}</span>
+                    <span class="time">age {{ fmtDur(blocker.age_ms) }}</span>
+                    <span class="sr-decision-reason">{{ blocker.reason }}</span>
+                    <span>{{ blocker.suggested_action }}</span>
+                </div>
+            </div>
+            <div v-if="submittedOrderBlockers.length" class="sr-order-card">
+                <div class="sr-order-card-head"><span class="sr-blocker">Runtime submitted-order blockers</span></div>
+                <div v-for="blocker in submittedOrderBlockers" :key="blocker.order_key" class="sr-order-forensic">
+                    <span class="mono">{{ blocker.order_key }}</span><span class="sym">{{ blocker.symbol || symbolOf(blocker.ticker_id) }}</span>
+                    <span>{{ blocker.side }} {{ blocker.kind }} · {{ blocker.status }}</span>
+                    <span class="mono">qty {{ fmt(blocker.quantity) }} · remaining {{ fmt(blocker.remaining_quantity) }}</span>
+                    <span>auth {{ dash(blocker.auth_order_boundary) }}</span><span>exchange {{ dash(blocker.exchange_boundary) }}</span>
+                    <span class="sr-decision-reason">{{ blocker.reason }}</span><span>{{ blocker.suggested_action }}</span>
+                </div>
+            </div>
+        </section>
+
+        <section v-if="activeTab === 'orders' && staleOrderForensics" class="sr-sec sr-stale-forensics">
+            <div class="sr-sec-head">Stale-order forensics
+                <span class="st-badge sts-attention">{{ staleOrderForensics.status }}</span>
+                <span class="sr-dim">report is not approval</span>
+            </div>
+            <div class="sr-grid">
+                <div class="sr-field"><span class="sr-k">as of</span><span class="sr-v time">{{ fmtTime(staleOrderForensics.as_of_ms) }}</span></div>
+                <div class="sr-field"><span class="sr-k">stale / repairable / blocked</span><span class="sr-v">{{ dash0(staleOrderForensics.stale_nonterminal_order_count) }} / {{ dash0(staleOrderForensics.repairable_order_count) }} / {{ dash0(staleOrderForensics.blocked_order_count) }}</span></div>
+                <div class="sr-field"><span class="sr-k">live mutation allowed</span><span class="sr-v neg">{{ boolText(staleOrderForensics.live_mutation_allowed_by_this_report) }}</span></div>
+                <div class="sr-field"><span class="sr-k">required statement</span><span class="sr-v mono">{{ dash(staleOrderForensics.required_statement_for_repair) }}</span></div>
+            </div>
+            <div class="sr-lasterr">{{ staleOrderForensics.reason }}</div>
+            <div v-if="(staleOrderForensics.forbidden_mutations || []).length" class="sr-prov">
+                <span class="sr-k">forbidden mutations</span> {{ staleOrderForensics.forbidden_mutations.join(', ') }}
+            </div>
+            <div class="sr-prov" :title="staleOrderForensics.report_path"><span class="sr-k">report</span> {{ dash(staleOrderForensics.report_path) }}</div>
+            <div class="sr-prov" :title="staleOrderForensics.repair_report_path"><span class="sr-k">repair report</span> {{ dash(staleOrderForensics.repair_report_path) }}</div>
+        </section>
+
         <!-- AUDIT PROVENANCE — display-only pointers; chart clients must NOT fetch these. -->
         <section v-if="activeTab === 'configuration' && auditPointers.length" class="sr-sec">
             <div class="sr-sec-head">Audit provenance <span class="sr-dim">display only — not fetched</span></div>
@@ -331,6 +420,58 @@
 
     <!-- ─── CAPITAL ─── auth wallets by class + wallet allocation tree. -->
     <div v-else-if="activeTab === 'capital'" class="sr-body">
+        <section class="sr-sec">
+            <div class="sr-sec-head">Strategy money <span class="sr-dim">server-computed projection</span></div>
+            <div v-if="runtimeSemantics.observer" class="sr-msg sr-msg-sm">N/A by design — origin observers have no financial allocation authority.</div>
+            <div v-else-if="money.loading" class="sr-msg sr-msg-sm">Loading strategy money…</div>
+            <div v-else-if="money.error" class="sr-ctl-msg error">{{ money.error }}</div>
+            <template v-else-if="moneyData">
+                <div class="sr-grid">
+                    <div class="sr-field"><span class="sr-k">authority</span><span class="sr-v">{{ dash(moneyData.authority_scope) }}</span></div>
+                    <div class="sr-field"><span class="sr-k">account</span><span class="sr-v">{{ dash(moneyData.account_id) }}</span></div>
+                    <div class="sr-field"><span class="sr-k">quote</span><span class="sr-v">{{ dash(moneyData.quote_currency) }}</span></div>
+                    <div class="sr-field"><span class="sr-k">as of</span><span class="sr-v time">{{ fmtTime(moneyData.generated_at_ms) }}</span></div>
+                    <div class="sr-field"><span class="sr-k">projection revision</span><span class="sr-v mono" :title="moneyData.projection_revision">{{ shortFp(moneyData.projection_revision) }}</span></div>
+                </div>
+                <div class="sr-money-totals">
+                    <div v-for="row in moneyTotalRows" :key="row.key" class="sr-money-total">
+                        <span class="sr-k">{{ row.label }}</span><span class="mono">{{ fmt(row.value) }}</span>
+                    </div>
+                </div>
+                <div v-if="moneyData.valuation" class="sr-valuation">
+                    <div class="sr-sec-head">Valuation
+                        <span class="st-badge">{{ dash(moneyData.valuation.status) }}</span>
+                        <span class="sr-dim">{{ fmtTime(moneyData.valuation.as_of_ms) }} · {{ dash(moneyData.valuation.source) }}</span>
+                    </div>
+                    <div class="sr-grid">
+                        <div class="sr-field"><span class="sr-k">total equity</span><span class="sr-v mono">{{ fmt(moneyData.valuation.total_equity) }}</span></div>
+                        <div class="sr-field"><span class="sr-k">unrealized P/L</span><span class="sr-v mono" :class="signClass(moneyData.valuation.total_unrealized_pnl)">{{ fmt(moneyData.valuation.total_unrealized_pnl) }}</span></div>
+                        <div v-if="moneyData.valuation.reason" class="sr-field"><span class="sr-k">reason</span><span class="sr-v">{{ moneyData.valuation.reason }}</span></div>
+                    </div>
+                    <table v-if="(moneyData.valuation.tickers || []).length" class="sr-table">
+                        <thead><tr><th>Symbol</th><th class="num">Position</th><th class="num">Entry</th><th class="num">Mark</th><th>Mark source / age</th><th class="num">Unrealized P/L</th><th>Status / reason</th></tr></thead>
+                        <tbody><tr v-for="ticker in moneyData.valuation.tickers" :key="ticker.ticker_id">
+                            <td class="sym">{{ ticker.symbol || symbolOf(ticker.ticker_id) }}</td>
+                            <td class="num mono">{{ fmt(ticker.position_quantity) }}</td>
+                            <td class="num mono">{{ fmt(ticker.average_entry_price) }}</td>
+                            <td class="num mono">{{ fmt(ticker.mark_price) }}</td>
+                            <td>{{ dash(ticker.mark_source) }}<span v-if="ticker.mark_age_ms != null" class="time"> · {{ fmtDur(ticker.mark_age_ms) }}</span></td>
+                            <td class="num mono" :class="signClass(ticker.unrealized_pnl)">{{ fmt(ticker.unrealized_pnl) }}</td>
+                            <td>{{ ticker.status }}<span v-if="ticker.reason" class="sr-decision-reason"> · {{ ticker.reason }}</span></td>
+                        </tr></tbody>
+                    </table>
+                </div>
+                <table v-if="(moneyData.funding || []).length" class="sr-table sr-funding">
+                    <thead><tr><th>Time</th><th>Direction</th><th class="num">Amount</th><th>Currency</th><th>Class</th><th>Reason</th></tr></thead>
+                    <tbody><tr v-for="event in moneyData.funding" :key="event.event_id">
+                        <td class="time">{{ fmtTime(event.ts_ms) }}</td><td>{{ event.direction }}</td>
+                        <td class="num mono">{{ fmt(event.amount) }}</td><td>{{ event.currency }}</td>
+                        <td>{{ event.classification }}</td><td>{{ event.reason }}</td>
+                    </tr></tbody>
+                </table>
+            </template>
+            <div v-else class="sr-msg sr-msg-sm">No strategy money projection published.</div>
+        </section>
         <section class="sr-sec">
             <div class="sr-sec-head">Allocation pool
                 <span class="sr-v" :class="'tone-' + runtimeSemantics.allocation.tone">{{ runtimeSemantics.allocation.label }}</span>
@@ -594,6 +735,7 @@ export default {
         decisions: { type: Array, default: () => [] },
         operations: { type: Object, default: () => ({}) },
         overlayVisibility: { type: Object, default: () => ({}) },
+        money: { type: Object, default: () => ({}) },
         loading: { type: Boolean, default: false },
         error: { type: String, default: null },
         streaming: { type: Boolean, default: false },
@@ -775,6 +917,15 @@ export default {
             const r = this.selectedRuntime && this.selectedRuntime.lineage_reasons
             return Array.isArray(r) ? r : []
         },
+        canonicalParamsDisplay() {
+            const value = this.selectedRuntime && this.selectedRuntime.strategy_params_canonical_json
+            return typeof value === 'string' && value ? value : ''
+        },
+        candidateMetricRows() {
+            const metrics = this.selectedRuntime && this.selectedRuntime.candidate_metrics
+            if (!metrics || typeof metrics !== 'object') return []
+            return Object.entries(metrics).map(([key, value]) => ({ key, value }))
+        },
         pendingAuthReasons() {
             const r = this.selectedRuntime && this.selectedRuntime.pending_auth_reasons
             return Array.isArray(r) ? r : []
@@ -798,6 +949,28 @@ export default {
         orderSplit() { return splitOrderStatusCounts(this.selectedRuntime && this.selectedRuntime.order_status_counts) },
         dispatchedKeys() { return DISPATCHED_STATUS_KEYS },
         runtimeBlocker() { return orderBlocker(this.selectedRuntime) },
+        tickerOrderRows() {
+            const rows = this.selectedRuntime && this.selectedRuntime.ticker_orders
+            return Array.isArray(rows) ? rows : []
+        },
+        staleOrderForensics() {
+            return this.selectedRuntime && this.selectedRuntime.stale_order_forensics || null
+        },
+        submittedOrderBlockers() {
+            const rows = this.selectedRuntime && this.selectedRuntime.submitted_order_blockers
+            return Array.isArray(rows) ? rows : []
+        },
+        moneyData() { return this.money && this.money.data || null },
+        moneyTotalRows() {
+            const totals = this.moneyData && this.moneyData.totals || {}
+            return [
+                ['observed_balance', 'observed balance'], ['observed_available', 'observed available'],
+                ['allocated', 'allocated'], ['unallocated', 'unallocated'],
+                ['gross_exposure', 'gross exposure'], ['realized_pnl', 'realized P/L'],
+                ['unrealized_pnl', 'unrealized P/L'], ['fees', 'fees'],
+                ['external_deposits', 'external deposits'], ['external_withdrawals', 'external withdrawals'],
+            ].map(([key, label]) => ({ key, label, value: totals[key] }))
+        },
 
         // Auth wallets grouped by class (exchange/margin/funding/derivative/other),
         // passed through VERBATIM (balances stay decimal strings).
@@ -814,7 +987,13 @@ export default {
             const rt = this.selectedRuntime
             if (!rt) return { legacy: false, wallets: [] }
             const now = this.nowMs
-            const tree = buildWalletAllocationTree(rt)
+            const money = !this.runtimeSemantics.observer && this.moneyData
+            const source = money ? {
+                ...rt,
+                wallet_allocations: money.wallets,
+                ticker_allocations: money.ticker_allocations,
+            } : rt
+            const tree = buildWalletAllocationTree(source)
             const ordersById = this._tickerOrdersMap(rt)
             return {
                 legacy: tree.legacy,
@@ -1251,6 +1430,22 @@ export default {
 .sr-load-more { margin-top: 10px; padding: 5px 10px; color: #d1d4dc; background: #131722;
                 border: 1px solid #2a2e39; border-radius: 4px; cursor: pointer; }
 .sr-load-more:hover { border-color: #35a776; }
+.sr-json { margin: 7px 0; padding: 8px; color: #b0b6c0; background: #0b0f18; border: 1px solid #1c212e;
+           white-space: pre-wrap; overflow-wrap: anywhere; }
+.sr-money-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 6px;
+                   margin-top: 9px; }
+.sr-money-total { display: flex; flex-direction: column; gap: 3px; padding: 7px 8px;
+                  background: #0e1320; border: 1px solid #1c212e; border-radius: 3px; }
+.sr-money-total .mono { color: #d1d4dc; font-size: 13px; }
+.sr-valuation { margin-top: 12px; }
+.sr-funding { margin-top: 10px; }
+.sr-order-card { margin-top: 7px; padding: 8px; background: #0e1320; border: 1px solid #2a2e39; border-radius: 4px; }
+.sr-order-card-head, .sr-order-counts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sr-order-counts { margin-top: 6px; }
+.sr-order-forensic { display: grid; grid-template-columns: minmax(180px, 1fr) repeat(5, auto);
+                     gap: 7px; margin-top: 7px; padding-top: 7px; border-top: 1px solid #2a2e39; font-size: 11px; }
+.sr-order-forensic .sr-decision-reason { grid-column: 1 / -1; }
+.sr-stale-forensics { border-left: 2px solid #e54150; padding-left: 9px; }
 /* Verified-lineage → clickable link into the Backtests dock. */
 .sr-lin-open { background: rgba(88,166,255,0.12); color: #58a6ff; border: 1px solid rgba(88,166,255,0.4);
                border-radius: 4px; padding: 2px 8px; font-size: 10px; cursor: pointer; white-space: nowrap; }
@@ -1270,6 +1465,7 @@ export default {
     .sr-recent-decision .sr-decision-reason { grid-column: 1 / -1; }
     .sr-activity-row { grid-template-columns: 100px minmax(80px, auto) minmax(120px, 1fr); }
     .sr-activity-row .sr-decision-reason, .sr-payload { grid-column: 1 / -1; }
+    .sr-order-forensic { grid-template-columns: 1fr 1fr; }
 }
 
 /* Readiness badge (delivery axis) */

@@ -98,6 +98,7 @@
                         :decisions="strategy.decisions || []"
                         :operations="strategy.operations || {}"
                         :overlay-visibility="strategy.overlayVisibility || {}"
+                        :money="strategy.money || {}"
                         :streaming="!!strategy.streaming"
                         :maximized="maximized"
                         :loading="!!strategy.loading"

@@ -93,6 +93,7 @@ const TERMINAL_EVENT = {
     get_strategy_ticker:         'strategy_ticker',
     list_strategy_decisions:     'strategy_decisions',
     list_strategy_operations:    'strategy_operations',
+    get_strategy_money:          'strategy_money',
     get_strategy_chart_overlays: 'strategy_chart_overlays',
     // strategy DIRECT-CONTROL mutations. Each resolves on the gateway control_ack;
     // the runtime performs the real safety/cancel/ledger/auth reconciliation.
@@ -596,6 +597,12 @@ export class CorkyClient {
         return this._request(command)
     }
 
+    /** Authoritative server-computed strategy money projection. */
+    getStrategyMoney(runtime_id) {
+        if (!runtime_id) throw new Error('getStrategyMoney: runtime_id is required')
+        return this._request({ type: 'get_strategy_money', runtime_id })
+    }
+
     /** Strategy chart overlays (decision/fill/order/allocation markers) →
      *  resolves the `overlays` array. Optional { timeframe, start_ms, end_ms }
      *  window the result. */
@@ -903,6 +910,7 @@ export class CorkyClient {
         if (type === 'strategy_ticker') return event.ticker
         if (type === 'strategy_decisions') return event.decisions
         if (type === 'strategy_operations') return event.page
+        if (type === 'strategy_money') return event.money
         if (type === 'strategy_chart_overlays') return event.overlays
         // backtest_run keeps {run_id, artifact}; progress/overlays keep the full
         // event (callers read .events / .overlays / .trades / series_descriptors).
