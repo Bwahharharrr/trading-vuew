@@ -430,8 +430,51 @@
         </section>
     </div>
 
-    <!-- ─── ACTIVITY ─── decision evidence; operations join this task in SUX-3. -->
+    <!-- ─── ACTIVITY ─── decision evidence + immutable operation history. -->
     <div v-else-if="activeTab === 'activity'" class="sr-body">
+        <section class="sr-sec">
+            <div class="sr-sec-head">Activity timeline
+                <span class="sr-dim">{{ activityRows.length }}</span>
+                <span v-if="operations.live" class="sr-live">● live</span>
+                <span v-if="operations.projectionRevision" class="sr-dim mono" :title="operations.projectionRevision">rev {{ shortFp(operations.projectionRevision) }}</span>
+            </div>
+            <div class="sr-activity-filters" aria-label="Activity filters">
+                <label>source
+                    <select v-model="activitySource"><option value="">all</option><option v-for="value in activitySources" :key="value">{{ value }}</option></select>
+                </label>
+                <label>kind
+                    <select v-model="activityKind"><option value="">all</option><option v-for="value in activityKinds" :key="value">{{ value }}</option></select>
+                </label>
+                <label>ticker
+                    <select v-model="activityTicker"><option value="">all</option><option v-for="value in activityTickers" :key="value">{{ value }}</option></select>
+                </label>
+            </div>
+            <div v-if="lifecycleIntervals.length" class="sr-lifecycle-list" aria-label="Runtime lifecycle intervals">
+                <div v-for="interval in lifecycleIntervals" :key="lifecycleKey(interval)" class="sr-lifecycle">
+                    <span class="st-badge" :class="lifecycleClass(interval.state)">{{ interval.state }}</span>
+                    <span class="time">{{ fmtTime(interval.start_ms) }} → {{ interval.end_ms ? fmtTime(interval.end_ms) : 'now' }}</span>
+                    <span>{{ interval.source }}</span>
+                    <span v-if="interval.ticker_id" class="sym">{{ symbolOf(interval.ticker_id) }}</span>
+                    <span v-if="interval.reason" class="sr-decision-reason">{{ interval.reason }}</span>
+                </div>
+            </div>
+            <div v-if="!activityRows.length" class="sr-msg sr-msg-sm">No activity matches these filters.</div>
+            <div v-for="row in activityRows" :key="row.id" class="sr-activity-row" :class="'activity-' + row.type">
+                <span class="time">{{ fmtTime(row.ts_ms) }}</span>
+                <span class="sr-activity-source">{{ row.source }}</span>
+                <span class="sr-activity-kind">{{ row.kind }}</span>
+                <span class="sym">{{ row.ticker_id ? symbolOf(row.ticker_id) : '—' }}</span>
+                <span class="sr-decision-reason" :title="row.reason">{{ row.reason }}</span>
+                <span v-if="row.count > 1" class="sr-chip">×{{ row.count }}</span>
+                <span v-if="row.order_id" class="mono" :title="row.order_id">order {{ shortFp(row.order_id) }}</span>
+                <details v-if="row.type === 'operation'" class="sr-payload">
+                    <summary>payload</summary><pre>{{ prettyPayload(row.payload) }}</pre>
+                </details>
+            </div>
+            <div v-if="operations.error" class="sr-ctl-msg error">{{ operations.error }}</div>
+            <button v-if="operations.nextCursor" class="sr-load-more" :disabled="operations.loading"
+                    @click="$emit('load-more-operations')">{{ operations.loading ? 'Loading…' : 'Load older operations' }}</button>
+        </section>
         <section class="sr-sec">
             <div class="sr-sec-head">Decision audit<span class="sr-dim">{{ decisions.length }}</span></div>
             <div v-if="!auditTickers.length" class="sr-msg sr-msg-sm">No decisions loaded for this runtime.</div>
@@ -542,6 +585,7 @@ export default {
         runtimes: { type: Array, default: () => [] },
         selectedRuntimeId: { type: String, default: '' },
         decisions: { type: Array, default: () => [] },
+        operations: { type: Object, default: () => ({}) },
         loading: { type: Boolean, default: false },
         error: { type: String, default: null },
         streaming: { type: Boolean, default: false },
@@ -557,7 +601,7 @@ export default {
         control: { type: Object, default: () => ({ available: false, pending: false, awaiting: false, error: null }) },
     },
     emits: [
-        'select-runtime', 'refresh',
+        'select-runtime', 'refresh', 'load-more-operations',
         // Direct-control intents (App echoes them to the feed's control methods).
         'cancel-ticker-orders', 'pause-ticker', 'resume-ticker', 'unlock-ticker', 'adopt-position',
         // Jump to the runtime's verified universe backtest run + candidate.
@@ -571,6 +615,9 @@ export default {
             selectedTicker: '',
             // Decision-audit: which ticker's decisions are shown (local UI state).
             selectedAuditTicker: '',
+            activitySource: '',
+            activityKind: '',
+            activityTicker: '',
             // Control inputs (local UI state). `reason` is the MANDATORY visible
             // operator reason; unlock/adopt add their allocation/position inputs.
             reason: '',
@@ -814,6 +861,66 @@ export default {
                 .slice()
                 .sort((a, b) => (Number(b.decision_ts_ms) || 0) - (Number(a.decision_ts_ms) || 0))
         },
+        activityBaseRows() {
+            const rows = []
+            for (const event of (this.operations.events || [])) {
+                if (!event) continue
+                rows.push({
+                    id: `operation:${event.event_id}`,
+                    type: 'operation',
+                    ts_ms: event.ts_ms,
+                    source: event.source || 'unknown',
+                    kind: event.kind || 'unknown',
+                    ticker_id: event.ticker_id || '',
+                    order_id: event.order_id || '',
+                    reason: this.operationReason(event),
+                    payload: event.payload,
+                    count: 1,
+                })
+            }
+            for (const [index, decision] of this.decisions.entries()) {
+                if (!decision) continue
+                rows.push({
+                    id: `decision:${decision.decision_id || index}`,
+                    type: 'decision',
+                    ts_ms: decision.decision_ts_ms,
+                    source: 'decision',
+                    kind: decision.outcome || 'unknown',
+                    ticker_id: decision.ticker_id || '',
+                    order_id: '',
+                    reason: this.decisionReason(decision),
+                    payload: decision,
+                    count: 1,
+                })
+            }
+            return rows.sort((a, b) => (Number(b.ts_ms) || 0) - (Number(a.ts_ms) || 0))
+        },
+        activitySources() { return Array.from(new Set(this.activityBaseRows.map(({ source }) => source))).sort() },
+        activityKinds() { return Array.from(new Set(this.activityBaseRows.map(({ kind }) => kind))).sort() },
+        activityTickers() {
+            return Array.from(new Set(this.activityBaseRows.map(({ ticker_id }) => ticker_id).filter(Boolean))).sort()
+        },
+        activityRows() {
+            const filtered = this.activityBaseRows.filter((row) =>
+                (!this.activitySource || row.source === this.activitySource) &&
+                (!this.activityKind || row.kind === this.activityKind) &&
+                (!this.activityTicker || row.ticker_id === this.activityTicker))
+            const grouped = []
+            for (const row of filtered) {
+                const previous = grouped[grouped.length - 1]
+                const sameDecision = previous && row.type === 'decision' && previous.type === 'decision' &&
+                    previous.kind === row.kind && previous.ticker_id === row.ticker_id &&
+                    previous.reason === row.reason
+                if (sameDecision) previous.count += 1
+                else grouped.push({ ...row })
+            }
+            return grouped
+        },
+        lifecycleIntervals() {
+            return (this.operations.lifecycleIntervals || []).filter((interval) =>
+                (!this.activitySource || interval.source === this.activitySource) &&
+                (!this.activityTicker || interval.ticker_id === this.activityTicker))
+        },
     },
     methods: {
         setActiveTab(id) {
@@ -945,6 +1052,23 @@ export default {
                 ? d.risk_checks.find((row) => row && row.detail && ['failed', 'rejected', 'blocked', 'denied'].includes(String(row.status || '').toLowerCase()))
                 : null
             return (check && check.detail) || '—'
+        },
+        operationReason(event) {
+            const payload = event && event.payload
+            if (!payload || typeof payload !== 'object') return '—'
+            const data = payload.data || (payload.event && payload.event.data) || {}
+            return payload.reason || payload.detail || data.reason || data.detail || '—'
+        },
+        prettyPayload(payload) {
+            try { return JSON.stringify(payload, null, 2) } catch (_error) { return String(payload) }
+        },
+        lifecycleKey(interval) {
+            return [interval.source, interval.ticker_id || '', interval.state, interval.start_ms].join(':')
+        },
+        lifecycleClass(state) {
+            const value = String(state || '').toLowerCase()
+            return value.includes('degrad') || value.includes('halt') || value.includes('error')
+                ? 'sts-attention' : 'sts-muted-grey'
         },
         outcomeClass(outcome) {
             const s = String(outcome || '').toLowerCase()
@@ -1096,6 +1220,24 @@ export default {
                   border-radius: 4px; cursor: pointer; }
 .sr-ticker-card:hover, .sr-ticker-card.active { border-color: #35a776; }
 .sr-ticker-card-reason { color: #808a9d; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-activity-filters { display: flex; flex-wrap: wrap; gap: 10px; padding: 8px 0; }
+.sr-activity-filters label { display: flex; align-items: center; gap: 5px; color: #808a9d; font-size: 11px; }
+.sr-activity-filters select { min-width: 120px; color: #d1d4dc; background: #131722; border: 1px solid #2a2e39;
+                              border-radius: 3px; padding: 3px 6px; }
+.sr-lifecycle-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; padding: 7px;
+                     border-left: 2px solid #58a6ff; background: rgba(88,166,255,0.05); }
+.sr-lifecycle { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 11px; }
+.sr-activity-row { display: grid; grid-template-columns: 120px 80px minmax(140px, 220px) minmax(120px, 180px) minmax(180px, 1fr) auto auto;
+                   gap: 8px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid #1c212e; }
+.sr-activity-source { color: #58a6ff; }
+.sr-activity-kind { color: #b0b6c0; font-weight: 600; overflow-wrap: anywhere; }
+.sr-payload { grid-column: 1 / -1; color: #808a9d; }
+.sr-payload summary { cursor: pointer; }
+.sr-payload pre { max-height: 240px; overflow: auto; padding: 8px; color: #b0b6c0; background: #0b0f18;
+                  border: 1px solid #1c212e; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sr-load-more { margin-top: 10px; padding: 5px 10px; color: #d1d4dc; background: #131722;
+                border: 1px solid #2a2e39; border-radius: 4px; cursor: pointer; }
+.sr-load-more:hover { border-color: #35a776; }
 /* Verified-lineage → clickable link into the Backtests dock. */
 .sr-lin-open { background: rgba(88,166,255,0.12); color: #58a6ff; border: 1px solid rgba(88,166,255,0.4);
                border-radius: 4px; padding: 2px 8px; font-size: 10px; cursor: pointer; white-space: nowrap; }
@@ -1113,6 +1255,8 @@ export default {
     .sr-ticker-card-reason { grid-column: 1 / -1; }
     .sr-recent-decision { grid-template-columns: 100px minmax(100px, 1fr) auto; }
     .sr-recent-decision .sr-decision-reason { grid-column: 1 / -1; }
+    .sr-activity-row { grid-template-columns: 100px minmax(80px, auto) minmax(120px, 1fr); }
+    .sr-activity-row .sr-decision-reason, .sr-payload { grid-column: 1 / -1; }
 }
 
 /* Readiness badge (delivery axis) */

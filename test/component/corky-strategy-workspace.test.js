@@ -72,4 +72,40 @@ describe('responsive strategy task workspace', () => {
         expect(wrapper.find('.sr').classes()).toContain('maximized')
         expect(wrapper.find('.sr-body').text()).toContain(runtimes[0].tickers[0].ticker_id)
     })
+
+    test('Activity combines immutable operations, grouped decisions, lifecycle, filters, and pagination', async () => {
+        const tickerId = runtimes[0].tickers[0].ticker_id
+        const decisions = [1, 2].map((value) => ({
+            decision_id: `d${value}`, decision_ts_ms: 100 - value, ticker_id: tickerId,
+            outcome: 'no_intents', reason: 'no entry signal', intents: [], risk_checks: [],
+            ledger_deltas: [], claim_states: [],
+        }))
+        const operations = {
+            live: true,
+            projectionRevision: 'projection-revision-full',
+            nextCursor: 'opaque-next',
+            resumeCursor: 'opaque-resume',
+            loading: false,
+            error: null,
+            events: [{
+                event_id: 'op-1', ts_ms: 110, source: 'order', kind: 'order_partially_filled',
+                ticker_id: tickerId, order_id: 'order-1', payload: { detail: 'partial fill recorded' },
+            }],
+            lifecycleIntervals: [{
+                state: 'degraded', start_ms: 90, source: 'gateway', reason: 'auth reconciliation stale',
+            }],
+        }
+        const wrapper = mountPanel({ decisions, operations })
+        await task(wrapper, 'Activity')
+        expect(wrapper.find('.sr-lifecycle').text()).toContain('auth reconciliation stale')
+        expect(wrapper.findAll('.sr-activity-row')).toHaveLength(2)
+        expect(wrapper.find('.activity-decision .sr-chip').text()).toBe('×2')
+        expect(wrapper.find('.activity-operation').text()).toContain('partial fill recorded')
+        expect(wrapper.find('.sr-payload pre').text()).toContain('partial fill recorded')
+        const source = wrapper.find('.sr-activity-filters select')
+        await source.setValue('order')
+        expect(wrapper.findAll('.sr-activity-row')).toHaveLength(1)
+        await wrapper.find('.sr-load-more').trigger('click')
+        expect(wrapper.emitted('load-more-operations')).toBeTruthy()
+    })
 })

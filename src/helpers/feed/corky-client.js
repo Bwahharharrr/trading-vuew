@@ -92,6 +92,7 @@ const TERMINAL_EVENT = {
     get_strategy_runtime:        'strategy_runtime',
     get_strategy_ticker:         'strategy_ticker',
     list_strategy_decisions:     'strategy_decisions',
+    list_strategy_operations:    'strategy_operations',
     get_strategy_chart_overlays: 'strategy_chart_overlays',
     // strategy DIRECT-CONTROL mutations. Each resolves on the gateway control_ack;
     // the runtime performs the real safety/cancel/ledger/auth reconciliation.
@@ -120,6 +121,8 @@ const STREAM_EVENT_TYPES = new Set([
     // subscription_id + increasing sequence; no separate accept event, so the
     // FIRST update resolves the originating subscribe (same model as above).
     'strategy_runtime_update',
+    // Immutable operations stream: cursor-resumable pages plus lifecycle bands.
+    'strategy_operations_update',
 ])
 
 export class CorkyError extends Error {
@@ -583,6 +586,16 @@ export class CorkyClient {
         return this._request(command)
     }
 
+    /** Immutable operations page for a runtime. `cursor` is opaque and must be
+     *  echoed verbatim; the client never interprets projection revisions. */
+    listStrategyOperations(runtime_id, opts = {}) {
+        if (!runtime_id) throw new Error('listStrategyOperations: runtime_id is required')
+        const command = { type: 'list_strategy_operations', runtime_id }
+        if (opts.limit != null) command.limit = opts.limit
+        if (opts.cursor != null) command.cursor = opts.cursor
+        return this._request(command)
+    }
+
     /** Strategy chart overlays (decision/fill/order/allocation markers) →
      *  resolves the `overlays` array. Optional { timeframe, start_ms, end_ms }
      *  window the result. */
@@ -612,6 +625,16 @@ export class CorkyClient {
         const command = { type: 'subscribe_strategy_runtime', subscription_id }
         if (runtime_id != null) command.runtime_id = runtime_id
         if (strategy != null) command.strategy = strategy
+        return this._request(command, { subscription_id, onEvent })
+    }
+
+    /** Cursor-resumable immutable strategy operations stream. */
+    subscribeStrategyOperations(opts = {}) {
+        const { subscription_id, runtime_id, cursor, onEvent } = opts
+        if (!subscription_id) throw new Error('subscribeStrategyOperations: subscription_id is required')
+        if (!runtime_id) throw new Error('subscribeStrategyOperations: runtime_id is required')
+        const command = { type: 'subscribe_strategy_operations', subscription_id, runtime_id }
+        if (cursor != null) command.cursor = cursor
         return this._request(command, { subscription_id, onEvent })
     }
 
@@ -879,6 +902,7 @@ export class CorkyClient {
         if (type === 'strategy_runtime') return event.runtime
         if (type === 'strategy_ticker') return event.ticker
         if (type === 'strategy_decisions') return event.decisions
+        if (type === 'strategy_operations') return event.page
         if (type === 'strategy_chart_overlays') return event.overlays
         // backtest_run keeps {run_id, artifact}; progress/overlays keep the full
         // event (callers read .events / .overlays / .trades / series_descriptors).

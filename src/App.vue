@@ -144,6 +144,7 @@
             :strategy="strategy"
             @strategy-select-runtime="strategySelectRuntime"
             @strategy-refresh="strategyRefresh"
+            @strategy-load-more-operations="strategyLoadMoreOperations"
             @strategy-cancel-ticker-orders="strategyCancelTickerOrders"
             @strategy-pause-ticker="strategyPauseTicker"
             @strategy-resume-ticker="strategyResumeTicker"
@@ -575,6 +576,10 @@ export default {
             strategy: {
                 runtimes: [], selectedRuntimeId: DEFAULT_STRATEGY_RUNTIME_ID,
                 decisions: [], overlays: {}, streaming: false, loading: false, error: null,
+                operations: {
+                    events: [], lifecycleIntervals: [], projectionRevision: null,
+                    nextCursor: null, resumeCursor: null, loading: false, error: null, live: false,
+                },
                 // Direct-control session state (see the control handlers below).
                 // `available` gates the panel's control surface entirely; a control
                 // send flips pending → awaiting and never mutates the runtime set.
@@ -2763,6 +2768,11 @@ export default {
                 if (!ids.includes(this.strategy.selectedRuntimeId)) {
                     this.strategy.selectedRuntimeId = this._strategyDefaultRuntimeId()
                 }
+                if (this._strategySub && this._strategySub.args &&
+                    this._strategySub.args.runtime_id !== this.strategy.selectedRuntimeId) {
+                    this._strategyStopSubscribe()
+                    this._strategyResetOperations()
+                }
                 await this._strategyLoadRuntime(this.strategy.selectedRuntimeId)
                 this._strategySubscribe()
             } catch (err) {
@@ -2778,18 +2788,34 @@ export default {
         // a selection change mid-fetch abandons the stale load.
         async _strategyLoadRuntime(runtime_id) {
             if (!this.strategyFeed || !runtime_id) return
+            const operationsState = this.strategy.operations
+            if (operationsState) { operationsState.loading = true; operationsState.error = null }
             let runtime
             try {
                 runtime = await this.strategyFeed.getRuntime(runtime_id)
-            } catch (err) { this.strategy.error = this._strategyErr(err); return }
+            } catch (err) {
+                this.strategy.error = this._strategyErr(err)
+                if (operationsState) {
+                    operationsState.loading = false
+                    operationsState.error = this._strategyErr(err)
+                }
+                return
+            }
             if (this.strategy.selectedRuntimeId !== runtime_id) return   // superseded
             if (runtime) this._strategyUpsertRuntimes([runtime])
             const tickerIds = this._strategyTickerIds(runtime)
-            const results = await Promise.all(tickerIds.map((tid) => Promise.all([
-                this.strategyFeed.getTicker(runtime_id, tid).catch(() => null),
-                this.strategyFeed.listDecisions(runtime_id, { ticker_id: tid, limit: 50 }).catch(() => []),
-                this.strategyFeed.getChartOverlays(runtime_id, tid, { timeframe: '1m' }).catch(() => []),
-            ])))
+            const operationRequest = typeof this.strategyFeed.listOperations === 'function'
+                ? this.strategyFeed.listOperations(runtime_id, { limit: 100 })
+                    .catch((error) => ({ _loadError: error }))
+                : Promise.resolve(null)
+            const [results, operationsPage] = await Promise.all([
+                Promise.all(tickerIds.map((tid) => Promise.all([
+                    this.strategyFeed.getTicker(runtime_id, tid).catch(() => null),
+                    this.strategyFeed.listDecisions(runtime_id, { ticker_id: tid, limit: 50 }).catch(() => []),
+                    this.strategyFeed.getChartOverlays(runtime_id, tid, { timeframe: '1m' }).catch(() => []),
+                ]))),
+                operationRequest,
+            ])
             if (this.strategy.selectedRuntimeId !== runtime_id) return   // superseded mid-fetch
             const decisions = []
             const overlays = {}
@@ -2814,6 +2840,16 @@ export default {
             }
             this.strategy.decisions = decisions
             this.strategy.overlays = overlays
+            if (operationsPage && operationsPage._loadError) {
+                if (this.strategy.operations) {
+                    this.strategy.operations.loading = false
+                    this.strategy.operations.error = this._strategyErr(operationsPage._loadError)
+                }
+            } else if (operationsPage) {
+                this._strategyApplyOperationsPage(operationsPage, { replace: true })
+            } else if (this.strategy.operations) {
+                this.strategy.operations.loading = false
+            }
             this.syncStrategyOverlays()
         },
 
@@ -2822,13 +2858,77 @@ export default {
         // keeps updating), and the whole set stays selectable.
         strategySelectRuntime(runtime_id) {
             if (!runtime_id || runtime_id === this.strategy.selectedRuntimeId) return
+            this._strategyStopSubscribe()
             this.strategy.selectedRuntimeId = runtime_id
-            this._strategyLoadRuntime(runtime_id)
+            this._strategyResetOperations()
+            Promise.resolve(this._strategyLoadRuntime(runtime_id)).finally(() => this._strategySubscribe())
         },
 
         // Manual refresh: reload the runtime set + selected detail (the subscription,
         // if running, keeps live-updating the set on top).
         strategyRefresh() { this.strategyOpen() },
+
+        _strategyResetOperations() {
+            this.strategy.operations = {
+                events: [], lifecycleIntervals: [], projectionRevision: null,
+                nextCursor: null, resumeCursor: null, loading: false, error: null, live: false,
+            }
+        },
+
+        // Merge immutable operation rows by event_id. The gateway owns cursor and
+        // revision semantics; the UI only echoes cursors and renders source truth.
+        _strategyApplyOperationsPage(page, { replace = false, updateNextCursor = false } = {}) {
+            if (!page || page.runtime_id !== this.strategy.selectedRuntimeId) return
+            const state = this.strategy.operations
+            const incoming = Array.isArray(page.events) ? page.events : []
+            const eventMap = new Map()
+            for (const event of (replace ? [] : state.events || [])) {
+                if (event && event.event_id) eventMap.set(event.event_id, event)
+            }
+            for (const event of incoming) {
+                if (event && event.event_id) eventMap.set(event.event_id, event)
+            }
+            state.events = Array.from(eventMap.values())
+                .sort((a, b) => (Number(b.ts_ms) || 0) - (Number(a.ts_ms) || 0))
+            const intervalMap = new Map()
+            for (const interval of (replace ? [] : state.lifecycleIntervals || [])) {
+                if (!interval) continue
+                intervalMap.set(`${interval.source}:${interval.ticker_id || ''}:${interval.state}:${interval.start_ms}`, interval)
+            }
+            for (const interval of (page.lifecycle_intervals || [])) {
+                if (!interval) continue
+                intervalMap.set(`${interval.source}:${interval.ticker_id || ''}:${interval.state}:${interval.start_ms}`, interval)
+            }
+            state.lifecycleIntervals = Array.from(intervalMap.values())
+                .sort((a, b) => (Number(b.start_ms) || 0) - (Number(a.start_ms) || 0))
+            state.projectionRevision = page.projection_revision || state.projectionRevision
+            if (replace || updateNextCursor) state.nextCursor = page.next_cursor || null
+            state.resumeCursor = page.resume_cursor || state.resumeCursor
+            state.loading = false
+            state.error = null
+        },
+
+        async strategyLoadMoreOperations() {
+            const state = this.strategy.operations
+            const runtimeId = this.strategy.selectedRuntimeId
+            if (!this.strategyFeed || !state || state.loading || !state.nextCursor ||
+                typeof this.strategyFeed.listOperations !== 'function') return
+            state.loading = true
+            state.error = null
+            try {
+                const page = await this.strategyFeed.listOperations(runtimeId, {
+                    limit: 100, cursor: state.nextCursor,
+                })
+                if (runtimeId === this.strategy.selectedRuntimeId) {
+                    this._strategyApplyOperationsPage(page, { updateNextCursor: true })
+                }
+            } catch (error) {
+                if (runtimeId === this.strategy.selectedRuntimeId) {
+                    state.loading = false
+                    state.error = this._strategyErr(error)
+                }
+            }
+        },
 
         // ── direct control (MUTATES a live runtime) ──────────────────────────────
         // Each handler forwards a panel intent to the feed's control method. Gated on
@@ -2916,19 +3016,36 @@ export default {
             }
         },
 
-        // Start the live runtime subscription (once). Scoped to the default live
+        // Start live runtime + immutable operations subscriptions for the selected
         // runtime; each update is a FULL-REPLACEMENT snapshot applied by increasing
         // sequence (see _strategyApplyUpdate). No-op when streaming is unsupported.
         _strategySubscribe() {
-            if (!this.strategyFeed || this._strategySub) return
+            if (!this.strategyFeed) return
             if (this.strategyFeed.streamingSupported === false) return
-            this._strategySub = this.strategyFeed.subscribeRuntime(
-                { subscription_id: 'strategy-runtime', runtime_id: this._strategyDefaultRuntimeId() }, {
+            const runtimeId = this.strategy.selectedRuntimeId
+            if (!runtimeId) return
+            if (!this._strategySub) this._strategySub = this.strategyFeed.subscribeRuntime(
+                { subscription_id: 'strategy-runtime', runtime_id: runtimeId }, {
                     onData: (runtimes) => this._strategyApplyUpdate(runtimes),
                     // Lost stream ⇒ lost control session (controls need the stateful
                     // socket). Keep the last-good set but hide the control surface.
                     onError: () => { this.strategy.streaming = false; if (this.strategy.control) this.strategy.control.available = false },
                 })
+            if (!this._strategyOperationsSub && typeof this.strategyFeed.subscribeOperations === 'function') {
+                const cursor = this.strategy.operations && this.strategy.operations.resumeCursor
+                this._strategyOperationsSub = this.strategyFeed.subscribeOperations(
+                    { subscription_id: 'strategy-operations', runtime_id: runtimeId, cursor }, {
+                        onData: (page) => {
+                            this._strategyApplyOperationsPage(page)
+                            if (this.strategy.operations) this.strategy.operations.live = true
+                        },
+                        onError: (error) => {
+                            if (!this.strategy.operations) return
+                            this.strategy.operations.live = false
+                            this.strategy.operations.error = this._strategyErr(error)
+                        },
+                    })
+            }
             this.strategy.streaming = true
             // A live subscription rides the same stateful socket the direct-control
             // commands require, so it is the control session — controls become
@@ -2940,9 +3057,14 @@ export default {
             if (this._strategySub && this.strategyFeed) {
                 try { this.strategyFeed.unsubscribe(this._strategySub) } catch (_) { /* gone */ }
             }
+            if (this._strategyOperationsSub && this.strategyFeed) {
+                try { this.strategyFeed.unsubscribe(this._strategyOperationsSub) } catch (_) { /* gone */ }
+            }
             this._strategySub = null
+            this._strategyOperationsSub = null
             if (this.strategy) {
                 this.strategy.streaming = false
+                if (this.strategy.operations) this.strategy.operations.live = false
                 if (this.strategy.control) this.strategy.control.available = false   // no session ⇒ no controls
             }
         },
@@ -3444,9 +3566,14 @@ export default {
             }
             this.strategyFeed = null
             this._strategySub = null
+            this._strategyOperationsSub = null
             this.strategy = {
                 runtimes: [], selectedRuntimeId: DEFAULT_STRATEGY_RUNTIME_ID,
                 decisions: [], overlays: {}, streaming: false, loading: false, error: null,
+                operations: {
+                    events: [], lifecycleIntervals: [], projectionRevision: null,
+                    nextCursor: null, resumeCursor: null, loading: false, error: null, live: false,
+                },
                 control: { available: false, pending: false, awaiting: false, error: null },
             }
             this.searchTabs = []

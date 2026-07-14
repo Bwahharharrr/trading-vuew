@@ -115,6 +115,28 @@ describe('strategy one-shot reads: command framing + terminal FIELD extraction',
     c2.getStrategyChartOverlays('rt', 'tk')
     expect(s2().sent[0].command).toEqual({ type: 'get_strategy_chart_overlays', runtime_id: 'rt', ticker_id: 'tk' })
   })
+
+  it('listStrategyOperations returns the page and preserves its opaque cursors', async () => {
+    const { client, sock } = makeClient()
+    const p = client.listStrategyOperations('rt-main', { limit: 25, cursor: 'opaque.page.2' })
+    expect(sock().sent[0].command).toEqual({
+      type: 'list_strategy_operations', runtime_id: 'rt-main', limit: 25, cursor: 'opaque.page.2',
+    })
+    sock().push({
+      schema_version: 1,
+      request_id: sock().sent[0].request_id,
+      event: {
+        type: 'strategy_operations',
+        page: {
+          runtime_id: 'rt-main', projection_revision: 'rev-2', events: [],
+          next_cursor: 'opaque.page.3', resume_cursor: 'opaque.resume.2', lifecycle_intervals: [],
+        },
+      },
+    })
+    await expect(p).resolves.toMatchObject({
+      runtime_id: 'rt-main', next_cursor: 'opaque.page.3', resume_cursor: 'opaque.resume.2',
+    })
+  })
 })
 
 // ── input guards ──────────────────────────────────────────────────────────────
@@ -125,6 +147,7 @@ describe('strategy sender input guards (throw + send nothing)', () => {
     expect(() => client.getStrategyTicker('rt')).toThrow(/runtime_id and ticker_id are required/)
     expect(() => client.getStrategyChartOverlays('rt')).toThrow(/runtime_id and ticker_id are required/)
     expect(() => client.listStrategyDecisions()).toThrow(/runtime_id is required/)
+    expect(() => client.listStrategyOperations()).toThrow(/runtime_id is required/)
     expect(sock().sent).toHaveLength(0)
   })
 
@@ -132,6 +155,13 @@ describe('strategy sender input guards (throw + send nothing)', () => {
     const { client, sock } = makeClient()
     expect(() => client.subscribeStrategyRuntime({})).toThrow(/subscription_id is required/)
     expect(() => client.subscribeStrategyRuntime({ subscription_id: 's' })).toThrow(/runtime_id or strategy is required/)
+    expect(sock().sent).toHaveLength(0)
+  })
+
+  it('subscribeStrategyOperations requires ids', () => {
+    const { client, sock } = makeClient()
+    expect(() => client.subscribeStrategyOperations({})).toThrow(/subscription_id is required/)
+    expect(() => client.subscribeStrategyOperations({ subscription_id: 'ops' })).toThrow(/runtime_id is required/)
     expect(sock().sent).toHaveLength(0)
   })
 })
@@ -193,5 +223,29 @@ describe('subscribeStrategyRuntime — first update resolves, rest fan out', () 
       event: { type: 'error', code: 'stateful_websocket_required', message: 'subscriptions require a stateful websocket', retryable: false },
     })
     await expect(p).rejects.toMatchObject({ code: 'stateful_websocket_required' })
+  })
+})
+
+describe('subscribeStrategyOperations — first page resolves, rest fan out', () => {
+  it('sends cursor verbatim and resolves the first operations update', async () => {
+    const { client, sock } = makeClient()
+    const seen = []
+    const p = client.subscribeStrategyOperations({
+      subscription_id: 'ops-main', runtime_id: 'rt-main', cursor: 'opaque.resume.1',
+      onEvent: ({ event }) => seen.push(event.sequence),
+    })
+    expect(sock().sent[0].command).toEqual({
+      type: 'subscribe_strategy_operations', subscription_id: 'ops-main',
+      runtime_id: 'rt-main', cursor: 'opaque.resume.1',
+    })
+    sock().push({
+      schema_version: 1,
+      event: {
+        type: 'strategy_operations_update', subscription_id: 'ops-main', sequence: 1,
+        page: { runtime_id: 'rt-main', projection_revision: 'rev-1', events: [], lifecycle_intervals: [] },
+      },
+    })
+    await expect(p).resolves.toMatchObject({ type: 'strategy_operations_update', sequence: 1 })
+    expect(seen).toEqual([1])
   })
 })

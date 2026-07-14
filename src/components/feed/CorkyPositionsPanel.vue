@@ -96,6 +96,7 @@
                         :runtimes="strategy.runtimes || []"
                         :selected-runtime-id="strategy.selectedRuntimeId || ''"
                         :decisions="strategy.decisions || []"
+                        :operations="strategy.operations || {}"
                         :streaming="!!strategy.streaming"
                         :maximized="maximized"
                         :loading="!!strategy.loading"
@@ -103,6 +104,7 @@
                         :control="strategy.control || {}"
                         @select-runtime="$emit('strategy-select-runtime', $event)"
                         @refresh="$emit('strategy-refresh')"
+                        @load-more-operations="$emit('strategy-load-more-operations')"
                         @cancel-ticker-orders="$emit('strategy-cancel-ticker-orders', $event)"
                         @pause-ticker="$emit('strategy-pause-ticker', $event)"
                         @resume-ticker="$emit('strategy-resume-ticker', $event)"
@@ -252,6 +254,7 @@ export default {
         'bt-refresh-strategies', 'bt-update-filter', 'bt-set-metric-filters', 'bt-list-runs', 'bt-inspect-strategy',
         'bt-select-run', 'bt-plot-run', 'bt-select-trade', 'bt-select-candidate', 'bt-close-detail',
         'strategy-select-runtime', 'strategy-refresh',
+        'strategy-load-more-operations',
         'strategy-cancel-ticker-orders', 'strategy-pause-ticker', 'strategy-resume-ticker',
         'strategy-unlock-ticker', 'strategy-adopt-position', 'strategy-open-lineage-run',
     ],

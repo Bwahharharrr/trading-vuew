@@ -43,8 +43,13 @@ function mkCtx() {
     strategy: {
       runtimes: [], selectedRuntimeId: DEFAULT_ID, decisions: [], overlays: {},
       streaming: false, loading: false, error: null,
+      operations: {
+        events: [], lifecycleIntervals: [], projectionRevision: null,
+        nextCursor: null, resumeCursor: null, loading: false, error: null, live: false,
+      },
     },
     _strategySub: null,
+    _strategyOperationsSub: null,
     _strategyLastSeq: -Infinity,
     corkyCurrent: { venue: 'bitfinex', symbol: ADA, timeframe: '1m' },
     chart: {
@@ -57,10 +62,18 @@ function mkCtx() {
       getRuntime: vi.fn(async (id) => mkRuntime(id)),
       getTicker: vi.fn(async (id, tid) => ({ ticker_id: tid, symbol: tid.split(':').slice(1).join(':') })),
       listDecisions: vi.fn(async (id, opts) => [{ ticker_id: opts.ticker_id, symbol: opts.ticker_id.split(':').slice(1).join(':'), decision_ts_ms: 1000, outcome: 'ok' }]),
+      listOperations: vi.fn(async (id, opts) => ({
+        runtime_id: id, projection_revision: 'rev-1', events: [], lifecycle_intervals: [],
+        next_cursor: null, resume_cursor: 'resume-1', opts,
+      })),
       getChartOverlays: vi.fn(async (id, tid) => (tid === ADA_TID ? OV_ADA.slice() : [])),
       subscribeRuntime: vi.fn((opts, handlers) => {
         ctx._subHandlers = handlers; ctx._subArgs = opts
-        return { subscription_id: opts.subscription_id }
+        return { subscription_id: opts.subscription_id, args: opts }
+      }),
+      subscribeOperations: vi.fn((opts, handlers) => {
+        ctx._opsHandlers = handlers; ctx._opsArgs = opts
+        return { subscription_id: opts.subscription_id, args: opts }
       }),
       unsubscribe: vi.fn(),
       destroy: vi.fn(),
@@ -68,6 +81,7 @@ function mkCtx() {
   }
   for (const m of ['strategyOpen', '_strategyLoadRuntime', 'strategySelectRuntime', 'strategyRefresh',
     '_strategySubscribe', '_strategyStopSubscribe', '_strategyApplyUpdate', '_strategyUpsertRuntimes',
+    '_strategyResetOperations', '_strategyApplyOperationsPage', 'strategyLoadMoreOperations',
     '_removeStrategyOverlays', '_strategyCandlePriceAt', 'syncStrategyOverlays', '_strategyErr',
     '_strategyDefaultRuntimeId', '_strategyTickerIds', '_loadedCandleRange']) {
     ctx[m] = M[m]
@@ -93,9 +107,12 @@ describe('strategyOpen', () => {
     // Decisions from both tickers merged.
     expect(ctx.strategy.decisions).toHaveLength(2)
     expect(ctx.strategy.overlays[ADA_TID]).toHaveLength(5)
+    expect(ctx.strategyFeed.listOperations).toHaveBeenCalledWith(DEFAULT_ID, { limit: 100 })
+    expect(ctx.strategy.operations.resumeCursor).toBe('resume-1')
     // Live subscription started, scoped to the default live runtime.
     expect(ctx.strategyFeed.subscribeRuntime).toHaveBeenCalled()
     expect(ctx._subArgs).toMatchObject({ subscription_id: 'strategy-runtime', runtime_id: DEFAULT_ID })
+    expect(ctx._opsArgs).toMatchObject({ subscription_id: 'strategy-operations', runtime_id: DEFAULT_ID, cursor: 'resume-1' })
     expect(ctx.strategy.streaming).toBe(true)
     expect(ctx.strategy.loading).toBe(false)
   })
@@ -118,6 +135,7 @@ describe('strategyOpen', () => {
     await ctx.strategyOpen()
     await ctx.strategyRefresh()
     expect(ctx.strategyFeed.subscribeRuntime).toHaveBeenCalledTimes(1)
+    expect(ctx.strategyFeed.subscribeOperations).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -169,6 +187,9 @@ describe('runtime selection', () => {
     await flush()
     expect(ctx.strategyFeed.getRuntime).toHaveBeenCalledWith(OTHER_ID)
     expect(ctx.strategy.runtimes.map((r) => r.runtime_id)).toEqual([DEFAULT_ID, OTHER_ID])
+    expect(ctx.strategyFeed.unsubscribe).toHaveBeenCalledTimes(2)
+    expect(ctx._subArgs.runtime_id).toBe(OTHER_ID)
+    expect(ctx._opsArgs.runtime_id).toBe(OTHER_ID)
   })
 
   test('re-selecting the SAME runtime is a no-op', async () => {
@@ -176,6 +197,62 @@ describe('runtime selection', () => {
     ctx.strategySelectRuntime(DEFAULT_ID)
     await flush()
     expect(ctx.strategyFeed.getRuntime).not.toHaveBeenCalled()
+  })
+})
+
+describe('selected-runtime immutable operations', () => {
+  beforeEach(async () => { await ctx.strategyOpen() })
+
+  test('merges live pages by event_id and preserves gateway lifecycle intervals', () => {
+    ctx._opsHandlers.onData({
+      runtime_id: DEFAULT_ID,
+      projection_revision: 'rev-2',
+      resume_cursor: 'resume-2',
+      events: [
+        { event_id: 'e1', ts_ms: 2, source: 'order', kind: 'submitted', payload: {} },
+        { event_id: 'e2', ts_ms: 3, source: 'order', kind: 'filled', payload: {} },
+      ],
+      lifecycle_intervals: [{ state: 'degraded', start_ms: 1, source: 'gateway', reason: 'stale auth' }],
+    })
+    ctx._opsHandlers.onData({
+      runtime_id: DEFAULT_ID,
+      projection_revision: 'rev-3',
+      resume_cursor: 'resume-3',
+      events: [{ event_id: 'e2', ts_ms: 3, source: 'order', kind: 'filled', payload: {} }],
+      lifecycle_intervals: [{ state: 'degraded', start_ms: 1, source: 'gateway', reason: 'stale auth' }],
+    })
+    expect(ctx.strategy.operations.events.map((event) => event.event_id)).toEqual(['e2', 'e1'])
+    expect(ctx.strategy.operations.lifecycleIntervals).toHaveLength(1)
+    expect(ctx.strategy.operations.lifecycleIntervals[0].reason).toBe('stale auth')
+    expect(ctx.strategy.operations.projectionRevision).toBe('rev-3')
+    expect(ctx.strategy.operations.resumeCursor).toBe('resume-3')
+    expect(ctx.strategy.operations.live).toBe(true)
+  })
+
+  test('ignores a late page for a previously selected runtime', () => {
+    ctx.strategy.selectedRuntimeId = OTHER_ID
+    ctx._strategyApplyOperationsPage({
+      runtime_id: DEFAULT_ID, projection_revision: 'stale',
+      events: [{ event_id: 'wrong', ts_ms: 1, source: 'x', kind: 'x', payload: {} }],
+      lifecycle_intervals: [],
+    })
+    expect(ctx.strategy.operations.events).toHaveLength(0)
+  })
+
+  test('loads older operations with the exact opaque next cursor', async () => {
+    ctx.strategy.operations.nextCursor = 'opaque-next'
+    ctx.strategyFeed.listOperations = vi.fn(async (runtimeId, opts) => ({
+      runtime_id: runtimeId, projection_revision: 'rev-old', next_cursor: null,
+      events: [{ event_id: 'old', ts_ms: 1, source: 'ledger', kind: 'delta', payload: {} }],
+      lifecycle_intervals: [],
+      opts,
+    }))
+    await ctx.strategyLoadMoreOperations()
+    expect(ctx.strategyFeed.listOperations).toHaveBeenCalledWith(DEFAULT_ID, {
+      limit: 100, cursor: 'opaque-next',
+    })
+    expect(ctx.strategy.operations.events[0].event_id).toBe('old')
+    expect(ctx.strategy.operations.nextCursor).toBeNull()
   })
 })
 

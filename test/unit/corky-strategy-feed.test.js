@@ -16,14 +16,17 @@ function makeFakeClient() {
     _runtime: RUNTIMES[0],
     _ticker: { ticker_id: 'BITFINEX:tTESTADA:TESTUSD', allocation: { status: 'waiting' } },
     _decisions: [{ decision_id: 'd1', outcome: 'no_intents' }],
+    _operations: { runtime_id: 'rt', projection_revision: 'rev-1', events: [], lifecycle_intervals: [], resume_cursor: 'cursor-1' },
     _overlays: [{ kind: 'fill', timestamp_ms: 1, label: 'x', status: 'filled' }],
     listStrategyRuntimes() { this.calls.push(['listStrategyRuntimes']); return Promise.resolve(this._runtimes) },
     getStrategyRuntime(id) { this.calls.push(['getStrategyRuntime', id]); return Promise.resolve(this._runtime) },
     getStrategyTicker(rt, tk) { this.calls.push(['getStrategyTicker', rt, tk]); return Promise.resolve(this._ticker) },
     listStrategyDecisions(rt, o) { this.calls.push(['listStrategyDecisions', rt, o]); return Promise.resolve(this._decisions) },
+    listStrategyOperations(rt, o) { this.calls.push(['listStrategyOperations', rt, o]); return Promise.resolve(this._operations) },
     getStrategyChartOverlays(rt, tk, o) { this.calls.push(['getStrategyChartOverlays', rt, tk, o]); return Promise.resolve(this._overlays) },
     _subscribeResult: () => Promise.resolve(),
     subscribeStrategyRuntime(args) { this.calls.push(['subscribeStrategyRuntime', args]); return this._subscribeResult(args) },
+    subscribeStrategyOperations(args) { this.calls.push(['subscribeStrategyOperations', args]); return this._subscribeResult(args) },
     unsubscribe(sid) { this.calls.push(['unsubscribe', sid]) },
     onSubscription(sid, cb) {
       if (!subs.has(sid)) subs.set(sid, new Set())
@@ -40,6 +43,9 @@ function makeFakeClient() {
 
 const runtimeUpdate = (sid, sequence, runtimes) => ({
   type: 'strategy_runtime_update', subscription_id: sid, sequence, runtimes,
+})
+const operationsUpdate = (sid, sequence, page) => ({
+  type: 'strategy_operations_update', subscription_id: sid, sequence, page,
 })
 
 let client, feed
@@ -65,6 +71,38 @@ describe('one-shot reads delegate + pass args', () => {
     expect(client.calls).toContainEqual(['listStrategyDecisions', 'rt', { ticker_id: 'tk', limit: 5 }])
     expect(await feed.getChartOverlays('rt', 'tk', { timeframe: '1m' })).toHaveLength(1)
     expect(client.calls).toContainEqual(['getStrategyChartOverlays', 'rt', 'tk', { timeframe: '1m' }])
+  })
+
+  it('listOperations preserves opaque cursors', async () => {
+    expect(await feed.listOperations('rt', { limit: 40, cursor: 'opaque' })).toMatchObject({ projection_revision: 'rev-1' })
+    expect(client.calls).toContainEqual(['listStrategyOperations', 'rt', { limit: 40, cursor: 'opaque' }])
+  })
+})
+
+describe('subscribeOperations — cursor-resumable immutable pages', () => {
+  it('delivers in-order pages and resumes from the latest published cursor', () => {
+    const got = []
+    const h = feed.subscribeOperations({ runtime_id: 'rt', cursor: 'cursor-0' }, {
+      onData: (page, meta) => got.push([meta.sequence, page.projection_revision]),
+    })
+    expect(client.calls).toContainEqual(['subscribeStrategyOperations', {
+      runtime_id: 'rt', cursor: 'cursor-0', subscription_id: h.subscription_id,
+    }])
+    client._pushUpdate(h.subscription_id, operationsUpdate(h.subscription_id, 1, {
+      runtime_id: 'rt', projection_revision: 'rev-2', events: [],
+      lifecycle_intervals: [], resume_cursor: 'cursor-2',
+    }))
+    client._pushUpdate(h.subscription_id, operationsUpdate(h.subscription_id, 1, {
+      runtime_id: 'rt', projection_revision: 'stale', events: [], lifecycle_intervals: [],
+    }))
+    expect(got).toEqual([[1, 'rev-2']])
+    client._emitOpen()
+    client._emitOpen()
+    expect(client.calls.filter((call) => call[0] === 'subscribeStrategyOperations').pop()).toEqual([
+      'subscribeStrategyOperations', {
+        runtime_id: 'rt', cursor: 'cursor-2', subscription_id: h.subscription_id,
+      },
+    ])
   })
 })
 

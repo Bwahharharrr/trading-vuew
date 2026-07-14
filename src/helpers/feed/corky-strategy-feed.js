@@ -1,6 +1,7 @@
 // CorkyStrategyFeed — orchestration over a CorkyClient for the READ-ONLY
 // strategy-runtime interface (list runtimes, inspect a runtime / ticker, list
-// decisions, chart overlays) plus a live runtime subscription.
+// decisions, immutable operations, chart overlays) plus live runtime/operations
+// subscriptions.
 //
 // Read surface only: this feed never touches the candle DataCube (strategy state
 // is NOT chart data) — it exposes plain promises + a runtime stream, and the UI
@@ -51,6 +52,9 @@ export class CorkyStrategyFeed {
   /** Recent decisions for a runtime. Resolves the `decisions` array. */
   listDecisions(runtime_id, opts = {}) { return this.client.listStrategyDecisions(runtime_id, opts) }
 
+  /** Cursor-bound immutable operations page for a runtime. */
+  listOperations(runtime_id, opts = {}) { return this.client.listStrategyOperations(runtime_id, opts) }
+
   /** Chart overlays (decision/fill/order/allocation markers). Resolves `overlays`. */
   getChartOverlays(runtime_id, ticker_id, opts = {}) {
     return this.client.getStrategyChartOverlays(runtime_id, ticker_id, opts)
@@ -93,6 +97,7 @@ export class CorkyStrategyFeed {
     const subscription_id = opts.subscription_id || this._nextSubscriptionId()
     const handle = {
       subscription_id,
+      kind: 'runtime',
       // request args minus subscription_id (added at issue time)
       args: { ...opts, subscription_id },
       onData: handlers.onData,
@@ -109,13 +114,36 @@ export class CorkyStrategyFeed {
     return handle
   }
 
+  /** Stream immutable operation pages for one runtime. The latest published
+   *  resume_cursor is retained on the handle and used after reconnect. */
+  subscribeOperations(opts = {}, handlers = {}) {
+    const subscription_id = opts.subscription_id || this._nextSubscriptionId('strategy-operations')
+    const handle = {
+      subscription_id,
+      kind: 'operations',
+      args: { ...opts, subscription_id },
+      onData: handlers.onData,
+      onError: handlers.onError,
+      lastSeq: -Infinity,
+      lastGood: null,
+      closed: false,
+    }
+    this._subs.set(subscription_id, handle)
+    handle.unFanout = this.client.onSubscription(
+      subscription_id, (payload) => this._onUpdate(handle, payload))
+    this._issue(handle)
+    return handle
+  }
+
   // Send (or re-send) the subscribe frame. Data (including the first update)
   // arrives via the fan-out listener, so the promise's resolution is ignored — we
   // only care about its rejection (subscribe refused, e.g. a non-stateful socket).
   // Surface both a synchronous throw and an async rejection through _onSubError.
   _issue(handle) {
     try {
-      const p = this.client.subscribeStrategyRuntime({ ...handle.args })
+      const p = handle.kind === 'operations'
+        ? this.client.subscribeStrategyOperations({ ...handle.args })
+        : this.client.subscribeStrategyRuntime({ ...handle.args })
       if (p && typeof p.catch === 'function') p.catch((err) => this._onSubError(handle, err))
     } catch (err) {
       this._onSubError(handle, err)
@@ -134,10 +162,15 @@ export class CorkyStrategyFeed {
       if (seq <= handle.lastSeq) return
       handle.lastSeq = seq
     }
-    const runtimes = Array.isArray(event.runtimes) ? event.runtimes : []
-    handle.lastGood = runtimes
+    const data = handle.kind === 'operations'
+      ? (event.page || { events: [], lifecycle_intervals: [] })
+      : (Array.isArray(event.runtimes) ? event.runtimes : [])
+    handle.lastGood = data
+    if (handle.kind === 'operations' && data.resume_cursor != null) {
+      handle.args.cursor = data.resume_cursor
+    }
     if (handle.onData) {
-      try { handle.onData(runtimes, { sequence: seq }) } catch (_) { /* consumer threw; isolate */ }
+      try { handle.onData(data, { sequence: seq }) } catch (_) { /* consumer threw; isolate */ }
     }
   }
 
