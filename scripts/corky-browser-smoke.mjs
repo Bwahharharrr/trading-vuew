@@ -72,8 +72,12 @@ async function main() {
 
     // 2) Discovery tree populates from list_candle_states.
     await page.locator('.corky-discovery').waitFor({ timeout: 10000 })
-    await page.locator('.corky-tf-chip').first().waitFor({ timeout: 15000 })
-    const venues = await page.locator('.corky-venue-title').allInnerTexts()
+    const firstSymbol = page.locator('.corky-symbol-title:visible').first()
+    await firstSymbol.waitFor({ timeout: 15000 })
+    await firstSymbol.click()
+    const firstTimeframe = page.locator('.corky-tf-chip:visible').first()
+    await firstTimeframe.waitFor({ timeout: 15000 })
+    const venues = await page.locator('.corky-venue-name').allInnerTexts()
     const symbols = await page.locator('.corky-symbol-title').allInnerTexts()
     const chips = await page.locator('.corky-tf-chip').count()
     must(venues.length > 0, `discovery rendered ${venues.length} venue(s): ${venues.join(', ')}`)
@@ -81,7 +85,7 @@ async function main() {
     must(chips > 0, `${chips} timeframe chip(s)`)
 
     // 3) Select the first timeframe chip → gateway drives the chart.
-    await page.locator('.corky-tf-chip').first().click()
+    await firstTimeframe.click()
     log('  clicked first timeframe chip')
 
     // 4) Chart canvas renders non-blank (history applied).
@@ -104,6 +108,20 @@ async function main() {
     }
     if (after !== before) log('  ✓ canvas changed after select (live tick / render)')
     else log('  ⚠ canvas fingerprint unchanged within window (history OK; runtime may be idle)')
+
+    // 6) Strategy workspace mounts from the same live gateway and exposes the
+    // complete task navigation. This is a read-only smoke: it never opens or
+    // submits an administrative mutation.
+    const strategyTab = page.locator('.pd-tab').filter({ hasText: 'Strategy' }).first()
+    await strategyTab.click()
+    await page.locator('.sr-tabs').waitFor({ timeout: 15000 })
+    const strategyTasks = await page.locator('.sr-tab').allInnerTexts()
+    must(strategyTasks.join('|') === 'Overview|Tickers|Activity|Capital|Orders|Configuration|Administration',
+      `Strategy workspace task tabs: ${strategyTasks.join(', ')}`)
+    const strategyStateVisible = await page.locator('.sr-status-banner, .sr-empty').first().isVisible()
+    must(strategyStateVisible, 'Strategy workspace rendered a runtime or explicit empty state')
+    await page.screenshot({ path: '/tmp/corky-smoke-strategy.png' })
+    log('  screenshot → /tmp/corky-smoke-strategy.png')
 
     must(errors.length === 0, `no page errors${errors.length ? ' — ' + errors.slice(0, 5).join(' | ') : ''}`)
     log(`  workers: ${workers.length ? workers.join(', ') : '(none)'}`)

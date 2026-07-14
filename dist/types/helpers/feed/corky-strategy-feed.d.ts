@@ -15,8 +15,18 @@ export class CorkyStrategyFeed {
     getTicker(runtime_id: any, ticker_id: any): any;
     /** Recent decisions for a runtime. Resolves the `decisions` array. */
     listDecisions(runtime_id: any, opts?: {}): any;
+    /** Cursor-bound immutable operations page for a runtime. */
+    listOperations(runtime_id: any, opts?: {}): any;
+    /** Server-computed money/valuation projection; decimal strings stay intact. */
+    getMoney(runtime_id: any): any;
     /** Chart overlays (decision/fill/order/allocation markers). Resolves `overlays`. */
     getChartOverlays(runtime_id: any, ticker_id: any, opts?: {}): any;
+    /** Read-only allocation-policy comparison, returned exactly as projected. */
+    compareAllocationPolicies(runtime_id: any, opts?: {}): any;
+    /** Revision-bound administrative preview; does not mutate runtime state. */
+    previewOperation(opts?: {}): any;
+    /** Apply an exact preview after the operator supplies its required statement. */
+    approveOperation(preview: any, approval_statement: any): any;
     /** Pause one ticker. opts: { runtime_id, ticker_id, reason, strategy_instance_id?, target_runtime_id? }. */
     pauseTicker(opts?: {}): any;
     /** Resume one paused ticker. Same opts shape as pauseTicker. */
@@ -38,6 +48,21 @@ export class CorkyStrategyFeed {
      */
     subscribeRuntime(opts?: {}, handlers?: {}): {
         subscription_id: any;
+        kind: string;
+        args: {
+            subscription_id: any;
+        };
+        onData: any;
+        onError: any;
+        lastSeq: number;
+        lastGood: null;
+        closed: boolean;
+    };
+    /** Stream immutable operation pages for one runtime. The latest published
+     *  resume_cursor is retained on the handle and used after reconnect. */
+    subscribeOperations(opts?: {}, handlers?: {}): {
+        subscription_id: any;
+        kind: string;
         args: {
             subscription_id: any;
         };

@@ -26,6 +26,17 @@ async function task(wrapper, label) {
 beforeEach(() => window.localStorage.clear())
 
 describe('responsive strategy task workspace', () => {
+    test('task tabs provide keyboard navigation and an associated tab panel', async () => {
+        const wrapper = mountPanel()
+        const tabs = wrapper.findAll('.sr-tab')
+        expect(tabs[0].attributes('aria-controls')).toBe('strategy-task-panel')
+        await tabs[0].trigger('keydown', { key: 'ArrowRight' })
+        expect(wrapper.find('.sr-tab.active').text()).toBe('Tickers')
+        expect(wrapper.find('#strategy-task-panel').attributes('aria-labelledby')).toBe('strategy-task-tickers')
+        await wrapper.find('.sr-tab.active').trigger('keydown', { key: 'End' })
+        expect(wrapper.find('.sr-tab.active').text()).toBe('Administration')
+    })
+
     test('compact and maximized presentations share the same selected runtime', () => {
         const compact = mountPanel({ maximized: false })
         const expanded = mountPanel({ maximized: true })
@@ -110,6 +121,23 @@ describe('responsive strategy task workspace', () => {
         expect(wrapper.findAll('.sr-activity-row')).toHaveLength(1)
         await wrapper.find('.sr-load-more').trigger('click')
         expect(wrapper.emitted('load-more-operations')).toBeTruthy()
+    })
+
+    test('Activity bounds large loaded histories to incremental render batches', async () => {
+        const tickerId = runtimes[0].tickers[0].ticker_id
+        const events = Array.from({ length: 1000 }, (_, index) => ({
+            event_id: `event-${index}`, ts_ms: 2000 - index, source: 'order',
+            kind: 'order_update', ticker_id: tickerId, payload: { reason: `event ${index}` },
+        }))
+        const wrapper = mountPanel({
+            operations: { events, lifecycleIntervals: [], projectionRevision: 'rev-large' },
+        })
+        await task(wrapper, 'Activity')
+        expect(wrapper.findAll('.sr-activity-row')).toHaveLength(200)
+        const reveal = wrapper.findAll('.sr-load-more').find((button) => button.text().includes('more loaded events'))
+        expect(reveal.text()).toContain('Show 200 more')
+        await reveal.trigger('click')
+        expect(wrapper.findAll('.sr-activity-row')).toHaveLength(400)
     })
 
     test('Capital renders only server-computed money and valuation decimals', async () => {
@@ -272,5 +300,20 @@ describe('responsive strategy task workspace', () => {
         expect(wrapper.find('.sr-admin-unavailable').text()).toContain('observer runtimes have no allocation authority')
         expect(wrapper.find('.sr-admin-workflow').exists()).toBe(false)
         expect(wrapper.find('.sr-operation-preview').exists()).toBe(false)
+    })
+
+    test('rollout flag disables mutations while preserving automatic-allocation visibility', async () => {
+        const runtime = {
+            ...runtimes[0], lineage_status: 'verified', runtime_control_available: true,
+            automatic_allocation: { enabled: true, policy_configured: true, policy_id: 'equal-v1' },
+        }
+        const wrapper = mountPanel({
+            runtimes: [runtime], selectedRuntimeId: runtime.runtime_id,
+            control: { available: true }, administrationEnabledFlag: false,
+        })
+        await task(wrapper, 'Administration')
+        expect(wrapper.text()).toContain('equal-v1')
+        expect(wrapper.find('.sr-admin-unavailable').text()).toContain('disabled by the rollout flag')
+        expect(wrapper.find('.sr-admin-workflow').exists()).toBe(false)
     })
 })

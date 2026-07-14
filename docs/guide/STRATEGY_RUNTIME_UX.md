@@ -1,6 +1,6 @@
 # Strategy Runtime UX Contract
 
-Status: SUX-0 semantic baseline.
+Status: implemented through SUX-7.
 
 The Strategy dock is an operator view over Corky chart-gateway projections. It
 must not read strategy sidecars, calculate financial totals, infer authority, or
@@ -77,3 +77,67 @@ operator states every Strategy UI change must preserve:
 Money values remain decimal strings. Fixture administrative actions are
 capability descriptions only and never authorize a live mutation.
 
+## Administration Safety Flow
+
+Automatic-allocation state is always rendered read-only before any action
+surface. Mutations are available only when all of these are true:
+
+- the runtime is not an `origin_observer`;
+- the runtime advertises direct control;
+- the selected-runtime WebSocket control session is active;
+- runtime lineage is `verified`;
+- an authoritative projection revision is available; and
+- the rollout flag is enabled.
+
+Policy changes follow `compare_strategy_allocation_policies` →
+`preview_strategy_operation` → `approve_strategy_operation`. The final action
+requires the exact text `APPROVE <preview_hash>`. Preview expiry, selected
+runtime, preview hash, and projection revision are checked again before send;
+the gateway remains authoritative for the final validation. The UI never
+patches money, allocation, order, or runtime state optimistically after an
+acknowledgement—it waits for immutable operation/runtime projections.
+
+Set `VITE_CORKY_STRATEGY_ADMINISTRATION=0` at build/dev-server startup to keep
+the entire Strategy workspace read-only while preserving automatic-allocation
+status, comparisons already received, and all other evidence views. The default
+is enabled, but runtime capability gates still apply.
+
+## Operator Workflow
+
+1. Open **Strategy** in the bottom dock and select the runtime.
+2. Use **Overview** for current health, mode, authority, freshness, and exact
+   attention reason.
+3. Use **Tickers**, **Activity**, **Capital**, **Orders**, and
+   **Configuration** for their respective evidence. Activity initially renders
+   at most 200 loaded rows; reveal more in 200-row batches or request the next
+   immutable page.
+4. Use **Administration** to inspect published automatic-allocation state.
+5. For a policy change, compare the candidate first, inspect allocation and
+   ranking evidence, enter actor/idempotency key/reason, then create a preview.
+6. Verify the operation, revision, expiry, and preview hash. Type the displayed
+   exact approval statement to enable **Apply exact preview**.
+
+The seven task tabs support Left/Right, Home, and End keyboard navigation. All
+status colors have text labels; color is never the only state indicator.
+
+## Release Validation
+
+The SUX-7 release gate is:
+
+```bash
+npm run typecheck
+npm test -- --run
+npm run build
+npm run size
+```
+
+When a chart gateway and dev server are available, also run:
+
+```bash
+npm run smoke:gateway
+npm run smoke:browser
+```
+
+The browser smoke requires a live gateway; inability to connect is an
+environmental prerequisite failure, not a substitute for the deterministic
+unit/component/build gates.

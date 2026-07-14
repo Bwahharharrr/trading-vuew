@@ -462,6 +462,7 @@ function deriveCorkyUrl() {
 // Default live strategy runtime to select + subscribe (matches the panel's
 // default; falls back to the first runtime when absent from the set).
 const DEFAULT_STRATEGY_RUNTIME_ID = 'v8-tail-repair-live-main'
+const STRATEGY_ADMINISTRATION_ENABLED = import.meta.env.VITE_CORKY_STRATEGY_ADMINISTRATION !== '0'
 
 // Distinct on-chart marker style per strategy-overlay class. `anchor` picks the
 // owning candle's price the glyph rides on ('h'=high above, 'l'=low below), so
@@ -590,6 +591,7 @@ export default {
                     control: true, lifecycle: true,
                 },
                 money: { data: null, loading: false, error: null },
+                features: { administration: STRATEGY_ADMINISTRATION_ENABLED },
                 administration: {
                     comparison: null, preview: null, result: null,
                     pending: null, error: null,
@@ -2956,6 +2958,9 @@ export default {
                 .find((row) => row && row.runtime_id === this.strategy.selectedRuntimeId)
             if (!state || !this.strategyFeed || !runtime) return { state, runtime, error: 'No selected strategy runtime.' }
             const semantics = strategyRuntimeSemantics(runtime)
+            if (this.strategy.features && this.strategy.features.administration === false) {
+                return { state, runtime, error: 'Strategy administration is disabled by the rollout flag.' }
+            }
             if (semantics.observer) return { state, runtime, error: 'Observer runtimes have no allocation authority.' }
             if (!semantics.runtimeControl.available) return { state, runtime, error: semantics.runtimeControl.reason }
             if (!(this.strategy.control && this.strategy.control.available)) {
@@ -3849,6 +3854,7 @@ export default {
                     control: true, lifecycle: true,
                 },
                 money: { data: null, loading: false, error: null },
+                features: { administration: STRATEGY_ADMINISTRATION_ENABLED },
                 administration: {
                     comparison: null, preview: null, result: null,
                     pending: null, error: null,

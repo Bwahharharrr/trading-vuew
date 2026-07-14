@@ -50,6 +50,54 @@ export function classifyRuntimeReadiness(state: any): {
     tone: string;
 };
 /**
+ * Build the operator-facing runtime semantics without conflating health, mode,
+ * mutation authority, freshness, or dependency gates. This is intentionally a
+ * read-only view model: it never grants authority from a connected socket.
+ */
+export function strategyRuntimeSemantics(runtime: any, opts?: {}): {
+    health: {
+        state: string;
+        ready: boolean;
+        tone: string;
+    };
+    mode: {
+        raw: string;
+        label: string;
+    };
+    observer: boolean;
+    authority: {
+        status: string;
+        tone: string;
+        label: string;
+        reason: any;
+    };
+    freshness: {
+        status: string;
+        tone: string;
+        label: string;
+        ageMs: number | null;
+    };
+    auth: {
+        configured: boolean;
+        ready: boolean;
+        status: string;
+        tone: string;
+        label: any;
+    };
+    allocation: {
+        configured: boolean;
+        ready: boolean;
+        status: string;
+        tone: string;
+        label: any;
+    };
+    runtimeControl: {
+        available: boolean;
+        reason: any;
+    };
+    primaryReason: any;
+};
+/**
  * Classify the RUNTIME-level allocation_strategy_status ROLLUP (e.g. 'active' /
  * 'inactive') — a coarse per-runtime health axis, DISTINCT from the per-ticker
  * waiting/long/short/… status (classifyStrategyStatus) and the readiness state.
@@ -64,8 +112,10 @@ export function classifyRuntimeStrategyRollup(raw: any): {
 /**
  * Group `overlays[]` into `{ decision, fill, order, allocation, control, other }`,
  * each a list of normalized markers `{ timestamp_ms, kind, label, status, source,
- * decision_id, symbol, ticker_id, timeframe, order_status_counts }` in input
- * order. Rows without a `timestamp_ms` are skipped; unknown kinds fold to `other`.
+ * decision_id, symbol, ticker_id, timeframe, order_status_counts, provenance,
+ * raw }` in input order. `raw` retains every gateway field for chart-to-activity
+ * inspection; rows without a timestamp are skipped and unknown kinds fold to
+ * `other`.
  */
 export function overlaysToMarkers(overlays: any): {
     decision: never[];

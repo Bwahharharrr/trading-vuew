@@ -100,6 +100,7 @@
                         :overlay-visibility="strategy.overlayVisibility || {}"
                         :money="strategy.money || {}"
                         :administration="strategy.administration || {}"
+                        :administration-enabled-flag="!strategy.features || strategy.features.administration !== false"
                         :streaming="!!strategy.streaming"
                         :maximized="maximized"
                         :loading="!!strategy.loading"

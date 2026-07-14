@@ -293,6 +293,39 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         streaming: boolean;
         loading: boolean;
         error: null;
+        operations: {
+            events: never[];
+            lifecycleIntervals: never[];
+            projectionRevision: null;
+            nextCursor: null;
+            resumeCursor: null;
+            loading: boolean;
+            error: null;
+            live: boolean;
+        };
+        overlayVisibility: {
+            decision: boolean;
+            fill: boolean;
+            order: boolean;
+            allocation: boolean;
+            control: boolean;
+            lifecycle: boolean;
+        };
+        money: {
+            data: null;
+            loading: boolean;
+            error: null;
+        };
+        features: {
+            administration: boolean;
+        };
+        administration: {
+            comparison: null;
+            preview: null;
+            result: null;
+            pending: null;
+            error: null;
+        };
         control: {
             available: boolean;
             pending: boolean;
@@ -498,8 +531,41 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     _strategyTickerIds(runtime: any): any[];
     strategyOpen(): Promise<void>;
     _strategyLoadRuntime(runtime_id: any): Promise<void>;
+    _strategyLoadChartOverlays(runtime_id?: any): Promise<void>;
     strategySelectRuntime(runtime_id: any): void;
     strategyRefresh(): void;
+    _strategyResetOperations(): void;
+    _strategyAdministrationContext(): {
+        state: {
+            comparison: null;
+            preview: null;
+            result: null;
+            pending: null;
+            error: null;
+        };
+        runtime: undefined;
+        error: string;
+    } | {
+        state: {
+            comparison: null;
+            preview: null;
+            result: null;
+            pending: null;
+            error: null;
+        };
+        runtime: never;
+        error: any;
+    };
+    _strategyOperationRevision(operation: any, state?: any): any;
+    strategyCompareAllocationPolicies(payload?: {}): Promise<void>;
+    strategyPreviewOperation(payload?: {}): Promise<void>;
+    strategyApproveOperation({ approval_statement }?: {}): Promise<void>;
+    strategyClearPreview(): void;
+    _strategyApplyOperationsPage(page: any, { replace, updateNextCursor }?: {
+        replace?: boolean | undefined;
+        updateNextCursor?: boolean | undefined;
+    }): void;
+    strategyLoadMoreOperations(): Promise<void>;
     _strategyControl(method: any, opts: any): Promise<void>;
     strategyCancelTickerOrders(p: any): Promise<void>;
     strategyPauseTicker(p: any): Promise<void>;
@@ -515,6 +581,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
     _removeStrategyOverlays(dc: any): void;
     _strategyCandlePriceAt(candles: any, ts: any, field: any): number | null;
     syncStrategyOverlays(): void;
+    strategyToggleOverlay({ kind, enabled }?: {}): void;
     setPositionsAccount(acct: any): void;
     _ensureHistoryLoaded(opts?: {}): void;
     loadHistoryPage(reset?: boolean, { silent }?: {
@@ -2441,7 +2508,7 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         signClass(dec: any): "" | "pos" | "neg";
         pctText(dec: any): string;
         fmtTime(ms: any): string;
-    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("refresh" | "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "update:tab-order" | "select-position" | "audit-position" | "load-more" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail" | "strategy-select-runtime" | "strategy-refresh" | "strategy-cancel-ticker-orders" | "strategy-pause-ticker" | "strategy-resume-ticker" | "strategy-unlock-ticker" | "strategy-adopt-position" | "strategy-open-lineage-run")[], "refresh" | "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "update:tab-order" | "select-position" | "audit-position" | "load-more" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail" | "strategy-select-runtime" | "strategy-refresh" | "strategy-cancel-ticker-orders" | "strategy-pause-ticker" | "strategy-resume-ticker" | "strategy-unlock-ticker" | "strategy-adopt-position" | "strategy-open-lineage-run", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("refresh" | "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "update:tab-order" | "select-position" | "audit-position" | "load-more" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail" | "strategy-select-runtime" | "strategy-refresh" | "strategy-load-more-operations" | "strategy-toggle-overlay" | "strategy-compare-allocation" | "strategy-preview-operation" | "strategy-approve-operation" | "strategy-clear-preview" | "strategy-cancel-ticker-orders" | "strategy-pause-ticker" | "strategy-resume-ticker" | "strategy-unlock-ticker" | "strategy-adopt-position" | "strategy-open-lineage-run")[], "refresh" | "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "update:tab-order" | "select-position" | "audit-position" | "load-more" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail" | "strategy-select-runtime" | "strategy-refresh" | "strategy-load-more-operations" | "strategy-toggle-overlay" | "strategy-compare-allocation" | "strategy-preview-operation" | "strategy-approve-operation" | "strategy-clear-preview" | "strategy-cancel-ticker-orders" | "strategy-pause-ticker" | "strategy-resume-ticker" | "strategy-unlock-ticker" | "strategy-adopt-position" | "strategy-open-lineage-run", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
         height: {
             type: NumberConstructor;
             default: number;
@@ -2545,6 +2612,12 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         "onBt-close-detail"?: ((...args: any[]) => any) | undefined;
         "onStrategy-select-runtime"?: ((...args: any[]) => any) | undefined;
         "onStrategy-refresh"?: ((...args: any[]) => any) | undefined;
+        "onStrategy-load-more-operations"?: ((...args: any[]) => any) | undefined;
+        "onStrategy-toggle-overlay"?: ((...args: any[]) => any) | undefined;
+        "onStrategy-compare-allocation"?: ((...args: any[]) => any) | undefined;
+        "onStrategy-preview-operation"?: ((...args: any[]) => any) | undefined;
+        "onStrategy-approve-operation"?: ((...args: any[]) => any) | undefined;
+        "onStrategy-clear-preview"?: ((...args: any[]) => any) | undefined;
         "onStrategy-cancel-ticker-orders"?: ((...args: any[]) => any) | undefined;
         "onStrategy-pause-ticker"?: ((...args: any[]) => any) | undefined;
         "onStrategy-resume-ticker"?: ((...args: any[]) => any) | undefined;
@@ -2557,8 +2630,8 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
         height: number;
         loading: boolean;
         open: boolean;
-        activeTab: string;
         maximized: boolean;
+        activeTab: string;
         tabOrder: unknown[];
         openPositions: unknown[];
         historicalPositions: unknown[];
@@ -3219,6 +3292,26 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
                 type: ArrayConstructor;
                 default: () => never[];
             };
+            operations: {
+                type: ObjectConstructor;
+                default: () => {};
+            };
+            overlayVisibility: {
+                type: ObjectConstructor;
+                default: () => {};
+            };
+            money: {
+                type: ObjectConstructor;
+                default: () => {};
+            };
+            administration: {
+                type: ObjectConstructor;
+                default: () => {};
+            };
+            administrationEnabledFlag: {
+                type: BooleanConstructor;
+                default: boolean;
+            };
             loading: {
                 type: BooleanConstructor;
                 default: boolean;
@@ -3228,6 +3321,10 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
                 default: null;
             };
             streaming: {
+                type: BooleanConstructor;
+                default: boolean;
+            };
+            maximized: {
                 type: BooleanConstructor;
                 default: boolean;
             };
@@ -3249,14 +3346,30 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
                 id: string;
                 label: string;
             }[];
-            activeTab: string;
+            ACTIVITY_RENDER_BATCH: number;
+            activeTab: string | null;
             selectedTicker: string;
             selectedAuditTicker: string;
+            activitySource: string;
+            activityKind: string;
+            activityTicker: string;
+            overlayKinds: string[];
             reason: string;
             unlockCurrency: string;
             unlockAmount: string;
             adoptPositionId: string;
             controlValidation: string;
+            allocationPolicyJson: string;
+            adminActor: string;
+            adminIdempotencyKey: string;
+            adminReason: string;
+            allocationScope: string;
+            allocationAccountId: string;
+            allocationStrategyInstanceId: string;
+            allocationDesiredState: string;
+            approvalStatement: string;
+            adminValidation: string;
+            activityVisibleLimit: number;
         }, {
             nowMs(): number;
             processGroups(): {
@@ -3268,8 +3381,10 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             }[];
             activeRuntimeId(): any;
             selectedRuntime(): {} | null;
+            selectedNodeTickers(): any;
             selectedTickerId(): string;
             controlEnabled(): boolean;
+            controlUnavailableReason(): any;
             controlPending(): boolean;
             controlAwaiting(): boolean;
             summaryDeps(): {
@@ -3346,6 +3461,49 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
                 ready: boolean;
                 tone: string;
             };
+            runtimeSemantics(): {
+                health: {
+                    state: string;
+                    ready: boolean;
+                    tone: string;
+                };
+                mode: {
+                    raw: string;
+                    label: string;
+                };
+                observer: boolean;
+                authority: {
+                    status: string;
+                    tone: string;
+                    label: string;
+                    reason: any;
+                };
+                freshness: {
+                    status: string;
+                    tone: string;
+                    label: string;
+                    ageMs: number | null;
+                };
+                auth: {
+                    configured: boolean;
+                    ready: boolean;
+                    status: string;
+                    tone: string;
+                    label: any;
+                };
+                allocation: {
+                    configured: boolean;
+                    ready: boolean;
+                    status: string;
+                    tone: string;
+                    label: any;
+                };
+                runtimeControl: {
+                    available: boolean;
+                    reason: any;
+                };
+                primaryReason: any;
+            };
             rollupInfo(): {
                 status: string;
                 known: boolean;
@@ -3358,6 +3516,18 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
                 running: boolean;
                 known: boolean;
             };
+            automaticAllocation(): any;
+            administrationEnabled(): boolean;
+            administrationUnavailableReason(): any;
+            administrationPending(): any;
+            administrationError(): any;
+            allocationComparison(): any;
+            operationPreview(): any;
+            operationResult(): any;
+            requiredApprovalStatement(): string;
+            previewExpired(): boolean;
+            previewRevisionCurrent(): boolean;
+            approvalReady(): boolean;
             lineageLink(): {
                 runId: any;
                 runIndex: any;
@@ -3365,8 +3535,14 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             } | null;
             lineageRawLabel(): any;
             lineageReasons(): any[];
+            canonicalParamsDisplay(): string;
+            candidateMetricRows(): {
+                key: string;
+                value: any;
+            }[];
             pendingAuthReasons(): any[];
             pendingAllocationReasons(): any[];
+            recentDecisionRows(): any[];
             approvalRaw(): any;
             approval(): {
                 present: boolean;
@@ -3394,6 +3570,15 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
                 submittedNonterminal: number;
                 oldestSubmittedTsMs: number | null;
             };
+            tickerOrderRows(): any[];
+            staleOrderForensics(): any;
+            submittedOrderBlockers(): any[];
+            moneyData(): any;
+            moneyTotalRows(): {
+                key: string;
+                label: string;
+                value: any;
+            }[];
             walletBalanceGroups(): {
                 class: string;
                 wallets: any;
@@ -3415,8 +3600,75 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             }[];
             activeAuditTicker(): any;
             auditDecisions(): unknown[];
+            activityBaseRows(): {
+                id: string;
+                type: string;
+                ts_ms: any;
+                source: any;
+                kind: any;
+                ticker_id: any;
+                order_id: any;
+                reason: any;
+                payload: any;
+                count: number;
+            }[];
+            activitySources(): any[];
+            activityKinds(): any[];
+            activityTickers(): any[];
+            filteredActivityRows(): {
+                id: string;
+                type: string;
+                ts_ms: any;
+                source: any;
+                kind: any;
+                ticker_id: any;
+                order_id: any;
+                reason: any;
+                payload: any;
+                count: number;
+            }[];
+            activityRows(): {
+                id: string;
+                type: string;
+                ts_ms: any;
+                source: any;
+                kind: any;
+                ticker_id: any;
+                order_id: any;
+                reason: any;
+                payload: any;
+                count: number;
+            }[];
+            activityHasMore(): boolean;
+            lifecycleIntervals(): any;
         }, {
+            setActiveTab(id: any): void;
+            onTaskTabKeydown(event: any, index: any): void;
+            overlayEnabled(kind: any): boolean;
             openLineage(): void;
+            parseAllocationPolicy(): any;
+            compareAllocationPolicy(): void;
+            administrationIdentity(): {
+                actor: string;
+                idempotency_key: string;
+                reason: string;
+            } | null;
+            previewPolicyProposal(proposal: any): void;
+            automaticAllocationScope(): {
+                scope: string;
+                account_id?: undefined;
+                strategy_instance_id?: undefined;
+            } | {
+                scope: string;
+                account_id: string;
+                strategy_instance_id?: undefined;
+            } | {
+                scope: string;
+                strategy_instance_id: string;
+                account_id?: undefined;
+            } | null;
+            previewAllocationToggle(): void;
+            approvePreview(): void;
             selectRuntime(id: any): void;
             selectTicker(runtimeId: any, tickerId: any): void;
             runControl(action: any): void;
@@ -3436,13 +3688,18 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             risksFailed(checks: any): boolean;
             deltasTitle(deltas: any): string;
             claimsTitle(claims: any): string;
+            decisionReason(decision: any): any;
+            operationReason(event: any): any;
+            prettyPayload(payload: any): string;
+            lifecycleKey(interval: any): string;
+            lifecycleClass(state: any): "sts-attention" | "sts-muted-grey";
             outcomeClass(outcome: any): "" | "neg" | "act";
             shortFp(fp: any): string;
             shortSha(sha: any): string;
             symbolOf(id: any): any;
             _tickerOrdersMap(rt: any): Map<any, any>;
             fmtTime(ms: any): string;
-        }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("cancel-ticker-orders" | "resume-ticker" | "unlock-ticker" | "adopt-position" | "pause-ticker" | "select-runtime" | "refresh" | "open-lineage-run")[], "cancel-ticker-orders" | "resume-ticker" | "unlock-ticker" | "adopt-position" | "pause-ticker" | "select-runtime" | "refresh" | "open-lineage-run", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+        }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("cancel-ticker-orders" | "resume-ticker" | "unlock-ticker" | "adopt-position" | "pause-ticker" | "select-runtime" | "refresh" | "load-more-operations" | "toggle-overlay" | "compare-allocation" | "preview-operation" | "approve-operation" | "clear-preview" | "open-lineage-run")[], "cancel-ticker-orders" | "resume-ticker" | "unlock-ticker" | "adopt-position" | "pause-ticker" | "select-runtime" | "refresh" | "load-more-operations" | "toggle-overlay" | "compare-allocation" | "preview-operation" | "approve-operation" | "clear-preview" | "open-lineage-run", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
             runtimes: {
                 type: ArrayConstructor;
                 default: () => never[];
@@ -3455,6 +3712,26 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
                 type: ArrayConstructor;
                 default: () => never[];
             };
+            operations: {
+                type: ObjectConstructor;
+                default: () => {};
+            };
+            overlayVisibility: {
+                type: ObjectConstructor;
+                default: () => {};
+            };
+            money: {
+                type: ObjectConstructor;
+                default: () => {};
+            };
+            administration: {
+                type: ObjectConstructor;
+                default: () => {};
+            };
+            administrationEnabledFlag: {
+                type: BooleanConstructor;
+                default: boolean;
+            };
             loading: {
                 type: BooleanConstructor;
                 default: boolean;
@@ -3464,6 +3741,10 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
                 default: null;
             };
             streaming: {
+                type: BooleanConstructor;
+                default: boolean;
+            };
+            maximized: {
                 type: BooleanConstructor;
                 default: boolean;
             };
@@ -3488,15 +3769,27 @@ declare const __VLS_export: import("vue").DefineComponent<{}, {}, {
             "onPause-ticker"?: ((...args: any[]) => any) | undefined;
             "onSelect-runtime"?: ((...args: any[]) => any) | undefined;
             onRefresh?: ((...args: any[]) => any) | undefined;
+            "onLoad-more-operations"?: ((...args: any[]) => any) | undefined;
+            "onToggle-overlay"?: ((...args: any[]) => any) | undefined;
+            "onCompare-allocation"?: ((...args: any[]) => any) | undefined;
+            "onPreview-operation"?: ((...args: any[]) => any) | undefined;
+            "onApprove-operation"?: ((...args: any[]) => any) | undefined;
+            "onClear-preview"?: ((...args: any[]) => any) | undefined;
             "onOpen-lineage-run"?: ((...args: any[]) => any) | undefined;
         }>, {
             error: string;
             loading: boolean;
+            money: Record<string, any>;
+            streaming: boolean;
             control: Record<string, any>;
             runtimes: unknown[];
             selectedRuntimeId: string;
             decisions: unknown[];
-            streaming: boolean;
+            operations: Record<string, any>;
+            overlayVisibility: Record<string, any>;
+            administration: Record<string, any>;
+            administrationEnabledFlag: boolean;
+            maximized: boolean;
             now: number;
         }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
     }, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;

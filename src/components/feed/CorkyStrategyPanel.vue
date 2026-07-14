@@ -5,11 +5,14 @@
     <!-- Drilldown view tabs for the SELECTED
          runtime. App owns the feed/subscription; this only renders + emits intents. -->
     <div class="sr-tabs" role="tablist" aria-label="Strategy views">
-        <button v-for="t in TABS" :key="t.id" class="sr-tab" :class="{ active: activeTab === t.id }"
-                role="tab" :aria-selected="activeTab === t.id" @click="setActiveTab(t.id)">{{ t.label }}</button>
+        <button v-for="(t, index) in TABS" :id="'strategy-task-' + t.id" ref="taskTabs" :key="t.id"
+                class="sr-tab" :class="{ active: activeTab === t.id }" role="tab"
+                :aria-selected="activeTab === t.id" aria-controls="strategy-task-panel"
+                :tabindex="activeTab === t.id ? 0 : -1" @click="setActiveTab(t.id)"
+                @keydown="onTaskTabKeydown($event, index)">{{ t.label }}</button>
         <span class="sr-spacer"></span>
         <span v-if="streaming" class="sr-live" title="Live runtime subscription (full-replacement updates)">● live</span>
-        <button class="sr-icon" title="Refresh runtimes" @click="$emit('refresh')">⟳</button>
+        <button class="sr-icon" title="Refresh runtimes" aria-label="Refresh strategy runtimes" @click="$emit('refresh')">⟳</button>
     </div>
 
     <!-- Nothing loaded → ONE centered state (vertically + horizontally). A downed
@@ -149,13 +152,16 @@
     </div>
 
     <!-- ═══ DRILLDOWN ═══ (selected runtime) -->
-    <div v-if="!selectedRuntime" class="sr-body">
+    <div v-if="!selectedRuntime" id="strategy-task-panel" class="sr-body" role="tabpanel"
+         :aria-labelledby="'strategy-task-' + activeTab" tabindex="0">
         <div v-if="!loading" class="sr-msg">No strategy runtime loaded.</div>
     </div>
 
     <!-- OVERVIEW / ORDERS / CONFIGURATION / ADMINISTRATION share one detail
          scroll owner; sections are assigned to exactly one task. -->
-    <div v-else-if="['overview', 'orders', 'configuration', 'administration'].includes(activeTab)" class="sr-body">
+    <div v-else-if="['overview', 'orders', 'configuration', 'administration'].includes(activeTab)"
+         id="strategy-task-panel" class="sr-body" role="tabpanel"
+         :aria-labelledby="'strategy-task-' + activeTab" tabindex="0">
         <section v-if="activeTab === 'administration'" class="sr-sec">
             <div class="sr-sec-head">Runtime administration</div>
             <div class="sr-grid">
@@ -528,7 +534,8 @@
     </div>
 
     <!-- ─── TICKERS ─── selected runtime ticker status and exact reason. -->
-    <div v-else-if="activeTab === 'tickers'" class="sr-body">
+    <div v-else-if="activeTab === 'tickers'" id="strategy-task-panel" class="sr-body"
+         role="tabpanel" :aria-labelledby="'strategy-task-' + activeTab" tabindex="0">
         <section class="sr-sec">
             <div class="sr-sec-head">Ticker state <span class="sr-dim">{{ selectedNodeTickers.length }}</span></div>
             <div v-if="!selectedNodeTickers.length" class="sr-msg sr-msg-sm">No ticker state published for this runtime.</div>
@@ -545,7 +552,8 @@
     </div>
 
     <!-- ─── CAPITAL ─── auth wallets by class + wallet allocation tree. -->
-    <div v-else-if="activeTab === 'capital'" class="sr-body">
+    <div v-else-if="activeTab === 'capital'" id="strategy-task-panel" class="sr-body"
+         role="tabpanel" :aria-labelledby="'strategy-task-' + activeTab" tabindex="0">
         <section class="sr-sec">
             <div class="sr-sec-head">Strategy money <span class="sr-dim">server-computed projection</span></div>
             <div v-if="runtimeSemantics.observer" class="sr-msg sr-msg-sm">N/A by design — origin observers have no financial allocation authority.</div>
@@ -698,7 +706,8 @@
     </div>
 
     <!-- ─── ACTIVITY ─── decision evidence + immutable operation history. -->
-    <div v-else-if="activeTab === 'activity'" class="sr-body">
+    <div v-else-if="activeTab === 'activity'" id="strategy-task-panel" class="sr-body"
+         role="tabpanel" :aria-labelledby="'strategy-task-' + activeTab" tabindex="0">
         <section class="sr-sec">
             <div class="sr-sec-head">Activity timeline
                 <span class="sr-dim">{{ activityRows.length }}</span>
@@ -748,6 +757,9 @@
             <div v-if="operations.error" class="sr-ctl-msg error">{{ operations.error }}</div>
             <button v-if="operations.nextCursor" class="sr-load-more" :disabled="operations.loading"
                     @click="$emit('load-more-operations')">{{ operations.loading ? 'Loading…' : 'Load older operations' }}</button>
+            <button v-if="activityHasMore" class="sr-load-more" @click="activityVisibleLimit += ACTIVITY_RENDER_BATCH">
+                Show {{ Math.min(ACTIVITY_RENDER_BATCH, filteredActivityRows.length - activityRows.length) }} more loaded events
+            </button>
         </section>
         <section class="sr-sec">
             <div class="sr-sec-head">Decision audit<span class="sr-dim">{{ decisions.length }}</span></div>
@@ -834,6 +846,7 @@ import { isNeg } from '../../helpers/feed/corky-positions.js'
 
 const DEFAULT_RUNTIME_ID = 'v8-tail-repair-live-main'
 const ACTIVE_TAB_STORAGE_KEY = 'corky.strategy.active-task.v1'
+const ACTIVITY_RENDER_BATCH = 200
 const TABS = [
     { id: 'overview', label: 'Overview' },
     { id: 'tickers', label: 'Tickers' },
@@ -863,6 +876,7 @@ export default {
         overlayVisibility: { type: Object, default: () => ({}) },
         money: { type: Object, default: () => ({}) },
         administration: { type: Object, default: () => ({}) },
+        administrationEnabledFlag: { type: Boolean, default: true },
         loading: { type: Boolean, default: false },
         error: { type: String, default: null },
         streaming: { type: Boolean, default: false },
@@ -888,6 +902,7 @@ export default {
     data() {
         return {
             TABS,
+            ACTIVITY_RENDER_BATCH,
             activeTab: storedActiveTab(),
             // Which ticker is highlighted (kept for command routing / drilldown focus).
             selectedTicker: '',
@@ -918,6 +933,7 @@ export default {
             allocationDesiredState: 'enabled',
             approvalStatement: '',
             adminValidation: '',
+            activityVisibleLimit: ACTIVITY_RENDER_BATCH,
         }
     },
     computed: {
@@ -1053,9 +1069,11 @@ export default {
             return this.selectedRuntime && this.selectedRuntime.automatic_allocation || null
         },
         administrationEnabled() {
-            return this.controlEnabled && !this.runtimeSemantics.observer && this.lineageInfo.tone === 'verified'
+            return this.administrationEnabledFlag && this.controlEnabled &&
+                !this.runtimeSemantics.observer && this.lineageInfo.tone === 'verified'
         },
         administrationUnavailableReason() {
+            if (!this.administrationEnabledFlag) return 'disabled by the rollout flag'
             if (this.runtimeSemantics.observer) return 'observer runtimes have no allocation authority'
             if (!this.controlEnabled) return this.controlUnavailableReason
             if (this.lineageInfo.tone !== 'verified') return 'verified runtime lineage is required'
@@ -1267,7 +1285,7 @@ export default {
         activityTickers() {
             return Array.from(new Set(this.activityBaseRows.map(({ ticker_id }) => ticker_id).filter(Boolean))).sort()
         },
-        activityRows() {
+        filteredActivityRows() {
             const filtered = this.activityBaseRows.filter((row) =>
                 (!this.activitySource || row.source === this.activitySource) &&
                 (!this.activityKind || row.kind === this.activityKind) &&
@@ -1283,6 +1301,8 @@ export default {
             }
             return grouped
         },
+        activityRows() { return this.filteredActivityRows.slice(0, this.activityVisibleLimit) },
+        activityHasMore() { return this.activityRows.length < this.filteredActivityRows.length },
         lifecycleIntervals() {
             return (this.operations.lifecycleIntervals || []).filter((interval) =>
                 (!this.activitySource || interval.source === this.activitySource) &&
@@ -1296,12 +1316,29 @@ export default {
             this.adminIdempotencyKey = ''
         },
         operationPreview() { this.approvalStatement = '' },
+        activitySource() { this.activityVisibleLimit = ACTIVITY_RENDER_BATCH },
+        activityKind() { this.activityVisibleLimit = ACTIVITY_RENDER_BATCH },
+        activityTicker() { this.activityVisibleLimit = ACTIVITY_RENDER_BATCH },
     },
     methods: {
         setActiveTab(id) {
             if (!TABS.some((tab) => tab.id === id)) return
             this.activeTab = id
             try { window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, id) } catch (_error) { /* no storage */ }
+        },
+        onTaskTabKeydown(event, index) {
+            let next = index
+            if (event.key === 'ArrowRight') next = (index + 1) % TABS.length
+            else if (event.key === 'ArrowLeft') next = (index - 1 + TABS.length) % TABS.length
+            else if (event.key === 'Home') next = 0
+            else if (event.key === 'End') next = TABS.length - 1
+            else return
+            event.preventDefault()
+            this.setActiveTab(TABS[next].id)
+            this.$nextTick(() => {
+                const tabs = this.$refs.taskTabs
+                if (Array.isArray(tabs) && tabs[next]) tabs[next].focus()
+            })
         },
         overlayEnabled(kind) { return this.overlayVisibility[kind] !== false },
         // Jump to the runtime's verified universe backtest run + selected candidate

@@ -170,10 +170,21 @@ export class CorkyClient {
     /** Recent decisions for a runtime → resolves the `decisions` array. Optional
      *  { ticker_id } filters to one ticker; { limit } caps the count. */
     listStrategyDecisions(runtime_id: any, opts?: {}): Promise<any>;
+    /** Immutable operations page for a runtime. `cursor` is opaque and must be
+     *  echoed verbatim; the client never interprets projection revisions. */
+    listStrategyOperations(runtime_id: any, opts?: {}): Promise<any>;
+    /** Authoritative server-computed strategy money projection. */
+    getStrategyMoney(runtime_id: any): Promise<any>;
     /** Strategy chart overlays (decision/fill/order/allocation markers) →
      *  resolves the `overlays` array. Optional { timeframe, start_ms, end_ms }
      *  window the result. */
     getStrategyChartOverlays(runtime_id: any, ticker_id: any, opts?: {}): Promise<any>;
+    /** Compare automatic-allocation policies without mutating runtime state. */
+    compareStrategyAllocationPolicies(runtime_id: any, opts?: {}): Promise<any>;
+    /** Create an expiring, revision-bound preview for an administrative action. */
+    previewStrategyOperation(opts?: {}): Promise<any>;
+    /** Apply one exact preview. The gateway still revalidates hash, expiry and revision. */
+    approveStrategyOperation(preview: any, approval_statement: any): Promise<any>;
     /**
      * Stream runtime snapshots. Resolves with the FIRST `strategy_runtime_update`;
      * register `onSubscription(subscription_id, …)` (or pass `onEvent`) for the
@@ -181,6 +192,8 @@ export class CorkyClient {
      * stream by `runtime_id` OR `strategy` (at least one is required).
      */
     subscribeStrategyRuntime(opts?: {}): Promise<any>;
+    /** Cursor-resumable immutable strategy operations stream. */
+    subscribeStrategyOperations(opts?: {}): Promise<any>;
     _strategyTickerControl(type: any, name: any, opts?: {}): {
         type: any;
         runtime_id: any;
