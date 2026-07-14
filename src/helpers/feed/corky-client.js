@@ -95,6 +95,9 @@ const TERMINAL_EVENT = {
     list_strategy_operations:    'strategy_operations',
     get_strategy_money:          'strategy_money',
     get_strategy_chart_overlays: 'strategy_chart_overlays',
+    compare_strategy_allocation_policies: 'strategy_allocation_comparison',
+    preview_strategy_operation:           'strategy_operation_preview',
+    approve_strategy_operation:           'strategy_operation_result',
     // strategy DIRECT-CONTROL mutations. Each resolves on the gateway control_ack;
     // the runtime performs the real safety/cancel/ledger/auth reconciliation.
     pause_strategy_ticker:         'control_ack',
@@ -617,6 +620,61 @@ export class CorkyClient {
         return this._request(command)
     }
 
+    /** Compare automatic-allocation policies without mutating runtime state. */
+    compareStrategyAllocationPolicies(runtime_id, opts = {}) {
+        if (!runtime_id) throw new Error('compareStrategyAllocationPolicies: runtime_id is required')
+        if (opts.as_of_ms == null) throw new Error('compareStrategyAllocationPolicies: as_of_ms is required')
+        if (opts.expires_at_ms == null) throw new Error('compareStrategyAllocationPolicies: expires_at_ms is required')
+        if (!Array.isArray(opts.policies) || !opts.policies.length) {
+            throw new Error('compareStrategyAllocationPolicies: policies are required')
+        }
+        return this._request({
+            type: 'compare_strategy_allocation_policies',
+            runtime_id,
+            as_of_ms: opts.as_of_ms,
+            expires_at_ms: opts.expires_at_ms,
+            policies: opts.policies,
+            candidate_performance: Array.isArray(opts.candidate_performance)
+                ? opts.candidate_performance : [],
+        })
+    }
+
+    /** Create an expiring, revision-bound preview for an administrative action. */
+    previewStrategyOperation(opts = {}) {
+        const required = ['runtime_id', 'idempotency_key', 'actor', 'expected_revision', 'expires_at_ms', 'operation']
+        for (const field of required) {
+            if (opts[field] == null || opts[field] === '') {
+                throw new Error(`previewStrategyOperation: ${field} is required`)
+            }
+        }
+        return this._request({
+            type: 'preview_strategy_operation',
+            runtime_id: opts.runtime_id,
+            idempotency_key: opts.idempotency_key,
+            actor: opts.actor,
+            expected_revision: opts.expected_revision,
+            expires_at_ms: opts.expires_at_ms,
+            operation: opts.operation,
+        })
+    }
+
+    /** Apply one exact preview. The gateway still revalidates hash, expiry and revision. */
+    approveStrategyOperation(preview, approval_statement) {
+        if (!preview || typeof preview !== 'object') {
+            throw new Error('approveStrategyOperation: preview is required')
+        }
+        if (!approval_statement) {
+            throw new Error('approveStrategyOperation: approval_statement is required')
+        }
+        const expected = `APPROVE ${preview.preview_hash || ''}`
+        if (!preview.preview_hash || approval_statement !== expected) {
+            throw new Error(`approveStrategyOperation: approval_statement must equal ${expected}`)
+        }
+        return this._request({
+            type: 'approve_strategy_operation', preview, approval_statement,
+        })
+    }
+
     /**
      * Stream runtime snapshots. Resolves with the FIRST `strategy_runtime_update`;
      * register `onSubscription(subscription_id, …)` (or pass `onEvent`) for the
@@ -912,6 +970,9 @@ export class CorkyClient {
         if (type === 'strategy_operations') return event.page
         if (type === 'strategy_money') return event.money
         if (type === 'strategy_chart_overlays') return event.overlays
+        if (type === 'strategy_allocation_comparison') return event.comparison
+        if (type === 'strategy_operation_preview') return event.preview
+        if (type === 'strategy_operation_result') return event.result
         // backtest_run keeps {run_id, artifact}; progress/overlays keep the full
         // event (callers read .events / .overlays / .trades / series_descriptors).
         return event

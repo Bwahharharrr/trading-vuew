@@ -63,6 +63,19 @@ export class CorkyStrategyFeed {
     return this.client.getStrategyChartOverlays(runtime_id, ticker_id, opts)
   }
 
+  /** Read-only allocation-policy comparison, returned exactly as projected. */
+  compareAllocationPolicies(runtime_id, opts = {}) {
+    return this.client.compareStrategyAllocationPolicies(runtime_id, opts)
+  }
+
+  /** Revision-bound administrative preview; does not mutate runtime state. */
+  previewOperation(opts = {}) { return this.client.previewStrategyOperation(opts) }
+
+  /** Apply an exact preview after the operator supplies its required statement. */
+  approveOperation(preview, approval_statement) {
+    return this.client.approveStrategyOperation(preview, approval_statement)
+  }
+
   // ── direct-control mutations (thin passthrough over the client) ───────────────
   // MUTATE a live runtime — gated by an available control session; each requires a
   // visible operator `reason` and echoes the discovered runtime id as

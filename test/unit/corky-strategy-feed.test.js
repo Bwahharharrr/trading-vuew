@@ -19,6 +19,9 @@ function makeFakeClient() {
     _operations: { runtime_id: 'rt', projection_revision: 'rev-1', events: [], lifecycle_intervals: [], resume_cursor: 'cursor-1' },
     _money: { runtime_id: 'rt', totals: { observed_balance: '10000.0000000000000000001' } },
     _overlays: [{ kind: 'fill', timestamp_ms: 1, label: 'x', status: 'filled' }],
+    _comparison: { runtime_id: 'rt', projection_revision: 'rev-1', proposals: [] },
+    _preview: { runtime_id: 'rt', preview_hash: 'hash-1' },
+    _result: { runtime_id: 'rt', applied: true },
     listStrategyRuntimes() { this.calls.push(['listStrategyRuntimes']); return Promise.resolve(this._runtimes) },
     getStrategyRuntime(id) { this.calls.push(['getStrategyRuntime', id]); return Promise.resolve(this._runtime) },
     getStrategyTicker(rt, tk) { this.calls.push(['getStrategyTicker', rt, tk]); return Promise.resolve(this._ticker) },
@@ -26,6 +29,9 @@ function makeFakeClient() {
     listStrategyOperations(rt, o) { this.calls.push(['listStrategyOperations', rt, o]); return Promise.resolve(this._operations) },
     getStrategyMoney(rt) { this.calls.push(['getStrategyMoney', rt]); return Promise.resolve(this._money) },
     getStrategyChartOverlays(rt, tk, o) { this.calls.push(['getStrategyChartOverlays', rt, tk, o]); return Promise.resolve(this._overlays) },
+    compareStrategyAllocationPolicies(rt, o) { this.calls.push(['compareStrategyAllocationPolicies', rt, o]); return Promise.resolve(this._comparison) },
+    previewStrategyOperation(o) { this.calls.push(['previewStrategyOperation', o]); return Promise.resolve(this._preview) },
+    approveStrategyOperation(p, s) { this.calls.push(['approveStrategyOperation', p, s]); return Promise.resolve(this._result) },
     _subscribeResult: () => Promise.resolve(),
     subscribeStrategyRuntime(args) { this.calls.push(['subscribeStrategyRuntime', args]); return this._subscribeResult(args) },
     subscribeStrategyOperations(args) { this.calls.push(['subscribeStrategyOperations', args]); return this._subscribeResult(args) },
@@ -83,6 +89,17 @@ describe('one-shot reads delegate + pass args', () => {
   it('getMoney delegates without converting decimals', async () => {
     expect((await feed.getMoney('rt')).totals.observed_balance).toBe('10000.0000000000000000001')
     expect(client.calls).toContainEqual(['getStrategyMoney', 'rt'])
+  })
+
+  it('delegates allocation comparison, preview and approval without reshaping', async () => {
+    const compare = { as_of_ms: 1, expires_at_ms: 2, policies: [{ kind: 'equal' }] }
+    await feed.compareAllocationPolicies('rt', compare)
+    const previewRequest = { runtime_id: 'rt', operation: { type: 'set_automatic_allocation_enabled' } }
+    const preview = await feed.previewOperation(previewRequest)
+    await feed.approveOperation(preview, 'APPROVE hash-1')
+    expect(client.calls).toContainEqual(['compareStrategyAllocationPolicies', 'rt', compare])
+    expect(client.calls).toContainEqual(['previewStrategyOperation', previewRequest])
+    expect(client.calls).toContainEqual(['approveStrategyOperation', preview, 'APPROVE hash-1'])
   })
 })
 

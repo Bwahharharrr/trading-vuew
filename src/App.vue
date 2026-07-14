@@ -146,6 +146,10 @@
             @strategy-refresh="strategyRefresh"
             @strategy-load-more-operations="strategyLoadMoreOperations"
             @strategy-toggle-overlay="strategyToggleOverlay"
+            @strategy-compare-allocation="strategyCompareAllocationPolicies"
+            @strategy-preview-operation="strategyPreviewOperation"
+            @strategy-approve-operation="strategyApproveOperation"
+            @strategy-clear-preview="strategyClearPreview"
             @strategy-cancel-ticker-orders="strategyCancelTickerOrders"
             @strategy-pause-ticker="strategyPauseTicker"
             @strategy-resume-ticker="strategyResumeTicker"
@@ -586,6 +590,10 @@ export default {
                     control: true, lifecycle: true,
                 },
                 money: { data: null, loading: false, error: null },
+                administration: {
+                    comparison: null, preview: null, result: null,
+                    pending: null, error: null,
+                },
                 // Direct-control session state (see the control handlers below).
                 // `available` gates the panel's control surface entirely; a control
                 // send flips pending → awaiting and never mutates the runtime set.
@@ -2936,6 +2944,158 @@ export default {
                 nextCursor: null, resumeCursor: null, loading: false, error: null, live: false,
             }
             this.strategy.money = { data: null, loading: false, error: null }
+            this.strategy.administration = {
+                comparison: null, preview: null, result: null,
+                pending: null, error: null,
+            }
+        },
+
+        _strategyAdministrationContext() {
+            const state = this.strategy.administration
+            const runtime = (this.strategy.runtimes || [])
+                .find((row) => row && row.runtime_id === this.strategy.selectedRuntimeId)
+            if (!state || !this.strategyFeed || !runtime) return { state, runtime, error: 'No selected strategy runtime.' }
+            const semantics = strategyRuntimeSemantics(runtime)
+            if (semantics.observer) return { state, runtime, error: 'Observer runtimes have no allocation authority.' }
+            if (!semantics.runtimeControl.available) return { state, runtime, error: semantics.runtimeControl.reason }
+            if (!(this.strategy.control && this.strategy.control.available)) {
+                return { state, runtime, error: 'No strategy control session.' }
+            }
+            if (classifyLineage(runtime.lineage_status).tone !== 'verified') {
+                return { state, runtime, error: 'Verified runtime lineage is required for allocation administration.' }
+            }
+            return { state, runtime, error: null }
+        },
+
+        _strategyOperationRevision(operation, state = this.strategy.administration) {
+            const type = operation && operation.type
+            if (type === 'approve_automatic_allocation_policy') {
+                return state && state.comparison && state.comparison.projection_revision || null
+            }
+            return this.strategy.operations && this.strategy.operations.projectionRevision || null
+        },
+
+        async strategyCompareAllocationPolicies(payload = {}) {
+            const context = this._strategyAdministrationContext()
+            if (!context.state) return
+            if (context.error) { context.state.error = context.error; return }
+            context.state.pending = 'comparison'
+            context.state.error = null
+            context.state.preview = null
+            context.state.result = null
+            try {
+                const comparison = await this.strategyFeed.compareAllocationPolicies(
+                    context.runtime.runtime_id, payload)
+                if (context.runtime.runtime_id !== this.strategy.selectedRuntimeId) return
+                if (!comparison || comparison.runtime_id !== context.runtime.runtime_id) {
+                    throw new Error('Gateway returned an allocation comparison for the wrong runtime.')
+                }
+                context.state.comparison = comparison
+            } catch (error) {
+                if (context.runtime.runtime_id === this.strategy.selectedRuntimeId) {
+                    context.state.error = this._strategyErr(error)
+                }
+            } finally {
+                if (context.runtime.runtime_id === this.strategy.selectedRuntimeId) context.state.pending = null
+            }
+        },
+
+        async strategyPreviewOperation(payload = {}) {
+            const context = this._strategyAdministrationContext()
+            if (!context.state) return
+            if (context.error) { context.state.error = context.error; return }
+            const expectedRevision = this._strategyOperationRevision(payload.operation, context.state)
+            if (!expectedRevision) {
+                context.state.error = 'No authoritative projection revision is available.'
+                return
+            }
+            if (payload.expected_revision && payload.expected_revision !== expectedRevision) {
+                context.state.error = 'The requested projection revision is stale. Compare or refresh again.'
+                return
+            }
+            context.state.pending = 'preview'
+            context.state.error = null
+            context.state.preview = null
+            context.state.result = null
+            try {
+                const preview = await this.strategyFeed.previewOperation({
+                    runtime_id: context.runtime.runtime_id,
+                    idempotency_key: payload.idempotency_key,
+                    actor: payload.actor,
+                    expected_revision: expectedRevision,
+                    expires_at_ms: payload.expires_at_ms,
+                    operation: payload.operation,
+                })
+                if (context.runtime.runtime_id !== this.strategy.selectedRuntimeId) return
+                if (!preview || preview.runtime_id !== context.runtime.runtime_id) {
+                    throw new Error('Gateway returned an operation preview for the wrong runtime.')
+                }
+                context.state.preview = preview
+            } catch (error) {
+                if (context.runtime.runtime_id === this.strategy.selectedRuntimeId) {
+                    context.state.error = this._strategyErr(error)
+                }
+            } finally {
+                if (context.runtime.runtime_id === this.strategy.selectedRuntimeId) context.state.pending = null
+            }
+        },
+
+        async strategyApproveOperation({ approval_statement } = {}) {
+            const context = this._strategyAdministrationContext()
+            if (!context.state) return
+            if (context.error) { context.state.error = context.error; return }
+            const preview = context.state.preview
+            if (!preview) { context.state.error = 'Create an operation preview first.'; return }
+            if (preview.runtime_id !== context.runtime.runtime_id) {
+                context.state.error = 'The preview belongs to a different runtime.'
+                return
+            }
+            if (Number(preview.expires_at_ms) <= Date.now()) {
+                context.state.error = 'The operation preview has expired. Create a new preview.'
+                return
+            }
+            const required = `APPROVE ${preview.preview_hash}`
+            if (approval_statement !== required) {
+                context.state.error = `Approval statement must exactly equal ${required}`
+                return
+            }
+            const currentRevision = this._strategyOperationRevision(preview.operation, context.state)
+            if (!currentRevision || preview.expected_revision !== currentRevision) {
+                context.state.error = 'The operation preview revision is stale. Create a new preview.'
+                return
+            }
+            const operationsRevision = this.strategy.operations && this.strategy.operations.projectionRevision
+            if (operationsRevision && preview.expected_revision !== operationsRevision) {
+                context.state.error = 'The live operations projection advanced. Create a new preview.'
+                return
+            }
+            context.state.pending = 'approval'
+            context.state.error = null
+            context.state.result = null
+            try {
+                const result = await this.strategyFeed.approveOperation(preview, approval_statement)
+                if (context.runtime.runtime_id !== this.strategy.selectedRuntimeId) return
+                if (!result || result.runtime_id !== context.runtime.runtime_id ||
+                    result.preview_hash !== preview.preview_hash) {
+                    throw new Error('Gateway returned a result that does not match the approved preview.')
+                }
+                // Never patch money, allocation or runtime state optimistically.
+                // The immutable operations/runtime subscriptions own reconciliation.
+                context.state.result = result
+            } catch (error) {
+                if (context.runtime.runtime_id === this.strategy.selectedRuntimeId) {
+                    context.state.error = this._strategyErr(error)
+                }
+            } finally {
+                if (context.runtime.runtime_id === this.strategy.selectedRuntimeId) context.state.pending = null
+            }
+        },
+
+        strategyClearPreview() {
+            if (!this.strategy.administration) return
+            this.strategy.administration.preview = null
+            this.strategy.administration.result = null
+            this.strategy.administration.error = null
         },
 
         // Merge immutable operation rows by event_id. The gateway owns cursor and
@@ -3689,6 +3849,10 @@ export default {
                     control: true, lifecycle: true,
                 },
                 money: { data: null, loading: false, error: null },
+                administration: {
+                    comparison: null, preview: null, result: null,
+                    pending: null, error: null,
+                },
                 control: { available: false, pending: false, awaiting: false, error: null },
             }
             this.searchTabs = []

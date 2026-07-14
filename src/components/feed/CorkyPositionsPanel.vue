@@ -99,6 +99,7 @@
                         :operations="strategy.operations || {}"
                         :overlay-visibility="strategy.overlayVisibility || {}"
                         :money="strategy.money || {}"
+                        :administration="strategy.administration || {}"
                         :streaming="!!strategy.streaming"
                         :maximized="maximized"
                         :loading="!!strategy.loading"
@@ -108,6 +109,10 @@
                         @refresh="$emit('strategy-refresh')"
                         @load-more-operations="$emit('strategy-load-more-operations')"
                         @toggle-overlay="$emit('strategy-toggle-overlay', $event)"
+                        @compare-allocation="$emit('strategy-compare-allocation', $event)"
+                        @preview-operation="$emit('strategy-preview-operation', $event)"
+                        @approve-operation="$emit('strategy-approve-operation', $event)"
+                        @clear-preview="$emit('strategy-clear-preview')"
                         @cancel-ticker-orders="$emit('strategy-cancel-ticker-orders', $event)"
                         @pause-ticker="$emit('strategy-pause-ticker', $event)"
                         @resume-ticker="$emit('strategy-resume-ticker', $event)"
@@ -259,6 +264,8 @@ export default {
         'strategy-select-runtime', 'strategy-refresh',
         'strategy-load-more-operations',
         'strategy-toggle-overlay',
+        'strategy-compare-allocation', 'strategy-preview-operation',
+        'strategy-approve-operation', 'strategy-clear-preview',
         'strategy-cancel-ticker-orders', 'strategy-pause-ticker', 'strategy-resume-ticker',
         'strategy-unlock-ticker', 'strategy-adopt-position', 'strategy-open-lineage-run',
     ],

@@ -163,6 +163,132 @@
                 <div class="sr-field"><span class="sr-k">target ticker</span><span class="sr-v">{{ selectedTickerId || 'Select a ticker from the fleet or Tickers tab' }}</span></div>
             </div>
         </section>
+        <section v-if="activeTab === 'administration'" class="sr-sec">
+            <div class="sr-sec-head">Automatic allocation <span class="sr-dim">published state · read only</span></div>
+            <div v-if="automaticAllocation" class="sr-grid">
+                <div class="sr-field"><span class="sr-k">effective</span><span class="sr-v" :class="automaticAllocation.enabled ? 'pos' : 'tone-neutral'">{{ automaticAllocation.enabled ? 'Enabled' : 'Disabled' }}</span></div>
+                <div class="sr-field"><span class="sr-k">policy configured</span><span class="sr-v">{{ boolText(automaticAllocation.policy_configured) }}</span></div>
+                <div class="sr-field"><span class="sr-k">global</span><span class="sr-v">{{ boolText(automaticAllocation.global_enabled) }}</span></div>
+                <div class="sr-field"><span class="sr-k">wallet</span><span class="sr-v">{{ boolText(automaticAllocation.wallet_enabled) }}</span></div>
+                <div class="sr-field"><span class="sr-k">strategy</span><span class="sr-v">{{ boolText(automaticAllocation.strategy_enabled) }}</span></div>
+                <div class="sr-field"><span class="sr-k">policy</span><span class="sr-v">{{ dash(automaticAllocation.policy_id) }} · v{{ dash(automaticAllocation.policy_version) }}</span></div>
+                <div class="sr-field"><span class="sr-k">policy hash</span><span class="sr-v mono" :title="automaticAllocation.policy_hash">{{ shortSha(automaticAllocation.policy_hash) }}</span></div>
+                <div class="sr-field"><span class="sr-k">approved by</span><span class="sr-v">{{ dash(automaticAllocation.approved_by) }}</span></div>
+                <div class="sr-field"><span class="sr-k">approved at</span><span class="sr-v time">{{ fmtTime(automaticAllocation.approved_at_ms) }}</span></div>
+                <div class="sr-field"><span class="sr-k">journal</span><span class="sr-v mono" :title="automaticAllocation.journal_path">{{ dash(automaticAllocation.journal_path) }}</span></div>
+            </div>
+            <div v-else class="sr-msg sr-msg-sm">No automatic-allocation status published.</div>
+            <div v-if="automaticAllocation && automaticAllocation.fault" class="sr-lasterr">{{ automaticAllocation.fault }}</div>
+            <details v-if="automaticAllocation && (automaticAllocation.last_decision || automaticAllocation.daily_digest)" class="sr-payload sr-auto-raw">
+                <summary>Last decision and daily digest</summary>
+                <pre>{{ prettyPayload({ last_decision: automaticAllocation.last_decision, daily_digest: automaticAllocation.daily_digest }) }}</pre>
+            </details>
+        </section>
+
+        <section v-if="activeTab === 'administration'" class="sr-sec">
+            <div class="sr-sec-head">Allocation administration <span class="sr-dim">compare → preview → approve</span></div>
+            <div v-if="!administrationEnabled" class="sr-msg sr-msg-sm sr-admin-unavailable">
+                Read only — {{ administrationUnavailableReason }}
+            </div>
+            <div v-else class="sr-admin-workflow">
+                <div class="sr-admin-form">
+                    <label>Policy JSON
+                        <textarea v-model="allocationPolicyJson" class="sr-admin-policy" rows="9" spellcheck="false"></textarea>
+                    </label>
+                    <div class="sr-admin-actions">
+                        <button class="sr-ctl-btn" :disabled="administrationPending" @click="compareAllocationPolicy">
+                            {{ administrationPending === 'comparison' ? 'Comparing…' : 'Compare policy' }}
+                        </button>
+                    </div>
+                </div>
+
+                <div v-if="allocationComparison" class="sr-comparison">
+                    <div class="sr-grid">
+                        <div class="sr-field"><span class="sr-k">as of</span><span class="sr-v time">{{ fmtTime(allocationComparison.as_of_ms) }}</span></div>
+                        <div class="sr-field"><span class="sr-k">expires</span><span class="sr-v time">{{ fmtTime(allocationComparison.expires_at_ms) }}</span></div>
+                        <div class="sr-field"><span class="sr-k">ledger revision</span><span class="sr-v mono" :title="allocationComparison.ledger_revision">{{ shortFp(allocationComparison.ledger_revision) }}</span></div>
+                        <div class="sr-field"><span class="sr-k">projection revision</span><span class="sr-v mono" :title="allocationComparison.projection_revision">{{ shortFp(allocationComparison.projection_revision) }}</span></div>
+                    </div>
+                    <div v-for="(proposal, index) in allocationComparison.proposals || []" :key="proposal.proposal_sha256 || index" class="sr-proposal">
+                        <div class="sr-proposal-head">
+                            <span class="sym">{{ dash(proposal.input && proposal.input.policy && proposal.input.policy.policy_id) }}</span>
+                            <span>v{{ dash(proposal.input && proposal.input.policy && proposal.input.policy.policy_version) }}</span>
+                            <span>{{ dash(proposal.input && proposal.input.policy && proposal.input.policy.kind) }}</span>
+                            <span class="sr-spacer"></span>
+                            <span class="mono" :title="proposal.proposal_sha256">{{ shortFp(proposal.proposal_sha256) }}</span>
+                        </div>
+                        <div class="sr-money-totals">
+                            <div class="sr-money-total"><span class="sr-k">newly unallocated</span><span class="mono">{{ fmt(proposal.total_newly_unallocated) }}</span></div>
+                            <div class="sr-money-total"><span class="sr-k">allocated</span><span class="mono">{{ fmt(proposal.allocated_amount) }}</span></div>
+                            <div class="sr-money-total"><span class="sr-k">remaining</span><span class="mono">{{ fmt(proposal.remaining_unallocated) }}</span></div>
+                            <div class="sr-money-total"><span class="sr-k">fallback</span><span>{{ dash(proposal.fallback_applied) }}</span></div>
+                        </div>
+                        <table v-if="(proposal.allocations || []).length" class="sr-table sr-proposal-allocations">
+                            <thead><tr><th>Ticker</th><th class="num">Amount</th></tr></thead>
+                            <tbody><tr v-for="row in proposal.allocations" :key="row.ticker_id"><td class="sym">{{ symbolOf(row.ticker_id) }}</td><td class="num mono">{{ fmt(row.amount) }}</td></tr></tbody>
+                        </table>
+                        <details v-if="(proposal.ranking || []).length" class="sr-payload"><summary>Ranking evidence</summary><pre>{{ prettyPayload(proposal.ranking) }}</pre></details>
+                        <button class="sr-ctl-btn" :disabled="administrationPending" @click="previewPolicyProposal(proposal)">Preview policy approval</button>
+                    </div>
+                    <div v-if="!(allocationComparison.proposals || []).length" class="sr-msg sr-msg-sm">The gateway returned no policy proposals.</div>
+                </div>
+
+                <div class="sr-admin-identity">
+                    <label>Actor<input v-model="adminActor" class="sr-ctl-input" type="text" autocomplete="off" placeholder="operator identity" /></label>
+                    <label>Idempotency key<input v-model="adminIdempotencyKey" class="sr-ctl-input" type="text" autocomplete="off" placeholder="unique operation key" /></label>
+                    <label>Reason<input v-model="adminReason" class="sr-ctl-input" type="text" placeholder="visible operator reason" /></label>
+                </div>
+                <div class="sr-admin-toggle">
+                    <label>Scope
+                        <select v-model="allocationScope" class="sr-ctl-input"><option value="global">global</option><option value="wallet">wallet</option><option value="strategy">strategy</option></select>
+                    </label>
+                    <label v-if="allocationScope === 'wallet'">Account
+                        <input v-model="allocationAccountId" class="sr-ctl-input" type="text" placeholder="account_id" />
+                    </label>
+                    <label v-if="allocationScope === 'strategy'">Strategy instance
+                        <input v-model="allocationStrategyInstanceId" class="sr-ctl-input" type="text" placeholder="strategy_instance_id" />
+                    </label>
+                    <label>Desired state
+                        <select v-model="allocationDesiredState" class="sr-ctl-input"><option value="enabled">enabled</option><option value="disabled">disabled</option></select>
+                    </label>
+                    <button class="sr-ctl-btn" :disabled="administrationPending || !operations.projectionRevision" @click="previewAllocationToggle">Preview state change</button>
+                </div>
+                <div v-if="adminValidation" class="sr-ctl-msg validation">{{ adminValidation }}</div>
+            </div>
+            <div v-if="administrationError" class="sr-ctl-msg error">{{ administrationError }}</div>
+        </section>
+
+        <section v-if="activeTab === 'administration' && operationPreview" class="sr-sec sr-operation-preview">
+            <div class="sr-sec-head">Operation preview
+                <span v-if="previewExpired" class="sr-stale">expired</span>
+                <span v-else class="sr-appr-ok">current</span>
+            </div>
+            <div class="sr-grid">
+                <div class="sr-field"><span class="sr-k">actor</span><span class="sr-v">{{ operationPreview.actor }}</span></div>
+                <div class="sr-field"><span class="sr-k">idempotency key</span><span class="sr-v mono">{{ operationPreview.idempotency_key }}</span></div>
+                <div class="sr-field"><span class="sr-k">expected revision</span><span class="sr-v mono" :title="operationPreview.expected_revision">{{ shortFp(operationPreview.expected_revision) }}</span></div>
+                <div class="sr-field"><span class="sr-k">expires</span><span class="sr-v time">{{ fmtTime(operationPreview.expires_at_ms) }}</span></div>
+                <div class="sr-field"><span class="sr-k">preview hash</span><span class="sr-v mono" :title="operationPreview.preview_hash">{{ operationPreview.preview_hash }}</span></div>
+            </div>
+            <pre class="sr-json">{{ prettyPayload(operationPreview.operation) }}</pre>
+            <div class="sr-approval-entry">
+                <span class="sr-k">Type exactly</span><code>{{ requiredApprovalStatement }}</code>
+                <input v-model="approvalStatement" class="sr-ctl-input" type="text" autocomplete="off" :placeholder="requiredApprovalStatement" />
+                <button class="sr-ctl-btn danger" :disabled="!approvalReady || administrationPending" @click="approvePreview">Apply exact preview</button>
+                <button class="sr-ctl-btn" :disabled="administrationPending" @click="$emit('clear-preview')">Clear</button>
+            </div>
+        </section>
+        <section v-if="activeTab === 'administration' && operationResult" class="sr-sec sr-operation-result">
+            <div class="sr-sec-head">Operation result
+                <span :class="operationResult.applied ? 'pos' : 'neg'">{{ operationResult.status }}</span>
+            </div>
+            <div class="sr-grid">
+                <div class="sr-field"><span class="sr-k">applied</span><span class="sr-v">{{ boolText(operationResult.applied) }}</span></div>
+                <div class="sr-field"><span class="sr-k">projection revision</span><span class="sr-v mono" :title="operationResult.projection_revision">{{ shortFp(operationResult.projection_revision) }}</span></div>
+                <div class="sr-field"><span class="sr-k">message</span><span class="sr-v">{{ operationResult.message }}</span></div>
+            </div>
+            <div class="sr-msg sr-msg-sm">Local money and allocation state was not changed optimistically; live gateway projections will reconcile it.</div>
+        </section>
         <section v-if="activeTab === 'overview'" class="sr-sec">
             <div class="sr-sec-head">
                 Runtime <span class="sr-rt-name">{{ selectedRuntime.runtime_id }}</span>
@@ -736,6 +862,7 @@ export default {
         operations: { type: Object, default: () => ({}) },
         overlayVisibility: { type: Object, default: () => ({}) },
         money: { type: Object, default: () => ({}) },
+        administration: { type: Object, default: () => ({}) },
         loading: { type: Boolean, default: false },
         error: { type: String, default: null },
         streaming: { type: Boolean, default: false },
@@ -752,6 +879,7 @@ export default {
     },
     emits: [
         'select-runtime', 'refresh', 'load-more-operations', 'toggle-overlay',
+        'compare-allocation', 'preview-operation', 'approve-operation', 'clear-preview',
         // Direct-control intents (App echoes them to the feed's control methods).
         'cancel-ticker-orders', 'pause-ticker', 'resume-ticker', 'unlock-ticker', 'adopt-position',
         // Jump to the runtime's verified universe backtest run + candidate.
@@ -776,6 +904,20 @@ export default {
             unlockAmount: '',
             adoptPositionId: '',
             controlValidation: '',
+            allocationPolicyJson: JSON.stringify({
+                policy_id: 'equal-v1', policy_version: 1, kind: 'equal',
+                min_eligible_tickers: 1, min_quarters: 0, min_total_trades: 0,
+                cooldown_ms: 0, fallback: 'leave_unallocated',
+            }, null, 2),
+            adminActor: '',
+            adminIdempotencyKey: '',
+            adminReason: '',
+            allocationScope: 'strategy',
+            allocationAccountId: '',
+            allocationStrategyInstanceId: '',
+            allocationDesiredState: 'enabled',
+            approvalStatement: '',
+            adminValidation: '',
         }
     },
     computed: {
@@ -907,6 +1049,43 @@ export default {
         },
         rollupInfo() { return classifyRuntimeStrategyRollup(this.selectedRuntime && this.selectedRuntime.allocation_strategy_status) },
         lineageInfo() { return classifyLineage(this.selectedRuntime && this.selectedRuntime.lineage_status) },
+        automaticAllocation() {
+            return this.selectedRuntime && this.selectedRuntime.automatic_allocation || null
+        },
+        administrationEnabled() {
+            return this.controlEnabled && !this.runtimeSemantics.observer && this.lineageInfo.tone === 'verified'
+        },
+        administrationUnavailableReason() {
+            if (this.runtimeSemantics.observer) return 'observer runtimes have no allocation authority'
+            if (!this.controlEnabled) return this.controlUnavailableReason
+            if (this.lineageInfo.tone !== 'verified') return 'verified runtime lineage is required'
+            return 'administrative capability unavailable'
+        },
+        administrationPending() { return this.administration && this.administration.pending || null },
+        administrationError() { return this.administration && this.administration.error || null },
+        allocationComparison() { return this.administration && this.administration.comparison || null },
+        operationPreview() { return this.administration && this.administration.preview || null },
+        operationResult() { return this.administration && this.administration.result || null },
+        requiredApprovalStatement() {
+            return this.operationPreview ? `APPROVE ${this.operationPreview.preview_hash}` : ''
+        },
+        previewExpired() {
+            return !!this.operationPreview && Number(this.operationPreview.expires_at_ms) <= this.nowMs
+        },
+        previewRevisionCurrent() {
+            if (!this.operationPreview) return false
+            const type = this.operationPreview.operation && this.operationPreview.operation.type
+            const current = type === 'approve_automatic_allocation_policy'
+                ? (this.allocationComparison && this.allocationComparison.projection_revision)
+                : this.operations.projectionRevision
+            const operationsCurrent = !this.operations.projectionRevision ||
+                this.operations.projectionRevision === this.operationPreview.expected_revision
+            return !!current && current === this.operationPreview.expected_revision && operationsCurrent
+        },
+        approvalReady() {
+            return this.administrationEnabled && !this.previewExpired && this.previewRevisionCurrent &&
+                !this.operationResult && this.approvalStatement === this.requiredApprovalStatement
+        },
         // The clickable backtest-candidate link (verified lineage only), or null.
         lineageLink() { return lineageCandidateLink(this.selectedRuntime) },
         lineageRawLabel() {
@@ -1110,6 +1289,14 @@ export default {
                 (!this.activityTicker || interval.ticker_id === this.activityTicker))
         },
     },
+    watch: {
+        activeRuntimeId() {
+            this.approvalStatement = ''
+            this.adminValidation = ''
+            this.adminIdempotencyKey = ''
+        },
+        operationPreview() { this.approvalStatement = '' },
+    },
     methods: {
         setActiveTab(id) {
             if (!TABS.some((tab) => tab.id === id)) return
@@ -1122,6 +1309,96 @@ export default {
         openLineage() {
             const l = this.lineageLink
             if (l) this.$emit('open-lineage-run', { run_id: l.runId, run_index: l.runIndex })
+        },
+        parseAllocationPolicy() {
+            try {
+                const policy = JSON.parse(this.allocationPolicyJson)
+                if (!policy || typeof policy !== 'object' || Array.isArray(policy)) throw new Error('object required')
+                return policy
+            } catch (_error) {
+                this.adminValidation = 'Policy JSON must contain one valid policy object.'
+                return null
+            }
+        },
+        compareAllocationPolicy() {
+            this.adminValidation = ''
+            if (!this.administrationEnabled) return
+            const policy = this.parseAllocationPolicy()
+            if (!policy) return
+            this.$emit('compare-allocation', {
+                as_of_ms: this.nowMs,
+                expires_at_ms: this.nowMs + 300000,
+                policies: [policy],
+                candidate_performance: [],
+            })
+        },
+        administrationIdentity() {
+            const actor = String(this.adminActor || '').trim()
+            const idempotencyKey = String(this.adminIdempotencyKey || '').trim()
+            const reason = String(this.adminReason || '').trim()
+            if (!actor || !idempotencyKey || !reason) {
+                this.adminValidation = 'Actor, unique idempotency key, and visible reason are required.'
+                return null
+            }
+            return { actor, idempotency_key: idempotencyKey, reason }
+        },
+        previewPolicyProposal(proposal) {
+            this.adminValidation = ''
+            if (!this.administrationEnabled || !this.allocationComparison) return
+            if (Number(this.allocationComparison.expires_at_ms) <= this.nowMs) {
+                this.adminValidation = 'The comparison has expired. Compare the policy again.'
+                return
+            }
+            const identity = this.administrationIdentity()
+            const policy = proposal && proposal.input && proposal.input.policy
+            if (!identity || !policy) return
+            this.$emit('preview-operation', {
+                ...identity,
+                expected_revision: this.allocationComparison.projection_revision,
+                expires_at_ms: this.nowMs + 300000,
+                operation: { type: 'approve_automatic_allocation_policy', policy, reason: identity.reason },
+            })
+        },
+        automaticAllocationScope() {
+            if (this.allocationScope === 'global') return { scope: 'global' }
+            if (this.allocationScope === 'wallet') {
+                const accountId = String(this.allocationAccountId ||
+                    (this.selectedRuntime && this.selectedRuntime.allocation_account_id) || '').trim()
+                if (!accountId) { this.adminValidation = 'Wallet scope requires an account_id.'; return null }
+                return { scope: 'wallet', account_id: accountId }
+            }
+            const strategyInstanceId = String(this.allocationStrategyInstanceId ||
+                (this.selectedRuntime && this.selectedRuntime.strategy_instance_id) || '').trim()
+            if (!strategyInstanceId) {
+                this.adminValidation = 'Strategy scope requires a strategy_instance_id.'
+                return null
+            }
+            return { scope: 'strategy', strategy_instance_id: strategyInstanceId }
+        },
+        previewAllocationToggle() {
+            this.adminValidation = ''
+            if (!this.administrationEnabled) return
+            if (!this.operations.projectionRevision) {
+                this.adminValidation = 'No authoritative operations projection revision is available.'
+                return
+            }
+            const identity = this.administrationIdentity()
+            const scope = this.automaticAllocationScope()
+            if (!identity || !scope) return
+            this.$emit('preview-operation', {
+                ...identity,
+                expected_revision: this.operations.projectionRevision,
+                expires_at_ms: this.nowMs + 300000,
+                operation: {
+                    type: 'set_automatic_allocation_enabled', scope,
+                    enabled: this.allocationDesiredState === 'enabled', reason: identity.reason,
+                },
+            })
+        },
+        approvePreview() {
+            this.adminValidation = ''
+            if (!this.approvalReady) return
+            this.$emit('approve-operation', { approval_statement: this.approvalStatement })
         },
         // ── selection ───────────────────────────────────────────────────────────
         selectRuntime(id) {
@@ -1446,6 +1723,32 @@ export default {
                      gap: 7px; margin-top: 7px; padding-top: 7px; border-top: 1px solid #2a2e39; font-size: 11px; }
 .sr-order-forensic .sr-decision-reason { grid-column: 1 / -1; }
 .sr-stale-forensics { border-left: 2px solid #e54150; padding-left: 9px; }
+.sr-auto-raw { margin-top: 7px; }
+.sr-admin-unavailable { border-left: 2px solid #808a9d; }
+.sr-admin-workflow { display: flex; flex-direction: column; gap: 12px; padding-top: 8px; }
+.sr-admin-form label, .sr-admin-identity label, .sr-admin-toggle label {
+    display: flex; flex-direction: column; gap: 4px; color: #808a9d; font-size: 11px;
+}
+.sr-admin-policy { width: 100%; box-sizing: border-box; resize: vertical; padding: 8px;
+                   color: #d1d4dc; background: #0b0f18; border: 1px solid #2a2e39;
+                   border-radius: 4px; font: 11px/1.4 monospace; }
+.sr-admin-policy:focus { outline: none; border-color: #35a776; }
+.sr-admin-actions, .sr-proposal-head, .sr-admin-toggle, .sr-approval-entry {
+    display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: 7px;
+}
+.sr-admin-identity { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 8px; }
+.sr-admin-identity .sr-ctl-input { width: 100%; box-sizing: border-box; }
+.sr-admin-toggle .sr-ctl-input { min-width: 150px; }
+.sr-proposal { margin-top: 8px; padding: 8px; border: 1px solid #2a2e39;
+               border-radius: 4px; background: #0e1320; }
+.sr-proposal-head { margin-top: 0; align-items: center; }
+.sr-proposal-allocations { margin: 8px 0; }
+.sr-operation-preview { border-left: 2px solid #ff9f40; padding-left: 10px; }
+.sr-operation-result { border-left: 2px solid #35a776; padding-left: 10px; }
+.sr-approval-entry { align-items: center; }
+.sr-approval-entry code { color: #ff9f40; padding: 5px 7px; background: #0b0f18;
+                          border: 1px solid #2a2e39; overflow-wrap: anywhere; }
+.sr-approval-entry input { flex: 1 1 260px; }
 /* Verified-lineage → clickable link into the Backtests dock. */
 .sr-lin-open { background: rgba(88,166,255,0.12); color: #58a6ff; border: 1px solid rgba(88,166,255,0.4);
                border-radius: 4px; padding: 2px 8px; font-size: 10px; cursor: pointer; white-space: nowrap; }
@@ -1466,6 +1769,7 @@ export default {
     .sr-activity-row { grid-template-columns: 100px minmax(80px, auto) minmax(120px, 1fr); }
     .sr-activity-row .sr-decision-reason, .sr-payload { grid-column: 1 / -1; }
     .sr-order-forensic { grid-template-columns: 1fr 1fr; }
+    .sr-admin-identity { grid-template-columns: 1fr; }
 }
 
 /* Readiness badge (delivery axis) */

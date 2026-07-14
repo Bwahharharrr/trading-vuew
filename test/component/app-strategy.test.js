@@ -51,6 +51,10 @@ function mkCtx() {
         decision: true, fill: true, order: true, allocation: true, control: true, lifecycle: true,
       },
       money: { data: null, loading: false, error: null },
+      administration: {
+        comparison: null, preview: null, result: null, pending: null, error: null,
+      },
+      control: { available: true, pending: false, awaiting: false, error: null },
     },
     _strategySub: null,
     _strategyOperationsSub: null,
@@ -75,6 +79,18 @@ function mkCtx() {
         authority_scope: 'wallet_local', totals: { observed_balance: '10000.0000000000000000001' },
         wallets: [], ticker_allocations: [], funding: [],
       })),
+      compareAllocationPolicies: vi.fn(async (id, opts) => ({
+        runtime_id: id, as_of_ms: opts.as_of_ms, expires_at_ms: opts.expires_at_ms,
+        ledger_revision: 'ledger-1', projection_revision: 'rev-1', proposals: [],
+      })),
+      previewOperation: vi.fn(async (opts) => ({
+        schema_version: 1, ...opts, created_at_ms: Date.now(), preview_hash: 'preview-hash-1',
+      })),
+      approveOperation: vi.fn(async (preview) => ({
+        runtime_id: preview.runtime_id, idempotency_key: preview.idempotency_key,
+        preview_hash: preview.preview_hash, status: 'applied', applied: true,
+        projection_revision: 'rev-2', message: 'applied',
+      })),
       getChartOverlays: vi.fn(async (id, tid) => (tid === ADA_TID ? OV_ADA.slice() : [])),
       subscribeRuntime: vi.fn((opts, handlers) => {
         ctx._subHandlers = handlers; ctx._subArgs = opts
@@ -91,6 +107,9 @@ function mkCtx() {
   for (const m of ['strategyOpen', '_strategyLoadRuntime', 'strategySelectRuntime', 'strategyRefresh',
     '_strategySubscribe', '_strategyStopSubscribe', '_strategyApplyUpdate', '_strategyUpsertRuntimes',
     '_strategyResetOperations', '_strategyApplyOperationsPage', 'strategyLoadMoreOperations',
+    '_strategyAdministrationContext', '_strategyOperationRevision',
+    'strategyCompareAllocationPolicies', 'strategyPreviewOperation',
+    'strategyApproveOperation', 'strategyClearPreview',
     '_strategyLoadChartOverlays', 'strategyToggleOverlay',
     '_removeStrategyOverlays', '_strategyCandlePriceAt', 'syncStrategyOverlays', '_strategyErr',
     '_strategyDefaultRuntimeId', '_strategyTickerIds', '_loadedCandleRange']) {
@@ -267,6 +286,70 @@ describe('selected-runtime immutable operations', () => {
     })
     expect(ctx.strategy.operations.events[0].event_id).toBe('old')
     expect(ctx.strategy.operations.nextCursor).toBeNull()
+  })
+})
+
+describe('safe allocation administration', () => {
+  beforeEach(async () => {
+    await ctx.strategyOpen()
+    ctx.strategy.runtimes[0] = mkRuntime(DEFAULT_ID, { lineage_status: 'verified' })
+    ctx.strategy.control.available = true
+  })
+
+  test('executes compare → revision-bound preview → exact approval without optimistic state changes', async () => {
+    const beforeRuntimes = JSON.stringify(ctx.strategy.runtimes)
+    const beforeMoney = JSON.stringify(ctx.strategy.money)
+    const expiresAt = Date.now() + 60_000
+    await ctx.strategyCompareAllocationPolicies({
+      as_of_ms: Date.now(), expires_at_ms: expiresAt,
+      policies: [{ policy_id: 'equal-v1', kind: 'equal' }], candidate_performance: [],
+    })
+    expect(ctx.strategy.administration.comparison.projection_revision).toBe('rev-1')
+
+    const operation = {
+      type: 'approve_automatic_allocation_policy',
+      policy: { policy_id: 'equal-v1', kind: 'equal' }, reason: 'reviewed comparison',
+    }
+    await ctx.strategyPreviewOperation({
+      actor: 'operator', idempotency_key: 'allocation-op-1',
+      expected_revision: 'rev-1', expires_at_ms: expiresAt, operation,
+    })
+    expect(ctx.strategyFeed.previewOperation).toHaveBeenCalledWith(expect.objectContaining({
+      runtime_id: DEFAULT_ID, expected_revision: 'rev-1', operation,
+    }))
+    await ctx.strategyApproveOperation({ approval_statement: 'APPROVE preview-hash-1' })
+    expect(ctx.strategy.administration.result).toMatchObject({ applied: true, projection_revision: 'rev-2' })
+    expect(JSON.stringify(ctx.strategy.runtimes)).toBe(beforeRuntimes)
+    expect(JSON.stringify(ctx.strategy.money)).toBe(beforeMoney)
+  })
+
+  test('blocks stale revisions and non-exact approval statements before sending', async () => {
+    ctx.strategy.administration.comparison = { projection_revision: 'rev-1' }
+    await ctx.strategyPreviewOperation({
+      actor: 'operator', idempotency_key: 'stale-op', expected_revision: 'old-rev',
+      expires_at_ms: Date.now() + 60_000,
+      operation: { type: 'approve_automatic_allocation_policy', policy: {}, reason: 'test' },
+    })
+    expect(ctx.strategyFeed.previewOperation).not.toHaveBeenCalled()
+    expect(ctx.strategy.administration.error).toMatch(/stale/i)
+
+    ctx.strategy.administration.preview = {
+      runtime_id: DEFAULT_ID, idempotency_key: 'op', preview_hash: 'hash-1',
+      expected_revision: 'rev-1', expires_at_ms: Date.now() + 60_000,
+      operation: { type: 'approve_automatic_allocation_policy' },
+    }
+    await ctx.strategyApproveOperation({ approval_statement: 'APPROVE wrong' })
+    expect(ctx.strategyFeed.approveOperation).not.toHaveBeenCalled()
+    expect(ctx.strategy.administration.error).toContain('APPROVE hash-1')
+  })
+
+  test('capability-fences observer runtimes', async () => {
+    ctx.strategy.runtimes[0] = mkRuntime(DEFAULT_ID, {
+      mode: 'origin_observer', lineage_status: 'verified', runtime_control_available: false,
+    })
+    await ctx.strategyCompareAllocationPolicies({ policies: [{}] })
+    expect(ctx.strategyFeed.compareAllocationPolicies).not.toHaveBeenCalled()
+    expect(ctx.strategy.administration.error).toMatch(/observer/i)
   })
 })
 

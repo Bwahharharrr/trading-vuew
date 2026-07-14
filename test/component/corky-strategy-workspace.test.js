@@ -179,4 +179,98 @@ describe('responsive strategy task workspace', () => {
         expect(wrapper.find('.sr-candidate-metrics').text()).toContain('8.25')
         expect(wrapper.text()).toContain('public snapshots matched')
     })
+
+    test('Administration renders automatic state and enforces compare → preview → exact approval', async () => {
+        const now = runtimes[0].generated_at_ms
+        const runtime = {
+            ...runtimes[0],
+            lineage_status: 'verified',
+            runtime_control_available: true,
+            automatic_allocation: {
+                journal_path: '/tmp/automatic-allocation.jsonl', policy_configured: true,
+                enabled: true, fault: null, global_enabled: true, wallet_enabled: true,
+                strategy_enabled: true, policy_id: 'equal-v1', policy_version: 1,
+                policy_hash: 'sha256:policy-hash', approved_by: 'operator', approved_at_ms: now - 1000,
+                last_decision: { applied_amount: '20.0000000000000000001' },
+                daily_digest: { remaining_unallocated: '0' },
+            },
+        }
+        const proposal = {
+            proposal_sha256: 'proposal-hash',
+            input: { policy: { policy_id: 'equal-v1', policy_version: 1, kind: 'equal' } },
+            total_newly_unallocated: '20.0000000000000000001',
+            allocated_amount: '20.0000000000000000001', remaining_unallocated: '0',
+            allocations: [{ ticker_id: runtime.tickers[0].ticker_id, amount: '10.0000000000000000001' }],
+            ranking: [{ ticker_id: runtime.tickers[0].ticker_id, eligible: true, selected: true }],
+        }
+        const comparison = {
+            runtime_id: runtime.runtime_id, as_of_ms: now, expires_at_ms: now + 300000,
+            ledger_revision: 'ledger-1', projection_revision: 'rev-1', proposals: [proposal],
+        }
+        const wrapper = mountPanel({
+            runtimes: [runtime], selectedRuntimeId: runtime.runtime_id, now,
+            control: { available: true },
+            operations: { projectionRevision: 'rev-1', events: [], lifecycleIntervals: [] },
+            administration: { comparison, preview: null, result: null, pending: null, error: null },
+        })
+        await task(wrapper, 'Administration')
+        expect(wrapper.text()).toContain('published state · read only')
+        expect(wrapper.text()).toContain('equal-v1')
+        expect(wrapper.text()).toContain('20.0000000000000000001')
+
+        await wrapper.find('.sr-admin-actions button').trigger('click')
+        expect(wrapper.emitted('compare-allocation').pop()[0]).toMatchObject({
+            as_of_ms: now, expires_at_ms: now + 300000,
+            policies: [{ policy_id: 'equal-v1', kind: 'equal' }], candidate_performance: [],
+        })
+        const identity = wrapper.findAll('.sr-admin-identity input')
+        await identity[0].setValue('operator')
+        await identity[1].setValue('allocation-op-1')
+        await identity[2].setValue('reviewed comparison')
+        await wrapper.find('.sr-proposal > button').trigger('click')
+        expect(wrapper.emitted('preview-operation').pop()[0]).toMatchObject({
+            actor: 'operator', idempotency_key: 'allocation-op-1', expected_revision: 'rev-1',
+            operation: { type: 'approve_automatic_allocation_policy', reason: 'reviewed comparison' },
+        })
+
+        const preview = {
+            runtime_id: runtime.runtime_id, actor: 'operator', idempotency_key: 'allocation-op-1',
+            expected_revision: 'rev-1', created_at_ms: now, expires_at_ms: now + 300000,
+            operation: { type: 'approve_automatic_allocation_policy', policy: proposal.input.policy },
+            preview_hash: 'preview-hash-1',
+        }
+        await wrapper.setProps({ administration: { comparison, preview, result: null, pending: null, error: null } })
+        const apply = wrapper.find('.sr-approval-entry .danger')
+        expect(apply.attributes('disabled')).toBeDefined()
+        await wrapper.find('.sr-approval-entry input').setValue('APPROVE preview-hash-1')
+        expect(apply.attributes('disabled')).toBeUndefined()
+        await apply.trigger('click')
+        expect(wrapper.emitted('approve-operation').pop()[0]).toEqual({
+            approval_statement: 'APPROVE preview-hash-1',
+        })
+
+        await wrapper.setProps({ administration: {
+            comparison, preview: { ...preview, expires_at_ms: now - 1 },
+            result: null, pending: null, error: null,
+        } })
+        await wrapper.find('.sr-approval-entry input').setValue('APPROVE preview-hash-1')
+        expect(wrapper.find('.sr-approval-entry .danger').attributes('disabled')).toBeDefined()
+        expect(wrapper.find('.sr-operation-preview').text()).toContain('expired')
+    })
+
+    test('Administration remains read-only for observer runtimes', async () => {
+        const observer = {
+            ...runtimes[0], mode: 'origin_observer', lineage_status: 'verified',
+            runtime_control_available: false, mutations_halted_reason: 'origin observer is capability-fenced',
+            automatic_allocation: null,
+        }
+        const wrapper = mountPanel({
+            runtimes: [observer], selectedRuntimeId: observer.runtime_id,
+            control: { available: true },
+        })
+        await task(wrapper, 'Administration')
+        expect(wrapper.find('.sr-admin-unavailable').text()).toContain('observer runtimes have no allocation authority')
+        expect(wrapper.find('.sr-admin-workflow').exists()).toBe(false)
+        expect(wrapper.find('.sr-operation-preview').exists()).toBe(false)
+    })
 })

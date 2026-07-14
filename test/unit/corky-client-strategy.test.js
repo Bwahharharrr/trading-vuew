@@ -157,6 +157,55 @@ describe('strategy one-shot reads: command framing + terminal FIELD extraction',
     const money = await p
     expect(money.totals.observed_balance).toBe('10000.0000000000000000001')
   })
+
+  it('frames compare → preview → exact approval and extracts each gateway payload', async () => {
+    const { client, sock } = makeClient()
+    const policy = { policy_id: 'equal-v1', policy_version: 1, kind: 'equal' }
+    const compared = client.compareStrategyAllocationPolicies('rt-main', {
+      as_of_ms: 100, expires_at_ms: 200, policies: [policy], candidate_performance: [],
+    })
+    expect(sock().sent[0].command).toEqual({
+      type: 'compare_strategy_allocation_policies', runtime_id: 'rt-main',
+      as_of_ms: 100, expires_at_ms: 200, policies: [policy], candidate_performance: [],
+    })
+    sock().push({ schema_version: 1, request_id: sock().sent[0].request_id, event: {
+      type: 'strategy_allocation_comparison', comparison: {
+        runtime_id: 'rt-main', as_of_ms: 100, expires_at_ms: 200,
+        ledger_revision: 'ledger-1', projection_revision: 'rev-1', proposals: [],
+      },
+    } })
+    await expect(compared).resolves.toMatchObject({ projection_revision: 'rev-1' })
+
+    const operation = { type: 'approve_automatic_allocation_policy', policy, reason: 'reviewed' }
+    const previewed = client.previewStrategyOperation({
+      runtime_id: 'rt-main', idempotency_key: 'op-1', actor: 'operator',
+      expected_revision: 'rev-1', expires_at_ms: 300, operation,
+    })
+    expect(sock().sent[1].command).toEqual({
+      type: 'preview_strategy_operation', runtime_id: 'rt-main', idempotency_key: 'op-1',
+      actor: 'operator', expected_revision: 'rev-1', expires_at_ms: 300, operation,
+    })
+    const preview = {
+      schema_version: 1, runtime_id: 'rt-main', idempotency_key: 'op-1', actor: 'operator',
+      expected_revision: 'rev-1', created_at_ms: 200, expires_at_ms: 300,
+      operation, preview_hash: 'hash-1',
+    }
+    sock().push({ schema_version: 1, request_id: sock().sent[1].request_id,
+      event: { type: 'strategy_operation_preview', preview } })
+    await expect(previewed).resolves.toEqual(preview)
+
+    const approved = client.approveStrategyOperation(preview, 'APPROVE hash-1')
+    expect(sock().sent[2].command).toEqual({
+      type: 'approve_strategy_operation', preview, approval_statement: 'APPROVE hash-1',
+    })
+    sock().push({ schema_version: 1, request_id: sock().sent[2].request_id, event: {
+      type: 'strategy_operation_result', result: {
+        runtime_id: 'rt-main', idempotency_key: 'op-1', preview_hash: 'hash-1',
+        status: 'applied', applied: true, projection_revision: 'rev-2', message: 'applied',
+      },
+    } })
+    await expect(approved).resolves.toMatchObject({ applied: true, projection_revision: 'rev-2' })
+  })
 })
 
 // ── input guards ──────────────────────────────────────────────────────────────
@@ -169,6 +218,16 @@ describe('strategy sender input guards (throw + send nothing)', () => {
     expect(() => client.listStrategyDecisions()).toThrow(/runtime_id is required/)
     expect(() => client.listStrategyOperations()).toThrow(/runtime_id is required/)
     expect(() => client.getStrategyMoney()).toThrow(/runtime_id is required/)
+    expect(() => client.compareStrategyAllocationPolicies()).toThrow(/runtime_id is required/)
+    expect(() => client.previewStrategyOperation({})).toThrow(/runtime_id is required/)
+    expect(() => client.approveStrategyOperation(null, '')).toThrow(/preview is required/)
+    expect(sock().sent).toHaveLength(0)
+  })
+
+  it('requires the exact approval statement before sending', () => {
+    const { client, sock } = makeClient()
+    expect(() => client.approveStrategyOperation({ preview_hash: 'abc' }, 'APPROVE xyz'))
+      .toThrow(/must equal APPROVE abc/)
     expect(sock().sent).toHaveLength(0)
   })
 
