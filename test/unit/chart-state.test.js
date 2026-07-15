@@ -185,15 +185,13 @@ describe('computeds + simple methods', () => {
     expect(ctx.$refs.tradingVue.resetChart).toHaveBeenCalled()
   })
 
-  test('resetView delegates to the strategy balance chart when that tab is active', () => {
-    const resetView = vi.fn()
+  test('resetView uses TradingVue for strategy balance tabs too', () => {
     const ctx = mkCtx({
       activeTab: { kind: 'strategy_balance' },
-      $refs: { strategyBalanceChart: { resetView }, tradingVue: { resetChart: vi.fn() } },
+      $refs: { tradingVue: { resetChart: vi.fn() } },
     })
     ctx.resetView()
-    expect(resetView).toHaveBeenCalled()
-    expect(ctx.$refs.tradingVue.resetChart).not.toHaveBeenCalled()
+    expect(ctx.$refs.tradingVue.resetChart).toHaveBeenCalled()
   })
 
   test('log_scale watcher writes grid.logScale and persists', () => {

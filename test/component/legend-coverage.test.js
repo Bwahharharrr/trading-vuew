@@ -97,6 +97,25 @@ describe('ohlcv computed', () => {
   })
 })
 
+describe('non-candle main-series legend', () => {
+  test('identifies a native Spline main series and suppresses candle volume chrome', () => {
+    const ctx = withDerived(mkCtx({
+      $props: {
+        values: { ohlcv: [111, 1000.125, 1002, 998] },
+        meta_props: {}, grid_id: 0,
+        common: {
+          data: [{ main: true, type: 'Spline' }],
+          meta: { last: [222, 999.5, 1002, 998] },
+          layout: { grids: [{ prec: 2 }] },
+        },
+        layout_override: undefined,
+      },
+    }))
+    expect(get(ctx, 'main_type')).toBe('Spline')
+    expect(get(ctx, 'show_volume_row')).toBe(false)
+  })
+})
+
 // ---------------------------------------------------------------------------
 // 2. ohlcv cache behaviour
 // ---------------------------------------------------------------------------

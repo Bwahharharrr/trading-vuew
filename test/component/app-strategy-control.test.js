@@ -12,6 +12,7 @@
 //      only changes on the next subscription full-replacement (reconciliation).
 import { test, expect, describe, beforeEach, vi } from 'vitest'
 import App from '../../src/App.vue'
+import DataCube from '../../src/helpers/datacube.js'
 import { CorkyStrategyFeed } from '../../src/helpers/feed/corky-strategy-feed.js'
 import { CorkyClient } from '../../src/helpers/feed/corky-client.js'
 
@@ -296,7 +297,7 @@ describe('strategy balance tab — strategy-scoped history and timeframe reload'
       runtimeId: 'rt-v8', strategyName: 'EMA V8', timeframe: '1h',
       history: null, loading: false, error: null, requestSequence: 0,
     }
-    const tab = { kind: 'strategy_balance', strategyBalance: state }
+    const tab = { id: 'balance-tab', kind: 'strategy_balance', strategyBalance: state, chart: null }
     const feed = {
       getBalanceHistory: vi.fn(async (runtimeId, opts) => ({
         runtime_id: runtimeId, timeframe: opts.timeframe, starting_balance: '1000', points: [],
@@ -305,6 +306,11 @@ describe('strategy balance tab — strategy-scoped history and timeframe reload'
     const ctx = {
       strategyFeed: feed,
       activeTab: tab,
+      activeChartTabId: 'balance-tab',
+      DataCubeClass: DataCube,
+      onTabCubeReplaced: vi.fn((target, dc) => { target.chart = dc }),
+      $nextTick: (fn) => { if (fn) fn(); return Promise.resolve() },
+      $refs: { tradingVue: { resetChart: vi.fn() } },
       createStrategyBalanceTab: vi.fn(() => tab),
       _strategyErr: M._strategyErr,
     }
@@ -316,10 +322,14 @@ describe('strategy balance tab — strategy-scoped history and timeframe reload'
     expect(ctx.createStrategyBalanceTab).toHaveBeenCalledWith({ runtimeId: 'rt-v8', strategyName: 'EMA V8' })
     expect(state.history).toMatchObject({ runtime_id: 'rt-v8', timeframe: '1h' })
     expect(state.loading).toBe(false)
+    expect(ctx.onTabCubeReplaced).toHaveBeenCalledTimes(1)
+    expect(tab.chart.data.chart.type).toBe('Spline')
+    expect(ctx.$refs.tradingVue.resetChart).toHaveBeenCalledTimes(1)
 
     await ctx.strategyBalanceTimeframeChanged('1D')
     expect(state.timeframe).toBe('1D')
     expect(feed.getBalanceHistory).toHaveBeenLastCalledWith('rt-v8', { timeframe: '1D' })
     expect(state.history.timeframe).toBe('1D')
+    expect(ctx.onTabCubeReplaced).toHaveBeenCalledTimes(2)
   })
 })

@@ -13,10 +13,15 @@ export default {
             return { author: 'C451', version: '1.1.2' }
         },
         draw(ctx) {
+            const dash = this.sett.lineDash || []
             this.setupStroke(ctx, this.line_width, this.color)
+            if (dash.length) ctx.setLineDash(dash)
             ctx.beginPath()
             this.drawDataLine(ctx, this.$props.data, this.data_index, this.skip_nan)
             ctx.stroke()
+            // Canvas state is shared by sibling overlays. Never leak a dotted
+            // spline's pattern into the next line/candle renderer.
+            if (dash.length) ctx.setLineDash([])
         },
         use_for() { return ['Spline', 'EMA', 'SMA'] },
         data_colors() { return [this.color] }

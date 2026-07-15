@@ -4928,10 +4928,13 @@ var _sfc_main$32 = {
 			};
 		},
 		draw(ctx) {
+			const dash = this.sett.lineDash || [];
 			this.setupStroke(ctx, this.line_width, this.color);
+			if (dash.length) ctx.setLineDash(dash);
 			ctx.beginPath();
 			this.drawDataLine(ctx, this.$props.data, this.data_index, this.skip_nan);
 			ctx.stroke();
+			if (dash.length) ctx.setLineDash([]);
 		},
 		use_for() {
 			return [
@@ -8162,7 +8165,7 @@ var _sfc_main$11 = {
 			return this.json_data.find((x) => x.main);
 		},
 		show_volume_row() {
-			return !!this.main_overlay;
+			return this.main_type === "Candles";
 		},
 		chart_show_volume() {
 			let s = this.main_overlay?.settings;
@@ -8314,7 +8317,7 @@ function _sfc_render$9(_ctx, _cache, $props, $setup, $data, $options) {
 				class: "t-vue-title",
 				style: normalizeStyle({ color: $props.common?.colors?.title })
 			}, toDisplayString($props.common.title_txt), 5),
-			$options.show_values ? (openBlock(), createElementBlock("span", _hoisted_1$3, [
+			$options.show_values && $options.main_type === "Candles" ? (openBlock(), createElementBlock("span", _hoisted_1$3, [
 				_cache[4] || (_cache[4] = createTextVNode(" O", -1)),
 				createElementVNode("span", _hoisted_2$1, toDisplayString($options.ohlcv[0]), 1),
 				_cache[5] || (_cache[5] = createTextVNode(" H", -1)),
@@ -8325,12 +8328,16 @@ function _sfc_render$9(_ctx, _cache, $props, $setup, $data, $options) {
 				createElementVNode("span", _hoisted_5, toDisplayString($options.ohlcv[3]), 1),
 				_cache[8] || (_cache[8] = createTextVNode(" V", -1)),
 				createElementVNode("span", _hoisted_6, toDisplayString($options.ohlcv[4]), 1)
-			])) : createCommentVNode("", true),
-			!$options.show_values ? (openBlock(), createElementBlock("span", {
+			])) : $options.show_values ? (openBlock(), createElementBlock("span", {
 				key: 1,
 				class: "t-vue-lspan",
 				style: normalizeStyle({ color: $props.common?.colors?.text })
-			}, toDisplayString(($props.common.meta.last || [])[4]), 5)) : createCommentVNode("", true)
+			}, toDisplayString(($props.values?.ohlcv || [])[1] ?? "n/a"), 5)) : createCommentVNode("", true),
+			!$options.show_values ? (openBlock(), createElementBlock("span", {
+				key: 2,
+				class: "t-vue-lspan",
+				style: normalizeStyle({ color: $props.common?.colors?.text })
+			}, toDisplayString(($props.common.meta.last || [])[$options.main_type === "Candles" ? 4 : 1] ?? "n/a"), 5)) : createCommentVNode("", true)
 		], 4)) : createCommentVNode("", true),
 		$props.grid_id === 0 && $options.show_volume_row && !$options.volume_detached ? (openBlock(), createElementBlock("div", _hoisted_7, [
 			_cache[12] || (_cache[12] = createElementVNode("span", { class: "t-vue-iname" }, "Volume", -1)),

@@ -10,16 +10,20 @@
              :style="{ color: common?.colors?.title }">
               {{common.title_txt}}
         </span>
-        <span v-if="show_values">
+        <span v-if="show_values && main_type === 'Candles'">
             O<span class="t-vue-lspan" >{{ohlcv[0]}}</span>
             H<span class="t-vue-lspan" >{{ohlcv[1]}}</span>
             L<span class="t-vue-lspan" >{{ohlcv[2]}}</span>
             C<span class="t-vue-lspan" >{{ohlcv[3]}}</span>
             V<span class="t-vue-lspan" >{{ohlcv[4]}}</span>
         </span>
+        <span v-else-if="show_values" class="t-vue-lspan"
+            :style="{color: common?.colors?.text}">
+            {{(values?.ohlcv || [])[1] ?? 'n/a'}}
+        </span>
         <span v-if="!show_values" class="t-vue-lspan"
             :style="{color: common?.colors?.text}">
-            {{(common.meta.last || [])[4]}}
+            {{(common.meta.last || [])[main_type === 'Candles' ? 4 : 1] ?? 'n/a'}}
         </span>
     </div>
     <!-- Volume legend row (main grid only): eye = show/hide, cog = settings,
@@ -250,7 +254,7 @@ export default {
         // the main grid (i.e. the data exposes a Candles main overlay). This
         // keeps the row out of empty/indicator-only charts.
         show_volume_row() {
-            return !!this.main_overlay
+            return this.main_type === 'Candles'
         },
         // Visibility of the volume bars on the candle pane (the eye toggle).
         // Default true — matches Candles.vue show_volume default.

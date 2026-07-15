@@ -9,6 +9,7 @@
 // destroys the replaced cube; tab ACTIVATE (switch) NEVER destroys a backgrounded
 // cube. With one tab only the replace path runs, so single-chart stays identical.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { isProxy, reactive } from 'vue'
 import ChartTabs from '../../src/mixins/app/chart-tabs.js'
 import DataCube from '../../src/helpers/datacube.js'
 
@@ -99,6 +100,15 @@ describe('chart-tabs: create / switch / close', () => {
         expect(balance.strategyBalance.timeframe).toBe('1h')
         expect(host.createStrategyBalanceTab({ runtimeId: 'rt-v8', strategyName: 'EMA V8' })).toBe(balance)
         expect(host.chartTabs).toHaveLength(2)
+    })
+
+    it('returns the reactive array record so balance loading and cube replacement render', () => {
+        host.chartTabs = reactive(host.chartTabs)
+        const balance = host.createStrategyBalanceTab({ runtimeId: 'rt-v8', strategyName: 'EMA V8' })
+        expect(isProxy(balance)).toBe(true)
+        expect(balance).toBe(host.chartTabs.find((tab) => tab.id === balance.id))
+        balance.strategyBalance.loading = true
+        expect(host.activeTab.strategyBalance.loading).toBe(true)
     })
 
     it('switching tabs NEVER destroys a backgrounded cube', () => {

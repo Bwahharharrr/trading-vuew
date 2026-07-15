@@ -124,7 +124,11 @@ async function main() {
       .filter((text) => /Healthy/.test(text) && /(stale|disconnected)/i.test(text)))
     must(contradictoryStrategyRows.length === 0,
       'Strategy catalog never presents stale/disconnected status as currently Healthy')
-    await strategyRows.first().click()
+    // Prefer the strategy with a known ledger-backed balance history when it is
+    // present; otherwise retain the catalog smoke's first-row fallback.
+    const emaRows = strategyRows.filter({ hasText: /EMA Regime Breakout/i })
+    const strategyRow = (await emaRows.count()) ? emaRows.first() : strategyRows.first()
+    await strategyRow.click()
     const contextualStrategyTab = page.locator('.pd-tab-strategy').first()
     await contextualStrategyTab.waitFor({ timeout: 15000 })
     must((await contextualStrategyTab.innerText()).trim().startsWith('S:'),
@@ -137,6 +141,27 @@ async function main() {
     must(strategyStateVisible, 'Strategy workspace rendered a runtime or explicit empty state')
     await page.screenshot({ path: '/tmp/corky-smoke-strategy.png' })
     log('  screenshot → /tmp/corky-smoke-strategy.png')
+
+    // 7) Balance history is another native TradingVue/DataCube chart. The old
+    // bespoke `.sbc` SVG renderer must not exist; the established canvas,
+    // axes/range machinery, and the right-aligned timeframe selector must.
+    await page.getByRole('button', { name: 'View balance over time', exact: true }).click()
+    const activeChartTab = page.locator('.ctab.active')
+    await activeChartTab.waitFor({ timeout: 15000 })
+    must((await activeChartTab.innerText()).includes('Balance ·'),
+      `balance chart tab opened: ${(await activeChartTab.innerText()).trim()}`)
+    await page.locator('.strategy-balance-state').waitFor({ state: 'hidden', timeout: 15000 })
+    const balanceProbe = await page.evaluate(CANVAS_PROBE)
+    must(balanceProbe.nonBlank > 0,
+      `native balance chart canvas rendered (${balanceProbe.w}x${balanceProbe.h}, ${balanceProbe.nonBlank} samples)`)
+    must(await page.locator('.chart-wrapper > .trading-vue').count() === 1,
+      'balance tab uses the shared TradingVue component')
+    must(await page.locator('.sbc, .sbc-svg').count() === 0,
+      'no bespoke strategy-balance SVG renderer remains')
+    must(await page.locator('.balance-timeframe-control select').isVisible(),
+      'balance timeframe selector remains available')
+    await page.screenshot({ path: '/tmp/corky-smoke-balance.png' })
+    log('  screenshot → /tmp/corky-smoke-balance.png')
 
     must(errors.length === 0, `no page errors${errors.length ? ' — ' + errors.slice(0, 5).join(' | ') : ''}`)
     log(`  workers: ${workers.length ? workers.join(', ') : '(none)'}`)

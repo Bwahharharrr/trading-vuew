@@ -11,7 +11,7 @@
             @create="createChartTab"
             @close="closeChartTab" />
         <div class="chart-wrapper">
-            <trading-vue v-if="!activeStrategyBalance" ref="tradingVue" :data="chart" :width="chartWidth" :height="chartHeight"
+            <trading-vue ref="tradingVue" :data="chart" :width="chartWidth" :height="chartHeight"
                     :color-back="colors.colorBack"
                     :color-grid="colors.colorGrid"
                     :color-text="colors.colorText"
@@ -25,15 +25,6 @@
                 @alarm-cleared="onAlarmCleared"
                 @alarm-moved="onAlarmMoved">
             </trading-vue>
-            <strategy-balance-chart v-else ref="strategyBalanceChart"
-                    :history="activeStrategyBalance.history"
-                    :loading="activeStrategyBalance.loading"
-                    :error="activeStrategyBalance.error"
-                    :strategy-name="activeStrategyBalance.strategyName"
-                    :timeframe="activeStrategyBalance.timeframe"
-                    :width="chartWidth" :height="chartHeight"
-                    :log-scale="log_scale" />
-
             <!-- Empty state: nothing loaded yet. An opaque cover hides the empty
                  grid / Volume legend / axes and invites the user to pick a source. -->
             <div v-if="!activeStrategyBalance && chartEmpty" class="chart-empty">
@@ -41,6 +32,21 @@
                     <div class="chart-empty-icon">▤</div>
                     <div class="chart-empty-msg">Select a ticker, position, strategy or backtest</div>
                     <div class="chart-empty-sub">Pick one from the source panel or the dock below to load a chart.</div>
+                </div>
+            </div>
+
+            <!-- Balance history is plotted by the same TradingVue/DataCube path
+                 above. This cover is status chrome only; it draws no chart. -->
+            <div v-if="activeStrategyBalance && (activeStrategyBalance.loading || activeStrategyBalance.error || chartEmpty)"
+                 class="chart-empty strategy-balance-state">
+                <div class="chart-empty-inner">
+                    <div class="chart-empty-icon">∿</div>
+                    <div class="chart-empty-msg" :class="{ 'strategy-balance-error': activeStrategyBalance.error }">
+                        {{ activeStrategyBalance.loading
+                            ? `Loading ${activeStrategyBalance.timeframe} balance history…`
+                            : (activeStrategyBalance.error || 'No balance history is available.') }}
+                    </div>
+                    <div class="chart-empty-sub">{{ activeStrategyBalance.strategyName }} · USD normalized</div>
                 </div>
             </div>
 
@@ -429,7 +435,6 @@ import OrderTypeModal from './components/OrderTypeModal.vue'
 import CorkyDiscoveryPanel from './components/feed/CorkyDiscoveryPanel.vue'
 import CorkyPositionsPanel from './components/feed/CorkyPositionsPanel.vue'
 import PositionAuditDrawer from './components/feed/PositionAuditDrawer.vue'
-import StrategyBalanceChart from './components/feed/StrategyBalanceChart.vue'
 import DataCube from '../src/helpers/datacube.js'
 import { CorkyClient } from '../src/helpers/feed/corky-client.js'
 import { CorkyFeed } from '../src/helpers/feed/corky-feed.js'
@@ -437,6 +442,7 @@ import { CorkyPositionsFeed } from '../src/helpers/feed/corky-positions-feed.js'
 import { CorkySearchFeed } from '../src/helpers/feed/corky-search-feed.js'
 import { CorkyBacktestsFeed } from '../src/helpers/feed/corky-backtests-feed.js'
 import { CorkyStrategyFeed } from '../src/helpers/feed/corky-strategy-feed.js'
+import { strategyBalanceChartData } from '../src/helpers/feed/strategy-balance-chart.js'
 import {
     overlaysToMarkers, classifyLineage, strategyRuntimeSemantics, CAPITAL_CONTROL_METHODS,
 } from '../src/helpers/feed/corky-strategy-transforms.js'
@@ -514,7 +520,6 @@ export default {
         CorkyDiscoveryPanel,
         CorkyPositionsPanel,
         PositionAuditDrawer,
-        StrategyBalanceChart,
     },
     data() {
         return {
@@ -3283,6 +3288,19 @@ export default {
                 const history = await this.strategyFeed.getBalanceHistory(state.runtimeId, { timeframe: state.timeframe })
                 if (sequence !== state.requestSequence) return
                 state.history = history
+                // Balance tabs are ordinary DataCubes. Replacing the tab cube
+                // routes rendering, scaling, navigation, reset and capture
+                // through the exact same TradingVue path as price/indicator data.
+                const dc = new this.DataCubeClass(strategyBalanceChartData(history, {
+                    strategyName: state.strategyName,
+                }), { scripts: false, validation: 'off' })
+                this.onTabCubeReplaced(tab, dc)
+                if (tab === this.activeTab) {
+                    this.$nextTick(() => {
+                        const tv = this.$refs && this.$refs.tradingVue
+                        if (tv && typeof tv.resetChart === 'function') tv.resetChart()
+                    })
+                }
             } catch (error) {
                 if (sequence !== state.requestSequence) return
                 state.error = this._strategyErr(error)
@@ -4070,6 +4088,8 @@ body {
 .chart-empty-icon { font-size: 42px; line-height: 1; color: #2b3446; margin-bottom: 14px; }
 .chart-empty-msg { font-size: 16px; font-weight: 600; color: #c4ccda; letter-spacing: 0.01em; }
 .chart-empty-sub { margin-top: 8px; font-size: 12px; color: #6b7686; }
+.strategy-balance-state { background: rgba(18, 24, 39, 0.9); }
+.strategy-balance-error { color: #ff7b86; }
 
 /* Bottom Panel */
 .bottom-panel {

@@ -187,9 +187,14 @@ export default {
                 },
             })
             this.chartTabs.push(tab)
-            this.setupChartCube(dc)
-            this.activateChartTab(tab.id)
-            return tab
+            // Vue proxies records when they are read back from the reactive
+            // array. Return that stored record: mutating the raw local object
+            // after push bypasses reactivity, leaving loading chrome stuck and
+            // preventing the rendered cube from following the replacement.
+            const stored = this.chartTabs.find(candidate => candidate.id === tab.id) || tab
+            this.setupChartCube(stored.chart)
+            this.activateChartTab(stored.id)
+            return stored
         },
 
         // Switch which tab renders. NEVER destroys a cube and — concurrent-live —
