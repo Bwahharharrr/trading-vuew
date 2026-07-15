@@ -41,6 +41,7 @@
                                 { open: expanded === cand._i, active: selectedRunIndex != null && cand.runIndex === selectedRunIndex },
                                 recencyClass(cand._i, candidateHistory, 'us-recent')
                             ]"
+                            :data-run-index="cand.runIndex"
                             @click="onRowClick(cand, cand._i)">
                             <td class="us-rank">{{ cand.runIndex != null ? cand.runIndex : cand._i }}</td>
                             <td v-for="c in candidateCols" :key="c.key" class="num" :class="c.sign ? signOf(cand[c.key]) : ''">{{ fmtCell(cand[c.key], c) }}</td>
@@ -187,6 +188,11 @@ export default {
             this.candidateFilters = []
             this.candidateHistory = []
             this.expanded = -1
+            this.$nextTick(() => this.expandSelectedCandidate())
+        },
+        selectedRunIndex: {
+            immediate: true,
+            handler() { this.$nextTick(() => this.expandSelectedCandidate()) },
         },
     },
     computed: {
@@ -249,6 +255,19 @@ export default {
     },
     methods: {
         recencyClass,
+        expandSelectedCandidate() {
+            if (this.selectedRunIndex == null) return
+            const candidate = this.candidates.find((row) => Number(row.runIndex) === Number(this.selectedRunIndex))
+            if (!candidate) return
+            this.expanded = candidate._i
+            this.$nextTick(() => {
+                const rows = this.$el && this.$el.querySelectorAll('.bt-row[data-run-index]')
+                const selected = rows && [...rows].find((row) => Number(row.dataset.runIndex) === Number(this.selectedRunIndex))
+                if (selected && typeof selected.scrollIntoView === 'function') {
+                    selected.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+                }
+            })
+        },
         // Copy the raw artifact JSON to the clipboard. Prefers the async Clipboard
         // API (secure contexts), falls back to a hidden-textarea execCommand for
         // older / non-secure ones. Either way a brief toast confirms by the cursor.

@@ -48,6 +48,7 @@ export const KNOWN_ERROR_CODES = {
     // unavailability is transient (read backend hiccup) → retry.
     backtest_artifacts_disabled:  { retryable: false },
     strategy_not_found:           { retryable: false },
+    strategy_balance_history_unavailable: { retryable: true },
     backtest_not_found:           { retryable: false },
     backtest_artifact_not_ready:  { retryable: true },
     invalid_backtest_request:     { retryable: false },
@@ -90,6 +91,7 @@ const TERMINAL_EVENT = {
     // type 'strategy_runtime' → event.runtime.
     list_strategy_runtimes:      'strategy_runtimes',
     get_strategy_runtime:        'strategy_runtime',
+    get_strategy_balance_history:'strategy_balance_history',
     get_strategy_ticker:         'strategy_ticker',
     list_strategy_decisions:     'strategy_decisions',
     list_strategy_operations:    'strategy_operations',
@@ -572,6 +574,17 @@ export class CorkyClient {
         return this._request({ type: 'get_strategy_runtime', runtime_id })
     }
 
+    /** Ledger-backed booked balance and marked-equity history. Decimal strings
+     *  remain untouched; the chart renderer is the only numeric boundary. */
+    getStrategyBalanceHistory(runtime_id, opts = {}) {
+        if (!runtime_id) throw new Error('getStrategyBalanceHistory: runtime_id is required')
+        const command = { type: 'get_strategy_balance_history', runtime_id }
+        if (opts.timeframe != null) command.timeframe = opts.timeframe
+        if (opts.start_ms != null) command.start_ms = opts.start_ms
+        if (opts.end_ms != null) command.end_ms = opts.end_ms
+        return this._request(command)
+    }
+
     /** Inspect one ticker within a runtime → resolves the `ticker` object. */
     getStrategyTicker(runtime_id, ticker_id) {
         if (!runtime_id || !ticker_id) {
@@ -962,6 +975,7 @@ export class CorkyClient {
         // event type differs from the field it carries — see TERMINAL_EVENT).
         if (type === 'strategy_runtimes') return event.runtimes
         if (type === 'strategy_runtime') return event.runtime
+        if (type === 'strategy_balance_history') return event.history
         if (type === 'strategy_ticker') return event.ticker
         if (type === 'strategy_decisions') return event.decisions
         if (type === 'strategy_operations') return event.page

@@ -67,6 +67,27 @@ describe('strategy one-shot reads: command framing + terminal FIELD extraction',
     expect(runtime.ticker_allocations[1].position_avg_price).toBe('60281.158738234545917069447978')
   })
 
+  it('getStrategyBalanceHistory preserves decimal strings and optional range fields', async () => {
+    const { client, sock } = makeClient()
+    const p = client.getStrategyBalanceHistory('v8-tail-repair-live-main', {
+      timeframe: '4h', start_ms: 100, end_ms: 200,
+    })
+    expect(sock().sent[0].command).toEqual({
+      type: 'get_strategy_balance_history', runtime_id: 'v8-tail-repair-live-main',
+      timeframe: '4h', start_ms: 100, end_ms: 200,
+    })
+    sock().push(withRequestId({
+      schema_version: 1,
+      event: { type: 'strategy_balance_history', history: {
+        runtime_id: 'v8-tail-repair-live-main', starting_balance: '10000.00000000000001',
+        points: [{ timestamp_ms: 100, booked_balance: '10000.00000000000001', equity: '10001.25', mark_status: 'complete' }],
+      } },
+    }, sock().sent[0].request_id))
+    const history = await p
+    expect(history.starting_balance).toBe('10000.00000000000001')
+    expect(history.points[0].equity).toBe('10001.25')
+  })
+
   it('getStrategyTicker → strategy_ticker → resolves event.ticker', async () => {
     const { client, sock } = makeClient()
     const p = client.getStrategyTicker('v8-tail-repair-live-main', 'BITFINEX:tTESTADA:TESTUSD')

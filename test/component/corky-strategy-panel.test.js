@@ -78,6 +78,17 @@ describe('CorkyStrategyPanel — Overview tab', () => {
         expect(banner.find('.sr-status-mode').text()).toBe('Live trading')
     })
 
+    test('balance button beside the mode emits the selected strategy identity', async () => {
+        const w = mountPanel()
+        const button = w.find('.sr-balance-open')
+        expect(button.exists()).toBe(true)
+        await button.trigger('click')
+        expect(w.emitted('view-balance')[0][0]).toEqual({
+            runtime_id: liveRuntime.runtime_id,
+            strategy_name: 'EMA Regime Breakout V8',
+        })
+    })
+
     test('shows strategy, public/private runtimes, gate readiness, and formatted observed balances', async () => {
         const w = mountPanel()
         const body = w.find('.sr-body').text()

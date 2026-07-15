@@ -141,6 +141,7 @@
                         @resume-ticker="$emit('strategy-resume-ticker', $event)"
                         @unlock-ticker="$emit('strategy-unlock-ticker', $event)"
                         @adopt-position="$emit('strategy-adopt-position', $event)"
+                        @view-balance="$emit('strategy-view-balance', $event)"
                         @open-lineage-run="$emit('strategy-open-lineage-run', $event)" />
 
         <!-- One reusable Run-Details tab body -->
@@ -293,6 +294,7 @@ export default {
         'strategy-approve-operation', 'strategy-clear-preview',
         'strategy-cancel-ticker-orders', 'strategy-pause-ticker', 'strategy-resume-ticker',
         'strategy-unlock-ticker', 'strategy-adopt-position', 'strategy-open-lineage-run',
+        'strategy-view-balance',
     ],
     computed: {
         // Base tabs in the persisted order, each with its live count. Reconciles

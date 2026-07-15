@@ -39,6 +39,9 @@
         <div class="sr-status-identity">
             <span class="sr-strategy-name">{{ selectedStrategyName }}</span>
             <span class="sr-status-mode" :class="'mode-' + runtimeSemantics.mode.raw">{{ runtimeSemantics.mode.label }}</span>
+            <button class="sr-balance-open" type="button"
+                    title="Open this strategy's USD-normalized balance history in a chart tab"
+                    @click="openBalanceHistory">View balance over time</button>
         </div>
         <div class="sr-status-description">{{ runtimeSemantics.mode.description }}</div>
         <div class="sr-status-meta">
@@ -909,7 +912,7 @@ export default {
         // Direct-control intents (App echoes them to the feed's control methods).
         'cancel-ticker-orders', 'pause-ticker', 'resume-ticker', 'unlock-ticker', 'adopt-position',
         // Jump to the runtime's verified universe backtest run + candidate.
-        'open-lineage-run',
+        'open-lineage-run', 'view-balance',
     ],
     data() {
         return {
@@ -1422,6 +1425,13 @@ export default {
             const l = this.lineageLink
             if (l) this.$emit('open-lineage-run', { run_id: l.runId, run_index: l.runIndex })
         },
+        openBalanceHistory() {
+            if (!this.selectedRuntime) return
+            this.$emit('view-balance', {
+                runtime_id: this.selectedRuntime.runtime_id,
+                strategy_name: this.selectedStrategyName,
+            })
+        },
         parseAllocationPolicy() {
             try {
                 const policy = JSON.parse(this.allocationPolicyJson)
@@ -1750,6 +1760,9 @@ export default {
                   background: rgba(88,166,255,0.12); }
 .sr-status-mode.mode-paper { color: #b0b6c0; border-color: #3b4352; background: #202735; }
 .sr-status-mode.mode-live { color: #ff9f40; border-color: rgba(255,159,64,0.45); background: rgba(255,159,64,0.1); }
+.sr-balance-open { color: #c8d3e2; background: #202735; border: 1px solid #465167;
+  border-radius: 4px; padding: 3px 8px; font-size: 10px; cursor: pointer; }
+.sr-balance-open:hover { color: #fff; border-color: #79b8ff; background: #26334a; }
 .sr-status-description { color: #b0b6c0; line-height: 1.45; }
 .sr-status-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: #6f7989; font-size: 11px; }
 .sr-service-health { font-weight: 600; }

@@ -46,6 +46,11 @@ export class CorkyStrategyFeed {
   /** One runtime's full snapshot. Resolves the `runtime` object. */
   getRuntime(runtime_id) { return this.client.getStrategyRuntime(runtime_id) }
 
+  /** Ledger-backed booked balance + marked equity; decimals stay as strings. */
+  getBalanceHistory(runtime_id, opts = {}) {
+    return this.client.getStrategyBalanceHistory(runtime_id, opts)
+  }
+
   /** One ticker within a runtime. Resolves the `ticker` object. */
   getTicker(runtime_id, ticker_id) { return this.client.getStrategyTicker(runtime_id, ticker_id) }
 

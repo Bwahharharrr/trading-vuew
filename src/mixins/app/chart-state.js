@@ -136,6 +136,11 @@ export default {
         },
 
         resetView() {
+            if (this.activeTab && this.activeTab.kind === 'strategy_balance') {
+                const chart = this.$refs.strategyBalanceChart
+                if (chart && typeof chart.resetView === 'function') chart.resetView()
+                return
+            }
             if (this.$refs.tradingVue) {
                 this.$refs.tradingVue.resetChart()
             }

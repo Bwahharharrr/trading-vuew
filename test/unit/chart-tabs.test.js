@@ -92,6 +92,15 @@ describe('chart-tabs: create / switch / close', () => {
         expect(d0).not.toHaveBeenCalled()              // tab 0's cube survives
     })
 
+    it('creates one reusable strategy balance tab per runtime', () => {
+        const balance = host.createStrategyBalanceTab({ runtimeId: 'rt-v8', strategyName: 'EMA V8' })
+        expect(balance.kind).toBe('strategy_balance')
+        expect(balance.title).toBe('Balance · EMA V8')
+        expect(balance.strategyBalance.timeframe).toBe('1h')
+        expect(host.createStrategyBalanceTab({ runtimeId: 'rt-v8', strategyName: 'EMA V8' })).toBe(balance)
+        expect(host.chartTabs).toHaveLength(2)
+    })
+
     it('switching tabs NEVER destroys a backgrounded cube', () => {
         const cube0 = host.chartTabs[0].chart
         const tab1 = host.createChartTab()
@@ -207,6 +216,15 @@ describe('chart-tabs: persistence (serialize / restore)', () => {
     it('serializes a blank tab as null', () => {
         const s = host.serializeChartTabs()          // tab0 has no selection
         expect(s.tabs).toEqual([null])
+    })
+
+    it('does not persist financial balance tabs across runtime sessions', () => {
+        host.chartTabs[0].corkyCurrent = { venue: 'V', symbol: 'BTC', timeframe: '1h' }
+        host.createStrategyBalanceTab({ runtimeId: 'rt-v8', strategyName: 'EMA V8' })
+        expect(host.serializeChartTabs()).toEqual({
+            tabs: [{ venue: 'V', symbol: 'BTC', timeframe: '1h' }],
+            activeIndex: 0,
+        })
     })
 
     it('restoreChartTabs recreates tabs from selections, dropping vanished symbols', () => {

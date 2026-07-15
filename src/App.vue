@@ -11,7 +11,7 @@
             @create="createChartTab"
             @close="closeChartTab" />
         <div class="chart-wrapper">
-            <trading-vue ref="tradingVue" :data="chart" :width="chartWidth" :height="chartHeight"
+            <trading-vue v-if="!activeStrategyBalance" ref="tradingVue" :data="chart" :width="chartWidth" :height="chartHeight"
                     :color-back="colors.colorBack"
                     :color-grid="colors.colorGrid"
                     :color-text="colors.colorText"
@@ -25,10 +25,18 @@
                 @alarm-cleared="onAlarmCleared"
                 @alarm-moved="onAlarmMoved">
             </trading-vue>
+            <strategy-balance-chart v-else ref="strategyBalanceChart"
+                    :history="activeStrategyBalance.history"
+                    :loading="activeStrategyBalance.loading"
+                    :error="activeStrategyBalance.error"
+                    :strategy-name="activeStrategyBalance.strategyName"
+                    :timeframe="activeStrategyBalance.timeframe"
+                    :width="chartWidth" :height="chartHeight"
+                    :log-scale="log_scale" />
 
             <!-- Empty state: nothing loaded yet. An opaque cover hides the empty
                  grid / Volume legend / axes and invites the user to pick a source. -->
-            <div v-if="chartEmpty" class="chart-empty">
+            <div v-if="!activeStrategyBalance && chartEmpty" class="chart-empty">
                 <div class="chart-empty-inner">
                     <div class="chart-empty-icon">▤</div>
                     <div class="chart-empty-msg">Select a ticker, position, strategy or backtest</div>
@@ -37,7 +45,7 @@
             </div>
 
             <!-- Left toolbar for drawing tools -->
-            <div class="left-toolbar">
+            <div v-if="!activeStrategyBalance" class="left-toolbar">
                 <button
                     class="tool-btn"
                     :class="{ active: rectDrawMode }"
@@ -51,7 +59,7 @@
 
             <!-- Drawing overlay -->
             <div
-                v-if="rectDrawMode"
+                v-if="!activeStrategyBalance && rectDrawMode"
                 class="drawing-overlay"
                 @mousedown="onDrawStart"
                 @mousemove="onDrawMove"
@@ -117,6 +125,16 @@
                     🔕 Clear Alarms<span v-if="priceAlarms.length"> ({{ priceAlarms.length }})</span>
                 </button>
             </div>
+
+            <div class="bottom-panel-spacer"></div>
+            <label v-if="activeStrategyBalance" class="balance-timeframe-control">
+                <span class="bottom-label">Timeframe</span>
+                <select :value="activeStrategyBalance.timeframe"
+                        :disabled="activeStrategyBalance.loading"
+                        @change="strategyBalanceTimeframeChanged($event.target.value)">
+                    <option v-for="timeframe in strategyBalanceTimeframes" :key="timeframe" :value="timeframe">{{ timeframe }}</option>
+                </select>
+            </label>
         </div>
 
         <!-- Positions dock (gateway mode): pinned to the very bottom, BELOW the
@@ -157,6 +175,7 @@
             @strategy-resume-ticker="strategyResumeTicker"
             @strategy-unlock-ticker="strategyUnlockTicker"
             @strategy-adopt-position="strategyAdoptPosition"
+            @strategy-view-balance="strategyViewBalance"
             @strategy-open-lineage-run="strategyOpenLineageRun"
             @bt-refresh-strategies="btLoadStrategies"
             @bt-update-filter="btUpdateFilter"
@@ -410,6 +429,7 @@ import OrderTypeModal from './components/OrderTypeModal.vue'
 import CorkyDiscoveryPanel from './components/feed/CorkyDiscoveryPanel.vue'
 import CorkyPositionsPanel from './components/feed/CorkyPositionsPanel.vue'
 import PositionAuditDrawer from './components/feed/PositionAuditDrawer.vue'
+import StrategyBalanceChart from './components/feed/StrategyBalanceChart.vue'
 import DataCube from '../src/helpers/datacube.js'
 import { CorkyClient } from '../src/helpers/feed/corky-client.js'
 import { CorkyFeed } from '../src/helpers/feed/corky-feed.js'
@@ -493,7 +513,8 @@ export default {
         OrderTypeModal,
         CorkyDiscoveryPanel,
         CorkyPositionsPanel,
-        PositionAuditDrawer
+        PositionAuditDrawer,
+        StrategyBalanceChart,
     },
     data() {
         return {
@@ -619,6 +640,16 @@ export default {
         }
     },
     computed: {
+        activeStrategyBalance() {
+            return this.activeTab && this.activeTab.kind === 'strategy_balance'
+                ? this.activeTab.strategyBalance : null
+        },
+        strategyBalanceTimeframes() {
+            const history = this.activeStrategyBalance && this.activeStrategyBalance.history
+            const values = history && history.available_timeframes
+            return Array.isArray(values) && values.length
+                ? values : ['1m', '5m', '15m', '1h', '4h', '1D', '1W']
+        },
         // True when the active chart has no candles loaded yet — drives the
         // empty-state placeholder (and hides the empty grid / axes / Volume legend).
         chartEmpty() {
@@ -2501,7 +2532,9 @@ export default {
             if (!run) return
             const ri = (runIndex == null || runIndex === '') ? null : Number(runIndex)
             this._btSetDetail({ runIndex: ri })
-            this._btLoadOverview(run)
+            if (!this.backtests.detail.shape || this.backtests.detail.shape.chartable !== false) {
+                this._btLoadOverview(run)
+            }
             if (this._btPlot && this._btPlot.runId === run.run_id) await this.btPlotRun(run)
         },
 
@@ -3233,6 +3266,38 @@ export default {
         strategyAdoptPosition(p) { return this._strategyControl('adoptPosition', p) },
         strategyAdoptPositions(p) { return this._strategyControl('adoptPositions', p) },
 
+        async strategyViewBalance({ runtime_id, strategy_name } = {}) {
+            if (!runtime_id || !this.strategyFeed) return
+            const tab = this.createStrategyBalanceTab({ runtimeId: runtime_id, strategyName: strategy_name })
+            if (!tab) return
+            await this._loadStrategyBalance(tab)
+        },
+
+        async _loadStrategyBalance(tab) {
+            const state = tab && tab.strategyBalance
+            if (!state || !this.strategyFeed || typeof this.strategyFeed.getBalanceHistory !== 'function') return
+            const sequence = ++state.requestSequence
+            state.loading = true
+            state.error = null
+            try {
+                const history = await this.strategyFeed.getBalanceHistory(state.runtimeId, { timeframe: state.timeframe })
+                if (sequence !== state.requestSequence) return
+                state.history = history
+            } catch (error) {
+                if (sequence !== state.requestSequence) return
+                state.error = this._strategyErr(error)
+            } finally {
+                if (sequence === state.requestSequence) state.loading = false
+            }
+        },
+
+        strategyBalanceTimeframeChanged(timeframe) {
+            const tab = this.activeTab
+            if (!tab || tab.kind !== 'strategy_balance' || !timeframe) return
+            tab.strategyBalance.timeframe = timeframe
+            return this._loadStrategyBalance(tab)
+        },
+
         // A verified runtime's lineage → jump straight to its universe backtest run
         // + selected candidate in the Backtests dock (field-map "Candidate link").
         async strategyOpenLineageRun({ run_id, run_index } = {}) {
@@ -3242,12 +3307,30 @@ export default {
             // by-id fetch, then a minimal stub (shape is detected from the run_id).
             let run = (this.backtests.runs || []).find((r) => r && r.run_id === run_id)
             if (!run && this.backtestsFeed) {
-                if (!(this.backtests.runs || []).length) {
-                    await this.btListRuns()
-                    run = (this.backtests.runs || []).find((r) => r && r.run_id === run_id)
+                // Current list filters may hide the lineage run. Resolve against an
+                // unfiltered catalog without changing the operator's saved filters.
+                if (typeof this.backtestsFeed.listRuns === 'function') {
+                    try {
+                        const allRuns = await this.backtestsFeed.listRuns({}) || []
+                        run = allRuns.find((candidate) => candidate && candidate.run_id === run_id)
+                        if (run && !(this.backtests.runs || []).some((candidate) => candidate && candidate.run_id === run_id)) {
+                            this.backtests.runs = [run, ...(this.backtests.runs || [])]
+                        }
+                    } catch (_) { /* fall through to exact artifact read */ }
                 }
                 if (!run && typeof this.backtestsFeed.getRun === 'function') {
-                    try { run = await this.backtestsFeed.getRun(run_id) } catch (_) { /* fall through */ }
+                    try {
+                        const response = await this.backtestsFeed.getRun(run_id, { compact: true })
+                        const artifact = response && response.artifact
+                        run = {
+                            run_id,
+                            status: 'completed',
+                            strategy: (artifact && artifact.strategy) || 'Backtest study',
+                            venue: artifact && artifact.venue,
+                            symbols: (artifact && artifact.symbols) || [],
+                            trade_timeframe: artifact && artifact.trade_timeframe,
+                        }
+                    } catch (_) { /* fall through */ }
                 }
             }
             if (!run) run = { run_id }
@@ -4007,6 +4090,17 @@ body {
     display: flex;
     align-items: center;
     gap: 10px;
+}
+
+.bottom-panel-spacer { flex: 1 1 auto; }
+.balance-timeframe-control { display: flex; align-items: center; gap: 9px; }
+.balance-timeframe-control select {
+    background: #131722;
+    color: #b8c2d1;
+    border: 1px solid #2a2e39;
+    border-radius: 4px;
+    padding: 5px 24px 5px 8px;
+    font-size: 11px;
 }
 
 .bottom-label {

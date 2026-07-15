@@ -18,6 +18,8 @@ declare namespace _default {
         function _makeChartTab(chart: any, extra?: {}): {
             id: string;
             title: string;
+            kind: string;
+            strategyBalance: null;
             chart: any;
             corkyFeed: null;
             corkyCurrent: null;
@@ -47,6 +49,8 @@ declare namespace _default {
         function createChartTab(): {
             id: string;
             title: string;
+            kind: string;
+            strategyBalance: null;
             chart: any;
             corkyFeed: null;
             corkyCurrent: null;
@@ -70,12 +74,17 @@ declare namespace _default {
             btPlot: null;
             btProgressSub: null;
         } | null;
+        function createStrategyBalanceTab({ runtimeId, strategyName, timeframe }?: {
+            timeframe?: string | undefined;
+        }): any;
         function activateChartTab(id: any): void;
         function serializeChartTabs(): any;
         function restoreChartTabs(saved: any): number;
         function _appendChartTab(): {
             id: string;
             title: string;
+            kind: string;
+            strategyBalance: null;
             chart: any;
             corkyFeed: null;
             corkyCurrent: null;

@@ -16,10 +16,10 @@
 
     <!-- Candidate ranking (sweep / optimize / universe / walk-forward). -->
     <template v-if="showStudy">
-        <div v-if="chartable" class="btd-candidate">
-            <span class="btd-clabel">Candidate</span>
+        <div class="btd-candidate">
+            <span class="btd-clabel">{{ chartable ? 'Candidate' : 'Chosen candidate' }}</span>
             <span class="btd-dim">{{ runIndex != null ? '#' + runIndex : 'top-ranked (default)' }}</span>
-            <button v-if="runIndex != null" class="btd-reset" @click="$emit('select-candidate', null)">↺ Top-ranked</button>
+            <button v-if="chartable && runIndex != null" class="btd-reset" @click="$emit('select-candidate', null)">↺ Top-ranked</button>
             <span v-if="candidateCount" class="btd-dim">· {{ candidateCount }} candidates</span>
         </div>
         <corky-universe-study :run="run" :artifact="detail.artifact || null"

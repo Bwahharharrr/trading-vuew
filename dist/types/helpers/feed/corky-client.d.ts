@@ -59,25 +59,29 @@ export namespace KNOWN_ERROR_CODES {
         let retryable_14: boolean;
         export { retryable_14 as retryable };
     }
-    namespace backtest_not_found {
+    namespace strategy_balance_history_unavailable {
         let retryable_15: boolean;
         export { retryable_15 as retryable };
     }
-    namespace backtest_artifact_not_ready {
+    namespace backtest_not_found {
         let retryable_16: boolean;
         export { retryable_16 as retryable };
     }
-    namespace invalid_backtest_request {
+    namespace backtest_artifact_not_ready {
         let retryable_17: boolean;
         export { retryable_17 as retryable };
     }
-    namespace backtest_artifact_invalid {
+    namespace invalid_backtest_request {
         let retryable_18: boolean;
         export { retryable_18 as retryable };
     }
-    namespace backtest_store_unavailable {
+    namespace backtest_artifact_invalid {
         let retryable_19: boolean;
         export { retryable_19 as retryable };
+    }
+    namespace backtest_store_unavailable {
+        let retryable_20: boolean;
+        export { retryable_20 as retryable };
     }
 }
 export class CorkyError extends Error {
@@ -165,6 +169,9 @@ export class CorkyClient {
     listStrategyRuntimes(): Promise<any>;
     /** Inspect one runtime → resolves the `runtime` object. */
     getStrategyRuntime(runtime_id: any): Promise<any>;
+    /** Ledger-backed booked balance and marked-equity history. Decimal strings
+     *  remain untouched; the chart renderer is the only numeric boundary. */
+    getStrategyBalanceHistory(runtime_id: any, opts?: {}): Promise<any>;
     /** Inspect one ticker within a runtime → resolves the `ticker` object. */
     getStrategyTicker(runtime_id: any, ticker_id: any): Promise<any>;
     /** Recent decisions for a runtime → resolves the `decisions` array. Optional

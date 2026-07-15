@@ -391,6 +391,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     onTaskTabKeydown(event: any, index: any): void;
     overlayEnabled(kind: any): boolean;
     openLineage(): void;
+    openBalanceHistory(): void;
     parseAllocationPolicy(): any;
     compareAllocationPolicy(): void;
     administrationIdentity(): {
@@ -453,7 +454,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     symbolOf(id: any): any;
     _tickerOrdersMap(rt: any): Map<any, any>;
     fmtTime(ms: any): string;
-}, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("cancel-ticker-orders" | "resume-ticker" | "unlock-ticker" | "adopt-position" | "pause-ticker" | "refresh" | "select-runtime" | "load-more-operations" | "toggle-overlay" | "compare-allocation" | "preview-operation" | "approve-operation" | "clear-preview" | "open-lineage-run")[], "cancel-ticker-orders" | "resume-ticker" | "unlock-ticker" | "adopt-position" | "pause-ticker" | "refresh" | "select-runtime" | "load-more-operations" | "toggle-overlay" | "compare-allocation" | "preview-operation" | "approve-operation" | "clear-preview" | "open-lineage-run", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+}, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("cancel-ticker-orders" | "resume-ticker" | "unlock-ticker" | "adopt-position" | "pause-ticker" | "refresh" | "select-runtime" | "load-more-operations" | "toggle-overlay" | "compare-allocation" | "preview-operation" | "approve-operation" | "clear-preview" | "open-lineage-run" | "view-balance")[], "cancel-ticker-orders" | "resume-ticker" | "unlock-ticker" | "adopt-position" | "pause-ticker" | "refresh" | "select-runtime" | "load-more-operations" | "toggle-overlay" | "compare-allocation" | "preview-operation" | "approve-operation" | "clear-preview" | "open-lineage-run" | "view-balance", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
     runtimes: {
         type: ArrayConstructor;
         default: () => never[];
@@ -530,6 +531,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     "onApprove-operation"?: ((...args: any[]) => any) | undefined;
     "onClear-preview"?: ((...args: any[]) => any) | undefined;
     "onOpen-lineage-run"?: ((...args: any[]) => any) | undefined;
+    "onView-balance"?: ((...args: any[]) => any) | undefined;
 }>, {
     error: string;
     loading: boolean;

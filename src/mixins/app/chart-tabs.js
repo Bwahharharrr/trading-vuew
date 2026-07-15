@@ -58,6 +58,8 @@ export default {
                 id: `ct-${n}`,
                 // 'Chart N' until a symbol loads; corkySelect sets 'SYMBOL · TF'.
                 title: `Chart ${n}`,
+                kind: 'market',
+                strategyBalance: null,
                 chart,
                 // Per-tab gateway stream (concurrent-live): each tab owns its feed
                 // + subscription, kept alive even when the tab is hidden, so
@@ -157,6 +159,39 @@ export default {
             return tab
         },
 
+        // Strategy balance histories are read-only chart tabs, not candle
+        // subscriptions. Reuse one tab per runtime so repeated clicks focus the
+        // existing history instead of multiplying identical views.
+        createStrategyBalanceTab({ runtimeId, strategyName, timeframe = '1h' } = {}) {
+            if (!runtimeId) return null
+            const existing = this.chartTabs.find((tab) =>
+                tab.kind === 'strategy_balance' &&
+                tab.strategyBalance && tab.strategyBalance.runtimeId === runtimeId)
+            if (existing) {
+                this.activateChartTab(existing.id)
+                return existing
+            }
+            if (this.chartTabs.length >= MAX_CHART_TABS) return null
+            const dc = new this.DataCubeClass()
+            const tab = this._makeChartTab(dc, {
+                kind: 'strategy_balance',
+                title: `Balance · ${strategyName || runtimeId}`,
+                strategyBalance: {
+                    runtimeId,
+                    strategyName: strategyName || runtimeId,
+                    timeframe,
+                    history: null,
+                    loading: false,
+                    error: null,
+                    requestSequence: 0,
+                },
+            })
+            this.chartTabs.push(tab)
+            this.setupChartCube(dc)
+            this.activateChartTab(tab.id)
+            return tab
+        },
+
         // Switch which tab renders. NEVER destroys a cube and — concurrent-live —
         // never re-subscribes: every tab's feed keeps streaming in the background,
         // so a switch is a pure render swap + restore of that tab's saved view (so
@@ -218,13 +253,18 @@ export default {
             // set overwrite the persisted layout — round-trip the pending saved set
             // so a transient discovery failure can't wipe the user's tabs.
             if (this._corkyRestorePending && this._savedCorkyTabs) return this._savedCorkyTabs
+            // Balance-history tabs are intentionally session-scoped. Restoring
+            // them before the strategy feed/runtime catalog exists would create
+            // stale financial views; users can reopen them from the live runtime.
+            const persistentTabs = this.chartTabs.filter((t) => t.kind !== 'strategy_balance')
+            const activePersistentIndex = persistentTabs.findIndex((t) => t.id === this.activeChartTabId)
             return {
-                tabs: this.chartTabs.map((t) => {
+                tabs: persistentTabs.map((t) => {
                     const sel = t.corkyCurrent || t.corkyLast
                     return (sel && sel.venue && sel.symbol && sel.timeframe)
                         ? { venue: sel.venue, symbol: sel.symbol, timeframe: sel.timeframe } : null
                 }),
-                activeIndex: Math.max(0, this.chartTabs.findIndex((t) => t.id === this.activeChartTabId)),
+                activeIndex: Math.max(0, activePersistentIndex),
             }
         },
 

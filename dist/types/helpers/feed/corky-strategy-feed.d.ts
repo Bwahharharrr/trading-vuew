@@ -11,6 +11,8 @@ export class CorkyStrategyFeed {
     listRuntimes(): any;
     /** One runtime's full snapshot. Resolves the `runtime` object. */
     getRuntime(runtime_id: any): any;
+    /** Ledger-backed booked balance + marked equity; decimals stay as strings. */
+    getBalanceHistory(runtime_id: any, opts?: {}): any;
     /** One ticker within a runtime. Resolves the `ticker` object. */
     getTicker(runtime_id: any, ticker_id: any): any;
     /** Recent decisions for a runtime. Resolves the `decisions` array. */

@@ -193,6 +193,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         rawJson(): string;
     }, {
         recencyClass: typeof import("../../helpers/recency.js").recencyClass;
+        expandSelectedCandidate(): void;
         copyRaw(e: any): Promise<void>;
         _fallbackCopy(text: any): boolean;
         _showCopyToast(e: any, ok: any): void;

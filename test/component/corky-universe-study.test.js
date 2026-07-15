@@ -75,6 +75,15 @@ describe('CorkyUniverseStudy', () => {
     expect(w.find('.us-subtable').text()).toContain('tETHBTC')
   })
 
+  test('a linked chosen candidate is highlighted and expanded on open', async () => {
+    const w = mountStudy({ selectedRunIndex: 52 })
+    await w.vm.$nextTick()
+    const selected = w.findAll('.us-table tbody .bt-row')[0]
+    expect(selected.classes()).toContain('active')
+    expect(selected.classes()).toContain('open')
+    expect(w.find('.us-subtable').text()).toContain('tAAVE:USD')
+  })
+
   test('feature-detects an alternate candidate container (rankings)', () => {
     const alt = { rankings: [{ run_index: 0, parameters: { values: { p: 1 } }, aggregate: { score: '0.5', median_pf: '1.1' } }] }
     const w = mountStudy({ artifact: alt })

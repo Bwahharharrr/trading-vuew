@@ -119,7 +119,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     signClass(dec: any): "" | "pos" | "neg";
     pctText(dec: any): string;
     fmtTime(ms: any): string;
-}, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("refresh" | "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "update:tab-order" | "select-position" | "audit-position" | "load-more" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail" | "strategy-select-runtime" | "strategy-open-runtime" | "strategy-close-detail" | "strategy-refresh" | "strategy-load-more-operations" | "strategy-toggle-overlay" | "strategy-compare-allocation" | "strategy-preview-operation" | "strategy-approve-operation" | "strategy-clear-preview" | "strategy-cancel-ticker-orders" | "strategy-pause-ticker" | "strategy-resume-ticker" | "strategy-unlock-ticker" | "strategy-adopt-position" | "strategy-open-lineage-run")[], "refresh" | "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "update:tab-order" | "select-position" | "audit-position" | "load-more" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail" | "strategy-select-runtime" | "strategy-open-runtime" | "strategy-close-detail" | "strategy-refresh" | "strategy-load-more-operations" | "strategy-toggle-overlay" | "strategy-compare-allocation" | "strategy-preview-operation" | "strategy-approve-operation" | "strategy-clear-preview" | "strategy-cancel-ticker-orders" | "strategy-pause-ticker" | "strategy-resume-ticker" | "strategy-unlock-ticker" | "strategy-adopt-position" | "strategy-open-lineage-run", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+}, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("refresh" | "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "update:tab-order" | "select-position" | "audit-position" | "load-more" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail" | "strategy-select-runtime" | "strategy-open-runtime" | "strategy-close-detail" | "strategy-refresh" | "strategy-load-more-operations" | "strategy-toggle-overlay" | "strategy-compare-allocation" | "strategy-preview-operation" | "strategy-approve-operation" | "strategy-clear-preview" | "strategy-cancel-ticker-orders" | "strategy-pause-ticker" | "strategy-resume-ticker" | "strategy-unlock-ticker" | "strategy-adopt-position" | "strategy-open-lineage-run" | "strategy-view-balance")[], "refresh" | "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "update:tab-order" | "select-position" | "audit-position" | "load-more" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail" | "strategy-select-runtime" | "strategy-open-runtime" | "strategy-close-detail" | "strategy-refresh" | "strategy-load-more-operations" | "strategy-toggle-overlay" | "strategy-compare-allocation" | "strategy-preview-operation" | "strategy-approve-operation" | "strategy-clear-preview" | "strategy-cancel-ticker-orders" | "strategy-pause-ticker" | "strategy-resume-ticker" | "strategy-unlock-ticker" | "strategy-adopt-position" | "strategy-open-lineage-run" | "strategy-view-balance", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
     height: {
         type: NumberConstructor;
         default: number;
@@ -237,6 +237,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     "onStrategy-unlock-ticker"?: ((...args: any[]) => any) | undefined;
     "onStrategy-adopt-position"?: ((...args: any[]) => any) | undefined;
     "onStrategy-open-lineage-run"?: ((...args: any[]) => any) | undefined;
+    "onStrategy-view-balance"?: ((...args: any[]) => any) | undefined;
 }>, {
     error: string;
     strategy: Record<string, any>;
@@ -802,6 +803,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
             rawJson(): string;
         }, {
             recencyClass: typeof import("../../helpers/recency.js").recencyClass;
+            expandSelectedCandidate(): void;
             copyRaw(e: any): Promise<void>;
             _fallbackCopy(text: any): boolean;
             _showCopyToast(e: any, ok: any): void;
@@ -1402,6 +1404,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         onTaskTabKeydown(event: any, index: any): void;
         overlayEnabled(kind: any): boolean;
         openLineage(): void;
+        openBalanceHistory(): void;
         parseAllocationPolicy(): any;
         compareAllocationPolicy(): void;
         administrationIdentity(): {
@@ -1464,7 +1467,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         symbolOf(id: any): any;
         _tickerOrdersMap(rt: any): Map<any, any>;
         fmtTime(ms: any): string;
-    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("cancel-ticker-orders" | "resume-ticker" | "unlock-ticker" | "adopt-position" | "pause-ticker" | "refresh" | "select-runtime" | "load-more-operations" | "toggle-overlay" | "compare-allocation" | "preview-operation" | "approve-operation" | "clear-preview" | "open-lineage-run")[], "cancel-ticker-orders" | "resume-ticker" | "unlock-ticker" | "adopt-position" | "pause-ticker" | "refresh" | "select-runtime" | "load-more-operations" | "toggle-overlay" | "compare-allocation" | "preview-operation" | "approve-operation" | "clear-preview" | "open-lineage-run", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("cancel-ticker-orders" | "resume-ticker" | "unlock-ticker" | "adopt-position" | "pause-ticker" | "refresh" | "select-runtime" | "load-more-operations" | "toggle-overlay" | "compare-allocation" | "preview-operation" | "approve-operation" | "clear-preview" | "open-lineage-run" | "view-balance")[], "cancel-ticker-orders" | "resume-ticker" | "unlock-ticker" | "adopt-position" | "pause-ticker" | "refresh" | "select-runtime" | "load-more-operations" | "toggle-overlay" | "compare-allocation" | "preview-operation" | "approve-operation" | "clear-preview" | "open-lineage-run" | "view-balance", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
         runtimes: {
             type: ArrayConstructor;
             default: () => never[];
@@ -1541,6 +1544,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         "onApprove-operation"?: ((...args: any[]) => any) | undefined;
         "onClear-preview"?: ((...args: any[]) => any) | undefined;
         "onOpen-lineage-run"?: ((...args: any[]) => any) | undefined;
+        "onView-balance"?: ((...args: any[]) => any) | undefined;
     }>, {
         error: string;
         loading: boolean;

@@ -259,11 +259,11 @@ describe('strategyOpenLineageRun — jump to the verified universe backtest run 
     expect(ctx.btSelectCandidate).toHaveBeenCalledWith(0)
   })
 
-  test('fetches the run by id when it is not in the loaded list', async () => {
-    const ctx = navCtx([])   // empty list → btListRuns (still empty) → getRun fallback
+  test('fetches the run by id when it is not in the unfiltered catalog', async () => {
+    const ctx = navCtx([])   // unfiltered list still empty → exact artifact fallback
     await ctx.strategyOpenLineageRun({ run_id: 'universe-x', run_index: 3 })
-    expect(ctx.btListRuns).toHaveBeenCalled()
-    expect(ctx.backtestsFeed.getRun).toHaveBeenCalledWith('universe-x')
+    expect(ctx.backtestsFeed.listRuns).toHaveBeenCalledWith({})
+    expect(ctx.backtestsFeed.getRun).toHaveBeenCalledWith('universe-x', { compact: true })
     expect(ctx.btSelectRun).toHaveBeenCalledWith(expect.objectContaining({ run_id: 'universe-x' }))
     expect(ctx.btSelectCandidate).toHaveBeenCalledWith(3)
   })
@@ -276,5 +276,50 @@ describe('strategyOpenLineageRun — jump to the verified universe backtest run 
     const ctx2 = navCtx([])
     await ctx2.strategyOpenLineageRun({})
     expect(ctx2.setPositionsTab).not.toHaveBeenCalled()
+  })
+
+  test('ignores current run filters and opens a lineage run from the unfiltered catalog', async () => {
+    const hidden = { run_id: 'universe-hidden', status: 'completed' }
+    const ctx = navCtx([])
+    ctx.backtests.filters = { strategy: 'another_strategy' }
+    ctx.backtestsFeed.listRuns.mockResolvedValue([hidden])
+    await ctx.strategyOpenLineageRun({ run_id: hidden.run_id, run_index: 7 })
+    expect(ctx.btSelectRun).toHaveBeenCalledWith(hidden)
+    expect(ctx.backtests.runs[0]).toBe(hidden)
+    expect(ctx.backtestsFeed.getRun).not.toHaveBeenCalled()
+  })
+})
+
+describe('strategy balance tab — strategy-scoped history and timeframe reload', () => {
+  test('opens/reuses a balance tab, loads history, and reloads the selected timeframe', async () => {
+    const state = {
+      runtimeId: 'rt-v8', strategyName: 'EMA V8', timeframe: '1h',
+      history: null, loading: false, error: null, requestSequence: 0,
+    }
+    const tab = { kind: 'strategy_balance', strategyBalance: state }
+    const feed = {
+      getBalanceHistory: vi.fn(async (runtimeId, opts) => ({
+        runtime_id: runtimeId, timeframe: opts.timeframe, starting_balance: '1000', points: [],
+      })),
+    }
+    const ctx = {
+      strategyFeed: feed,
+      activeTab: tab,
+      createStrategyBalanceTab: vi.fn(() => tab),
+      _strategyErr: M._strategyErr,
+    }
+    ctx._loadStrategyBalance = M._loadStrategyBalance
+    ctx.strategyViewBalance = M.strategyViewBalance
+    ctx.strategyBalanceTimeframeChanged = M.strategyBalanceTimeframeChanged
+
+    await ctx.strategyViewBalance({ runtime_id: 'rt-v8', strategy_name: 'EMA V8' })
+    expect(ctx.createStrategyBalanceTab).toHaveBeenCalledWith({ runtimeId: 'rt-v8', strategyName: 'EMA V8' })
+    expect(state.history).toMatchObject({ runtime_id: 'rt-v8', timeframe: '1h' })
+    expect(state.loading).toBe(false)
+
+    await ctx.strategyBalanceTimeframeChanged('1D')
+    expect(state.timeframe).toBe('1D')
+    expect(feed.getBalanceHistory).toHaveBeenLastCalledWith('rt-v8', { timeframe: '1D' })
+    expect(state.history.timeframe).toBe('1D')
   })
 })
