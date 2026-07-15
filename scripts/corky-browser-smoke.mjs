@@ -109,11 +109,26 @@ async function main() {
     if (after !== before) log('  ✓ canvas changed after select (live tick / render)')
     else log('  ⚠ canvas fingerprint unchanged within window (history OK; runtime may be idle)')
 
-    // 6) Strategy workspace mounts from the same live gateway and exposes the
-    // complete task navigation. This is a read-only smoke: it never opens or
-    // submits an administrative mutation.
+    // 6) Strategy is a catalog. Open one running strategy, verify the contextual
+    // `S: <name>` tab, then inspect its complete task navigation. This is a
+    // read-only smoke: it never opens or submits an administrative mutation.
     const strategyTab = page.locator('.pd-tab').filter({ hasText: 'Strategy' }).first()
     await strategyTab.click()
+    await page.locator('.strategy-list').waitFor({ timeout: 15000 })
+    const strategyRows = page.locator('.strategy-list-row')
+    const strategyCount = await strategyRows.count()
+    must(strategyCount > 0, `Strategy catalog rendered ${strategyCount} running strategy row(s)`)
+    if (!strategyCount) throw new Error('no running strategy available for contextual workspace smoke')
+    const contradictoryStrategyRows = await strategyRows.evaluateAll((rows) => rows
+      .map((row) => row.textContent || '')
+      .filter((text) => /Healthy/.test(text) && /(stale|disconnected)/i.test(text)))
+    must(contradictoryStrategyRows.length === 0,
+      'Strategy catalog never presents stale/disconnected status as currently Healthy')
+    await strategyRows.first().click()
+    const contextualStrategyTab = page.locator('.pd-tab-strategy').first()
+    await contextualStrategyTab.waitFor({ timeout: 15000 })
+    must((await contextualStrategyTab.innerText()).trim().startsWith('S:'),
+      `contextual strategy tab: ${(await contextualStrategyTab.innerText()).trim()}`)
     await page.locator('.sr-tabs').waitFor({ timeout: 15000 })
     const strategyTasks = await page.locator('.sr-tab').allInnerTexts()
     must(strategyTasks.join('|') === 'Overview|Tickers|Activity|Capital|Orders|Configuration|Administration',

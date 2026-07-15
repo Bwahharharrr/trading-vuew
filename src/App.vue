@@ -143,6 +143,8 @@
             :backtests="backtests"
             :strategy="strategy"
             @strategy-select-runtime="strategySelectRuntime"
+            @strategy-open-runtime="strategyOpenRuntime"
+            @strategy-close-detail="strategyCloseDetail"
             @strategy-refresh="strategyRefresh"
             @strategy-load-more-operations="strategyLoadMoreOperations"
             @strategy-toggle-overlay="strategyToggleOverlay"
@@ -581,6 +583,7 @@ export default {
             // runtime's audit rows (both tickers). App owns selection + streaming.
             strategy: {
                 runtimes: [], selectedRuntimeId: DEFAULT_STRATEGY_RUNTIME_ID,
+                detailOpen: false,
                 decisions: [], overlays: {}, streaming: false, loading: false, error: null,
                 operations: {
                     events: [], lifecycleIntervals: [], projectionRevision: null,
@@ -2069,14 +2072,11 @@ export default {
             else this._positionsStopOpenStream()
         },
 
-        // Subscribe the live runtime stream ONLY while the Strategy tab is the
-        // visible dock tab; stop otherwise (mirrors _positionsSyncStreams so the
-        // subscription doesn't keep streaming when the dock is collapsed / another
-        // tab is active). The one-time data load lives in strategyOpen, so
-        // re-entering the tab re-subscribes without re-fetching.
+        // Keep the selected runtime current while either the strategy catalog or
+        // selected-strategy workspace is visible; stop elsewhere.
         _strategySyncStreams() {
             const want = this.feedMode === 'gateway' && this.positionsDockOpen &&
-                this.positionsActiveTab === 'strategy' && !!this.strategyFeed
+                ['strategy', 'strategy-detail'].includes(this.positionsActiveTab) && !!this.strategyFeed
             if (want) this._strategySubscribe()
             else this._strategyStopSubscribe()
         },
@@ -2744,9 +2744,9 @@ export default {
         },
 
         // ── Strategy runtimes ────────────────────────────────────────────────────
-        // Read-only surface over CorkyStrategyFeed: the runtime SET + a live
-        // full-replacement subscription (both runtimes stay selectable; the default
-        // live runtime is subscribed). Money/quantity fields flow through as decimal
+        // Read-only surface over CorkyStrategyFeed: the authoritative runtime SET +
+        // an unfiltered live-catalog subscription. Selected-runtime operations and
+        // controls remain explicitly scoped. Money/quantity fields flow as decimal
         // strings — the panel/transforms render them verbatim (never float-parsed).
 
         _strategyErr(err) { return err ? (err.message || err.code || String(err)) : null },
@@ -2756,7 +2756,7 @@ export default {
         _strategyDefaultRuntimeId() {
             const ids = (this.strategy.runtimes || []).map((r) => r && r.runtime_id)
             if (ids.includes(DEFAULT_STRATEGY_RUNTIME_ID)) return DEFAULT_STRATEGY_RUNTIME_ID
-            return ids[0] || DEFAULT_STRATEGY_RUNTIME_ID
+            return ids[0] || ''
         },
 
         // Ticker ids for a runtime, from its allocations then orders (deduped, order
@@ -2787,8 +2787,8 @@ export default {
                 if (!ids.includes(this.strategy.selectedRuntimeId)) {
                     this.strategy.selectedRuntimeId = this._strategyDefaultRuntimeId()
                 }
-                if (this._strategySub && this._strategySub.args &&
-                    this._strategySub.args.runtime_id !== this.strategy.selectedRuntimeId) {
+                if (this._strategyOperationsSub && this._strategyOperationsSub.args &&
+                    this._strategyOperationsSub.args.runtime_id !== this.strategy.selectedRuntimeId) {
                     this._strategyStopSubscribe()
                     this._strategyResetOperations()
                 }
@@ -2934,6 +2934,20 @@ export default {
             this.strategy.selectedRuntimeId = runtime_id
             this._strategyResetOperations()
             Promise.resolve(this._strategyLoadRuntime(runtime_id)).finally(() => this._strategySubscribe())
+        },
+
+        // Strategy is a catalog. Opening one creates the reusable contextual
+        // `S: <name>` dock tab, then loads all task views for that runtime.
+        strategyOpenRuntime(runtime_id) {
+            if (!runtime_id) return
+            this.strategy.detailOpen = true
+            this.strategySelectRuntime(runtime_id)
+            this.setPositionsTab('strategy-detail')
+        },
+
+        strategyCloseDetail() {
+            this.strategy.detailOpen = false
+            if (this.positionsActiveTab === 'strategy-detail') this.setPositionsTab('strategy')
         },
 
         // Manual refresh: reload the runtime set + selected detail (the subscription,
@@ -3244,22 +3258,25 @@ export default {
             }
         },
 
-        // Start live runtime + immutable operations subscriptions for the selected
-        // runtime; each update is a FULL-REPLACEMENT snapshot applied by increasing
-        // sequence (see _strategyApplyUpdate). No-op when streaming is unsupported.
+        // Start the unfiltered live runtime catalog plus immutable operations for
+        // the selected runtime. Catalog updates are authoritative full replacements;
+        // operations and controls remain selected-runtime scoped.
         _strategySubscribe() {
             if (!this.strategyFeed) return
             if (this.strategyFeed.streamingSupported === false) return
             const runtimeId = this.strategy.selectedRuntimeId
-            if (!runtimeId) return
-            if (!this._strategySub) this._strategySub = this.strategyFeed.subscribeRuntime(
-                { subscription_id: 'strategy-runtime', runtime_id: runtimeId }, {
-                    onData: (runtimes) => this._strategyApplyUpdate(runtimes),
-                    // Lost stream ⇒ lost control session (controls need the stateful
-                    // socket). Keep the last-good set but hide the control surface.
-                    onError: () => { this.strategy.streaming = false; if (this.strategy.control) this.strategy.control.available = false },
-                })
-            if (!this._strategyOperationsSub && typeof this.strategyFeed.subscribeOperations === 'function') {
+            if (!this._strategySub) {
+                if (this.strategy.control) this.strategy.control.available = false
+                this._strategySub = this.strategyFeed.subscribeRuntime(
+                    { subscription_id: 'strategy-runtimes' }, {
+                        onData: (runtimes) => this._strategyApplyUpdate(runtimes),
+                        // Lost stream ⇒ lost control session (controls need the stateful
+                        // socket). Keep the last-good set but hide the control surface.
+                        onError: () => { this.strategy.streaming = false; if (this.strategy.control) this.strategy.control.available = false },
+                    })
+            }
+            if (runtimeId && !this._strategyOperationsSub &&
+                typeof this.strategyFeed.subscribeOperations === 'function') {
                 const cursor = this.strategy.operations && this.strategy.operations.resumeCursor
                 this._strategyOperationsSub = this.strategyFeed.subscribeOperations(
                     { subscription_id: 'strategy-operations', runtime_id: runtimeId, cursor }, {
@@ -3274,11 +3291,6 @@ export default {
                         },
                     })
             }
-            this.strategy.streaming = true
-            // A live subscription rides the same stateful socket the direct-control
-            // commands require, so it is the control session — controls become
-            // available (still gated per-action by the runtime the operator picks).
-            if (this.strategy.control) this.strategy.control.available = true
         },
 
         _strategyStopSubscribe() {
@@ -3300,13 +3312,42 @@ export default {
         // Apply a FULL-REPLACEMENT runtime update from the subscription. The feed
         // already dropped stale/duplicate/reconnect-replay sequences (and resets
         // its watermark on reconnect), so there is no App-level sequence guard.
-        // The update carries the current snapshot of the runtime(s) it covers —
-        // upserted by runtime_id into the selectable set (order preserved), so
-        // out-of-scope rows (e.g. the non-subscribed runtime) stay selectable.
+        // The unfiltered update is the complete current catalog. Replacing the set
+        // is essential: retaining omitted rows would turn stopped processes into
+        // permanent ghost strategies.
         _strategyApplyUpdate(runtimes) {
-            if (!Array.isArray(runtimes) || !runtimes.length) return   // keep last-good
-            this._strategyUpsertRuntimes(runtimes)
+            if (!Array.isArray(runtimes)) return
+            const next = runtimes.filter((runtime) => runtime && runtime.runtime_id)
+            this.strategy.runtimes = next
             this.strategy.streaming = true
+            const ids = next.map((runtime) => runtime.runtime_id)
+            const selectedRemoved = !ids.includes(this.strategy.selectedRuntimeId)
+            if (selectedRemoved) {
+                this.strategy.selectedRuntimeId = this._strategyDefaultRuntimeId()
+                this.strategy.decisions = []
+                this.strategy.overlays = {}
+                if (typeof this.syncStrategyOverlays === 'function') this.syncStrategyOverlays()
+                if (this.strategy.detailOpen) {
+                    this.strategy.detailOpen = false
+                    if (this.positionsActiveTab === 'strategy-detail') {
+                        if (typeof this.setPositionsTab === 'function') this.setPositionsTab('strategy')
+                        else this.positionsActiveTab = 'strategy'
+                    }
+                }
+                if (this._strategyOperationsSub && this.strategyFeed) {
+                    try { this.strategyFeed.unsubscribe(this._strategyOperationsSub) } catch (_) { /* gone */ }
+                    this._strategyOperationsSub = null
+                }
+                this._strategyResetOperations()
+                if (this.strategy.selectedRuntimeId) {
+                    Promise.resolve(this._strategyLoadRuntime(this.strategy.selectedRuntimeId))
+                        .finally(() => this._strategySubscribe())
+                }
+            }
+            if (this.strategy.control) {
+                this.strategy.control.available = !!this.strategy.selectedRuntimeId &&
+                    ids.includes(this.strategy.selectedRuntimeId)
+            }
             // Clear the awaiting-reconciliation hint only when THIS snapshot actually
             // covers the runtime a control was sent to (awaiting holds that
             // runtime_id) — an unrelated runtime's update must not clear it.
@@ -3316,9 +3357,8 @@ export default {
             }
         },
 
-        // Upsert runtimes into `strategy.runtimes` by runtime_id (replace in place,
-        // preserving order; append unknown ones). Shared by the one-shot detail read
-        // and the subscription's full-replacement apply.
+        // Upsert one-shot selected-runtime detail reads without disturbing the live
+        // catalog. Subscription updates do not use this helper; they replace the set.
         _strategyUpsertRuntimes(runtimes) {
             const set = (this.strategy.runtimes || []).slice()
             for (const rt of runtimes) {

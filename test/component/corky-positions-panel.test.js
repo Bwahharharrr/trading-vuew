@@ -82,11 +82,11 @@ describe('CorkyPositionsPanel — rendering', () => {
         expect(w.findAll('.pd-tab')).toHaveLength(5)   // base tabs incl. Strategy, no Run-Details
     })
 
-    test('the Strategy tab renders the strategy panel', () => {
+    test('the Strategy tab renders only the running-strategy catalog', () => {
         const runtimes = [{ runtime_id: 'v8-tail-repair-live-main', state: 'Ready', mode: 'live', strategy: 'ema_v8', ticker_allocations: [], ticker_orders: [], order_status_counts: {}, auth_wallet_balances: [] }]
         const w = mountPanel({ activeTab: 'strategy', strategy: { runtimes, selectedRuntimeId: '', decisions: [] } })
-        expect(w.find('.sr').exists()).toBe(true)
-        expect(w.findComponent({ name: 'CorkyStrategyPanel' }).exists()).toBe(true)
+        expect(w.findComponent({ name: 'CorkyStrategyList' }).exists()).toBe(true)
+        expect(w.findComponent({ name: 'CorkyStrategyPanel' }).exists()).toBe(false)
     })
 
     test('the Strategy tab shows a runtime count badge', () => {
@@ -96,10 +96,26 @@ describe('CorkyPositionsPanel — rendering', () => {
         expect(strategyTab.text()).toContain('2')
     })
 
-    test('dock forwards the strategy bundle down and bubbles intents up as strategy-*', () => {
+    test('a selected strategy gets one contextual S: tab directly after Strategy', async () => {
+        const runtime = { runtime_id: 'v8-tail-repair-live-main', state: 'Ready', mode: 'live', strategy: 'ema_regime_breakout_v8' }
+        const strategy = { runtimes: [runtime], selectedRuntimeId: runtime.runtime_id, detailOpen: true }
+        const w = mountPanel({ activeTab: 'strategy', tabOrder: ['strategy', 'open', 'historical', 'search', 'backtests'], strategy })
+        const tabs = w.findAll('.pd-tab')
+        expect(tabs[0].text()).toContain('Strategy')
+        expect(tabs[1].text()).toBe('S: EMA Regime Breakout V8 ×')
+        expect(tabs[2].text()).toContain('Open Positions')
+        await tabs[1].trigger('click')
+        expect(w.emitted('update:active-tab').pop()).toEqual(['strategy-detail'])
+    })
+
+    test('the catalog opens a runtime and the contextual tab scopes the full strategy workspace', () => {
         const runtimes = [{ runtime_id: 'v8-tail-repair-live-main', state: 'Ready', mode: 'live', strategy: 'ema_v8', ticker_allocations: [], ticker_orders: [], order_status_counts: {}, auth_wallet_balances: [] }]
         const decisions = [{ decision_id: 'd1', ticker_id: 'x', symbol: 'tX', timeframe: '1m', outcome: 'no_intents' }]
-        const w = mountPanel({ activeTab: 'strategy', maximized: true, strategy: { runtimes, selectedRuntimeId: 'v8-tail-repair-live-main', decisions, streaming: true } })
+        const catalog = mountPanel({ activeTab: 'strategy', strategy: { runtimes, selectedRuntimeId: runtimes[0].runtime_id } })
+        catalog.findComponent({ name: 'CorkyStrategyList' }).vm.$emit('open-runtime', runtimes[0].runtime_id)
+        expect(catalog.emitted('strategy-open-runtime').pop()[0]).toBe(runtimes[0].runtime_id)
+
+        const w = mountPanel({ activeTab: 'strategy-detail', maximized: true, strategy: { runtimes, selectedRuntimeId: 'v8-tail-repair-live-main', detailOpen: true, decisions, streaming: true } })
         const child = w.findComponent({ name: 'CorkyStrategyPanel' })
         // Down: bundle spreads into the child's individual props.
         expect(child.props('runtimes')).toEqual(runtimes)

@@ -678,15 +678,12 @@ export class CorkyClient {
     /**
      * Stream runtime snapshots. Resolves with the FIRST `strategy_runtime_update`;
      * register `onSubscription(subscription_id, …)` (or pass `onEvent`) for the
-     * ongoing FULL-REPLACEMENT updates (apply by increasing `sequence`). Scope the
-     * stream by `runtime_id` OR `strategy` (at least one is required).
+     * ongoing FULL-REPLACEMENT updates (apply by increasing `sequence`). Omit both
+     * filters for the authoritative live catalog, or scope by runtime/strategy.
      */
     subscribeStrategyRuntime(opts = {}) {
         const { subscription_id, runtime_id, strategy, onEvent } = opts
         if (!subscription_id) throw new Error('subscribeStrategyRuntime: subscription_id is required')
-        if (runtime_id == null && strategy == null) {
-            throw new Error('subscribeStrategyRuntime: runtime_id or strategy is required')
-        }
         const command = { type: 'subscribe_strategy_runtime', subscription_id }
         if (runtime_id != null) command.runtime_id = runtime_id
         if (strategy != null) command.strategy = strategy

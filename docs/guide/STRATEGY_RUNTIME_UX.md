@@ -10,11 +10,20 @@ treat evidence as approval.
 
 | Axis | Primary fields | Rendering rule |
 | --- | --- | --- |
-| Runtime health | `state`, `last_error` | Health answers whether the process is operational. It does not grant money or control authority. |
+| Runtime health | `state`, `last_error` | Health answers whether the process was operational at the published snapshot. It is current only while freshness is current and does not grant money or control authority. |
 | Execution mode | `mode`, `state_origin` | Mode answers how decisions are produced. `origin_observer` is read-only by construction. |
 | Mutation authority | configured flags, order-control status, `mutations_halted_reason`, client capability state | Authority is explicit. A connected socket alone never grants it. |
-| Freshness | `generated_at_ms`, dependency timestamps, valuation timestamps | Stale data is shown separately from health and authority. |
+| Freshness | `generated_at_ms`, dependency timestamps, valuation timestamps | Stale/disconnected publishing makes current status unknown. Last-reported health may remain visible only when labelled as historical evidence. |
 | Attention | pending reasons, blockers, `last_error`, operation reasons | The most actionable exact reason is visible without a tooltip. |
+
+The health label is explicitly **Runtime healthy**, not **Service healthy**, so
+it cannot be mistaken for a claim that every latest strategy action executed.
+In `shadow_live`, the duplicate-exit reason `sell quantity … exceeds sellable
+quantity … (tracked long … minus … pending sell)` is an expected local
+simulation hold: render **Exit already queued locally** in a neutral tone and
+say that it was not sent to the exchange. The raw reason remains available in
+technical evidence. The same `intent_denied` outcome in true live mode remains
+an attention state.
 
 ## Capability Semantics
 
@@ -32,8 +41,24 @@ signal. It is rendered as `N/A — not configured`.
 
 ## Information Architecture
 
-The compact dock shows the fleet, selected-runtime status, and current
-attention. The maximized workspace exposes:
+The base **Strategy** dock tab is a catalog of every running strategy and its
+health, execution mode, ticker count, freshness, and current attention reason.
+It does not embed one runtime's task views.
+
+The catalog first loads `list_strategy_runtimes`, then follows the unfiltered
+runtime subscription. Each subscription payload replaces the complete catalog,
+including `runtimes=[]`; an omitted runtime is removed. Operations and controls
+remain scoped to the selected runtime. The gateway normally removes a runtime
+after 30 seconds of receive silence, while the client marks snapshots stale
+after 15 seconds. During that interval and on disconnect, the UI says **Status
+unknown**, never **Healthy** plus **Data is stale**. Published health is shown
+only as **Last reported: ...** until a fresh snapshot arrives.
+
+Opening a catalog row creates one reusable contextual tab immediately after the
+Strategy tab. Its title is `S: <strategy name>`, and every view inside it is
+scoped to that selected runtime. Opening another strategy retargets the same
+contextual tab; closing it returns to the Strategy catalog. The strategy
+workspace exposes:
 
 1. Overview
 2. Tickers
@@ -54,7 +79,7 @@ compete with the fleet list for the same 240-pixel dock height.
 | `state_origin`, `mutations_halted_reason` | Persistent status banner | derive only the safe observer fence from `mode=origin_observer` for older gateways |
 | dependencies and pending feature/auth/allocation reasons | Overview | explicit empty state |
 | `tickers[]`, last-decision summary | Tickers | legacy allocation rows, visibly marked |
-| `recent_decisions`, decision history | Overview and Activity | explicit no-evidence state |
+| `recent_decisions`, decision history | Overview (20 most recent) and Activity | merge snapshot summaries with available durable rows; explicit no-evidence state |
 | strategy operations and lifecycle intervals | Activity and chart lifecycle bands | unavailable state; never read JSONL paths |
 | strategy money and valuation | Capital | `N/A by design` for observers |
 | order counts, detailed blockers, stale forensics | Orders | counts only are labelled incomplete |
@@ -104,17 +129,20 @@ is enabled, but runtime capability gates still apply.
 
 ## Operator Workflow
 
-1. Open **Strategy** in the bottom dock and select the runtime.
-2. Use **Overview** for current health, mode, authority, freshness, and exact
-   attention reason.
-3. Use **Tickers**, **Activity**, **Capital**, **Orders**, and
+1. Open **Strategy** in the bottom dock to see every running strategy and its
+   status.
+2. Open a strategy to create its `S: <strategy name>` contextual tab.
+3. Use **Overview** for current health, mode, authority, freshness, the 20 most
+   recent decisions, and the direct link to the verified universe backtest
+   study/candidate that supplied the runtime parameters.
+4. Use **Tickers**, **Activity**, **Capital**, **Orders**, and
    **Configuration** for their respective evidence. Activity initially renders
    at most 200 loaded rows; reveal more in 200-row batches or request the next
    immutable page.
-4. Use **Administration** to inspect published automatic-allocation state.
-5. For a policy change, compare the candidate first, inspect allocation and
+5. Use **Administration** to inspect published automatic-allocation state.
+6. For a policy change, compare the candidate first, inspect allocation and
    ranking evidence, enter actor/idempotency key/reason, then create a preview.
-6. Verify the operation, revision, expiry, and preview hash. Type the displayed
+7. Verify the operation, revision, expiry, and preview hash. Type the displayed
    exact approval statement to enable **Apply exact preview**.
 
 The seven task tabs support Left/Right, Home, and End keyboard navigation. All

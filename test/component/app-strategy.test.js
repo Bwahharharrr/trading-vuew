@@ -104,7 +104,8 @@ function mkCtx() {
       destroy: vi.fn(),
     },
   }
-  for (const m of ['strategyOpen', '_strategyLoadRuntime', 'strategySelectRuntime', 'strategyRefresh',
+  for (const m of ['strategyOpen', '_strategyLoadRuntime', 'strategySelectRuntime', 'strategyOpenRuntime',
+    'strategyCloseDetail', 'strategyRefresh',
     '_strategySubscribe', '_strategyStopSubscribe', '_strategyApplyUpdate', '_strategyUpsertRuntimes',
     '_strategyResetOperations', '_strategyApplyOperationsPage', 'strategyLoadMoreOperations',
     '_strategyAdministrationContext', '_strategyOperationRevision',
@@ -137,15 +138,21 @@ describe('strategyOpen', () => {
     expect(ctx.strategyFeed.getChartOverlays).toHaveBeenCalledTimes(1)
     // Decisions from both tickers merged.
     expect(ctx.strategy.decisions).toHaveLength(2)
+    expect(ctx.strategyFeed.listDecisions).toHaveBeenCalledTimes(2)
+    expect(ctx.strategyFeed.listDecisions).toHaveBeenCalledWith(DEFAULT_ID, { ticker_id: ADA_TID, limit: 50 })
+    expect(ctx.strategyFeed.listDecisions).toHaveBeenCalledWith(DEFAULT_ID, { ticker_id: BTC_TID, limit: 50 })
     expect(ctx.strategy.overlays[ADA_TID]).toHaveLength(5)
     expect(ctx.strategyFeed.listOperations).toHaveBeenCalledWith(DEFAULT_ID, { limit: 100 })
     expect(ctx.strategy.operations.resumeCursor).toBe('resume-1')
     expect(ctx.strategyFeed.getMoney).toHaveBeenCalledWith(DEFAULT_ID)
     expect(ctx.strategy.money.data.totals.observed_balance).toBe('10000.0000000000000000001')
-    // Live subscription started, scoped to the default live runtime.
+    // The live runtime subscription is the authoritative, unfiltered catalog;
+    // immutable operations remain scoped to the selected runtime.
     expect(ctx.strategyFeed.subscribeRuntime).toHaveBeenCalled()
-    expect(ctx._subArgs).toMatchObject({ subscription_id: 'strategy-runtime', runtime_id: DEFAULT_ID })
+    expect(ctx._subArgs).toEqual({ subscription_id: 'strategy-runtimes' })
     expect(ctx._opsArgs).toMatchObject({ subscription_id: 'strategy-operations', runtime_id: DEFAULT_ID, cursor: 'resume-1' })
+    expect(ctx.strategy.streaming).toBe(false)
+    ctx._subHandlers.onData([mkRuntime(DEFAULT_ID), mkRuntime(OTHER_ID)])
     expect(ctx.strategy.streaming).toBe(true)
     expect(ctx.strategy.loading).toBe(false)
   })
@@ -154,7 +161,8 @@ describe('strategyOpen', () => {
     ctx.strategyFeed.listRuntimes = vi.fn(async () => [mkRuntime(OTHER_ID)])
     await ctx.strategyOpen()
     expect(ctx.strategy.selectedRuntimeId).toBe(OTHER_ID)
-    expect(ctx._subArgs.runtime_id).toBe(OTHER_ID)
+    expect(ctx._subArgs).toEqual({ subscription_id: 'strategy-runtimes' })
+    expect(ctx._opsArgs.runtime_id).toBe(OTHER_ID)
   })
 
   test('a read failure surfaces a clean error, not a hang', async () => {
@@ -175,12 +183,12 @@ describe('strategyOpen', () => {
 describe('subscription full-replacement apply (by increasing sequence)', () => {
   beforeEach(async () => { await ctx.strategyOpen() })
 
-  test('an in-order update upserts the covered runtime; others stay selectable', () => {
+  test('a catalog update replaces the complete set and removes omitted runtimes', () => {
     const updated = mkRuntime(DEFAULT_ID, { state: 'Ready', last_decision_ms: 999 })
     ctx._subHandlers.onData([updated], { sequence: 1 })
     const ids = ctx.strategy.runtimes.map((r) => r.runtime_id)
-    expect(ids).toEqual([DEFAULT_ID, OTHER_ID])                       // both still present
-    expect(ctx.strategy.runtimes[0].last_decision_ms).toBe(999)       // subscribed row replaced
+    expect(ids).toEqual([DEFAULT_ID])
+    expect(ctx.strategy.runtimes[0].last_decision_ms).toBe(999)
   })
 
   test('applies every feed-delivered update — the feed owns the sequence guard, so a post-reconnect low sequence still applies (no App watermark that could freeze live updates)', () => {
@@ -202,11 +210,23 @@ describe('subscription full-replacement apply (by increasing sequence)', () => {
     expect(ctx.strategy.runtimes).toHaveLength(2)
   })
 
+  test('an empty catalog removes stopped runtimes and clears the selection', () => {
+    ctx.strategy.detailOpen = true
+    ctx.positionsActiveTab = 'strategy-detail'
+    ctx.setPositionsTab = vi.fn((tab) => { ctx.positionsActiveTab = tab })
+    ctx._subHandlers.onData([], { sequence: 2 })
+    expect(ctx.strategy.runtimes).toEqual([])
+    expect(ctx.strategy.selectedRuntimeId).toBe('')
+    expect(ctx.strategy.detailOpen).toBe(false)
+    expect(ctx.positionsActiveTab).toBe('strategy')
+    expect(ctx.strategy.control.available).toBe(false)
+  })
+
   test('onError drops the live flag but keeps the last-good set', () => {
     ctx._subHandlers.onData([mkRuntime(DEFAULT_ID)], { sequence: 1 })
     ctx._subHandlers.onError(new Error('sub gone'), { lastGood: ctx.strategy.runtimes })
     expect(ctx.strategy.streaming).toBe(false)
-    expect(ctx.strategy.runtimes).toHaveLength(2)
+    expect(ctx.strategy.runtimes).toHaveLength(1)
   })
 })
 
@@ -221,7 +241,7 @@ describe('runtime selection', () => {
     expect(ctx.strategyFeed.getRuntime).toHaveBeenCalledWith(OTHER_ID)
     expect(ctx.strategy.runtimes.map((r) => r.runtime_id)).toEqual([DEFAULT_ID, OTHER_ID])
     expect(ctx.strategyFeed.unsubscribe).toHaveBeenCalledTimes(2)
-    expect(ctx._subArgs.runtime_id).toBe(OTHER_ID)
+    expect(ctx._subArgs).toEqual({ subscription_id: 'strategy-runtimes' })
     expect(ctx._opsArgs.runtime_id).toBe(OTHER_ID)
   })
 
@@ -230,6 +250,18 @@ describe('runtime selection', () => {
     ctx.strategySelectRuntime(DEFAULT_ID)
     await flush()
     expect(ctx.strategyFeed.getRuntime).not.toHaveBeenCalled()
+  })
+
+  test('opening from the catalog creates the contextual tab; closing returns to Strategy', async () => {
+    ctx.setPositionsTab = vi.fn((tab) => { ctx.positionsActiveTab = tab })
+    ctx.strategyOpenRuntime(OTHER_ID)
+    expect(ctx.strategy.detailOpen).toBe(true)
+    expect(ctx.strategy.selectedRuntimeId).toBe(OTHER_ID)
+    expect(ctx.setPositionsTab).toHaveBeenLastCalledWith('strategy-detail')
+    await flush()
+    ctx.strategyCloseDetail()
+    expect(ctx.strategy.detailOpen).toBe(false)
+    expect(ctx.setPositionsTab).toHaveBeenLastCalledWith('strategy')
   })
 })
 

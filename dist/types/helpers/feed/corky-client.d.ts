@@ -188,8 +188,8 @@ export class CorkyClient {
     /**
      * Stream runtime snapshots. Resolves with the FIRST `strategy_runtime_update`;
      * register `onSubscription(subscription_id, …)` (or pass `onEvent`) for the
-     * ongoing FULL-REPLACEMENT updates (apply by increasing `sequence`). Scope the
-     * stream by `runtime_id` OR `strategy` (at least one is required).
+     * ongoing FULL-REPLACEMENT updates (apply by increasing `sequence`). Omit both
+     * filters for the authoritative live catalog, or scope by runtime/strategy.
      */
     subscribeStrategyRuntime(opts?: {}): Promise<any>;
     /** Cursor-resumable immutable strategy operations stream. */

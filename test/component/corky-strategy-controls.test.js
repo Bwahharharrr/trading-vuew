@@ -50,10 +50,14 @@ function mountPanel(runtime, control = AVAILABLE, props = {}) {
   })
 }
 
-// Select a ticker by clicking its hierarchy row (control targets the selection).
+// Select a ticker in its dedicated view, then return to Administration.
 async function selectTicker(w, needle) {
-  const row = w.findAll('.sr-ticker').find((r) => r.text().includes(needle))
+  const tab = w.findAll('.sr-tab').find((r) => r.text() === 'Tickers')
+  await tab.trigger('click')
+  const row = w.findAll('.sr-ticker-card').find((r) => r.text().includes(needle))
   await row.trigger('click')
+  const administration = w.findAll('.sr-tab').find((r) => r.text() === 'Administration')
+  await administration.trigger('click')
   return w
 }
 const btn = (w, label) => w.findAll('.sr-ctl-btn').find((b) => b.text() === label)
@@ -94,7 +98,7 @@ describe('control surface gating — hidden without a session', () => {
     const w = mountPanel(runtime, AVAILABLE)
     await selectTicker(w, 'tTESTADA:TESTUSD')
     expect(w.findAll('.sr-ctl-btn')).toHaveLength(0)
-    expect(w.find('.sr-ctl-unavailable').text()).toContain('origin observer is capability-fenced')
+    expect(w.find('.sr-ctl-unavailable').text()).toContain('monitoring-only mode does not offer runtime controls')
   })
 })
 

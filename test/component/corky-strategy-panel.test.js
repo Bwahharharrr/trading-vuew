@@ -24,7 +24,9 @@ const NOW_FRESH = 1782937600019
 const NOW_STALE = 1782950129878 + 1
 
 function mountPanel(props = {}) {
-    return mount(CorkyStrategyPanel, { props: { runtimes, decisions, now: NOW_FRESH, ...props } })
+    return mount(CorkyStrategyPanel, {
+        props: { runtimes, decisions, now: NOW_FRESH, streaming: true, ...props },
+    })
 }
 beforeEach(() => window.localStorage.clear())
 // Activate a tab by its label.
@@ -47,7 +49,9 @@ describe('CorkyStrategyPanel — tabs + runtime selector', () => {
         const w = mountPanel({ selectedRuntimeId: '' })
         const rows = w.findAll('.sr-rt')
         expect(rows).toHaveLength(runtimes.length)
-        expect(w.find('.sr-rt.active').text()).toContain('v8-tail-repair-live-main')
+        expect(w.find('.sr-rt.active').attributes('data-runtime-id')).toBe('v8-tail-repair-live-main')
+        expect(w.find('.sr-rt.active').text()).toContain('EMA Regime Breakout V8')
+        expect(w.find('.sr-rt.active').text()).toContain('Viewing')
     })
 
     test('clicking a runtime row emits select-runtime; honours an explicit selection', async () => {
@@ -55,7 +59,7 @@ describe('CorkyStrategyPanel — tabs + runtime selector', () => {
         await w.findAll('.sr-rt')[1].trigger('click')
         expect(w.emitted('select-runtime')[0]).toEqual(['v8-tail-repair-status-main'])
         const w2 = mountPanel({ selectedRuntimeId: 'v8-tail-repair-status-main' })
-        expect(w2.find('.sr-rt.active').text()).toContain('v8-tail-repair-status-main')
+        expect(w2.find('.sr-rt.active').attributes('data-runtime-id')).toBe('v8-tail-repair-status-main')
     })
 
     test('refresh icon emits refresh; ● live shows only while streaming', async () => {
@@ -68,10 +72,10 @@ describe('CorkyStrategyPanel — tabs + runtime selector', () => {
 })
 
 describe('CorkyStrategyPanel — Overview tab', () => {
-    test('readiness state (Ready) is its own badge, distinct from strategy status', () => {
-        const rt = mountPanel().find('.sr-sec-head .rt-badge')
-        expect(rt.text()).toBe('Ready')
-        expect(rt.classes()).toContain('tone-ready')
+    test('runtime health is named separately from operating mode', () => {
+        const banner = mountPanel().find('.sr-status-banner')
+        expect(banner.find('.sr-service-health').text()).toBe('Runtime healthy')
+        expect(banner.find('.sr-status-mode').text()).toBe('Live trading')
     })
 
     test('shows strategy, public/private runtimes, gate readiness, and formatted observed balances', async () => {

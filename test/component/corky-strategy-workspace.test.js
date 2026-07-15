@@ -42,8 +42,8 @@ describe('responsive strategy task workspace', () => {
         const expanded = mountPanel({ maximized: true })
         expect(compact.find('.sr').classes()).not.toContain('maximized')
         expect(expanded.find('.sr').classes()).toContain('maximized')
-        expect(compact.find('.sr-rt.active').text()).toContain(runtimes[0].runtime_id)
-        expect(expanded.find('.sr-rt.active').text()).toContain(runtimes[0].runtime_id)
+        expect(compact.find('.sr-rt.active').attributes('data-runtime-id')).toBe(runtimes[0].runtime_id)
+        expect(expanded.find('.sr-rt.active').attributes('data-runtime-id')).toBe(runtimes[0].runtime_id)
         expect(expanded.find('.sr-hier').exists()).toBe(true)
         expect(expanded.find('.sr-body').exists()).toBe(true)
     })
@@ -68,6 +68,49 @@ describe('responsive strategy task workspace', () => {
         await task(wrapper, 'Administration')
         expect(wrapper.find('.sr-body').text()).toContain('Runtime administration')
         expect(wrapper.find('.sr-body').text()).toContain('Approval')
+    })
+
+    test('Overview links directly to the verified universe study and shows the latest 20 durable decisions', async () => {
+        const tickerId = runtimes[0].tickers[0].ticker_id
+        const decisions = Array.from({ length: 25 }, (_, index) => ({
+            decision_id: `decision-${index}`,
+            decision_ts_ms: runtimes[0].generated_at_ms + index,
+            ticker_id: tickerId,
+            symbol: runtimes[0].tickers[0].symbol,
+            outcome: 'no_intents',
+            reason: `decision reason ${index}`,
+        }))
+        const wrapper = mountPanel({ decisions })
+        expect(wrapper.find('.sr-lineage-source').text()).toContain('Universe backtest study')
+        expect(wrapper.find('.sr-lineage-source').text()).toContain(runtimes[0].universe_backtest_run_id)
+        await wrapper.find('.sr-lineage-source .sr-lin-open').trigger('click')
+        expect(wrapper.emitted('open-lineage-run').pop()[0]).toEqual({
+            run_id: runtimes[0].universe_backtest_run_id,
+            run_index: runtimes[0].candidate_run_index,
+        })
+        expect(wrapper.findAll('.sr-recent-decision')).toHaveLength(20)
+        expect(wrapper.findAll('.sr-recent-decision')[0].text()).toContain('Decision reason 24')
+        expect(wrapper.text()).toContain('showing 20 most recent (max 20)')
+    })
+
+    test('merges snapshot context when durable decision history is only partially available', () => {
+        const ticker = runtimes[0].tickers[0]
+        const snapshotDecision = {
+            decision_id: 'snapshot-only', decision_ts_ms: 2000,
+            ticker_id: ticker.ticker_id, symbol: ticker.symbol,
+            outcome: 'no_intents', reason: 'snapshot context retained',
+        }
+        const durableDecision = {
+            decision_id: 'durable-only', decision_ts_ms: 1000,
+            ticker_id: ticker.ticker_id, symbol: ticker.symbol,
+            outcome: 'no_intents', reason: 'durable history retained',
+        }
+        const runtime = { ...runtimes[0], recent_decisions: [snapshotDecision] }
+        const wrapper = mountPanel({ runtimes: [runtime], decisions: [durableDecision] })
+        const rows = wrapper.findAll('.sr-recent-decision')
+        expect(rows).toHaveLength(2)
+        expect(rows[0].text()).toContain('Snapshot context retained')
+        expect(rows[1].text()).toContain('Durable history retained')
     })
 
     test('Tickers renders exact status reasons and selects its command target', async () => {
@@ -297,7 +340,7 @@ describe('responsive strategy task workspace', () => {
             control: { available: true },
         })
         await task(wrapper, 'Administration')
-        expect(wrapper.find('.sr-admin-unavailable').text()).toContain('observer runtimes have no allocation authority')
+        expect(wrapper.find('.sr-admin-unavailable').text()).toContain('monitoring-only strategies have no allocation authority')
         expect(wrapper.find('.sr-admin-workflow').exists()).toBe(false)
         expect(wrapper.find('.sr-operation-preview').exists()).toBe(false)
     })

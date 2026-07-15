@@ -49,6 +49,16 @@ export function classifyRuntimeReadiness(state: any): {
     ready: boolean;
     tone: string;
 };
+/** Human-readable strategy name while retaining the wire id elsewhere. */
+export function strategyDisplayName(runtime: any): string;
+/** Translate a wire reason without hiding its raw value from technical details. */
+export function humanizeStrategyReason(reason: any, mode?: string): any;
+/** Plain-language decision summary for overview and activity surfaces. */
+export function strategyDecisionPresentation(decision: any, mode?: string): {
+    label: string;
+    tone: string;
+    detail: any;
+};
 /**
  * Build the operator-facing runtime semantics without conflating health, mode,
  * mutation authority, freshness, or dependency gates. This is intentionally a
@@ -56,14 +66,27 @@ export function classifyRuntimeReadiness(state: any): {
  */
 export function strategyRuntimeSemantics(runtime: any, opts?: {}): {
     health: {
+        tone: string;
+        label: string;
         state: string;
         ready: boolean;
-        tone: string;
     };
-    mode: {
-        raw: string;
+    currentStatus: {
+        known: boolean;
+        tone: string;
+        label: string;
+        state: string;
+        ready: boolean;
+        status?: undefined;
+    } | {
+        state: string;
+        status: string;
+        ready: boolean;
+        known: boolean;
+        tone: string;
         label: string;
     };
+    mode: any;
     observer: boolean;
     authority: {
         status: string;

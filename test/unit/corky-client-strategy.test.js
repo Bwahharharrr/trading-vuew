@@ -231,10 +231,9 @@ describe('strategy sender input guards (throw + send nothing)', () => {
     expect(sock().sent).toHaveLength(0)
   })
 
-  it('subscribeStrategyRuntime checks subscription_id first, then runtime_id|strategy', () => {
+  it('subscribeStrategyRuntime requires only a subscription id for a catalog stream', () => {
     const { client, sock } = makeClient()
     expect(() => client.subscribeStrategyRuntime({})).toThrow(/subscription_id is required/)
-    expect(() => client.subscribeStrategyRuntime({ subscription_id: 's' })).toThrow(/runtime_id or strategy is required/)
     expect(sock().sent).toHaveLength(0)
   })
 
@@ -252,6 +251,14 @@ describe('subscribeStrategyRuntime — first update resolves, rest fan out', () 
   const update = (subscription_id, sequence, runtimes) => ({
     schema_version: 1, request_id: sequence === 1 ? 's1' : null,
     event: { type: 'strategy_runtime_update', subscription_id, sequence, runtimes },
+  })
+
+  it('allows an unfiltered authoritative runtime catalog subscription', () => {
+    const { client, sock } = makeClient()
+    client.subscribeStrategyRuntime({ subscription_id: 'strategy-runtimes' })
+    expect(sock().sent[0].command).toEqual({
+      type: 'subscribe_strategy_runtime', subscription_id: 'strategy-runtimes',
+    })
   })
 
   it('sends subscribe_strategy_runtime with runtime_id (not strategy); resolves on the FIRST update; fans out the rest', async () => {

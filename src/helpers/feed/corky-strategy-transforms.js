@@ -128,6 +128,116 @@ export function classifyRuntimeReadiness(state) {
 
 const OBSERVER_MODES = new Set(['origin_observer'])
 
+const MODE_PRESENTATION = {
+  origin_observer: {
+    label: 'Monitoring only',
+    description: 'Observes the market and records decisions. It cannot place orders or change balances.',
+  },
+  paper: {
+    label: 'Paper trading',
+    description: 'Uses simulated orders and balances. No real exchange money is used.',
+  },
+  shadow_live: {
+    label: 'Live-data simulation',
+    description: 'Evaluates live market data and records decisions without sending exchange orders.',
+  },
+  live: {
+    label: 'Live trading',
+    description: 'Can place orders only when its configured trading authority permits.',
+  },
+}
+
+const REASON_PRESENTATION = {
+  origin_observer_money_mutations_fenced: 'Expected while monitoring only — this runtime cannot place orders or change balances.',
+  market_data_continuity_gap: 'Market data continuity gap.',
+  no_entry_signal: 'Entry conditions were not met.',
+  'no entry signal': 'Entry conditions were not met.',
+}
+
+const SHADOW_LIVE_PENDING_SELL_REASON = /sell quantity \S+ exceeds sellable quantity \S+ \(tracked long \S+ minus (\S+) pending sell\)/i
+
+function shadowLivePendingSellHold(reason, mode) {
+  if (String(mode || '').trim().toLowerCase() !== 'shadow_live') return null
+  const match = String(reason || '').match(SHADOW_LIVE_PENDING_SELL_REASON)
+  if (!match) return null
+  return {
+    pendingQuantity: match[1],
+    detail: `A sell for ${match[1]} is already queued locally in this live-data simulation. It was not sent to the exchange; repeated exit signals are being safely suppressed.`,
+  }
+}
+
+function sentenceCase(value) {
+  const text = String(value || '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
+  return text ? text[0].toUpperCase() + text.slice(1) : ''
+}
+
+/** Human-readable strategy name while retaining the wire id elsewhere. */
+export function strategyDisplayName(runtime) {
+  const rt = runtime || {}
+  const raw = rt.display_name || rt.strategy_display_name || rt.strategy_id || rt.strategy
+  if (raw == null || String(raw).trim() === '') return 'Unnamed strategy'
+  return String(raw).trim().split('_').map((part) => {
+    if (/^v\d+$/i.test(part) || /^[A-Z0-9]{2,}$/.test(part)) return part.toUpperCase()
+    if (/^ema$/i.test(part)) return 'EMA'
+    return part ? part[0].toUpperCase() + part.slice(1).toLowerCase() : ''
+  }).join(' ')
+}
+
+/** Translate a wire reason without hiding its raw value from technical details. */
+export function humanizeStrategyReason(reason, mode = '') {
+  if (reason == null || String(reason).trim() === '') return ''
+  const raw = String(reason).trim()
+  const pendingSell = shadowLivePendingSellHold(raw, mode)
+  if (pendingSell) return pendingSell.detail
+  return REASON_PRESENTATION[raw.toLowerCase()] || sentenceCase(raw)
+}
+
+/** Plain-language decision summary for overview and activity surfaces. */
+export function strategyDecisionPresentation(decision, mode = '') {
+  const row = decision || {}
+  const outcome = String(row.outcome || 'unknown').trim().toLowerCase()
+  const rawReason = row.reason || row.first_intent_reason || ''
+  const observerDenied = outcome === 'intent_denied' && (
+    String(mode).toLowerCase() === 'origin_observer' ||
+    String(rawReason).toLowerCase().includes('origin_observer') ||
+    String(rawReason).toLowerCase().includes('money_mutations_fenced')
+  )
+  const pendingShadowSell = outcome === 'intent_denied'
+    ? shadowLivePendingSellHold(rawReason, mode)
+    : null
+
+  if (outcome === 'no_intents') {
+    return {
+      label: 'No trade signal', tone: 'neutral',
+      detail: humanizeStrategyReason(rawReason) || 'Entry conditions were not met on the latest market update.',
+    }
+  }
+  if (observerDenied) {
+    return {
+      label: 'Order not sent', tone: 'neutral',
+      detail: REASON_PRESENTATION.origin_observer_money_mutations_fenced,
+    }
+  }
+  if (pendingShadowSell) {
+    return {
+      label: 'Exit already queued locally', tone: 'neutral',
+      detail: pendingShadowSell.detail,
+    }
+  }
+  if (outcome === 'intent_denied') {
+    return {
+      label: 'Strategy action blocked', tone: 'attention',
+      detail: humanizeStrategyReason(rawReason, mode) || 'A safety or authority check blocked this action.',
+    }
+  }
+  return {
+    label: sentenceCase(outcome) || 'Decision recorded',
+    tone: outcome.includes('reject') || outcome.includes('fail') || outcome.includes('error')
+      ? 'attention' : 'neutral',
+    detail: humanizeStrategyReason(rawReason, mode) || 'No additional explanation was published.',
+  }
+}
+
 function configuredGate(configured, ready, reasons, unavailableLabel) {
   if (!configured) {
     return { configured: false, ready: false, status: 'not_applicable', tone: 'neutral', label: unavailableLabel }
@@ -152,12 +262,12 @@ export function strategyRuntimeSemantics(runtime, opts = {}) {
   const staleAfterMs = Number.isFinite(opts.staleAfterMs) ? opts.staleAfterMs : 15_000
   const streaming = opts.streaming !== false
   const freshness = !streaming
-    ? { status: 'disconnected', tone: 'attention', label: 'Disconnected', ageMs }
+    ? { status: 'disconnected', tone: 'attention', label: 'Updates disconnected', ageMs }
     : ageMs == null
-      ? { status: 'unknown', tone: 'neutral', label: 'Freshness unknown', ageMs: null }
+      ? { status: 'unknown', tone: 'neutral', label: 'Update time unavailable', ageMs: null }
       : ageMs > staleAfterMs
-        ? { status: 'stale', tone: 'attention', label: 'Stale', ageMs }
-        : { status: 'current', tone: 'ready', label: 'Current', ageMs }
+        ? { status: 'stale', tone: 'attention', label: 'Runtime status update is stale', ageMs }
+        : { status: 'current', tone: 'ready', label: 'Updated', ageMs }
 
   const auth = configuredGate(
     rt.auth_gate_configured === true,
@@ -175,17 +285,27 @@ export function strategyRuntimeSemantics(runtime, opts = {}) {
   const featureReason = (Array.isArray(rt.pending_feature_reasons) ? rt.pending_feature_reasons : []).find(Boolean)
   const authReason = auth.status === 'blocked' ? auth.label : null
   const allocationReason = allocation.status === 'blocked' ? allocation.label : null
-  const primaryReason = rt.mutations_halted_reason || rt.last_error || featureReason || authReason
+  const primaryReason = (!observer && rt.mutations_halted_reason) || rt.last_error || featureReason || authReason
     || allocationReason || rt.auth_order_control_reason || null
 
+  const pendingShadowSell = shadowLivePendingSellHold(rt.mutations_halted_reason, mode)
   let authority
   if (observer) {
     authority = {
-      status: 'read_only', tone: 'neutral', label: 'Money mutations fenced',
-      reason: rt.mutations_halted_reason || 'origin observer is capability-fenced',
+      status: 'read_only', tone: 'neutral', label: 'Cannot place orders or change balances',
+      reason: rt.mutations_halted_reason || 'monitoring-only mode cannot change financial state',
+    }
+  } else if (pendingShadowSell) {
+    authority = {
+      status: 'simulated_pending', tone: 'neutral', label: 'Exchange orders disabled',
+      reason: pendingShadowSell.detail,
     }
   } else if (rt.mutations_halted_reason) {
     authority = { status: 'halted', tone: 'attention', label: 'Mutations halted', reason: rt.mutations_halted_reason }
+  } else if (mode === 'paper') {
+    authority = { status: 'simulated', tone: 'neutral', label: 'Simulated orders only', reason: null }
+  } else if (mode === 'shadow_live') {
+    authority = { status: 'read_only', tone: 'neutral', label: 'Exchange orders disabled', reason: null }
   } else if (rt.auth_order_control_configured === true && String(rt.auth_order_control_status || '').toLowerCase() === 'ready') {
     authority = { status: 'order_capable', tone: 'ready', label: 'Order capable', reason: null }
   } else {
@@ -193,14 +313,36 @@ export function strategyRuntimeSemantics(runtime, opts = {}) {
   }
 
   const runtimeControl = observer
-    ? { available: false, reason: 'origin observer is capability-fenced' }
+    ? { available: false, reason: 'monitoring-only mode does not offer runtime controls' }
     : rt.runtime_control_available === true
       ? { available: true, reason: null }
       : { available: false, reason: rt.runtime_control_reason || 'runtime does not advertise direct control' }
 
+  const health = classifyRuntimeReadiness(rt.state)
+  const healthPresentation = {
+    ...health,
+    tone: health.state === 'Degraded' ? 'attention' : health.tone,
+    label: health.ready ? 'Runtime healthy' : health.state === 'Degraded'
+      ? 'Runtime needs attention' : `Runtime ${sentenceCase(health.state)}`,
+  }
+  // A Ready state is only a current health claim while its publishing stream is
+  // current. Once updates are stale/disconnected, retain it as last-reported
+  // evidence without presenting it as the runtime's present state.
+  const currentStatus = freshness.status === 'current'
+    ? { ...healthPresentation, known: true }
+    : {
+        state: 'Unknown', status: 'unknown', ready: false, known: false,
+        tone: freshness.tone, label: 'Status unknown',
+      }
+  const modePresentation = MODE_PRESENTATION[mode] || {
+    label: 'Unknown mode',
+    description: 'Trading capability has not been reported by this runtime.',
+  }
+
   return {
-    health: classifyRuntimeReadiness(rt.state),
-    mode: { raw: mode, label: mode.split('_').filter(Boolean).map((part) => part[0].toUpperCase() + part.slice(1)).join(' ') || 'Unknown' },
+    health: healthPresentation,
+    currentStatus,
+    mode: { raw: mode, ...modePresentation },
     observer,
     authority,
     freshness,

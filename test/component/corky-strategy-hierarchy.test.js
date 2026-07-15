@@ -36,43 +36,45 @@ async function tab(w, label) {
     await btn.trigger('click')
     return w
 }
-const tickerRowFor = (w, needle) => w.findAll('.sr-ticker').find((r) => r.text().includes(needle))
+const tickerRowFor = (w, needle) => w.findAll('.sr-ticker-card').find((r) => r.text().includes(needle))
 
 // ═══════════════════════════════════════════════════════════════════════════
 // NEW-CONTRACT FIXTURE — hierarchy + statuses + lineage + wallet tree
 // ═══════════════════════════════════════════════════════════════════════════
-describe('new-contract (strategy-runtimes-ux-contract) — process → runtime hierarchy', () => {
+describe('new-contract (strategy-runtimes-ux-contract) — running strategy selector', () => {
     const mountUx = (props = {}) =>
-        mount(CorkyStrategyPanel, { props: { runtimes: UX_RUNTIMES, now: AS_OF, ...props } })
+        mount(CorkyStrategyPanel, {
+            props: { runtimes: UX_RUNTIMES, now: AS_OF, streaming: true, ...props },
+        })
 
-    test('groups runtimes under the corky-strategy-runtime process with a ready/degraded roll-up', () => {
+    test('summarizes running strategies without exposing the internal process kind', () => {
         const head = mountUx().find('.sr-proc-head')
-        expect(head.text()).toContain('corky-strategy-runtime')
-        expect(head.text()).toContain('runtimes=2')
-        expect(head.text()).toContain('ready=1')     // v8 live = Ready
-        expect(head.text()).toContain('degraded=1')  // status-matrix = Degraded
+        expect(head.text()).toContain('Running strategies')
+        expect(head.text()).toContain('2 total')
+        expect(head.text()).toContain('1 healthy')
+        expect(head.text()).toContain('1 needs attention')
+        expect(head.text()).not.toContain('corky-strategy-runtime')
     })
 
-    test('renders one selectable runtime row per runtime with id/mode/strategy_id/instance/state + lineage badge', () => {
+    test('renders one strategy-first selector row per runtime', () => {
         const rows = mountUx().findAll('.sr-rt')
         expect(rows).toHaveLength(2)
         const live = rows[0]
-        expect(live.text()).toContain('v8-tail-repair-live-main')
-        expect(live.text()).toContain('live')                                   // mode
-        expect(live.text()).toContain('ema_regime_breakout_v8')                 // strategy_id
-        expect(live.text()).toContain('v8-tail-repair-testusd-1m-live-20260701T143936Z') // instance
-        expect(live.find('.rt-badge').text()).toBe('Ready')                     // readiness axis
-        expect(live.find('.lin-badge').text()).toBe('verified')                 // lineage axis
+        expect(live.attributes('data-runtime-id')).toBe('v8-tail-repair-live-main')
+        expect(live.text()).toContain('EMA Regime Breakout V8')
+        expect(live.text()).toContain('Live trading')
+        expect(live.find('.rt-badge').text()).toBe('Healthy')
+        expect(live.text()).toContain('Viewing')
+        expect(live.text()).not.toContain('v8-tail-repair-testusd-1m-live-20260701T143936Z')
     })
 
-    test('lineage is visually distinct: verified vs mismatch; mismatch never reads as verified', () => {
+    test('verified identity stays secondary while mismatches remain visible', () => {
         const rows = mountUx().findAll('.sr-rt')
-        const verified = rows[0].find('.lin-badge')
         const mismatch = rows[1].find('.lin-badge')
-        expect(verified.classes()).toContain('lin-verified')
-        expect(mismatch.text()).toBe('mismatch')
+        expect(rows[0].find('.lin-badge').exists()).toBe(false)
+        expect(mismatch.text()).toBe('Identity issue')
         expect(mismatch.classes()).toContain('lin-attention')
-        expect(mismatch.classes()).not.toContain('lin-verified')
+        expect(mountUx().find('.sr-status-meta').text()).toContain('Strategy identity verified')
     })
 
     test('clicking a runtime row emits select-runtime with its runtime_id', async () => {
@@ -81,49 +83,51 @@ describe('new-contract (strategy-runtimes-ux-contract) — process → runtime h
         expect(w.emitted('select-runtime')[0]).toEqual(['strategy-runtime-status-matrix'])
     })
 
-    test('renders ticker child rows under each runtime (symbol + status + reason)', () => {
-        const w = mountUx()
+    test('renders selected strategy tickers in the dedicated Tickers view', async () => {
+        const w = await tab(mountUx(), 'Tickers')
         const ada = tickerRowFor(w, 'tTESTADA:TESTUSD')
-        expect(ada.find('.sr-tk-sym').text()).toBe('tTESTADA:TESTUSD')
+        expect(ada.find('.sym').text()).toBe('tTESTADA:TESTUSD')
         expect(ada.find('.st-badge').text()).toBe('waiting')
         expect(ada.text()).toContain('no entry signal')      // status_reason
-        // all six tickers across both runtimes are present
-        expect(w.findAll('.sr-ticker')).toHaveLength(6)
+        expect(w.findAll('.sr-ticker-card')).toHaveLength(2)
     })
 
-    test('ticker status styles follow classifyTickerStatus (muted/green/short/attention/lockout)', () => {
-        const w = mountUx()
-        const styleOf = (needle) => tickerRowFor(w, needle).find('.st-badge').classes().find((c) => c.startsWith('sts-'))
-        expect(styleOf('tTESTADA:TESTUSD')).toBe('sts-muted-grey')     // waiting
-        expect(styleOf('tTESTBTC:TESTUSD')).toBe('sts-positive-green') // long
-        expect(styleOf('tTESTXLM:TESTUSD')).toBe('sts-short-distinct') // short
-        expect(styleOf('tTESTDOT:TESTUSD')).toBe('sts-attention')      // paused
-        expect(styleOf('tTESTSOL:TESTUSD')).toBe('sts-lockout')        // bust_locked
-        expect(styleOf('tTESTLTC:TESTUSD')).toBe('sts-attention')      // degraded
+    test('ticker status styles follow classifyTickerStatus (muted/green/short/attention/lockout)', async () => {
+        const live = await tab(mountUx(), 'Tickers')
+        const matrix = await tab(mountUx({ selectedRuntimeId: UX_MATRIX.runtime_id }), 'Tickers')
+        const styleOf = (w, needle) => tickerRowFor(w, needle).find('.st-badge').classes().find((c) => c.startsWith('sts-'))
+        expect(styleOf(live, 'tTESTADA:TESTUSD')).toBe('sts-muted-grey')
+        expect(styleOf(live, 'tTESTBTC:TESTUSD')).toBe('sts-positive-green')
+        expect(styleOf(matrix, 'tTESTXLM:TESTUSD')).toBe('sts-short-distinct')
+        expect(styleOf(matrix, 'tTESTDOT:TESTUSD')).toBe('sts-attention')
+        expect(styleOf(matrix, 'tTESTSOL:TESTUSD')).toBe('sts-lockout')
+        expect(styleOf(matrix, 'tTESTLTC:TESTUSD')).toBe('sts-attention')
     })
 
-    test('duration label shows only when timing is present (long → "for 19m")', () => {
-        const w = mountUx()
+    test('duration label shows only when timing is present (long → "for 19m")', async () => {
+        const live = await tab(mountUx(), 'Tickers')
+        const matrix = await tab(mountUx({ selectedRuntimeId: UX_MATRIX.runtime_id }), 'Tickers')
         // long: duration from position_opened_at_ms (1782952260000) → 19m
-        expect(tickerRowFor(w, 'tTESTBTC:TESTUSD').find('.sr-tk-dur').text()).toBe('for 19m')
+        expect(tickerRowFor(live, 'tTESTBTC:TESTUSD').find('.sr-tk-dur').text()).toBe('for 19m')
         // short: duration from position_opened_at_ms → 50m
-        expect(tickerRowFor(w, 'tTESTXLM:TESTUSD').find('.sr-tk-dur').text()).toBe('for 50m')
+        expect(tickerRowFor(matrix, 'tTESTXLM:TESTUSD').find('.sr-tk-dur').text()).toBe('for 50m')
     })
 
-    test('a ticker with NO published timing OMITS the duration (never invents one)', () => {
+    test('a ticker with NO published timing OMITS the duration (never invents one)', async () => {
         const rt = {
             ...UX_LIVE,
             tickers: [{ ticker_id: 'V:tNOW:USD', symbol: 'tNOW:USD', status: 'waiting', status_reason: 'x' }],
             ticker_orders: [],
         }
         const w = mount(CorkyStrategyPanel, { props: { runtimes: [rt], selectedRuntimeId: rt.runtime_id, now: AS_OF } })
+        await tab(w, 'Tickers')
         const row = tickerRowFor(w, 'tNOW:USD')
         expect(row.find('.st-badge').text()).toBe('waiting')
         expect(row.find('.sr-tk-dur').exists()).toBe(false)
     })
 
-    test('an orders_submitted_nonterminal ticker shows the submitted-order BLOCKER overlay on top of its status', () => {
-        const w = mountUx()
+    test('an orders_submitted_nonterminal ticker shows the submitted-order BLOCKER overlay on top of its status', async () => {
+        const w = await tab(mountUx(), 'Tickers')
         const ada = tickerRowFor(w, 'tTESTADA:TESTUSD')  // ticker_orders → submitted_nonterminal=1
         const btc = tickerRowFor(w, 'tTESTBTC:TESTUSD')  // submitted_nonterminal=0
         expect(ada.find('.st-badge').text()).toBe('waiting')   // status style preserved
@@ -131,14 +135,13 @@ describe('new-contract (strategy-runtimes-ux-contract) — process → runtime h
         expect(btc.find('.sr-blocker').exists()).toBe(false)
     })
 
-    test('renders public/private dependency child rows', () => {
+    test('keeps runtime dependencies inside Technical details', () => {
         const w = mountUx()
-        const deps = w.findAll('.sr-deps')
-        expect(deps.length).toBe(2)  // one per runtime
-        expect(deps[0].text()).toContain('public')
-        expect(deps[0].text()).toContain('public-market-main')
-        expect(deps[0].text()).toContain('private')
-        expect(deps[0].text()).toContain('private-account-main')
+        const details = w.find('.sr-technical')
+        expect(details.text()).toContain('Public runtime')
+        expect(details.text()).toContain('public-market-main')
+        expect(details.text()).toContain('Private runtime')
+        expect(details.text()).toContain('private-account-main')
     })
 })
 
@@ -229,15 +232,15 @@ describe('live gateway (live_get_strategy_runtime) — fallback path renders + i
             props: { runtimes: [LIVE_RUNTIME], now: LIVE_RUNTIME.generated_at_ms, ...props },
         })
 
-    test('the single live runtime renders under the process group and is selected by default', () => {
+    test('a single runtime removes the redundant selector and leads with strategy identity', () => {
         const w = mountLive()
-        expect(w.find('.sr-proc-head').text()).toContain('runtimes=1')
-        expect(w.findAll('.sr-rt')).toHaveLength(1)
-        expect(w.find('.sr-rt.active').text()).toContain('v8-tail-repair-live-main')
+        expect(w.find('.sr-hier').exists()).toBe(false)
+        expect(w.find('.sr-strategy-name').text()).toBe('EMA Regime Breakout V8')
+        expect(w.find('.sr-technical').text()).toContain('v8-tail-repair-live-main')
     })
 
-    test('ticker rows render from tickers[] with the entering (transitional) status style', () => {
-        const w = mountLive()
+    test('ticker rows render from tickers[] with the entering (transitional) status style', async () => {
+        const w = await tab(mountLive(), 'Tickers')
         const ada = tickerRowFor(w, 'tTESTADA:TESTUSD')   // status "entering"
         expect(ada.find('.st-badge').text()).toBe('entering')
         expect(ada.find('.st-badge').classes()).toContain('sts-transitional')
@@ -265,8 +268,8 @@ describe('live gateway (live_get_strategy_runtime) — fallback path renders + i
         expect(w.find('.sr-lasterr').text()).toContain('missing or stale runtime control session')
     })
 
-    test('verified lineage badge renders for the live runtime', () => {
-        expect(mountLive().find('.sr-rt .lin-badge').text()).toBe('verified')
+    test('verified strategy identity is explained in the status summary', () => {
+        expect(mountLive().find('.sr-status-meta').text()).toContain('Strategy identity verified')
     })
 })
 
@@ -278,20 +281,18 @@ describe('lineage states — unknown is neutral, missing/unsupported are attenti
     const runtimes = lineageStatesFx.event.runtimes
     const w = mount(CorkyStrategyPanel, { props: { runtimes, now: AS_OF } })
 
-    test('unknown lineage renders a NEUTRAL badge (not verified, not attention)', () => {
-        const row = w.findAll('.sr-rt').find((r) => r.text().includes('lineage-unknown'))
-        const badge = row.find('.lin-badge')
-        expect(badge.text()).toBe('unknown')
-        expect(badge.classes()).toContain('lin-neutral')
-        expect(badge.classes()).not.toContain('lin-verified')
+    test('unknown lineage stays neutral and does not claim verification', () => {
+        const row = w.findAll('.sr-rt').find((r) => r.attributes('data-runtime-id') === 'strategy-runtime-lineage-unknown')
+        expect(row.find('.lin-badge').exists()).toBe(false)
+        expect(row.text()).not.toContain('verified')
     })
 
     test('artifact_missing / unsupported_artifact render as attention (never verified)', () => {
-        const missing = w.findAll('.sr-rt').find((r) => r.text().includes('artifact-missing')).find('.lin-badge')
-        const unsupported = w.findAll('.sr-rt').find((r) => r.text().includes('unsupported-artifact')).find('.lin-badge')
-        expect(missing.text()).toBe('artifact_missing')
+        const missing = w.findAll('.sr-rt').find((r) => r.attributes('data-runtime-id') === 'strategy-runtime-lineage-artifact-missing').find('.lin-badge')
+        const unsupported = w.findAll('.sr-rt').find((r) => r.attributes('data-runtime-id') === 'strategy-runtime-lineage-unsupported-artifact').find('.lin-badge')
+        expect(missing.text()).toBe('Identity issue')
         expect(missing.classes()).toContain('lin-attention')
-        expect(unsupported.text()).toBe('unsupported_artifact')
+        expect(unsupported.text()).toBe('Identity issue')
         expect(unsupported.classes()).toContain('lin-attention')
         expect(w.findAll('.lin-badge.lin-verified')).toHaveLength(0)
     })

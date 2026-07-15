@@ -83,9 +83,21 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
 }, {
     orderedBaseTabs(): {
         id: unknown;
+        kind: string;
         label: any;
         count: any;
     }[];
+    visibleBaseTabs(): ({
+        id: unknown;
+        kind: string;
+        label: any;
+        count: any;
+    } | {
+        id: string;
+        kind: string;
+    })[];
+    selectedStrategyRuntime(): any;
+    strategyDetailTitle(): string;
     rows(): unknown[];
     activeSearchTab(): {} | null;
     runDetailTitle(): string;
@@ -107,7 +119,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     signClass(dec: any): "" | "pos" | "neg";
     pctText(dec: any): string;
     fmtTime(ms: any): string;
-}, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("refresh" | "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "update:tab-order" | "select-position" | "audit-position" | "load-more" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail" | "strategy-select-runtime" | "strategy-refresh" | "strategy-load-more-operations" | "strategy-toggle-overlay" | "strategy-compare-allocation" | "strategy-preview-operation" | "strategy-approve-operation" | "strategy-clear-preview" | "strategy-cancel-ticker-orders" | "strategy-pause-ticker" | "strategy-resume-ticker" | "strategy-unlock-ticker" | "strategy-adopt-position" | "strategy-open-lineage-run")[], "refresh" | "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "update:tab-order" | "select-position" | "audit-position" | "load-more" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail" | "strategy-select-runtime" | "strategy-refresh" | "strategy-load-more-operations" | "strategy-toggle-overlay" | "strategy-compare-allocation" | "strategy-preview-operation" | "strategy-approve-operation" | "strategy-clear-preview" | "strategy-cancel-ticker-orders" | "strategy-pause-ticker" | "strategy-resume-ticker" | "strategy-unlock-ticker" | "strategy-adopt-position" | "strategy-open-lineage-run", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+}, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("refresh" | "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "update:tab-order" | "select-position" | "audit-position" | "load-more" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail" | "strategy-select-runtime" | "strategy-open-runtime" | "strategy-close-detail" | "strategy-refresh" | "strategy-load-more-operations" | "strategy-toggle-overlay" | "strategy-compare-allocation" | "strategy-preview-operation" | "strategy-approve-operation" | "strategy-clear-preview" | "strategy-cancel-ticker-orders" | "strategy-pause-ticker" | "strategy-resume-ticker" | "strategy-unlock-ticker" | "strategy-adopt-position" | "strategy-open-lineage-run")[], "refresh" | "update:open" | "update:maximized" | "update:active-tab" | "update:active-account" | "update:tab-order" | "select-position" | "audit-position" | "load-more" | "resize-start" | "run-search" | "cancel-search" | "close-search-tab" | "select-result" | "bt-refresh-strategies" | "bt-update-filter" | "bt-set-metric-filters" | "bt-list-runs" | "bt-inspect-strategy" | "bt-select-run" | "bt-plot-run" | "bt-select-trade" | "bt-select-candidate" | "bt-close-detail" | "strategy-select-runtime" | "strategy-open-runtime" | "strategy-close-detail" | "strategy-refresh" | "strategy-load-more-operations" | "strategy-toggle-overlay" | "strategy-compare-allocation" | "strategy-preview-operation" | "strategy-approve-operation" | "strategy-clear-preview" | "strategy-cancel-ticker-orders" | "strategy-pause-ticker" | "strategy-resume-ticker" | "strategy-unlock-ticker" | "strategy-adopt-position" | "strategy-open-lineage-run", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
     height: {
         type: NumberConstructor;
         default: number;
@@ -210,6 +222,8 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
     "onBt-select-candidate"?: ((...args: any[]) => any) | undefined;
     "onBt-close-detail"?: ((...args: any[]) => any) | undefined;
     "onStrategy-select-runtime"?: ((...args: any[]) => any) | undefined;
+    "onStrategy-open-runtime"?: ((...args: any[]) => any) | undefined;
+    "onStrategy-close-detail"?: ((...args: any[]) => any) | undefined;
     "onStrategy-refresh"?: ((...args: any[]) => any) | undefined;
     "onStrategy-load-more-operations"?: ((...args: any[]) => any) | undefined;
     "onStrategy-toggle-overlay"?: ((...args: any[]) => any) | undefined;
@@ -878,6 +892,125 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
             }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
         }, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
     }, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
+    CorkyStrategyList: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
+        runtimes: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
+        loading: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        error: {
+            type: StringConstructor;
+            default: null;
+        };
+        streaming: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        now: {
+            type: NumberConstructor;
+            default: number;
+        };
+    }>, {}, {}, {
+        rows(): {
+            runtime: unknown;
+            name: string;
+            tickerCount: any;
+            semantics: {
+                health: {
+                    tone: string;
+                    label: string;
+                    state: string;
+                    ready: boolean;
+                };
+                currentStatus: {
+                    known: boolean;
+                    tone: string;
+                    label: string;
+                    state: string;
+                    ready: boolean;
+                    status?: undefined;
+                } | {
+                    state: string;
+                    status: string;
+                    ready: boolean;
+                    known: boolean;
+                    tone: string;
+                    label: string;
+                };
+                mode: any;
+                observer: boolean;
+                authority: {
+                    status: string;
+                    tone: string;
+                    label: string;
+                    reason: any;
+                };
+                freshness: {
+                    status: string;
+                    tone: string;
+                    label: string;
+                    ageMs: number | null;
+                };
+                auth: {
+                    configured: boolean;
+                    ready: boolean;
+                    status: string;
+                    tone: string;
+                    label: any;
+                };
+                allocation: {
+                    configured: boolean;
+                    ready: boolean;
+                    status: string;
+                    tone: string;
+                    label: any;
+                };
+                runtimeControl: {
+                    available: boolean;
+                    reason: any;
+                };
+                primaryReason: any;
+            };
+        }[];
+        summary(): string;
+    }, {
+        humanReason(reason: any, mode: any): any;
+        statusLabel(status: any): "Status unknown" | "Healthy" | "Needs attention";
+        freshness(value: any): any;
+    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("open-runtime" | "refresh")[], "open-runtime" | "refresh", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+        runtimes: {
+            type: ArrayConstructor;
+            default: () => never[];
+        };
+        loading: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        error: {
+            type: StringConstructor;
+            default: null;
+        };
+        streaming: {
+            type: BooleanConstructor;
+            default: boolean;
+        };
+        now: {
+            type: NumberConstructor;
+            default: number;
+        };
+    }>> & Readonly<{
+        "onOpen-runtime"?: ((...args: any[]) => any) | undefined;
+        onRefresh?: ((...args: any[]) => any) | undefined;
+    }>, {
+        error: string;
+        loading: boolean;
+        streaming: boolean;
+        runtimes: unknown[];
+        now: number;
+    }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
     CorkyStrategyPanel: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
         runtimes: {
             type: ArrayConstructor;
@@ -978,8 +1111,13 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
             degraded: number;
             runtimes: any;
         }[];
+        runtimeNodes(): any[];
+        runtimeFleetSummary(): string;
         activeRuntimeId(): any;
         selectedRuntime(): {} | null;
+        selectedStrategyName(): string;
+        strategyInstanceId(): any;
+        freshnessText(): string;
         selectedNodeTickers(): any;
         selectedTickerId(): string;
         controlEnabled(): boolean;
@@ -1062,14 +1200,27 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         };
         runtimeSemantics(): {
             health: {
+                tone: string;
+                label: string;
                 state: string;
                 ready: boolean;
-                tone: string;
             };
-            mode: {
-                raw: string;
+            currentStatus: {
+                known: boolean;
+                tone: string;
+                label: string;
+                state: string;
+                ready: boolean;
+                status?: undefined;
+            } | {
+                state: string;
+                status: string;
+                ready: boolean;
+                known: boolean;
+                tone: string;
                 label: string;
             };
+            mode: any;
             observer: boolean;
             authority: {
                 status: string;
@@ -1205,9 +1356,11 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
             ts_ms: any;
             source: any;
             kind: any;
+            displayKind: string;
             ticker_id: any;
             order_id: any;
             reason: any;
+            displayReason: any;
             payload: any;
             count: number;
         }[];
@@ -1220,9 +1373,11 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
             ts_ms: any;
             source: any;
             kind: any;
+            displayKind: string;
             ticker_id: any;
             order_id: any;
             reason: any;
+            displayReason: any;
             payload: any;
             count: number;
         }[];
@@ -1232,9 +1387,11 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
             ts_ms: any;
             source: any;
             kind: any;
+            displayKind: string;
             ticker_id: any;
             order_id: any;
             reason: any;
+            displayReason: any;
             payload: any;
             count: number;
         }[];
@@ -1279,6 +1436,15 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         gateClass(ok: any): "" | "pos" | "neg";
         signClass(dec: any): "" | "pos" | "neg";
         numOr0(v: any): number;
+        strategyName(runtime: any): string;
+        runtimeStatusLabel(status: any): "Status unknown" | "Healthy" | "Needs attention";
+        humanReason(reason: any): any;
+        decisionSummary(decision: any): {
+            label: string;
+            tone: string;
+            detail: any;
+        };
+        activityKindLabel(kind: any): string;
         tickerBadge(info: any): string[];
         blockerTitle(b: any): string;
         walletKey(w: any): string;
@@ -1298,7 +1464,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         symbolOf(id: any): any;
         _tickerOrdersMap(rt: any): Map<any, any>;
         fmtTime(ms: any): string;
-    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("cancel-ticker-orders" | "resume-ticker" | "unlock-ticker" | "adopt-position" | "pause-ticker" | "select-runtime" | "refresh" | "load-more-operations" | "toggle-overlay" | "compare-allocation" | "preview-operation" | "approve-operation" | "clear-preview" | "open-lineage-run")[], "cancel-ticker-orders" | "resume-ticker" | "unlock-ticker" | "adopt-position" | "pause-ticker" | "select-runtime" | "refresh" | "load-more-operations" | "toggle-overlay" | "compare-allocation" | "preview-operation" | "approve-operation" | "clear-preview" | "open-lineage-run", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
+    }, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, ("cancel-ticker-orders" | "resume-ticker" | "unlock-ticker" | "adopt-position" | "pause-ticker" | "refresh" | "select-runtime" | "load-more-operations" | "toggle-overlay" | "compare-allocation" | "preview-operation" | "approve-operation" | "clear-preview" | "open-lineage-run")[], "cancel-ticker-orders" | "resume-ticker" | "unlock-ticker" | "adopt-position" | "pause-ticker" | "refresh" | "select-runtime" | "load-more-operations" | "toggle-overlay" | "compare-allocation" | "preview-operation" | "approve-operation" | "clear-preview" | "open-lineage-run", import("vue").PublicProps, Readonly<import("vue").ExtractPropTypes<{
         runtimes: {
             type: ArrayConstructor;
             default: () => never[];
@@ -1361,13 +1527,13 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
             };
         };
     }>> & Readonly<{
+        onRefresh?: ((...args: any[]) => any) | undefined;
         "onCancel-ticker-orders"?: ((...args: any[]) => any) | undefined;
         "onResume-ticker"?: ((...args: any[]) => any) | undefined;
         "onUnlock-ticker"?: ((...args: any[]) => any) | undefined;
         "onAdopt-position"?: ((...args: any[]) => any) | undefined;
         "onPause-ticker"?: ((...args: any[]) => any) | undefined;
         "onSelect-runtime"?: ((...args: any[]) => any) | undefined;
-        onRefresh?: ((...args: any[]) => any) | undefined;
         "onLoad-more-operations"?: ((...args: any[]) => any) | undefined;
         "onToggle-overlay"?: ((...args: any[]) => any) | undefined;
         "onCompare-allocation"?: ((...args: any[]) => any) | undefined;
@@ -1382,6 +1548,7 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         streaming: boolean;
         control: Record<string, any>;
         runtimes: unknown[];
+        now: number;
         selectedRuntimeId: string;
         decisions: unknown[];
         operations: Record<string, any>;
@@ -1389,7 +1556,6 @@ declare const __VLS_export: import("vue").DefineComponent<import("vue").ExtractP
         administration: Record<string, any>;
         administrationEnabledFlag: boolean;
         maximized: boolean;
-        now: number;
     }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
 }, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
 import { newTabIntent } from '../../helpers/open-intent.js';

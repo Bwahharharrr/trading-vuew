@@ -1,5 +1,5 @@
 <template>
-<div class="sr" :class="{ maximized }">
+<div class="sr" :class="{ maximized, 'single-runtime': runtimes.length === 1 }">
     <!-- Task-oriented views for the selected runtime. The active task is kept
          across panel remounts so changing dock size does not reset the operator. -->
     <!-- Drilldown view tabs for the SELECTED
@@ -32,71 +32,57 @@
     <!-- A transient error while runtimes ARE loaded still shows the top banner. -->
     <div v-if="error" class="sr-error">{{ error }}</div>
 
-    <!-- Persistent selected-runtime truth surface. Health, execution mode,
-         mutation authority, and freshness are deliberately separate axes. -->
-    <div v-if="selectedRuntime" class="sr-status-banner" :class="'health-' + runtimeSemantics.health.tone">
-        <span class="rt-badge" :class="'tone-' + runtimeSemantics.health.tone">{{ runtimeSemantics.health.state }}</span>
-        <span class="sr-status-mode">{{ runtimeSemantics.mode.label }}</span>
-        <span class="sr-status-authority" :class="'tone-' + runtimeSemantics.authority.tone">{{ runtimeSemantics.authority.label }}</span>
-        <span class="sr-status-fresh" :class="'tone-' + runtimeSemantics.freshness.tone">
-            {{ runtimeSemantics.freshness.label }}
-            <template v-if="runtimeSemantics.freshness.ageMs != null">· {{ fmtDur(runtimeSemantics.freshness.ageMs) }} ago</template>
-        </span>
-        <span v-if="runtimeSemantics.primaryReason" class="sr-status-reason" :title="runtimeSemantics.primaryReason">
-            {{ runtimeSemantics.primaryReason }}
-        </span>
+    <!-- Plain-language strategy identity and operating capability. A stale or
+         disconnected stream makes current health unknown; the published health
+         remains available only as explicitly last-reported evidence. -->
+    <div v-if="selectedRuntime" class="sr-status-banner" :class="'health-' + runtimeSemantics.currentStatus.tone">
+        <div class="sr-status-identity">
+            <span class="sr-strategy-name">{{ selectedStrategyName }}</span>
+            <span class="sr-status-mode" :class="'mode-' + runtimeSemantics.mode.raw">{{ runtimeSemantics.mode.label }}</span>
+        </div>
+        <div class="sr-status-description">{{ runtimeSemantics.mode.description }}</div>
+        <div class="sr-status-meta">
+            <span class="sr-service-health" :class="'tone-' + runtimeSemantics.currentStatus.tone">{{ runtimeSemantics.currentStatus.label }}</span>
+            <span aria-hidden="true">·</span>
+            <span class="sr-status-fresh" :class="'tone-' + runtimeSemantics.freshness.tone">{{ freshnessText }}</span>
+            <template v-if="!runtimeSemantics.currentStatus.known">
+                <span aria-hidden="true">·</span>
+                <span class="sr-last-reported">Last reported: {{ runtimeSemantics.health.label }}</span>
+            </template>
+            <template v-if="lineageInfo.tone === 'verified'">
+                <span aria-hidden="true">·</span>
+                <span class="sr-identity-confirmed">Strategy identity verified</span>
+            </template>
+            <template v-else-if="lineageInfo.tone === 'attention'">
+                <span aria-hidden="true">·</span>
+                <span class="tone-attention">Strategy identity needs attention</span>
+            </template>
+        </div>
+        <div v-if="runtimeSemantics.primaryReason" class="sr-status-reason" :title="runtimeSemantics.primaryReason">
+            <template v-if="!runtimeSemantics.currentStatus.known">Last reported: </template>
+            {{ humanReason(runtimeSemantics.primaryReason) }}
+        </div>
     </div>
 
-    <!-- ═══ HIERARCHY ═══ process group → runtime rows (selectable, open the
-         drilldown) → child TICKER rows (status + reason) + DEPENDENCY rows. -->
-    <div class="sr-hier" role="tree" aria-label="Strategy runtime hierarchy">
-        <div v-for="pg in processGroups" :key="pg.process_kind" class="sr-proc" role="group">
-            <div class="sr-proc-head">
-                <span class="sr-proc-kind">{{ pg.process_kind }}</span>
-                <span class="sr-proc-stat">runtimes={{ pg.total }} ready={{ pg.ready }} degraded={{ pg.degraded }}</span>
-            </div>
-            <div v-for="node in pg.runtimes" :key="node.rt.runtime_id" class="sr-rt-node">
-                <button class="sr-rt" :class="{ active: node.rt.runtime_id === activeRuntimeId }"
-                        role="treeitem" :aria-selected="node.rt.runtime_id === activeRuntimeId"
-                        @click="selectRuntime(node.rt.runtime_id)">
-                    <span class="sr-rt-id">{{ node.rt.runtime_id }}</span>
-                    <span class="sr-mode" :class="'mode-' + node.rt.mode">{{ node.rt.mode }}</span>
-                    <span class="sr-rt-strategy">{{ dash(node.rt.strategy_id || node.rt.strategy) }}</span>
-                    <span class="sr-rt-inst" :title="node.rt.strategy_instance_id">{{ dash(node.rt.strategy_instance_id) }}</span>
-                    <span class="sr-spacer"></span>
-                    <span class="rt-badge" :class="'tone-' + node.readiness.tone">{{ node.readiness.state }}</span>
-                    <span class="lin-badge" :class="'lin-' + node.lineage.tone"
-                          :title="'lineage ' + node.lineageRaw + (node.lineage.running ? ' — running' : ' — not presented as running')">
-                        {{ node.lineageRaw }}
-                    </span>
-                </button>
-
-                <div class="sr-rt-children">
-                    <!-- TICKER child rows: symbol + status + reason (+ submitted-order blocker). -->
-                    <div v-if="node.tickers.length" class="sr-child-grp">
-                        <button v-for="tk in node.tickers" :key="tk.ticker_id"
-                                class="sr-ticker" :class="{ active: tk.ticker_id === selectedTickerId && node.rt.runtime_id === activeRuntimeId }"
-                                role="treeitem" :title="tk.ticker_id"
-                                @click="selectTicker(node.rt.runtime_id, tk.ticker_id)">
-                            <span class="sr-tk-sym">{{ tk.symbol }}</span>
-                            <span class="st-badge" :class="tickerBadge(tk.status)">{{ tk.status.status }}</span>
-                            <span v-if="tk.status.durationMs != null" class="sr-tk-dur">for {{ fmtDur(tk.status.durationMs) }}</span>
-                            <span v-if="tk.status.reason" class="sr-tk-reason">{{ tk.status.reason }}</span>
-                            <span v-if="tk.lastDecision" class="sr-tk-decision" :title="tk.lastDecision">decision: {{ tk.lastDecision }}</span>
-                            <span v-if="tk.blocker.blocked" class="sr-blocker" :title="blockerTitle(tk.blocker)">⚠ submitted order</span>
-                        </button>
-                    </div>
-                    <!-- DEPENDENCY child rows: public / private runtime. -->
-                    <div v-if="node.deps.length" class="sr-child-grp sr-deps">
-                        <span class="sr-deps-label">depends on</span>
-                        <div v-for="dep in node.deps" :key="dep.kind + ':' + dep.runtime_id" class="sr-dep">
-                            <span class="sr-dep-kind">{{ dash(dep.kind) }} runtime</span>
-                            <span class="sr-dep-id" :class="{ unknown: !dep.runtime_id }">{{ dep.runtime_id || 'unknown' }}</span>
-                            <span v-if="dep.legacy" class="sr-legacy-tag" title="inferred from target_public/private_runtime_id (older payload)">inferred</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
+    <!-- A selector is useful only when there is a choice. Internal process and
+         runtime ids stay out of this default view. -->
+    <div v-if="runtimes.length > 1" class="sr-hier" role="listbox" aria-label="Running strategies">
+        <div class="sr-proc-head">
+            <span class="sr-proc-kind">Running strategies</span>
+            <span class="sr-proc-stat">{{ runtimeFleetSummary }}</span>
+        </div>
+        <div v-for="node in runtimeNodes" :key="node.rt.runtime_id" class="sr-rt-node">
+            <button class="sr-rt" :class="{ active: node.rt.runtime_id === activeRuntimeId }"
+                    :data-runtime-id="node.rt.runtime_id" role="option"
+                    :aria-selected="node.rt.runtime_id === activeRuntimeId"
+                    @click="selectRuntime(node.rt.runtime_id)">
+                <span class="sr-rt-strategy">{{ strategyName(node.rt) }}</span>
+                <span class="sr-mode" :class="'mode-' + node.semantics.mode.raw">{{ node.semantics.mode.label }}</span>
+                <span class="sr-spacer"></span>
+                <span class="rt-badge" :class="'tone-' + node.semantics.currentStatus.tone">{{ runtimeStatusLabel(node.semantics.currentStatus) }}</span>
+                <span v-if="node.lineage.tone === 'attention'" class="lin-badge lin-attention">Identity issue</span>
+                <span v-if="node.rt.runtime_id === activeRuntimeId" class="sr-viewing">Viewing</span>
+            </button>
         </div>
     </div>
 
@@ -297,43 +283,66 @@
         </section>
         <section v-if="activeTab === 'overview'" class="sr-sec">
             <div class="sr-sec-head">
-                Runtime <span class="sr-rt-name">{{ selectedRuntime.runtime_id }}</span>
-                <span class="rt-badge" :class="'tone-' + readinessInfo.tone">{{ readinessInfo.state }}</span>
-                <span class="sr-mode" :class="'mode-' + selectedRuntime.mode">{{ selectedRuntime.mode }}</span>
+                Strategy <span class="sr-rt-name">{{ selectedStrategyName }}</span>
                 <span v-if="selectedRuntime.allocation_strategy_status" class="st-badge"
                       :class="'tone-' + rollupInfo.tone">{{ selectedRuntime.allocation_strategy_status }}</span>
-                <span class="lin-badge" :class="'lin-' + lineageInfo.tone">{{ lineageRawLabel }}</span>
             </div>
             <div class="sr-grid">
-                <div class="sr-field"><span class="sr-k">strategy</span><span class="sr-v">{{ dash(selectedRuntime.strategy_id || selectedRuntime.strategy) }}</span></div>
-                <div class="sr-field"><span class="sr-k">instance</span><span class="sr-v" :title="selectedRuntime.strategy_instance_id">{{ dash(selectedRuntime.strategy_instance_id) }}</span></div>
-                <div class="sr-field"><span class="sr-k">public runtime</span><span class="sr-v">{{ dash(summaryDeps.public) }}</span></div>
-                <div class="sr-field"><span class="sr-k">private runtime</span><span class="sr-v">{{ dash(summaryDeps.private) }}</span></div>
+                <div class="sr-field"><span class="sr-k">Operating mode</span><span class="sr-v">{{ runtimeSemantics.mode.label }}</span></div>
+                <div class="sr-field"><span class="sr-k">Trading capability</span><span class="sr-v" :class="'tone-' + runtimeSemantics.authority.tone">{{ runtimeSemantics.authority.label }}</span></div>
                 <div class="sr-field">
-                    <span class="sr-k">features</span>
+                    <span class="sr-k">Strategy inputs</span>
                     <span class="sr-v" :class="gateClass(selectedRuntime.features_ready === selectedRuntime.feature_requirements)">
                         {{ dash(selectedRuntime.features_ready) }} / {{ dash(selectedRuntime.feature_requirements) }} ready
                     </span>
                 </div>
-                <div class="sr-field"><span class="sr-k">Auth dependency</span><span class="sr-v" :class="'tone-' + runtimeSemantics.auth.tone">{{ runtimeSemantics.auth.label }}</span></div>
-                <div class="sr-field"><span class="sr-k">allocation authority</span><span class="sr-v" :class="'tone-' + runtimeSemantics.allocation.tone">{{ runtimeSemantics.allocation.label }}</span></div>
-                <div class="sr-field"><span class="sr-k">last decision</span><span class="sr-v time">{{ fmtTime(selectedRuntime.last_decision_ms) }}</span></div>
-                <div class="sr-field"><span class="sr-k">ledger / fills</span><span class="sr-v">{{ dash(selectedRuntime.ledger_events) }} / {{ dash(selectedRuntime.fills) }}</span></div>
+                <div class="sr-field"><span class="sr-k">Last decision</span><span class="sr-v time">{{ fmtTime(selectedRuntime.last_decision_ms) }}</span></div>
+            </div>
+
+            <div class="sr-lineage-source" :class="{ unavailable: !lineageLink }">
+                <div>
+                    <div class="sr-k">Parameter source</div>
+                    <div v-if="lineageLink" class="sr-lineage-source-title">Universe backtest study</div>
+                    <div v-else class="sr-lineage-source-title">No verified universe study linked</div>
+                    <div v-if="lineageLink" class="sr-lineage-source-meta">
+                        Run {{ lineageLink.runId }}
+                        <template v-if="lineageLink.rank != null"> · rank {{ lineageLink.rank }}</template>
+                        <template v-if="lineageLink.runIndex != null"> · candidate {{ lineageLink.runIndex }}</template>
+                    </div>
+                    <div v-else class="sr-lineage-source-meta">The runtime has not published verified parameter lineage.</div>
+                </div>
+                <button v-if="lineageLink" class="sr-lin-open" @click="openLineage">
+                    Open universe study ↗
+                </button>
             </div>
 
             <div v-if="selectedRuntime.last_error" class="sr-lasterr">
                 <span class="sr-k">last error</span> {{ selectedRuntime.last_error }}
             </div>
+
+            <details class="sr-technical">
+                <summary>Technical details</summary>
+                <div class="sr-grid">
+                    <div class="sr-field"><span class="sr-k">Strategy ID</span><span class="sr-v mono">{{ dash(selectedRuntime.strategy_id || selectedRuntime.strategy) }}</span></div>
+                    <div class="sr-field"><span class="sr-k">Runtime ID</span><span class="sr-v mono">{{ selectedRuntime.runtime_id }}</span></div>
+                    <div class="sr-field"><span class="sr-k">Strategy instance</span><span class="sr-v mono">{{ dash(strategyInstanceId) }}</span></div>
+                    <div class="sr-field"><span class="sr-k">Process type</span><span class="sr-v mono">{{ dash(selectedRuntime.process_kind) }}</span></div>
+                    <div class="sr-field"><span class="sr-k">Internal mode</span><span class="sr-v mono">{{ dash(selectedRuntime.mode) }}</span></div>
+                    <div class="sr-field"><span class="sr-k">Lineage</span><span class="sr-v mono">{{ lineageRawLabel }}</span></div>
+                    <div class="sr-field"><span class="sr-k">Public runtime</span><span class="sr-v mono">{{ dash(summaryDeps.public) }}</span></div>
+                    <div class="sr-field"><span class="sr-k">Private runtime</span><span class="sr-v mono">{{ dash(summaryDeps.private) }}</span></div>
+                </div>
+            </details>
         </section>
 
         <section v-if="activeTab === 'overview'" class="sr-sec">
-            <div class="sr-sec-head">Current activity <span class="sr-dim">recent runtime evidence</span></div>
-            <div v-if="!recentDecisionRows.length" class="sr-msg sr-msg-sm">No recent decision evidence published.</div>
-            <div v-for="d in recentDecisionRows" :key="d.decision_id || (d.decision_ts_ms + ':' + d.ticker_id)" class="sr-recent-decision">
+            <div class="sr-sec-head">Recent decisions <span class="sr-dim">showing {{ recentDecisionRows.length }} most recent (max 20)</span></div>
+            <div v-if="!recentDecisionRows.length" class="sr-msg sr-msg-sm">No recent strategy decisions have been published.</div>
+            <div v-for="d in recentDecisionRows" :key="d._displayKey" class="sr-recent-decision">
                 <span class="time">{{ fmtTime(d.decision_ts_ms) }}</span>
-                <span class="sym">{{ d.symbol || symbolOf(d.ticker_id) }}</span>
-                <span class="sr-outcome" :class="outcomeClass(d.outcome)">{{ dash(d.outcome) }}</span>
-                <span class="sr-decision-reason">{{ decisionReason(d) }}</span>
+                <span class="sym">{{ d.symbol }}</span>
+                <span class="sr-outcome" :class="'tone-' + d.presentation.tone">{{ d.presentation.label }}</span>
+                <span class="sr-decision-reason" :class="'tone-' + d.presentation.tone">{{ d.presentation.detail }}</span>
             </div>
         </section>
 
@@ -544,7 +553,7 @@
                     @click="selectTicker(activeRuntimeId, tk.ticker_id)">
                 <span class="sym">{{ tk.symbol }}</span>
                 <span class="st-badge" :class="tickerBadge(tk.status)">{{ tk.status.status }}</span>
-                <span v-if="tk.status.durationMs != null" class="time">for {{ fmtDur(tk.status.durationMs) }}</span>
+                <span v-if="tk.status.durationMs != null" class="time sr-tk-dur">for {{ fmtDur(tk.status.durationMs) }}</span>
                 <span class="sr-ticker-card-reason">{{ tk.status.reason || 'No status reason published.' }}</span>
                 <span v-if="tk.blocker.blocked" class="sr-blocker" :title="blockerTitle(tk.blocker)">⚠ submitted order</span>
             </button>
@@ -556,7 +565,7 @@
          role="tabpanel" :aria-labelledby="'strategy-task-' + activeTab" tabindex="0">
         <section class="sr-sec">
             <div class="sr-sec-head">Strategy money <span class="sr-dim">server-computed projection</span></div>
-            <div v-if="runtimeSemantics.observer" class="sr-msg sr-msg-sm">N/A by design — origin observers have no financial allocation authority.</div>
+            <div v-if="runtimeSemantics.observer" class="sr-msg sr-msg-sm">Not available by design — monitoring-only strategies cannot allocate or change money.</div>
             <div v-else-if="money.loading" class="sr-msg sr-msg-sm">Loading strategy money…</div>
             <div v-else-if="money.error" class="sr-ctl-msg error">{{ money.error }}</div>
             <template v-else-if="moneyData">
@@ -719,7 +728,7 @@
                     <select v-model="activitySource"><option value="">all</option><option v-for="value in activitySources" :key="value">{{ value }}</option></select>
                 </label>
                 <label>kind
-                    <select v-model="activityKind"><option value="">all</option><option v-for="value in activityKinds" :key="value">{{ value }}</option></select>
+                    <select v-model="activityKind"><option value="">all</option><option v-for="value in activityKinds" :key="value" :value="value">{{ activityKindLabel(value) }}</option></select>
                 </label>
                 <label>ticker
                     <select v-model="activityTicker"><option value="">all</option><option v-for="value in activityTickers" :key="value">{{ value }}</option></select>
@@ -745,13 +754,13 @@
             <div v-for="row in activityRows" :key="row.id" class="sr-activity-row" :class="'activity-' + row.type">
                 <span class="time">{{ fmtTime(row.ts_ms) }}</span>
                 <span class="sr-activity-source">{{ row.source }}</span>
-                <span class="sr-activity-kind">{{ row.kind }}</span>
+                <span class="sr-activity-kind">{{ row.displayKind }}</span>
                 <span class="sym">{{ row.ticker_id ? symbolOf(row.ticker_id) : '—' }}</span>
-                <span class="sr-decision-reason" :title="row.reason">{{ row.reason }}</span>
+                <span class="sr-decision-reason">{{ row.displayReason }}</span>
                 <span v-if="row.count > 1" class="sr-chip">×{{ row.count }}</span>
                 <span v-if="row.order_id" class="mono" :title="row.order_id">order {{ shortFp(row.order_id) }}</span>
-                <details v-if="row.type === 'operation'" class="sr-payload">
-                    <summary>payload</summary><pre>{{ prettyPayload(row.payload) }}</pre>
+                <details class="sr-payload">
+                    <summary>Technical event details</summary><pre>{{ prettyPayload(row.payload) }}</pre>
                 </details>
             </div>
             <div v-if="operations.error" class="sr-ctl-msg error">{{ operations.error }}</div>
@@ -787,8 +796,8 @@
                             <tr v-for="d in auditDecisions" :key="d.decision_id || (d.decision_ts_ms + ':' + d.symbol)">
                                 <td class="time">{{ fmtTime(d.decision_ts_ms) }}</td>
                                 <td>{{ dash(d.timeframe) }}</td>
-                                <td><span class="sr-outcome" :class="outcomeClass(d.outcome)">{{ dash(d.outcome) }}</span></td>
-                                <td class="sr-decision-reason" :title="decisionReason(d)">{{ decisionReason(d) }}</td>
+                                <td><span class="sr-outcome" :class="outcomeClass(d.outcome)" :title="d.outcome">{{ decisionSummary(d).label }}</span></td>
+                                <td class="sr-decision-reason" :title="decisionReason(d)">{{ decisionSummary(d).detail }}</td>
                                 <td class="num" :title="intentsTitle(d.intents)">{{ (d.intents || []).length }}</td>
                                 <td class="num" title="Queued order intents (local journal only — NOT sent to the exchange)">{{ dash0(d.queued_order_count) }}</td>
                                 <td class="num" :class="{ neg: numOr0(d.rejected_order_count) > 0 }">{{ dash0(d.rejected_order_count) }}</td>
@@ -838,6 +847,9 @@ import {
     splitOrderStatusCounts,
     approvalStatus,
     strategyRuntimeSemantics,
+    strategyDisplayName,
+    strategyDecisionPresentation,
+    humanizeStrategyReason,
     fmtDecimal,
     fmtDuration,
     DISPATCHED_STATUS_KEYS,
@@ -958,18 +970,23 @@ export default {
                     // (older runtime with no runtime.tickers[]).
                     const src = Array.isArray(rt.tickers) && rt.tickers.length ? rt.tickers
                         : (Array.isArray(rt.ticker_allocations) ? rt.ticker_allocations : [])
-                    const tickers = src.filter(Boolean).map((t) => ({
-                        ticker_id: t.ticker_id,
-                        symbol: t.symbol || this.symbolOf(t.ticker_id),
-                        status: classifyTickerStatus(t.status, t, now),
-                        lastDecision: typeof t.last_decision_summary === 'string'
-                            ? t.last_decision_summary
-                            : (t.last_decision_summary && (t.last_decision_summary.reason || t.last_decision_summary.outcome)),
-                        blocker: orderBlocker(ordersById.get(t.ticker_id) || t),
-                    }))
+                    const tickers = src.filter(Boolean).map((t) => {
+                        const summary = t.last_decision_summary
+                        const decision = typeof summary === 'string'
+                            ? { outcome: summary.split(':', 1)[0], reason: summary.includes(':') ? summary.slice(summary.indexOf(':') + 1).trim() : '' }
+                            : summary
+                        return {
+                            ticker_id: t.ticker_id,
+                            symbol: t.symbol || this.symbolOf(t.ticker_id),
+                            status: classifyTickerStatus(t.status, t, now),
+                            lastDecision: decision ? strategyDecisionPresentation(decision, rt.mode).label : '',
+                            blocker: orderBlocker(ordersById.get(t.ticker_id) || t),
+                        }
+                    })
                     return {
                         rt,
                         readiness,
+                        semantics: strategyRuntimeSemantics(rt, { nowMs: now, streaming: this.streaming }),
                         lineage: classifyLineage(rt.lineage_status),
                         lineageRaw: rt.lineage_status != null && rt.lineage_status !== '' ? rt.lineage_status : 'unknown',
                         deps: normalizeDependencies(rt),
@@ -978,6 +995,19 @@ export default {
                 })
                 return { process_kind: g.process_kind, total: g.runtimes.length, ready, degraded, runtimes }
             })
+        },
+
+        runtimeNodes() { return this.processGroups.flatMap((group) => group.runtimes) },
+        runtimeFleetSummary() {
+            const known = this.runtimeNodes.filter((node) => node.semantics.currentStatus.known)
+            const healthy = known.filter((node) => node.semantics.currentStatus.ready).length
+            const attention = known.length - healthy
+            const unknown = this.runtimeNodes.length - known.length
+            const parts = [`${this.runtimeNodes.length} total`]
+            if (healthy) parts.push(`${healthy} healthy`)
+            if (attention) parts.push(`${attention} needs attention`)
+            if (unknown) parts.push(`${unknown} status unknown`)
+            return parts.join(' · ')
         },
 
         activeRuntimeId() {
@@ -989,12 +1019,28 @@ export default {
         selectedRuntime() {
             return this.runtimes.find((r) => r && r.runtime_id === this.activeRuntimeId) || null
         },
-        selectedNodeTickers() {
-            for (const group of this.processGroups) {
-                const node = group.runtimes.find(({ rt }) => rt.runtime_id === this.activeRuntimeId)
-                if (node) return node.tickers
+        selectedStrategyName() { return strategyDisplayName(this.selectedRuntime) },
+        strategyInstanceId() {
+            const rt = this.selectedRuntime || {}
+            return rt.strategy_instance_id || (rt.state_origin && rt.state_origin.strategy_instance_id) || null
+        },
+        freshnessText() {
+            const freshness = this.runtimeSemantics.freshness
+            if (freshness.status === 'current') {
+                return freshness.ageMs != null && freshness.ageMs < 60_000
+                    ? 'Updated just now' : `Updated ${this.fmtDur(freshness.ageMs)} ago`
             }
-            return []
+            if (freshness.status === 'stale') {
+                return freshness.ageMs == null ? 'Runtime status update is stale' : `Runtime status update is stale · last update ${this.fmtDur(freshness.ageMs)} ago`
+            }
+            if (freshness.status === 'disconnected') {
+                return freshness.ageMs == null ? 'Updates disconnected' : `Updates disconnected · last update ${this.fmtDur(freshness.ageMs)} ago`
+            }
+            return freshness.label
+        },
+        selectedNodeTickers() {
+            const node = this.runtimeNodes.find(({ rt }) => rt.runtime_id === this.activeRuntimeId)
+            return node ? node.tickers : []
         },
         selectedTickerId() {
             const rt = this.selectedRuntime
@@ -1074,7 +1120,7 @@ export default {
         },
         administrationUnavailableReason() {
             if (!this.administrationEnabledFlag) return 'disabled by the rollout flag'
-            if (this.runtimeSemantics.observer) return 'observer runtimes have no allocation authority'
+            if (this.runtimeSemantics.observer) return 'monitoring-only strategies have no allocation authority'
             if (!this.controlEnabled) return this.controlUnavailableReason
             if (this.lineageInfo.tone !== 'verified') return 'verified runtime lineage is required'
             return 'administrative capability unavailable'
@@ -1132,8 +1178,32 @@ export default {
             return Array.isArray(r) ? r : []
         },
         recentDecisionRows() {
-            const rows = this.selectedRuntime && this.selectedRuntime.recent_decisions
-            return Array.isArray(rows) ? rows.slice(0, 8) : []
+            const durableRows = Array.isArray(this.decisions) ? this.decisions.filter(Boolean) : []
+            const snapshotRows = this.selectedRuntime && Array.isArray(this.selectedRuntime.recent_decisions)
+                ? this.selectedRuntime.recent_decisions.filter(Boolean) : []
+            // Snapshot summaries keep the overview useful when one ticker's
+            // durable history request fails. Durable rows are applied second so
+            // their fuller audit payload wins when both sources describe the
+            // same decision.
+            const byDecision = new Map()
+            const keyOf = (decision) => decision.decision_id || [
+                decision.decision_ts_ms, decision.ticker_id, decision.symbol,
+                decision.outcome, decision.reason,
+            ].join(':')
+            for (const decision of snapshotRows) byDecision.set(keyOf(decision), decision)
+            for (const decision of durableRows) {
+                const key = keyOf(decision)
+                byDecision.set(key, { ...(byDecision.get(key) || {}), ...decision })
+            }
+            const rows = Array.from(byDecision.values())
+                .sort((left, right) => (Number(right.decision_ts_ms) || 0) - (Number(left.decision_ts_ms) || 0))
+                .slice(0, 20)
+            return rows.map((decision, index) => ({
+                ...decision,
+                _displayKey: decision.decision_id || `${decision.decision_ts_ms}:${decision.ticker_id}:${index}`,
+                symbol: decision.symbol || this.symbolOf(decision.ticker_id),
+                presentation: strategyDecisionPresentation(decision, this.runtimeSemantics.mode.raw),
+            }))
         },
 
         approvalRaw() { return (this.selectedRuntime && this.selectedRuntime.live_operator_approval) || {} },
@@ -1256,24 +1326,29 @@ export default {
                     ts_ms: event.ts_ms,
                     source: event.source || 'unknown',
                     kind: event.kind || 'unknown',
+                    displayKind: this.activityKindLabel(event.kind),
                     ticker_id: event.ticker_id || '',
                     order_id: event.order_id || '',
                     reason: this.operationReason(event),
+                    displayReason: this.humanReason(this.operationReason(event)) || 'No additional explanation was published.',
                     payload: event.payload,
                     count: 1,
                 })
             }
             for (const [index, decision] of this.decisions.entries()) {
                 if (!decision) continue
+                const presentation = strategyDecisionPresentation(decision, this.runtimeSemantics.mode.raw)
                 rows.push({
                     id: `decision:${decision.decision_id || index}`,
                     type: 'decision',
                     ts_ms: decision.decision_ts_ms,
                     source: 'decision',
                     kind: decision.outcome || 'unknown',
+                    displayKind: presentation.label,
                     ticker_id: decision.ticker_id || '',
                     order_id: '',
                     reason: this.decisionReason(decision),
+                    displayReason: presentation.detail,
                     payload: decision,
                     count: 1,
                 })
@@ -1507,6 +1582,19 @@ export default {
             return /^0(?:\.0+)?$/.test(s) ? '' : 'pos'
         },
         numOr0(v) { const n = Number(v); return Number.isFinite(n) ? n : 0 },
+        strategyName(runtime) { return strategyDisplayName(runtime) },
+        runtimeStatusLabel(status) {
+            if (!status || !status.known) return 'Status unknown'
+            return status.ready ? 'Healthy' : 'Needs attention'
+        },
+        humanReason(reason) { return humanizeStrategyReason(reason, this.runtimeSemantics.mode.raw) },
+        decisionSummary(decision) {
+            return strategyDecisionPresentation(decision, this.runtimeSemantics.mode.raw)
+        },
+        activityKindLabel(kind) {
+            const presentation = strategyDecisionPresentation({ outcome: kind }, this.runtimeSemantics.mode.raw)
+            return presentation.label
+        },
 
         // ── classification helpers ──────────────────────────────────────────────
         // Ticker status → badge classes. `style` groups long/short/muted/attention/
@@ -1626,6 +1714,8 @@ export default {
 .sr.maximized .sr-controls { grid-area: controls; min-width: 0; }
 .sr.maximized .sr-body { grid-area: body; min-width: 0; }
 .sr.maximized .sr-empty { grid-column: 1 / -1; grid-row: 2 / -1; }
+.sr.maximized.single-runtime { grid-template-columns: minmax(0, 1fr);
+                               grid-template-areas: "tabs" "error" "status" "controls" "body"; }
 .sr:not(.maximized) .sr-hier { max-height: 88px; }
 .sr:not(.maximized) .sr-rt-children { display: none; }
 .sr:not(.maximized) .sr-proc-head { padding-top: 0; }
@@ -1650,13 +1740,22 @@ export default {
 .sr-empty-inner { color: #808a9d; text-align: center; max-width: 90%; line-height: 1.5; }
 .sr-empty-inner.error { color: #e54150; }
 
-/* Selected-runtime truth surface: independent health/mode/authority/freshness. */
-.sr-status-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 7px 12px;
+/* Selected strategy: capability first, then clearly named health/freshness. */
+.sr-status-banner { display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 10px 12px;
                     border-bottom: 1px solid #1c212e; background: #0f1521; }
-.sr-status-mode { color: #b0b6c0; font-weight: 600; }
-.sr-status-authority, .sr-status-fresh { font-size: 11px; padding: 1px 7px; border-radius: 9px; background: #202735; }
-.sr-status-reason { flex: 1 1 260px; min-width: 0; color: #ff9f40; font-size: 11px;
-                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-status-identity { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sr-strategy-name { color: #fff; font-size: 15px; font-weight: 700; }
+.sr-status-mode { color: #79b8ff; font-size: 10px; font-weight: 700; text-transform: uppercase;
+                  padding: 2px 7px; border: 1px solid rgba(88,166,255,0.38); border-radius: 9px;
+                  background: rgba(88,166,255,0.12); }
+.sr-status-mode.mode-paper { color: #b0b6c0; border-color: #3b4352; background: #202735; }
+.sr-status-mode.mode-live { color: #ff9f40; border-color: rgba(255,159,64,0.45); background: rgba(255,159,64,0.1); }
+.sr-status-description { color: #b0b6c0; line-height: 1.45; }
+.sr-status-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: #6f7989; font-size: 11px; }
+.sr-service-health { font-weight: 600; }
+.sr-status-fresh { font-size: 11px; }
+.sr-identity-confirmed { color: #8b95a5; }
+.sr-status-reason { color: #ff9f40; font-size: 11px; line-height: 1.4; }
 .tone-ready { color: #35a776; }
 .tone-attention { color: #ff9f40; }
 .tone-neutral { color: #9aa4b2; }
@@ -1670,12 +1769,13 @@ export default {
 .sr-rt-node { margin: 0 0 6px; }
 .sr-rt { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: #0e1320; color: #d1d4dc;
          border: 1px solid #2a2e39; border-radius: 4px; padding: 6px 10px; cursor: pointer; }
-.sr-rt:hover { border-color: #35a776; }
-.sr-rt.active { border-color: #35a776; box-shadow: inset 3px 0 0 #35a776; background: rgba(53,167,118,0.08); }
+.sr-rt:hover { border-color: #58a6ff; }
+.sr-rt.active { border-color: #58a6ff; box-shadow: inset 3px 0 0 #58a6ff; background: rgba(88,166,255,0.08); }
 .sr-rt-id { font-weight: 700; color: #fff; }
-.sr-rt-strategy { color: #808a9d; }
+.sr-rt-strategy { color: #fff; font-weight: 700; }
 .sr-rt-inst { color: #5c6470; font-size: 11px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sr-rt-name { color: #fff; font-weight: 700; text-transform: none; letter-spacing: 0; font-size: 12px; }
+.sr-viewing { color: #79b8ff; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
 .sr-mode { font-size: 10px; text-transform: uppercase; padding: 1px 6px; border-radius: 8px; background: #2a2e39; color: #b0b6c0; }
 .sr-mode.mode-live { background: rgba(229,65,80,0.16); color: #e07a85; }
 .sr-mode.mode-shadow_live { background: rgba(88,166,255,0.16); color: #58a6ff; }
@@ -1710,13 +1810,23 @@ export default {
 .sr-v { color: #d1d4dc; text-align: right; }
 .mono { font-variant-numeric: tabular-nums; }
 .time { color: #808a9d; }
+.sr-lineage-source { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 10px;
+                     border: 1px solid rgba(88,166,255,0.35); border-radius: 5px; padding: 9px 10px;
+                     background: rgba(88,166,255,0.07); }
+.sr-lineage-source.unavailable { border-color: #2a2e39; background: #0e1320; }
+.sr-lineage-source-title { margin-top: 2px; color: #d1d4dc; font-weight: 700; }
+.sr-lineage-source-meta { margin-top: 2px; color: #808a9d; font-size: 11px; }
 .sr-lasterr { margin-top: 8px; color: #e07a85; background: rgba(229,65,80,0.08); border: 1px solid rgba(229,65,80,0.3); border-radius: 4px; padding: 6px 8px; }
 .sr-reasons { margin: 6px 0 0; padding: 0 0 0 18px; color: #f5c518; font-size: 11px; }
 .sr-lin-reasons { margin-top: 6px; }
 .sr-lin-reason { color: #808a9d; font-size: 11px; padding: 1px 0; }
-.sr-recent-decision { display: grid; grid-template-columns: 120px minmax(120px, 180px) minmax(90px, auto) 1fr;
+.sr-recent-decision { display: grid; grid-template-columns: 120px minmax(120px, 180px) minmax(110px, auto) 1fr;
                       gap: 10px; align-items: baseline; padding: 5px 0; border-bottom: 1px solid #1c212e; }
-.sr-decision-reason { color: #ff9f40; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-decision-reason { color: #b0b6c0; max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-decision-reason.tone-attention { color: #ff9f40; }
+.sr-technical { margin-top: 10px; padding-top: 7px; border-top: 1px solid #1c212e; color: #808a9d; }
+.sr-technical summary { width: fit-content; color: #79b8ff; cursor: pointer; font-size: 11px; }
+.sr-technical[open] summary { margin-bottom: 4px; }
 .sr-ticker-card { display: grid; grid-template-columns: minmax(140px, 220px) auto auto minmax(180px, 1fr) auto;
                   align-items: center; gap: 10px; width: 100%; margin-top: 6px; padding: 8px 10px;
                   color: #d1d4dc; text-align: left; background: #0e1320; border: 1px solid #2a2e39;

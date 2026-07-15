@@ -106,7 +106,8 @@ export class CorkyStrategyFeed {
   /**
    * Stream the runtime set. `handlers.onData(runtimes, { sequence })` fires on
    * every (in-order) FULL-REPLACEMENT update; `handlers.onError(err, { lastGood })`
-   * on a subscribe failure. Scope with `opts.runtime_id` OR `opts.strategy`.
+   * on a subscribe failure. Omit filters for the authoritative catalog, or scope
+   * with `opts.runtime_id` / `opts.strategy` for a narrower diagnostic stream.
    * Returns a handle for unsubscribe().
    */
   subscribeRuntime(opts = {}, handlers = {}) {

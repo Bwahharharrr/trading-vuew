@@ -10,20 +10,32 @@
                  and persisted by App (`tab-order` prop / `update:tab-order` intent).
                  Transient tabs (run details, search results) render after and are
                  NOT draggable. -->
-            <button v-for="t in orderedBaseTabs" :key="t.id"
-                    class="pd-tab" role="tab"
-                    :aria-selected="activeTab === t.id"
-                    :class="{ active: activeTab === t.id, 'pd-drag': dragId === t.id, 'pd-drag-over': dragOverId === t.id }"
-                    draggable="true"
-                    :title="'Drag to reorder · ' + t.label"
-                    @click="selectTab(t.id)"
-                    @dragstart="onTabDragStart(t.id, $event)"
-                    @dragover.prevent="onTabDragOver(t.id)"
-                    @dragleave="onTabDragLeave(t.id)"
-                    @drop.prevent="onTabDrop(t.id)"
-                    @dragend="onTabDragEnd">
-                {{ t.label }}<span v-if="t.count" class="pd-count">{{ t.count }}</span>
-            </button>
+            <template v-for="t in visibleBaseTabs" :key="t.id">
+                <button v-if="t.kind === 'base'"
+                        class="pd-tab" role="tab"
+                        :aria-selected="activeTab === t.id"
+                        :class="{ active: activeTab === t.id, 'pd-drag': dragId === t.id, 'pd-drag-over': dragOverId === t.id }"
+                        draggable="true"
+                        :title="'Drag to reorder · ' + t.label"
+                        @click="selectTab(t.id)"
+                        @dragstart="onTabDragStart(t.id, $event)"
+                        @dragover.prevent="onTabDragOver(t.id)"
+                        @dragleave="onTabDragLeave(t.id)"
+                        @drop.prevent="onTabDrop(t.id)"
+                        @dragend="onTabDragEnd">
+                    {{ t.label }}<span v-if="t.count" class="pd-count">{{ t.count }}</span>
+                </button>
+                <button v-else class="pd-tab pd-tab-search pd-tab-strategy" role="tab"
+                        :aria-selected="activeTab === 'strategy-detail'"
+                        :class="{ active: activeTab === 'strategy-detail' }"
+                        @click="selectTab('strategy-detail')">
+                    {{ strategyDetailTitle }}
+                    <span class="pd-tab-close" role="button" tabindex="0"
+                          title="Close strategy details"
+                          @click.stop="$emit('strategy-close-detail')"
+                          @keydown.enter.stop.prevent="$emit('strategy-close-detail')">×</span>
+                </button>
+            </template>
             <!-- Reusable single Run-Details tab: appears once a run is selected,
                  re-targets to whichever run is clicked, closable. -->
             <button v-if="backtests.selectedRun"
@@ -91,9 +103,19 @@
                         @inspect-strategy="$emit('bt-inspect-strategy', $event)"
                         @select-run="$emit('bt-select-run', $event)" />
 
-        <!-- Strategy runtimes — presentational; App owns the feed/subscription. -->
-        <corky-strategy-panel v-if="activeTab === 'strategy'"
+        <!-- Strategy is the catalog. Selecting one opens its own contextual tab. -->
+        <corky-strategy-list v-if="activeTab === 'strategy'"
                         :runtimes="strategy.runtimes || []"
+                        :streaming="!!strategy.streaming"
+                        :loading="!!strategy.loading"
+                        :error="strategy.error || null"
+                        @open-runtime="$emit('strategy-open-runtime', $event)"
+                        @refresh="$emit('strategy-refresh')" />
+
+        <!-- One selected-strategy workspace. Every task tab below is scoped to
+             this strategy; the catalog stays available in the Strategy tab. -->
+        <corky-strategy-panel v-else-if="activeTab === 'strategy-detail' && selectedStrategyRuntime"
+                        :runtimes="[selectedStrategyRuntime]"
                         :selected-runtime-id="strategy.selectedRuntimeId || ''"
                         :decisions="strategy.decisions || []"
                         :operations="strategy.operations || {}"
@@ -198,7 +220,9 @@ import SearchSignalsForm from './SearchSignalsForm.vue'
 import SearchResults from './SearchResults.vue'
 import CorkyBacktestsPanel from './CorkyBacktestsPanel.vue'
 import CorkyBacktestDetail from './CorkyBacktestDetail.vue'
+import CorkyStrategyList from './CorkyStrategyList.vue'
 import CorkyStrategyPanel from './CorkyStrategyPanel.vue'
+import { strategyDisplayName } from '../../helpers/feed/corky-strategy-transforms.js'
 
 // Canonical base-tab set + labels. The persisted order is reconciled against
 // this: unknown ids are dropped, and any canonical id missing from the saved
@@ -214,7 +238,7 @@ const BASE_TAB_LABELS = {
 
 export default {
     name: 'CorkyPositionsPanel',
-    components: { SearchSignalsForm, SearchResults, CorkyBacktestsPanel, CorkyBacktestDetail, CorkyStrategyPanel },
+    components: { SearchSignalsForm, SearchResults, CorkyBacktestsPanel, CorkyBacktestDetail, CorkyStrategyList, CorkyStrategyPanel },
     props: {
         height: { type: Number, default: 34 },
         open: { type: Boolean, default: false },
@@ -262,7 +286,7 @@ export default {
         'run-search', 'cancel-search', 'close-search-tab', 'select-result',
         'bt-refresh-strategies', 'bt-update-filter', 'bt-set-metric-filters', 'bt-list-runs', 'bt-inspect-strategy',
         'bt-select-run', 'bt-plot-run', 'bt-select-trade', 'bt-select-candidate', 'bt-close-detail',
-        'strategy-select-runtime', 'strategy-refresh',
+        'strategy-select-runtime', 'strategy-open-runtime', 'strategy-close-detail', 'strategy-refresh',
         'strategy-load-more-operations',
         'strategy-toggle-overlay',
         'strategy-compare-allocation', 'strategy-preview-operation',
@@ -284,7 +308,24 @@ export default {
             for (const id of BASE_TAB_IDS) {
                 if (!seen.has(id)) { seen.add(id); order.push(id) }
             }
-            return order.map((id) => ({ id, label: BASE_TAB_LABELS[id], count: this.tabCount(id) }))
+            return order.map((id) => ({ id, kind: 'base', label: BASE_TAB_LABELS[id], count: this.tabCount(id) }))
+        },
+        visibleBaseTabs() {
+            const tabs = []
+            for (const tab of this.orderedBaseTabs) {
+                tabs.push(tab)
+                if (tab.id === 'strategy' && this.strategy.detailOpen && this.selectedStrategyRuntime) {
+                    tabs.push({ id: 'strategy-detail', kind: 'strategy-detail' })
+                }
+            }
+            return tabs
+        },
+        selectedStrategyRuntime() {
+            const id = this.strategy && this.strategy.selectedRuntimeId
+            return (this.strategy.runtimes || []).find((runtime) => runtime && runtime.runtime_id === id) || null
+        },
+        strategyDetailTitle() {
+            return this.selectedStrategyRuntime ? `S: ${strategyDisplayName(this.selectedStrategyRuntime)}` : 'Strategy'
         },
         rows() {
             if (this.activeTab === 'open') return this.openPositions
