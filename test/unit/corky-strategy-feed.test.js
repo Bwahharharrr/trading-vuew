@@ -18,6 +18,7 @@ function makeFakeClient() {
     _decisions: [{ decision_id: 'd1', outcome: 'no_intents' }],
     _operations: { runtime_id: 'rt', projection_revision: 'rev-1', events: [], lifecycle_intervals: [], resume_cursor: 'cursor-1' },
     _money: { runtime_id: 'rt', totals: { observed_balance: '10000.0000000000000000001' } },
+    _lifecycle: { runtime_id: 'rt', current_mode: 'shadow_live', profiles: [] },
     _balance: { runtime_id: 'rt', starting_balance: '10000.0000000000000000001', points: [] },
     _overlays: [{ kind: 'fill', timestamp_ms: 1, label: 'x', status: 'filled' }],
     _comparison: { runtime_id: 'rt', projection_revision: 'rev-1', proposals: [] },
@@ -29,6 +30,7 @@ function makeFakeClient() {
     listStrategyDecisions(rt, o) { this.calls.push(['listStrategyDecisions', rt, o]); return Promise.resolve(this._decisions) },
     listStrategyOperations(rt, o) { this.calls.push(['listStrategyOperations', rt, o]); return Promise.resolve(this._operations) },
     getStrategyMoney(rt) { this.calls.push(['getStrategyMoney', rt]); return Promise.resolve(this._money) },
+    listStrategyLaunchProfiles(rt) { this.calls.push(['listStrategyLaunchProfiles', rt]); return Promise.resolve(this._lifecycle) },
     getStrategyBalanceHistory(rt, o) { this.calls.push(['getStrategyBalanceHistory', rt, o]); return Promise.resolve(this._balance) },
     getStrategyChartOverlays(rt, tk, o) { this.calls.push(['getStrategyChartOverlays', rt, tk, o]); return Promise.resolve(this._overlays) },
     compareStrategyAllocationPolicies(rt, o) { this.calls.push(['compareStrategyAllocationPolicies', rt, o]); return Promise.resolve(this._comparison) },
@@ -91,6 +93,11 @@ describe('one-shot reads delegate + pass args', () => {
   it('getMoney delegates without converting decimals', async () => {
     expect((await feed.getMoney('rt')).totals.observed_balance).toBe('10000.0000000000000000001')
     expect(client.calls).toContainEqual(['getStrategyMoney', 'rt'])
+  })
+
+  it('listLaunchProfiles delegates the runtime-scoped lifecycle read', async () => {
+    expect(await feed.listLaunchProfiles('rt')).toMatchObject({ current_mode: 'shadow_live' })
+    expect(client.calls).toContainEqual(['listStrategyLaunchProfiles', 'rt'])
   })
 
   it('getBalanceHistory delegates without converting decimals', async () => {

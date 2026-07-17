@@ -620,6 +620,7 @@ export default {
                     control: true, lifecycle: true,
                 },
                 money: { data: null, loading: false, error: null },
+                lifecycle: { data: null, loading: false, error: null },
                 features: { administration: STRATEGY_ADMINISTRATION_ENABLED },
                 administration: {
                     comparison: null, preview: null, result: null,
@@ -2849,6 +2850,8 @@ export default {
             if (operationsState) { operationsState.loading = true; operationsState.error = null }
             const moneyState = this.strategy.money
             if (moneyState) { moneyState.loading = true; moneyState.error = null }
+            const lifecycleState = this.strategy.lifecycle
+            if (lifecycleState) { lifecycleState.loading = true; lifecycleState.error = null }
             let runtime
             try {
                 runtime = await this.strategyFeed.getRuntime(runtime_id)
@@ -2862,6 +2865,10 @@ export default {
                     moneyState.loading = false
                     moneyState.error = this._strategyErr(err)
                 }
+                if (lifecycleState) {
+                    lifecycleState.loading = false
+                    lifecycleState.error = this._strategyErr(err)
+                }
                 return
             }
             if (this.strategy.selectedRuntimeId !== runtime_id) return   // superseded
@@ -2874,13 +2881,18 @@ export default {
             const moneyRequest = typeof this.strategyFeed.getMoney === 'function'
                 ? this.strategyFeed.getMoney(runtime_id).catch((error) => ({ _loadError: error }))
                 : Promise.resolve(null)
-            const [results, operationsPage, money] = await Promise.all([
+            const lifecycleRequest = typeof this.strategyFeed.listLaunchProfiles === 'function'
+                ? this.strategyFeed.listLaunchProfiles(runtime_id)
+                    .catch((error) => ({ _loadError: error }))
+                : Promise.resolve(null)
+            const [results, operationsPage, money, lifecycle] = await Promise.all([
                 Promise.all(tickerIds.map((tid) => Promise.all([
                     this.strategyFeed.getTicker(runtime_id, tid).catch(() => null),
                     this.strategyFeed.listDecisions(runtime_id, { ticker_id: tid, limit: 50 }).catch(() => []),
                 ]))),
                 operationRequest,
                 moneyRequest,
+                lifecycleRequest,
             ])
             if (this.strategy.selectedRuntimeId !== runtime_id) return   // superseded mid-fetch
             const decisions = []
@@ -2922,6 +2934,16 @@ export default {
                 this.strategy.money.data = money || null
                 this.strategy.money.loading = false
                 this.strategy.money.error = null
+            }
+            if (lifecycle && lifecycle._loadError) {
+                if (this.strategy.lifecycle) {
+                    this.strategy.lifecycle.loading = false
+                    this.strategy.lifecycle.error = this._strategyErr(lifecycle._loadError)
+                }
+            } else if (this.strategy.lifecycle) {
+                this.strategy.lifecycle.data = lifecycle || null
+                this.strategy.lifecycle.loading = false
+                this.strategy.lifecycle.error = null
             }
             await this._strategyLoadChartOverlays(runtime_id)
         },
@@ -2998,13 +3020,14 @@ export default {
                 nextCursor: null, resumeCursor: null, loading: false, error: null, live: false,
             }
             this.strategy.money = { data: null, loading: false, error: null }
+            this.strategy.lifecycle = { data: null, loading: false, error: null }
             this.strategy.administration = {
                 comparison: null, preview: null, result: null,
                 pending: null, error: null,
             }
         },
 
-        _strategyAdministrationContext() {
+        _strategyAdministrationContext(operation = null) {
             const state = this.strategy.administration
             const runtime = (this.strategy.runtimes || [])
                 .find((row) => row && row.runtime_id === this.strategy.selectedRuntimeId)
@@ -3013,6 +3036,10 @@ export default {
             if (this.strategy.features && this.strategy.features.administration === false) {
                 return { state, runtime, error: 'Strategy administration is disabled by the rollout flag.' }
             }
+            const lifecycleAction = operation && [
+                'stop_runtime', 'launch_runtime_profile', 'switch_runtime_profile',
+            ].includes(operation.type)
+            if (lifecycleAction) return { state, runtime, error: null }
             if (semantics.observer) return { state, runtime, error: 'Observer runtimes have no allocation authority.' }
             if (!semantics.runtimeControl.available) return { state, runtime, error: semantics.runtimeControl.reason }
             if (!(this.strategy.control && this.strategy.control.available)) {
@@ -3033,7 +3060,7 @@ export default {
         },
 
         async strategyCompareAllocationPolicies(payload = {}) {
-            const context = this._strategyAdministrationContext()
+            const context = this._strategyAdministrationContext(payload.operation)
             if (!context.state) return
             if (context.error) { context.state.error = context.error; return }
             context.state.pending = 'comparison'
@@ -3058,7 +3085,7 @@ export default {
         },
 
         async strategyPreviewOperation(payload = {}) {
-            const context = this._strategyAdministrationContext()
+            const context = this._strategyAdministrationContext(payload.operation)
             if (!context.state) return
             if (context.error) { context.state.error = context.error; return }
             const expectedRevision = this._strategyOperationRevision(payload.operation, context.state)
@@ -3098,7 +3125,8 @@ export default {
         },
 
         async strategyApproveOperation({ approval_statement } = {}) {
-            const context = this._strategyAdministrationContext()
+            const existingPreview = this.strategy.administration && this.strategy.administration.preview
+            const context = this._strategyAdministrationContext(existingPreview && existingPreview.operation)
             if (!context.state) return
             if (context.error) { context.state.error = context.error; return }
             const preview = context.state.preview
@@ -3995,6 +4023,7 @@ export default {
                     control: true, lifecycle: true,
                 },
                 money: { data: null, loading: false, error: null },
+                lifecycle: { data: null, loading: false, error: null },
                 features: { administration: STRATEGY_ADMINISTRATION_ENABLED },
                 administration: {
                     comparison: null, preview: null, result: null,

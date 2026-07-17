@@ -718,9 +718,9 @@ export interface CancelSearchCommand {
 
 // ───────────────────────────────────────────── strategies / backtests ──────
 //
-// READ-ONLY strategy + backtest commands served by corky-chart-gateway over the
-// SAME WebSocket. The chart app never calls the legacy runner HTTP artifact API;
-// artifact writing stays runner-side. All money/quantity fields are
+// Strategy catalog/profile reads + backtest commands served by
+// corky-chart-gateway over the SAME WebSocket. The chart app never calls the
+// legacy runner HTTP artifact API; artifact writing stays runner-side. All money/quantity fields are
 // {@link DecimalString} — never float-parse them.
 
 export type BacktestRunStatus = 'queued' | 'running' | 'completed' | 'failed'
@@ -732,6 +732,39 @@ export interface ListStrategiesCommand { type: 'list_strategies' }
 export interface GetStrategyCommand {
   type: 'get_strategy'
   strategy: string
+}
+
+/** Discover server-approved lifecycle modes for one observed strategy runtime. */
+export interface ListStrategyLaunchProfilesCommand {
+  type: 'list_strategy_launch_profiles'
+  runtime_id: string
+}
+
+/** Safe launch metadata. Executable arguments and credentials are never public. */
+export interface ChartStrategyLaunchProfile {
+  profile_id: string
+  profile_revision: string
+  display_name: string
+  runtime_id: string
+  strategy_id: string
+  strategy_instance_id: string
+  mode: string
+  account_id?: string | null
+  network?: string | null
+  max_order_notional?: DecimalString | null
+  active: boolean
+  launch_ready: boolean
+  blockers?: string[]
+}
+
+export interface ChartStrategyRuntimeLifecycleStatus {
+  runtime_id: string
+  current_mode: string
+  observed_pid?: number | null
+  stop_available: boolean
+  stop_unavailable_reason?: string | null
+  profiles_error?: string | null
+  profiles: ChartStrategyLaunchProfile[]
 }
 
 /** List backtest runs; all filters optional. */
@@ -807,6 +840,7 @@ export type ChartClientCommand =
   | CancelSearchCommand
   | ListStrategiesCommand
   | GetStrategyCommand
+  | ListStrategyLaunchProfilesCommand
   | ListBacktestRunsCommand
   | GetBacktestRunCommand
   | GetBacktestProgressCommand
@@ -1334,6 +1368,12 @@ export interface StrategyEvent {
   strategy: ChartStrategyDescriptor
 }
 
+/** Response to `list_strategy_launch_profiles`. */
+export interface StrategyRuntimeLifecycleEvent {
+  type: 'strategy_runtime_lifecycle'
+  lifecycle: ChartStrategyRuntimeLifecycleStatus
+}
+
 /** Response to `list_backtest_runs`. */
 export interface BacktestRunsEvent {
   type: 'backtest_runs'
@@ -1420,6 +1460,7 @@ export type ChartFeedEventKind =
   | SearchFailedEvent
   | StrategiesEvent
   | StrategyEvent
+  | StrategyRuntimeLifecycleEvent
   | BacktestRunsEvent
   | BacktestRunEvent
   | BacktestProgressEvent

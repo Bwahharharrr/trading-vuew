@@ -51,6 +51,7 @@ function mkCtx() {
         decision: true, fill: true, order: true, allocation: true, control: true, lifecycle: true,
       },
       money: { data: null, loading: false, error: null },
+      lifecycle: { data: null, loading: false, error: null },
       administration: {
         comparison: null, preview: null, result: null, pending: null, error: null,
       },
@@ -78,6 +79,10 @@ function mkCtx() {
         runtime_id: id, generated_at_ms: 5000, projection_revision: 'money-rev',
         authority_scope: 'wallet_local', totals: { observed_balance: '10000.0000000000000000001' },
         wallets: [], ticker_allocations: [], funding: [],
+      })),
+      listLaunchProfiles: vi.fn(async (id) => ({
+        runtime_id: id, current_mode: 'shadow_live', observed_pid: 4242,
+        stop_available: true, profiles: [],
       })),
       compareAllocationPolicies: vi.fn(async (id, opts) => ({
         runtime_id: id, as_of_ms: opts.as_of_ms, expires_at_ms: opts.expires_at_ms,
@@ -146,6 +151,8 @@ describe('strategyOpen', () => {
     expect(ctx.strategy.operations.resumeCursor).toBe('resume-1')
     expect(ctx.strategyFeed.getMoney).toHaveBeenCalledWith(DEFAULT_ID)
     expect(ctx.strategy.money.data.totals.observed_balance).toBe('10000.0000000000000000001')
+    expect(ctx.strategyFeed.listLaunchProfiles).toHaveBeenCalledWith(DEFAULT_ID)
+    expect(ctx.strategy.lifecycle.data).toMatchObject({ observed_pid: 4242, stop_available: true })
     // The live runtime subscription is the authoritative, unfiltered catalog;
     // immutable operations remain scoped to the selected runtime.
     expect(ctx.strategyFeed.subscribeRuntime).toHaveBeenCalled()
@@ -382,6 +389,26 @@ describe('safe allocation administration', () => {
     await ctx.strategyCompareAllocationPolicies({ policies: [{}] })
     expect(ctx.strategyFeed.compareAllocationPolicies).not.toHaveBeenCalled()
     expect(ctx.strategy.administration.error).toMatch(/observer/i)
+  })
+
+  test('allows a revision-bound lifecycle preview without a runtime control session', async () => {
+    ctx.strategy.runtimes[0] = mkRuntime(DEFAULT_ID, {
+      mode: 'shadow_live', lineage_status: 'unknown', runtime_control_available: false,
+    })
+    ctx.strategy.control.available = false
+    const operation = {
+      type: 'switch_runtime_profile', expected_pid: 4242,
+      profile_id: 'guarded-test', profile_revision: 'sha256:profile', reason: 'move to TEST trading',
+    }
+    await ctx.strategyPreviewOperation({
+      actor: 'operator', idempotency_key: 'switch-1', expected_revision: 'rev-1',
+      expires_at_ms: Date.now() + 60_000, operation,
+    })
+    expect(ctx.strategyFeed.previewOperation).toHaveBeenCalledWith(expect.objectContaining({
+      runtime_id: DEFAULT_ID, expected_revision: 'rev-1', operation,
+    }))
+    await ctx.strategyApproveOperation({ approval_statement: 'APPROVE preview-hash-1' })
+    expect(ctx.strategyFeed.approveOperation).toHaveBeenCalled()
   })
 })
 

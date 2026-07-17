@@ -157,6 +157,63 @@
                 <div class="sr-field"><span class="sr-k">manual control</span><span class="sr-v" :class="controlEnabled ? 'pos' : 'tone-neutral'">{{ controlEnabled ? 'Available' : controlUnavailableReason }}</span></div>
                 <div class="sr-field"><span class="sr-k">target ticker</span><span class="sr-v">{{ selectedTickerId || 'Select a ticker from the fleet or Tickers tab' }}</span></div>
             </div>
+            <div v-if="administrationEnabledFlag && (administrationEnabled || lifecycleData)" class="sr-admin-identity">
+                <label>Actor<input v-model="adminActor" class="sr-ctl-input" type="text" autocomplete="off" placeholder="operator identity" /></label>
+                <label>Idempotency key<input v-model="adminIdempotencyKey" class="sr-ctl-input" type="text" autocomplete="off" placeholder="unique key (generated if blank)" /></label>
+                <label>Reason<input v-model="adminReason" class="sr-ctl-input" type="text" placeholder="visible operator reason" /></label>
+            </div>
+            <div v-if="adminValidation" class="sr-ctl-msg validation">{{ adminValidation }}</div>
+            <div v-if="administrationError" class="sr-ctl-msg error">{{ administrationError }}</div>
+        </section>
+
+        <section v-if="activeTab === 'administration'" class="sr-sec sr-runtime-lifecycle">
+            <div class="sr-sec-head">Strategy process <span class="sr-dim">preview → exact approval → reconcile</span></div>
+            <div v-if="!administrationEnabledFlag" class="sr-msg sr-msg-sm sr-admin-unavailable">
+                Read only — disabled by the rollout flag.
+            </div>
+            <div v-else-if="lifecycle.loading" class="sr-msg sr-msg-sm">Loading server-approved launch modes…</div>
+            <div v-else-if="lifecycle.error" class="sr-ctl-msg error">{{ lifecycle.error }}</div>
+            <template v-else-if="lifecycleData">
+                <div class="sr-grid">
+                    <div class="sr-field"><span class="sr-k">current mode</span><span class="sr-v">{{ dash(lifecycleData.current_mode) }}</span></div>
+                    <div class="sr-field"><span class="sr-k">verified process</span><span class="sr-v mono">{{ lifecycleData.observed_pid ? `PID ${lifecycleData.observed_pid}` : 'Not verified' }}</span></div>
+                </div>
+                <div v-if="lifecycleData.stop_unavailable_reason" class="sr-msg sr-msg-sm">Stop unavailable — {{ lifecycleData.stop_unavailable_reason }}</div>
+                <div v-if="lifecycleData.profiles_error" class="sr-ctl-msg error">Launch modes unavailable — {{ lifecycleData.profiles_error }}</div>
+                <div class="sr-lifecycle-actions">
+                    <button class="sr-ctl-btn danger" :disabled="administrationPending || !lifecycleData.stop_available || !operations.projectionRevision"
+                            @click="previewRuntimeStop">Preview stop</button>
+                </div>
+                <div v-if="lifecycleProfiles.length" class="sr-lifecycle-profile">
+                    <label>Launch mode
+                        <select v-model="selectedLifecycleProfileId" class="sr-ctl-input">
+                            <option v-for="profile in lifecycleProfiles" :key="profile.profile_id" :value="profile.profile_id">
+                                {{ profile.display_name }} · {{ profile.mode }}{{ profile.active ? ' · active' : '' }}
+                            </option>
+                        </select>
+                    </label>
+                    <template v-if="selectedLifecycleProfile">
+                        <div class="sr-grid">
+                            <div class="sr-field"><span class="sr-k">mode</span><span class="sr-v">{{ selectedLifecycleProfile.mode }}</span></div>
+                            <div class="sr-field"><span class="sr-k">account</span><span class="sr-v">{{ dash(selectedLifecycleProfile.account_id) }}</span></div>
+                            <div class="sr-field"><span class="sr-k">network</span><span class="sr-v">{{ dash(selectedLifecycleProfile.network) }}</span></div>
+                            <div class="sr-field"><span class="sr-k">max order notional</span><span class="sr-v mono">{{ dash(selectedLifecycleProfile.max_order_notional) }}</span></div>
+                        </div>
+                        <ul v-if="selectedLifecycleProfile.blockers && selectedLifecycleProfile.blockers.length" class="sr-reasons">
+                            <li v-for="(blocker, index) in selectedLifecycleProfile.blockers" :key="index">{{ blocker }}</li>
+                        </ul>
+                        <div class="sr-lifecycle-actions">
+                            <button class="sr-ctl-btn" :disabled="administrationPending || !operations.projectionRevision || selectedLifecycleProfile.active || !selectedLifecycleProfile.launch_ready"
+                                    @click="previewRuntimeProfile">
+                                {{ lifecycleData.observed_pid ? 'Preview mode switch' : 'Preview launch' }}
+                            </button>
+                        </div>
+                    </template>
+                </div>
+                <div v-else-if="!lifecycleData.profiles_error" class="sr-msg sr-msg-sm">No server-approved launch modes are configured for this strategy.</div>
+                <div class="sr-msg sr-msg-sm">Credentials and executable arguments remain server-side; the browser submits only the selected profile revision.</div>
+            </template>
+            <div v-else class="sr-msg sr-msg-sm">No lifecycle status has been published for this runtime.</div>
         </section>
         <section v-if="activeTab === 'administration'" class="sr-sec">
             <div class="sr-sec-head">Automatic allocation <span class="sr-dim">published state · read only</span></div>
@@ -228,11 +285,6 @@
                     <div v-if="!(allocationComparison.proposals || []).length" class="sr-msg sr-msg-sm">The gateway returned no policy proposals.</div>
                 </div>
 
-                <div class="sr-admin-identity">
-                    <label>Actor<input v-model="adminActor" class="sr-ctl-input" type="text" autocomplete="off" placeholder="operator identity" /></label>
-                    <label>Idempotency key<input v-model="adminIdempotencyKey" class="sr-ctl-input" type="text" autocomplete="off" placeholder="unique operation key" /></label>
-                    <label>Reason<input v-model="adminReason" class="sr-ctl-input" type="text" placeholder="visible operator reason" /></label>
-                </div>
                 <div class="sr-admin-toggle">
                     <label>Scope
                         <select v-model="allocationScope" class="sr-ctl-input"><option value="global">global</option><option value="wallet">wallet</option><option value="strategy">strategy</option></select>
@@ -248,9 +300,7 @@
                     </label>
                     <button class="sr-ctl-btn" :disabled="administrationPending || !operations.projectionRevision" @click="previewAllocationToggle">Preview state change</button>
                 </div>
-                <div v-if="adminValidation" class="sr-ctl-msg validation">{{ adminValidation }}</div>
             </div>
-            <div v-if="administrationError" class="sr-ctl-msg error">{{ administrationError }}</div>
         </section>
 
         <section v-if="activeTab === 'administration' && operationPreview" class="sr-sec sr-operation-preview">
@@ -282,7 +332,7 @@
                 <div class="sr-field"><span class="sr-k">projection revision</span><span class="sr-v mono" :title="operationResult.projection_revision">{{ shortFp(operationResult.projection_revision) }}</span></div>
                 <div class="sr-field"><span class="sr-k">message</span><span class="sr-v">{{ operationResult.message }}</span></div>
             </div>
-            <div class="sr-msg sr-msg-sm">Local money and allocation state was not changed optimistically; live gateway projections will reconcile it.</div>
+            <div class="sr-msg sr-msg-sm">Local strategy state was not changed optimistically; live gateway projections will reconcile the approved operation.</div>
         </section>
         <section v-if="activeTab === 'overview'" class="sr-sec">
             <div class="sr-sec-head">
@@ -890,6 +940,7 @@ export default {
         operations: { type: Object, default: () => ({}) },
         overlayVisibility: { type: Object, default: () => ({}) },
         money: { type: Object, default: () => ({}) },
+        lifecycle: { type: Object, default: () => ({}) },
         administration: { type: Object, default: () => ({}) },
         administrationEnabledFlag: { type: Boolean, default: true },
         loading: { type: Boolean, default: false },
@@ -946,6 +997,7 @@ export default {
             allocationAccountId: '',
             allocationStrategyInstanceId: '',
             allocationDesiredState: 'enabled',
+            selectedLifecycleProfileId: '',
             approvalStatement: '',
             adminValidation: '',
             activityVisibleLimit: ACTIVITY_RENDER_BATCH,
@@ -1117,6 +1169,15 @@ export default {
         automaticAllocation() {
             return this.selectedRuntime && this.selectedRuntime.automatic_allocation || null
         },
+        lifecycleData() { return this.lifecycle && this.lifecycle.data || null },
+        lifecycleProfiles() {
+            const profiles = this.lifecycleData && this.lifecycleData.profiles
+            return Array.isArray(profiles) ? profiles : []
+        },
+        selectedLifecycleProfile() {
+            return this.lifecycleProfiles.find((profile) =>
+                profile && profile.profile_id === this.selectedLifecycleProfileId) || null
+        },
         administrationEnabled() {
             return this.administrationEnabledFlag && this.controlEnabled &&
                 !this.runtimeSemantics.observer && this.lineageInfo.tone === 'verified'
@@ -1133,6 +1194,11 @@ export default {
         allocationComparison() { return this.administration && this.administration.comparison || null },
         operationPreview() { return this.administration && this.administration.preview || null },
         operationResult() { return this.administration && this.administration.result || null },
+        operationIsLifecycle() {
+            const type = this.operationPreview && this.operationPreview.operation &&
+                this.operationPreview.operation.type
+            return ['stop_runtime', 'launch_runtime_profile', 'switch_runtime_profile'].includes(type)
+        },
         requiredApprovalStatement() {
             return this.operationPreview ? `APPROVE ${this.operationPreview.preview_hash}` : ''
         },
@@ -1150,7 +1216,9 @@ export default {
             return !!current && current === this.operationPreview.expected_revision && operationsCurrent
         },
         approvalReady() {
-            return this.administrationEnabled && !this.previewExpired && this.previewRevisionCurrent &&
+            const workflowEnabled = this.operationIsLifecycle
+                ? this.administrationEnabledFlag : this.administrationEnabled
+            return workflowEnabled && !this.previewExpired && this.previewRevisionCurrent &&
                 !this.operationResult && this.approvalStatement === this.requiredApprovalStatement
         },
         // The clickable backtest-candidate link (verified lineage only), or null.
@@ -1392,6 +1460,21 @@ export default {
             this.approvalStatement = ''
             this.adminValidation = ''
             this.adminIdempotencyKey = ''
+            this.selectedLifecycleProfileId = ''
+        },
+        lifecycleProfiles: {
+            immediate: true,
+            handler(profiles) {
+                if (!Array.isArray(profiles) || !profiles.length) {
+                    this.selectedLifecycleProfileId = ''
+                    return
+                }
+                if (profiles.some((profile) =>
+                    profile && profile.profile_id === this.selectedLifecycleProfileId)) return
+                const preferred = profiles.find((profile) => profile && !profile.active && profile.launch_ready) ||
+                    profiles.find((profile) => profile && !profile.active) || profiles[0]
+                this.selectedLifecycleProfileId = preferred && preferred.profile_id || ''
+            },
         },
         operationPreview() { this.approvalStatement = '' },
         activitySource() { this.activityVisibleLimit = ACTIVITY_RENDER_BATCH },
@@ -1456,13 +1539,82 @@ export default {
         },
         administrationIdentity() {
             const actor = String(this.adminActor || '').trim()
-            const idempotencyKey = String(this.adminIdempotencyKey || '').trim()
             const reason = String(this.adminReason || '').trim()
-            if (!actor || !idempotencyKey || !reason) {
-                this.adminValidation = 'Actor, unique idempotency key, and visible reason are required.'
+            if (!actor || !reason) {
+                this.adminValidation = 'Actor and visible reason are required.'
                 return null
             }
+            let idempotencyKey = String(this.adminIdempotencyKey || '').trim()
+            if (!idempotencyKey) {
+                idempotencyKey = `web-${this.activeRuntimeId}-${this.nowMs}`
+                this.adminIdempotencyKey = idempotencyKey
+            }
             return { actor, idempotency_key: idempotencyKey, reason }
+        },
+        lifecycleIdentity() {
+            if (!this.administrationEnabledFlag) {
+                this.adminValidation = 'Strategy administration is disabled by the rollout flag.'
+                return null
+            }
+            if (!this.operations.projectionRevision) {
+                this.adminValidation = 'No authoritative operations projection revision is available.'
+                return null
+            }
+            return this.administrationIdentity()
+        },
+        previewRuntimeStop() {
+            this.adminValidation = ''
+            const status = this.lifecycleData
+            const identity = this.lifecycleIdentity()
+            if (!identity) return
+            if (!status || !status.stop_available || !status.observed_pid) {
+                this.adminValidation = status && status.stop_unavailable_reason ||
+                    'The strategy process cannot be verified for stopping.'
+                return
+            }
+            this.$emit('preview-operation', {
+                ...identity,
+                expected_revision: this.operations.projectionRevision,
+                expires_at_ms: this.nowMs + 300000,
+                operation: {
+                    type: 'stop_runtime', expected_pid: Number(status.observed_pid),
+                    reason: identity.reason,
+                },
+            })
+        },
+        previewRuntimeProfile() {
+            this.adminValidation = ''
+            const status = this.lifecycleData
+            const profile = this.selectedLifecycleProfile
+            const identity = this.lifecycleIdentity()
+            if (!identity) return
+            if (!status || !profile) {
+                this.adminValidation = 'Select a server-approved launch mode.'
+                return
+            }
+            if (profile.active) {
+                this.adminValidation = 'That launch mode is already active.'
+                return
+            }
+            if (!profile.launch_ready) {
+                this.adminValidation = (profile.blockers || []).join(' · ') ||
+                    'The selected launch mode is not ready.'
+                return
+            }
+            const common = {
+                profile_id: profile.profile_id,
+                profile_revision: profile.profile_revision,
+                reason: identity.reason,
+            }
+            const operation = status.observed_pid
+                ? { type: 'switch_runtime_profile', expected_pid: Number(status.observed_pid), ...common }
+                : { type: 'launch_runtime_profile', ...common }
+            this.$emit('preview-operation', {
+                ...identity,
+                expected_revision: this.operations.projectionRevision,
+                expires_at_ms: this.nowMs + 300000,
+                operation,
+            })
         },
         previewPolicyProposal(proposal) {
             this.adminValidation = ''
@@ -1897,8 +2049,16 @@ export default {
     display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: 7px;
 }
 .sr-admin-identity { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 8px; }
+.sr-sec > .sr-admin-identity { margin-top: 10px; }
 .sr-admin-identity .sr-ctl-input { width: 100%; box-sizing: border-box; }
 .sr-admin-toggle .sr-ctl-input { min-width: 150px; }
+.sr-runtime-lifecycle { border-left: 2px solid #58a6ff; padding-left: 10px; }
+.sr-lifecycle-profile { margin-top: 10px; padding: 9px; background: #0e1320;
+                        border: 1px solid #2a2e39; border-radius: 4px; }
+.sr-lifecycle-profile > label { display: flex; flex-direction: column; gap: 4px;
+                               color: #808a9d; font-size: 11px; }
+.sr-lifecycle-profile select { width: min(520px, 100%); }
+.sr-lifecycle-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
 .sr-proposal { margin-top: 8px; padding: 8px; border: 1px solid #2a2e39;
                border-radius: 4px; background: #0e1320; }
 .sr-proposal-head { margin-top: 0; align-items: center; }

@@ -179,6 +179,28 @@ describe('strategy one-shot reads: command framing + terminal FIELD extraction',
     expect(money.totals.observed_balance).toBe('10000.0000000000000000001')
   })
 
+  it('listStrategyLaunchProfiles returns only public lifecycle metadata', async () => {
+    const { client, sock } = makeClient()
+    const p = client.listStrategyLaunchProfiles('rt-main')
+    expect(sock().sent[0].command).toEqual({
+      type: 'list_strategy_launch_profiles', runtime_id: 'rt-main',
+    })
+    const lifecycle = {
+      runtime_id: 'rt-main', current_mode: 'shadow_live', observed_pid: 123,
+      stop_available: true, profiles: [{
+        profile_id: 'test-live', profile_revision: 'sha256:profile',
+        display_name: 'Guarded TEST trading', runtime_id: 'rt-main',
+        strategy_id: 'ema', strategy_instance_id: 'ema-1', mode: 'live',
+        account_id: 'test-account', network: 'testnet', max_order_notional: '12',
+        active: false, launch_ready: true, blockers: [],
+      }],
+    }
+    sock().push({ schema_version: 1, request_id: sock().sent[0].request_id,
+      event: { type: 'strategy_runtime_lifecycle', lifecycle } })
+    await expect(p).resolves.toEqual(lifecycle)
+    expect(JSON.stringify(await p)).not.toContain('args')
+  })
+
   it('frames compare → preview → exact approval and extracts each gateway payload', async () => {
     const { client, sock } = makeClient()
     const policy = { policy_id: 'equal-v1', policy_version: 1, kind: 'equal' }
@@ -239,6 +261,7 @@ describe('strategy sender input guards (throw + send nothing)', () => {
     expect(() => client.listStrategyDecisions()).toThrow(/runtime_id is required/)
     expect(() => client.listStrategyOperations()).toThrow(/runtime_id is required/)
     expect(() => client.getStrategyMoney()).toThrow(/runtime_id is required/)
+    expect(() => client.listStrategyLaunchProfiles()).toThrow(/runtime_id is required/)
     expect(() => client.compareStrategyAllocationPolicies()).toThrow(/runtime_id is required/)
     expect(() => client.previewStrategyOperation({})).toThrow(/runtime_id is required/)
     expect(() => client.approveStrategyOperation(null, '')).toThrow(/preview is required/)

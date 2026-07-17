@@ -121,6 +121,7 @@
                         :operations="strategy.operations || {}"
                         :overlay-visibility="strategy.overlayVisibility || {}"
                         :money="strategy.money || {}"
+                        :lifecycle="strategy.lifecycle || {}"
                         :administration="strategy.administration || {}"
                         :administration-enabled-flag="!strategy.features || strategy.features.administration !== false"
                         :streaming="!!strategy.streaming"

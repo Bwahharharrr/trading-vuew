@@ -329,6 +329,99 @@ describe('responsive strategy task workspace', () => {
         expect(wrapper.find('.sr-operation-preview').text()).toContain('expired')
     })
 
+    test('Administration previews audited stop and guarded TEST mode-switch operations', async () => {
+        const now = runtimes[0].generated_at_ms
+        const runtime = {
+            ...runtimes[0], mode: 'shadow_live', lineage_status: 'unknown',
+            runtime_control_available: false,
+        }
+        const profile = {
+            profile_id: 'guarded-test', profile_revision: 'sha256:profile-revision',
+            display_name: 'Guarded TEST trading', runtime_id: runtime.runtime_id,
+            strategy_id: runtime.strategy, strategy_instance_id: runtime.strategy_instance_id,
+            mode: 'live', account_id: 'test-account', network: 'testnet',
+            max_order_notional: '12', active: false, launch_ready: true, blockers: [],
+        }
+        const lifecycle = {
+            loading: false, error: null, data: {
+                runtime_id: runtime.runtime_id, current_mode: 'shadow_live', observed_pid: 4242,
+                stop_available: true, profiles: [profile],
+            },
+        }
+        const wrapper = mountPanel({
+            runtimes: [runtime], selectedRuntimeId: runtime.runtime_id, now,
+            control: { available: false }, lifecycle,
+            operations: { projectionRevision: 'rev-1', events: [], lifecycleIntervals: [] },
+            administration: { comparison: null, preview: null, result: null, pending: null, error: null },
+        })
+        await task(wrapper, 'Administration')
+        expect(wrapper.find('.sr-runtime-lifecycle').text()).toContain('Guarded TEST trading')
+        expect(wrapper.find('.sr-runtime-lifecycle').text()).toContain('test-account')
+        expect(wrapper.find('.sr-runtime-lifecycle').text()).toContain('testnet')
+        expect(wrapper.find('.sr-runtime-lifecycle').text()).not.toContain('--live')
+
+        const identity = wrapper.findAll('.sr-admin-identity input')
+        await identity[0].setValue('operator')
+        await identity[2].setValue('move to TEST trading')
+        const switchButton = wrapper.findAll('.sr-lifecycle-actions button')
+            .find((button) => button.text().includes('mode switch'))
+        await switchButton.trigger('click')
+        const switchIntent = wrapper.emitted('preview-operation').pop()[0]
+        expect(switchIntent).toMatchObject({
+            actor: 'operator', expected_revision: 'rev-1',
+            operation: {
+                type: 'switch_runtime_profile', expected_pid: 4242,
+                profile_id: 'guarded-test', profile_revision: 'sha256:profile-revision',
+                reason: 'move to TEST trading',
+            },
+        })
+        expect(switchIntent.idempotency_key).toBe(`web-${runtime.runtime_id}-${now}`)
+
+        await wrapper.findAll('.sr-lifecycle-actions button')
+            .find((button) => button.text() === 'Preview stop').trigger('click')
+        expect(wrapper.emitted('preview-operation').pop()[0].operation).toEqual({
+            type: 'stop_runtime', expected_pid: 4242, reason: 'move to TEST trading',
+        })
+
+        const preview = {
+            runtime_id: runtime.runtime_id, actor: 'operator', idempotency_key: 'switch-1',
+            expected_revision: 'rev-1', created_at_ms: now, expires_at_ms: now + 300000,
+            operation: {
+                type: 'switch_runtime_profile', expected_pid: 4242,
+                profile_id: 'guarded-test', profile_revision: 'sha256:profile-revision',
+                reason: 'move to TEST trading',
+            },
+            preview_hash: 'lifecycle-preview-hash',
+        }
+        await wrapper.setProps({ administration: {
+            comparison: null, preview, result: null, pending: null, error: null,
+        } })
+        await wrapper.find('.sr-approval-entry input').setValue('APPROVE lifecycle-preview-hash')
+        expect(wrapper.find('.sr-approval-entry .danger').attributes('disabled')).toBeUndefined()
+    })
+
+    test('Administration explains and disables an unready launch profile', async () => {
+        const profile = {
+            profile_id: 'guarded-test', profile_revision: 'sha256:profile-revision',
+            display_name: 'Guarded TEST trading', runtime_id: runtimes[0].runtime_id,
+            strategy_id: runtimes[0].strategy, strategy_instance_id: 'ema-1', mode: 'live',
+            active: false, launch_ready: false,
+            blockers: ["account 'test-account' is not Ready: Needs attention"],
+        }
+        const wrapper = mountPanel({
+            lifecycle: { data: {
+                runtime_id: runtimes[0].runtime_id, current_mode: 'shadow_live', observed_pid: 4242,
+                stop_available: true, profiles: [profile],
+            } },
+            operations: { projectionRevision: 'rev-1', events: [], lifecycleIntervals: [] },
+        })
+        await task(wrapper, 'Administration')
+        expect(wrapper.find('.sr-runtime-lifecycle').text()).toContain('not Ready')
+        const switchButton = wrapper.findAll('.sr-lifecycle-actions button')
+            .find((button) => button.text().includes('mode switch'))
+        expect(switchButton.attributes('disabled')).toBeDefined()
+    })
+
     test('Administration remains read-only for observer runtimes', async () => {
         const observer = {
             ...runtimes[0], mode: 'origin_observer', lineage_status: 'verified',

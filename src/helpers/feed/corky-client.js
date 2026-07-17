@@ -90,6 +90,7 @@ const TERMINAL_EVENT = {
     // FIELD it carries (see _resultFor): e.g. get_strategy_runtime → event
     // type 'strategy_runtime' → event.runtime.
     list_strategy_runtimes:      'strategy_runtimes',
+    list_strategy_launch_profiles:'strategy_runtime_lifecycle',
     get_strategy_runtime:        'strategy_runtime',
     get_strategy_balance_history:'strategy_balance_history',
     get_strategy_ticker:         'strategy_ticker',
@@ -574,6 +575,13 @@ export class CorkyClient {
         return this._request({ type: 'get_strategy_runtime', runtime_id })
     }
 
+    /** Server-owned launch profiles and verified process identity for one runtime.
+     *  The gateway never returns executable argv or credential material. */
+    listStrategyLaunchProfiles(runtime_id) {
+        if (!runtime_id) throw new Error('listStrategyLaunchProfiles: runtime_id is required')
+        return this._request({ type: 'list_strategy_launch_profiles', runtime_id })
+    }
+
     /** Ledger-backed booked balance and marked-equity history. Decimal strings
      *  remain untouched; the chart renderer is the only numeric boundary. */
     getStrategyBalanceHistory(runtime_id, opts = {}) {
@@ -974,6 +982,7 @@ export class CorkyClient {
         // strategy-runtime reads: each returns its named payload slice (the
         // event type differs from the field it carries — see TERMINAL_EVENT).
         if (type === 'strategy_runtimes') return event.runtimes
+        if (type === 'strategy_runtime_lifecycle') return event.lifecycle
         if (type === 'strategy_runtime') return event.runtime
         if (type === 'strategy_balance_history') return event.history
         if (type === 'strategy_ticker') return event.ticker
